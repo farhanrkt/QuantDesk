@@ -1,0 +1,39 @@
+# --- dependencies (Vercel reinstalls these from the lockfiles) ---
+node_modules
+.venv
+venv
+__pycache__
+*.pyc
+
+# --- build output ---
+.next
+out
+*.tsbuildinfo
+# Next regenerates this on every build; it is in create-next-app's ignore list too.
+next-env.d.ts
+
+# --- deploy tooling ---
+.vercel
+
+# --- secrets ---
+# This project needs no keys today (yfinance and Google News RSS are both
+# keyless). If that ever changes, the value goes in Vercel's environment
+# variables, never in the repo.
+.env
+.env.*
+!.env.example
+
+# --- editor / OS / agent local state ---
+# PyCharm: workspace.xml holds absolute paths from this machine, and the rest is
+# per-developer preference rather than project configuration.
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+# Claude Code's per-machine permission allowlist. A shared .claude/settings.json
+# would be committable; the .local one never is.
+.claude/settings.local.json
+
+# --- logs ---
+*.log
+npm-debug.log*

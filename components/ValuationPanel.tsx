@@ -1,0 +1,236 @@
+"use client";
+
+import {
+  Bar, BarChart, CartesianGrid, ReferenceArea, ReferenceLine,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from "recharts";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
+import { DownloadButton } from "@/components/ui/controls";
+import { ValuationControls } from "@/components/ValuationControls";
+import type { ValuationOptions } from "@/lib/api";
+import type { ValuationResponse } from "@/lib/types";
+import { downloadCsv, toCsv } from "@/lib/csv";
+import { num, pct, signedPct } from "@/lib/utils";
+
+const DCF = "#E8B44C";
+const DDM = "#A78BFA";
+const MARKET = "#5B8DEF";
+const UP = "#35C4A8";
+const DOWN = "#FF6B6B";
+
+export function ValuationPanel({
+  data, onApply, busy, csvUrl,
+}: {
+  data: ValuationResponse;
+  onApply: (o: ValuationOptions) => void;
+  busy: boolean;
+  csvUrl: string;
+}) {
+  const accent = data.engine === "DDM" ? DDM : DCF;
+  const mc = data.monteCarlo;
+  const verdictColor =
+    data.verdict === "UNDERVALUED" ? UP : data.verdict === "OVERVALUED" ? DOWN : DCF;
+
+  const downloadSchedule = () =>
+    downloadCsv(
+      `${data.ticker}_${data.engine.toLowerCase()}_schedule.csv`,
+      toCsv(
+        data.schedule.map((r) => ({
+          year: r.year, stream: r.streamRaw,
+          discountFactor: r.discountFactor, presentValue: r.presentValueRaw,
+        })),
+        [
+          { key: "year", label: "Year" },
+          { key: "stream", label: data.streamLabel },
+          { key: "discountFactor", label: "Discount Factor" },
+          { key: "presentValue", label: "Present Value" },
+        ]
+      )
+    );
+
+  return (
+    <div className="space-y-4 animate-rise">
+      <ValuationControls
+        engine={data.engine}
+        rateName={data.rateName}
+        currencySymbol={data.market.symbol}
+        computedRate={data.discountRate}
+        basis={data.assumptions.basis}
+        basisOptions={data.assumptions.basisOptions}
+        manualDefaults={data.assumptions.manualDefaults}
+        manualApplied={data.assumptions.manualApplied}
+        busy={busy}
+        onApply={onApply}
+      />
+
+      {data.notices.map((n, i) => (
+        <div key={i}
+             className="rounded border px-4 py-3 text-xs leading-relaxed"
+             style={{
+               borderColor: n.tone === "warn" ? "#F2C14E66" : `${accent}55`,
+               background: n.tone === "warn" ? "#F2C14E14" : `${accent}14`,
+               color: n.tone === "warn" ? "#F2C14E" : "#E7EEF5",
+             }}>
+          {n.text}
+        </div>
+      ))}
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Stat label="Market price" value={data.priceLabel} />
+        <Stat label="Median intrinsic value" value={mc.p50Label}
+              tone={(mc.upside ?? 0) >= 0 ? "text-acc" : "text-dist"}
+              sub={`${signedPct(mc.upside)} vs market`} />
+        <Stat label="Bear · P25" value={mc.p25Label} />
+        <Stat label="Bull · P75" value={mc.p75Label} />
+        <Stat label="P(undervalued)" value={pct(mc.probUndervalued, 0)} />
+      </div>
+
+      <Card accent={accent}>
+        <CardHeader>
+          <CardTitle>Distribution of simulated fair value</CardTitle>
+          <div className="flex items-center gap-2">
+            <Badge color={accent}>{data.engine}</Badge>
+            <Badge color={verdictColor}>{data.verdict}</Badge>
+            {/* The full draw set never crosses the wire, so this one is a
+                server round trip rather than a client-side export. */}
+            <DownloadButton href={csvUrl}>Simulation CSV</DownloadButton>
+          </div>
+        </CardHeader>
+        <CardBody>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={mc.histogram} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="2 4" vertical={false} />
+              <XAxis dataKey="value" type="number" domain={["dataMin", "dataMax"]}
+                     tickFormatter={(v) => num(v, 0)} tickLine={false} axisLine={false} />
+              <YAxis tickLine={false} axisLine={false} width={48} />
+              <Tooltip
+                cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                contentStyle={{ background: "#080C10", border: "1px solid #1E2A36",
+                                borderRadius: 4, fontSize: 12 }}
+                labelFormatter={(v) => `Fair value ${num(Number(v))}`}
+                formatter={(v: number) => [`${v} iterations`, ""]} />
+              <ReferenceArea x1={mc.p25} x2={mc.p75} fill={UP} fillOpacity={0.06} />
+              <Bar dataKey="count" fill={accent} fillOpacity={0.55} isAnimationActive={false} />
+              <ReferenceLine x={data.price} stroke={MARKET} strokeWidth={2}
+                             label={{ value: "Market", fill: MARKET, fontSize: 11, position: "top" }} />
+              <ReferenceLine x={mc.p50} stroke={UP} strokeWidth={2} strokeDasharray="5 4"
+                             label={{ value: "Median", fill: UP, fontSize: 11, position: "top" }} />
+            </BarChart>
+          </ResponsiveContainer>
+          <p className="mt-3 text-xs leading-relaxed text-ash">
+            {data.assumptions.iterations.toLocaleString()} iterations.{" "}
+            {data.engine === "DCF" ? "FCF growth" : "Dividend growth"} ~ N({pct(data.assumptions.growth)},{" "}
+            {pct(data.assumptions.sdGrowth)}), {data.rateName} ~ N({pct(data.discountRate, 2)},{" "}
+            {pct(data.assumptions.sdRate, 2)}), terminal growth ~ N({pct(data.assumptions.terminalGrowth, 2)},{" "}
+            {pct(data.assumptions.sdTerminal, 2)}). Display trimmed at the 0.5th/99.5th percentiles;
+            every statistic above uses the full sample.
+          </p>
+        </CardBody>
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Base-case {data.engine === "DCF" ? "cash flow" : "dividend"} projection
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[0.65rem] text-ash">{data.assumptions.basis}</span>
+              <DownloadButton onClick={downloadSchedule}>CSV</DownloadButton>
+            </div>
+          </CardHeader>
+          <CardBody className="px-0">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
+                  <th>Year</th>
+                  <th className="text-right">{data.streamLabel}</th>
+                  <th className="text-right">Discount factor</th>
+                  <th className="text-right">Present value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.schedule.map((row) => (
+                  <tr key={row.year} className="border-b border-rule/60 last:border-0">
+                    <td className="num px-5 py-2 text-ash">{row.year}</td>
+                    <td className="num px-5 py-2 text-right">{row.stream}</td>
+                    <td className="num px-5 py-2 text-right text-ash">{row.discountFactor}</td>
+                    <td className="num px-5 py-2 text-right">{row.presentValue}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {data.history.length > 0 && (
+              <>
+                <div className="eyebrow px-5 pb-2 pt-5">
+                  {data.engine === "DCF" ? "Historical free cash flow" : "Declared dividend history"}
+                </div>
+                <table className="w-full text-left text-xs">
+                  <tbody>
+                    {data.history.map((row, i) => (
+                      <tr key={i} className="border-b border-rule/60 last:border-0">
+                        {Object.values(row).map((cell, j) => (
+                          <td key={j} className={`num px-5 py-2 ${j === 0 ? "text-ash" : "text-right"}`}>
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </CardBody>
+        </Card>
+
+        <div className="space-y-4">
+          <Card accent={accent}>
+            <CardHeader>
+              <CardTitle>
+                {data.engine === "DCF" ? "Enterprise → equity bridge" : "Value composition"}
+              </CardTitle>
+            </CardHeader>
+            <CardBody className="px-0">
+              <table className="w-full text-left text-xs">
+                <tbody>
+                  {data.bridge.map((row) => (
+                    <tr key={row.component} className="border-b border-rule/60 last:border-0">
+                      <td className="px-5 py-2 text-ash">{row.component}</td>
+                      <td className="num px-5 py-2 text-right">{row.amount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle>Model diagnostics</CardTitle></CardHeader>
+            <CardBody className="px-0">
+              <table className="w-full text-left text-xs">
+                <tbody>
+                  {data.diagnostics.map((row) => (
+                    <tr key={row.metric} className="border-b border-rule/60 last:border-0">
+                      <td className="px-5 py-2 text-ash">{row.metric}</td>
+                      <td className="num px-5 py-2 text-right">{row.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardBody>
+          </Card>
+        </div>
+      </div>
+
+      <p className="text-xs leading-relaxed text-ash">
+        Routed to the {data.engine} because {data.routeReason}. The KPI strip reports the Monte
+        Carlo <b className="text-chalk/80">median</b>; the bridge reports the{" "}
+        <b className="text-chalk/80">base case</b>. They differ because the price distribution is
+        right-skewed in 1/(r − g). Data from Yahoo Finance, unaudited. A research tool, not
+        investment advice.
+      </p>
+    </div>
+  );
+}
