@@ -37,6 +37,10 @@ from __future__ import annotations
 
 import asyncio
 import io
+import sys
+
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent))
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
