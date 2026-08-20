@@ -605,6 +605,10 @@ class WhaleTracker:
             return {
                 "Ticker": tk,
                 "Recent Anomalies": len(recent),
+                # The ticker's OWN long-run flag rate, which is the null the
+                # screener's significance test measures each hit against.
+                "Anomaly Rate": res.anomaly_rate,
+                "Total Days": res.total_days,
                 "Dominant Flow": dominant,
                 "Top Strength": int(top["Strength"]),
                 "Latest Signal": recent.index.max().strftime("%Y-%m-%d"),
@@ -624,8 +628,9 @@ class WhaleTracker:
         if not rows:
             return pd.DataFrame(
                 columns=[
-                    "Ticker", "Recent Anomalies", "Dominant Flow", "Top Strength",
-                    "Latest Signal", "Latest Tag", "Latest Close", "RVOL (top)",
+                    "Ticker", "Recent Anomalies", "Anomaly Rate", "Total Days",
+                    "Dominant Flow", "Top Strength", "Latest Signal", "Latest Tag",
+                    "Latest Close", "RVOL (top)",
                 ]
             )
         return (

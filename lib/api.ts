@@ -3,7 +3,8 @@
 import { useCallback, useRef, useState } from "react";
 import type {
   AnomalyResponse, ConfluenceResponse, Engine, EngineFailure, Leg, ManualInputs,
-  Market, NewsResponse, ScreenerResponse, TechnicalResponse, ValuationResponse,
+  Market, NewsResponse, QualityResponse, ScreenerResponse, TechnicalResponse,
+  ValuationResponse,
 } from "./types";
 
 /** Drops undefined/null/empty/NaN so optional params never reach the API as "". */
@@ -124,8 +125,8 @@ export function simulationCsvUrl(o: RunOptions, v: ValuationOptions) {
   return `/api/intrinsic-value/simulation?${queryString(valuationParams(o, v) as never)}`;
 }
 
-type Lens = "anomaly" | "technical" | "valuation" | "news";
-const ALL_LENSES: Lens[] = ["anomaly", "technical", "valuation", "news"];
+type Lens = "anomaly" | "technical" | "valuation" | "quality" | "news";
+const ALL_LENSES: Lens[] = ["anomaly", "technical", "valuation", "quality", "news"];
 
 /**
  * Guards against out-of-order settlement.
@@ -140,10 +141,10 @@ const ALL_LENSES: Lens[] = ["anomaly", "technical", "valuation", "news"];
  */
 function useLensGuard() {
   const seq = useRef<Record<Lens, number>>({
-    anomaly: 0, technical: 0, valuation: 0, news: 0,
+    anomaly: 0, technical: 0, valuation: 0, quality: 0, news: 0,
   });
   const inflight = useRef<Record<Lens, AbortController | null>>({
-    anomaly: null, technical: null, valuation: null, news: null,
+    anomaly: null, technical: null, valuation: null, quality: null, news: null,
   });
 
   return useCallback((lenses: Lens[]) => {
@@ -181,6 +182,7 @@ export function useEngines() {
   const [anomaly, setAnomaly] = useState<Engine<AnomalyResponse>>({ status: "idle" });
   const [technical, setTechnical] = useState<Engine<TechnicalResponse>>({ status: "idle" });
   const [valuation, setValuation] = useState<Engine<ValuationResponse>>({ status: "idle" });
+  const [quality, setQuality] = useState<Engine<QualityResponse>>({ status: "idle" });
   const [news, setNews] = useState<Engine<NewsResponse>>({ status: "idle" });
 
   // The last options each engine ran with, so a partial re-run can reuse them.
@@ -241,6 +243,7 @@ export function useEngines() {
     setAnomaly({ status: "loading" });
     setTechnical({ status: "loading" });
     setValuation({ status: "loading" });
+    setQuality({ status: "loading" });
     setNews({ status: "loading" });
 
     let payload: ConfluenceResponse;
@@ -254,6 +257,7 @@ export function useEngines() {
       if (current("anomaly")) setAnomaly({ status: "error", failure });
       if (current("technical")) setTechnical({ status: "error", failure });
       if (current("valuation")) setValuation({ status: "error", failure });
+      if (current("quality")) setQuality({ status: "error", failure });
       if (current("news")) setNews({ status: "error", failure });
       return;
     }
@@ -261,6 +265,7 @@ export function useEngines() {
     if (current("anomaly")) setAnomaly(fromLeg(payload.anomaly));
     if (current("technical")) setTechnical(fromLeg(payload.technical));
     if (current("valuation")) setValuation(fromLeg(payload.valuation));
+    if (current("quality")) setQuality(fromLeg(payload.quality));
     if (current("news")) setNews(fromLeg(payload.news));
   }, [claim]);
 
@@ -279,7 +284,7 @@ export function useEngines() {
   );
 
   return {
-    anomaly, technical, valuation, news,
+    anomaly, technical, valuation, quality, news,
     run, refineValuation, refineTechnical, csvUrl,
     valuationOptions: lastValuation, technicalOptions: lastTechnical,
   };

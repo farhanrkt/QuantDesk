@@ -46,7 +46,7 @@ function AnomalyTooltip({ active, payload }: TooltipProps<number, string>) {
 }
 
 export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
-  const { stats, series, anomalies, config } = data;
+  const { stats, series, anomalies, config, liquidity, accumulation } = data;
 
   // Recharts renders a Scatter by reading one key off every row, so each flow
   // class gets its own column that is null everywhere it does not apply.
@@ -91,6 +91,22 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
               tone={toneOf(stats.netFlowBias)}
               sub="whole look-back" />
         <Stat label="Peak strength" value={`${stats.maxStrength}/100`} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Est. bid-ask spread"
+              value={liquidity?.spread == null ? "—" : pct(liquidity.spread, 2)}
+              sub={liquidity?.spreadDetail?.primarySource ?? ""} />
+        <Stat label="Move vs spread"
+              value={liquidity?.moveVsSpread == null ? "—" : `${num(liquidity.moveVsSpread, 1)}x`}
+              tone={liquidity?.insideSpreadNoise ? "text-warn" : "text-ash"}
+              sub="latest day, round trip" />
+        <Stat label="Volatility (Yang-Zhang)"
+              value={liquidity?.yangZhangVol == null ? "—" : pct(liquidity.yangZhangVol, 0)}
+              sub="annualised, gap-aware" />
+        <Stat label="Amihud illiquidity"
+              value={liquidity?.amihud == null ? "—" : liquidity.amihud.toExponential(1)}
+              sub="price impact per $ traded" />
       </div>
 
       <Card accent={biasColor}>
@@ -140,6 +156,72 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
           </ResponsiveContainer>
         </CardBody>
       </Card>
+
+      {/* The two questions a point-anomaly detector cannot answer on its own:
+          is the move bigger than the spread, and is anyone accumulating
+          patiently rather than in one visible print? */}
+      {liquidity?.insideSpreadNoise && (
+        <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-xs leading-relaxed text-warn">
+          The latest move is only {num(liquidity.moveVsSpread ?? 0, 1)}x the estimated
+          round-trip spread of {pct(liquidity.warningSpread ?? 0, 2)}. On this listing a move
+          that size does not survive the cost of trading it, however unusual the volume looks.
+        </div>
+      )}
+
+      {accumulation && accumulation.episodes.length > 0 && (
+        <Card accent={accumulation.current
+          ? flowColor(accumulation.current.direction) : undefined}>
+          <CardHeader>
+            <CardTitle>Sustained flow regimes</CardTitle>
+            <span className="font-mono text-[0.65rem] text-ash">
+              CUSUM · h={accumulation.config.threshold} · k={accumulation.config.slack}
+            </span>
+          </CardHeader>
+          <CardBody className="px-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
+                    <th>Direction</th><th>Began</th><th>Confirmed</th><th>Ended</th>
+                    <th className="text-right">Days</th>
+                    <th className="text-right">Price</th>
+                    <th className="text-right">Avg RVOL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {accumulation.episodes.map((e) => (
+                    <tr key={`${e.direction}-${e.start}`}
+                        className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
+                      <td className="px-5 py-2" style={{ color: flowColor(e.direction) }}>
+                        {e.direction}{e.ongoing && " · ongoing"}
+                      </td>
+                      <td className="num px-5 py-2 text-ash">{e.start}</td>
+                      <td className="num px-5 py-2 text-ash">{e.detected}</td>
+                      <td className="num px-5 py-2 text-ash">{e.end}</td>
+                      <td className="num px-5 py-2 text-right">{e.days}</td>
+                      <td className={cn("num px-5 py-2 text-right",
+                                        (e.priceChangePct ?? 0) >= 0 ? "text-acc" : "text-dist")}>
+                        {e.priceChangePct == null ? "—"
+                          : `${e.priceChangePct >= 0 ? "+" : ""}${num(e.priceChangePct, 1)}%`}
+                      </td>
+                      <td className="num px-5 py-2 text-right">
+                        {e.avgRvol == null ? "—" : `${num(e.avgRvol)}x`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+              An institution building a position splits the order over weeks so no single day
+              stands out — which makes it invisible to the day-by-day detector above. CUSUM
+              accumulates small deviations instead, so a run of unremarkable days trips a
+              threshold none of them would alone. &quot;Began&quot; is the estimated
+              changepoint; &quot;confirmed&quot; is when there was enough evidence to say so.
+            </p>
+          </CardBody>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

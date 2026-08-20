@@ -325,7 +325,7 @@ Persist named watchlists per user, run them on a schedule (Vercel Cron → the A
 
 This is the retention mechanic. It is also the natural paywall (free = 1 watchlist / weekly; paid = unlimited / daily / instant). Requires A6 (persistence) and A3 (queue) — which is why those come first.
 
-### F2. Signal validation & backtest — the credibility feature
+### ✅ F2. Signal validation — **delivered 20 Aug 2026**, see RESEARCH_ROADMAP.md
 The engine *already contains* leakage-free walk-forward scoring (`whale.py:417-440`), built expressly for historical evaluation, and nothing in the product surfaces its purpose. Every anomaly-detection tool for retail investors is asserted rather than evidenced; being the one that shows its own hit rate is a real differentiator.
 
 Ship: forward returns at +5 / +20 / +60 trading days after each detected anomaly, segmented by flow direction and strength decile, with a benchmark-relative column and an honest sample-size warning. If accumulation signals at strength > 80 don't beat the index, **say so** — that credibility is worth more than the signal.
@@ -354,8 +354,8 @@ Curate and cache a fundamentals table for the LQ45 / IDX30 constituents from IDX
 
 | Phase | Work |
 |---|---|
-| **Done** | ~~All criticals C1–C4~~ ✅ · ~~All quick wins Q1–Q10~~ ✅ |
-| **Next** | B1 (URL state) · A1 + A2 (data layer + cache) · A5 (generated types) |
+| **Done** | ~~All criticals C1–C4~~ ✅ · ~~All quick wins Q1–Q10~~ ✅ · ~~F2 signal validation~~ ✅ · a fourth Quality lens, a residual income engine and sustained-accumulation detection (see [RESEARCH_ROADMAP.md](RESEARCH_ROADMAP.md)) |
+| **Next** | B1 (URL state) · A1 + A2 (data layer + cache) · A5 (generated types) · F3 sensitivity grid |
 | **This quarter** | A1 + A2 (data layer + cache) · A5 (generated types) · F3 (sensitivity grid — cheap, high value) · A4 decision (runtime) |
 | **Next quarter** | A6 + A3 (persistence + queue) → F1 (watchlists & alerts) · F2 (backtest) · F5 (IDX data layer) |
 

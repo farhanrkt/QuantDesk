@@ -5,6 +5,7 @@ import { useState } from "react";
 import { AnomalyPanel } from "@/components/AnomalyPanel";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
 import { NewsPanel } from "@/components/NewsPanel";
+import { QualityPanel } from "@/components/QualityPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { TickerBar } from "@/components/TickerBar";
@@ -25,6 +26,7 @@ const TABS = [
   { id: "flow", label: "Flow · anomalies", accent: "#35C4A8" },
   { id: "trend", label: "Technicals", accent: "#5B8DEF" },
   { id: "value", label: "Intrinsic value", accent: "#E8B44C" },
+  { id: "quality", label: "Quality", accent: "#F2C14E" },
   { id: "screen", label: "Screener", accent: "#A78BFA" },
 ];
 
@@ -72,7 +74,7 @@ function Panel<T>({
 
 export default function Home() {
   const {
-    anomaly, technical, valuation, news,
+    anomaly, technical, valuation, quality, news,
     run, refineValuation, refineTechnical, csvUrl,
   } = useEngines();
   // The ticker bar is controlled from here so the screener can drive it too.
@@ -117,12 +119,13 @@ export default function Home() {
           <div>
             <h1 className="font-mono text-2xl font-semibold tracking-[0.22em]">QUANTDESK</h1>
             <p className="eyebrow mt-2">
-              Anomaly detection · Technical analysis · Intrinsic value — US &amp; IDX
+              Flow · Trend · Value · Quality — US &amp; IDX
             </p>
           </div>
           <p className="max-w-sm text-xs leading-relaxed text-ash">
-            Three independent models read the same ticker. Where they agree is more interesting
-            than what any one of them says on its own.
+            Four models read the same ticker from different data. Where they agree is more
+            interesting than what any one of them says alone — with the caveat that they are
+            not equally independent.
           </p>
         </div>
       </header>
@@ -146,7 +149,8 @@ export default function Home() {
       ) : (
         <div className="space-y-6">
           <ConfluenceRail ticker={resolvedTicker} anomaly={anomaly}
-                          technical={technical} valuation={valuation} />
+                          technical={technical} valuation={valuation}
+                          quality={quality} />
 
           <div>
             <Tabs tabs={TABS} active={tab} onChange={setTab} />
@@ -180,6 +184,9 @@ export default function Home() {
                                     csvUrl={csvUrl()} />
                   )}
                 </Panel>
+              )}
+              {tab === "quality" && (
+                <Panel state={quality}>{(d) => <QualityPanel data={d} />}</Panel>
               )}
               {tab === "screen" && <ScreenerPanel onSelect={handleSelect} />}
             </div>

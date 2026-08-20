@@ -10,7 +10,7 @@ import { PanelSkeleton } from "@/components/ui/skeleton";
 import { useScreener } from "@/lib/api";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import type { Market } from "@/lib/types";
-import { cn, num } from "@/lib/utils";
+import { cn, num, pct } from "@/lib/utils";
 
 const ACC = "#35C4A8";
 const DIST = "#FF6B6B";
@@ -163,6 +163,11 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
               {state.data.recentDays} days
             </CardTitle>
             <div className="flex items-center gap-3">
+              {state.data.significance?.available && (
+                <span className="num text-[0.65rem] text-ash">
+                  {state.data.significance.discoveries} significant
+                </span>
+              )}
               {rows.length > 0 && onSelect && (
                 <span className="text-[0.65rem] text-ash">Select a ticker to run all three engines</span>
               )}
@@ -184,6 +189,7 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
                       <th>Dominant flow</th><th>Latest signal</th><th>Tag</th>
                       <th className="text-right">Close</th>
                       <th className="text-right">Max RVOL</th>
+                      <th className="text-right">q-value</th>
                       <th className="w-32">Strength</th>
                     </tr>
                   </thead>
@@ -219,6 +225,12 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
                         <td className="px-5 py-2 text-ash">{r.latestTag}</td>
                         <td className="num px-5 py-2 text-right">{num(r.latestClose)}</td>
                         <td className="num px-5 py-2 text-right">{num(r.topRvol)}x</td>
+                        <td className={cn("num px-5 py-2 text-right",
+                                          r.significant ? "text-acc" : "text-ash")}
+                            title={r.anomalyRate == null ? undefined
+                              : `Tested against this ticker's own ${pct(r.anomalyRate)} long-run flag rate`}>
+                          {r.qValue == null ? "—" : r.qValue.toFixed(3)}
+                        </td>
                         <td className="px-5 py-2">
                           <div className="flex items-center gap-2">
                             <div className="h-1 flex-1 rounded bg-rule">
@@ -239,6 +251,21 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
             )}
           </CardBody>
         </Card>
+      )}
+
+      {state.status === "ready" && state.data.significance?.available && (
+        <div className="rounded border border-rule bg-panel px-4 py-3">
+          <div className="eyebrow mb-1">Multiple testing</div>
+          <p className="text-xs leading-relaxed text-chalk/80">
+            {state.data.significance.reading}
+          </p>
+          <p className="mt-2 text-[0.7rem] leading-relaxed text-ash">
+            Scanning many names produces hits by construction. Each ticker&apos;s recent count is
+            tested against its OWN long-run flag rate — so a chronically noisy stock needs far
+            more activity to qualify than a normally quiet one — and the q-value column applies a
+            Benjamini-Hochberg false-discovery-rate correction across the whole scan.
+          </p>
+        </div>
       )}
 
       <p className="text-xs leading-relaxed text-ash">

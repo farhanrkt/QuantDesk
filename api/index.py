@@ -29,6 +29,8 @@ GET /api/technical-analysis         Engine 2 — QuantDash technicals
 GET /api/intrinsic-value            Engine 3 — INTRINSIC DCF/DDM + Monte Carlo
 GET /api/intrinsic-value/simulation Engine 3 — full Monte Carlo draw set as CSV
 GET /api/screener                   Engine 1 — multi-ticker watchlist scan
+GET /api/quality                    Engine 4 — Piotroski / Altman / Beneish
+GET /api/event-study                abnormal returns after each anomaly
 GET /api/news                       contextual catalyst headlines
 GET /api/confluence                 every lens at once, in ONE invocation
 """
@@ -50,11 +52,13 @@ sys.path.append(str(Path(__file__).parent))
 from typing import Optional
 
 import numpy as np
+import yfinance as yf
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from _lib import news, symbols, technical, valuation
+from _lib import (accumulation, eventstudy, microstructure, news, quality,
+                  riskmodel, symbols, technical, valuation)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -223,8 +227,9 @@ def csv_response(frame, filename: str) -> StreamingResponse:
 def health():
     return ok({
         "status": "ok",
-        "engines": ["isolation-forest", "technical-analysis", "intrinsic-value"],
-        "extras": ["screener", "news", "simulation-csv"],
+        "engines": ["isolation-forest", "technical-analysis", "intrinsic-value",
+                    "quality"],
+        "extras": ["screener", "news", "simulation-csv", "event-study"],
     })
 
 
@@ -304,8 +309,17 @@ def whale_payload(symbol: str, period: str = "2y", mode: str = "threshold",
 
     recent = result.recent_anomalies(recent_days)
 
+    # Both of these read the frame the engine already built, so they cost no
+    # extra network call. They answer the two questions the point detector
+    # cannot: "is this move bigger than the spread?" and "is anyone accumulating
+    # patiently rather than in one visible print?"
+    liquidity = microstructure.liquidity_profile(frame)
+    episodes = accumulation.detect(frame)
+
     return {
         "ticker": result.ticker,
+        "liquidity": liquidity,
+        "accumulation": episodes,
         "config": {
             "period": period, "mode": mode,
             "contamination": contamination, "madK": mad_k,
@@ -429,6 +443,8 @@ def screener(
         {
             "ticker": r["Ticker"],
             "recentAnomalies": int(r["Recent Anomalies"]),
+            "anomalyRate": float(r["Anomaly Rate"]),
+            "totalDays": int(r["Total Days"]),
             "dominantFlow": r["Dominant Flow"],
             "topStrength": int(r["Top Strength"]),
             "latestSignal": r["Latest Signal"],
@@ -438,12 +454,21 @@ def screener(
         }
         for _, r in table.iterrows()
     ]
+    # A scan over N names produces hits by construction. Test each one against
+    # that ticker's OWN long-run flag rate and control the false discovery rate
+    # across the scan, so "3 names flagged" arrives next to "about 1.4 expected
+    # from noise" instead of standing alone.
+    significance = eventstudy.screener_significance(
+        rows, recent_trading_days=max(1, int(recent_days * 5 / 7)),
+    )
+
     return ok({
         "scanned": len(universe),
         "universe": universe,
         "recentDays": recent_days,
         "config": {"period": period, "mode": mode},
-        "rows": rows,
+        "rows": significance["rows"],
+        "significance": {k: v for k, v in significance.items() if k != "rows"},
     })
 
 
@@ -584,6 +609,100 @@ def intrinsic_value_simulation(
 
 
 # --------------------------------------------------------------------------- #
+# Engine 4 — accounting quality and solvency
+# --------------------------------------------------------------------------- #
+def quality_payload(symbol: str) -> dict:
+    """Piotroski / Altman / Beneish from the statements already fetched."""
+    return quality.analyze(valuation.fetch_company(symbol))
+
+
+@app.get("/api/quality")
+def quality_scores(
+    ticker: str = Query(..., pattern=TICKER_PATTERN),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+):
+    """Fundamental strength, distress risk and earnings-manipulation screens.
+
+    Returns `applicable: false` for banks and insurers rather than a number:
+    none of the three models was built on financial firms and none transfers.
+    """
+    symbol = resolved(ticker, market)
+    return ok({"ticker": symbol, **quality_payload(symbol)})
+
+
+# --------------------------------------------------------------------------- #
+# Signal validation — does the anomaly flag predict anything?
+# --------------------------------------------------------------------------- #
+@app.get("/api/event-study")
+def event_study(
+    ticker: str = Query(..., pattern=TICKER_PATTERN),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+    period: str = Query("5y", pattern="^(2y|5y|max)$"),
+    mode: str = Query("threshold", pattern="^(threshold|mad|quota)$"),
+    score_threshold: float = Query(-0.10, ge=-0.50, le=0.50),
+):
+    """Cumulative abnormal returns after each detected anomaly.
+
+    The one number that decides whether the flow engine is worth attention. A
+    long window is the default because an event study needs events: at a strict
+    cutoff a two-year window can yield fewer than ten, which is not enough to
+    say anything. Walk-forward mode is not offered here — it would cost minutes
+    and the market-model estimation already excludes look-ahead.
+    """
+    symbol = resolved(ticker, market)
+    config = AnalysisConfig(period=period, detection_mode=mode,
+                            score_threshold=score_threshold)
+    try:
+        result = WhaleTracker(config).analyze(symbol)
+    except DataFetchError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except WhaleTrackerError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    index_symbol = riskmodel.MARKET_INDEX.get(market.upper(), "^GSPC")
+    try:
+        market_history = yf.Ticker(index_symbol).history(period=period, auto_adjust=True)
+    except Exception:
+        market_history = None
+    if market_history is None or market_history.empty:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Could not fetch {index_symbol}, so abnormal returns cannot "
+                   f"be measured against a market model.",
+        )
+    if getattr(market_history.index, "tz", None) is not None:
+        market_history.index = market_history.index.tz_localize(None)
+
+    prices = result.data.copy()
+    if getattr(prices.index, "tz", None) is not None:
+        prices.index = prices.index.tz_localize(None)
+    events = result.anomalies.copy()
+    if getattr(events.index, "tz", None) is not None:
+        events.index = events.index.tz_localize(None)
+
+    study = eventstudy.run_event_study(prices, market_history, events)
+
+    # Bernard & Thomas: an anomaly beside an earnings print has a benign
+    # explanation, and the drift afterwards is a documented effect rather than
+    # anyone's footprint.
+    try:
+        earnings = yf.Ticker(symbol).earnings_dates
+        earnings_index = list(earnings.index) if earnings is not None else []
+    except Exception:
+        earnings_index = []
+    pead = eventstudy.tag_earnings_proximity(events, earnings_index)
+
+    return ok({
+        "ticker": symbol,
+        "benchmark": index_symbol,
+        "period": period,
+        "anomalies": len(events),
+        "study": study,
+        "earningsProximity": pead,
+    })
+
+
+# --------------------------------------------------------------------------- #
 # Contextual catalyst
 # --------------------------------------------------------------------------- #
 @app.get("/api/news")
@@ -653,6 +772,7 @@ async def confluence(
             symbol, range_key=range, sr_window=sr_window, sr_levels=sr_levels,
         )),
         leg("valuation", lambda: valuation_payload(symbol, market_code=market.upper())),
+        leg("quality", lambda: quality_payload(symbol)),
         leg("news", lambda: {"ticker": symbol,
                              "items": news.fetch_news(symbol, limit=news_limit)}),
     )

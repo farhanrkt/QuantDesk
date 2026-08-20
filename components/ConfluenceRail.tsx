@@ -1,6 +1,8 @@
 "use client";
 
-import type { AnomalyResponse, Engine, TechnicalResponse, ValuationResponse } from "@/lib/types";
+import type {
+  AnomalyResponse, Engine, QualityResponse, TechnicalResponse, ValuationResponse,
+} from "@/lib/types";
 import { pct, signedPct } from "@/lib/utils";
 
 const ACC = "#35C4A8";
@@ -8,6 +10,7 @@ const DIST = "#FF6B6B";
 const TECH = "#5B8DEF";
 const DCF = "#E8B44C";
 const DDM = "#A78BFA";
+const QUAL = "#E8B44C";
 const ASH = "#7A8CA0";
 
 interface Reading {
@@ -81,6 +84,32 @@ function readValuation(state: Engine<ValuationResponse>): Reading {
   };
 }
 
+function readQuality(state: Engine<QualityResponse>): Reading {
+  if (state.status !== "ready")
+    return { lens: "Quality", verdict: "—", detail: "no reading", color: ASH, vote: 0 };
+  const d = state.data;
+  if (!d.applicable)
+    return {
+      lens: "Quality", verdict: "n/a",
+      detail: "the three accounting models do not apply to financials",
+      color: ASH, vote: 0,
+    };
+
+  const parts: string[] = [];
+  if (d.piotroski) parts.push(`F-Score ${d.piotroski.score}/${d.piotroski.maxScore}`);
+  if (d.altman?.score != null) parts.push(`Z'' ${d.altman.score.toFixed(1)} (${d.altman.band})`);
+  if (d.beneish?.score != null) parts.push(`M ${d.beneish.score.toFixed(2)}`);
+
+  return {
+    lens: "Quality",
+    verdict: d.verdict === "SOUND" ? "Sound"
+      : d.verdict === "CONCERNS" ? "Concerns" : "Neutral",
+    detail: parts.join(" · ") || (d.headline ?? ""),
+    color: d.verdict === "SOUND" ? ACC : d.verdict === "CONCERNS" ? DIST : QUAL,
+    vote: d.verdict === "SOUND" ? 1 : d.verdict === "CONCERNS" ? -1 : 0,
+  };
+}
+
 /**
  * The one view none of the three source apps could produce: what the flow model,
  * the trend model and the valuation model each conclude, side by side, and
@@ -88,15 +117,17 @@ function readValuation(state: Engine<ValuationResponse>): Reading {
  * landing in the same place is worth more than any one of them alone.
  */
 export function ConfluenceRail({
-  ticker, anomaly, technical, valuation,
+  ticker, anomaly, technical, valuation, quality,
 }: {
   ticker: string;
   anomaly: Engine<AnomalyResponse>;
   technical: Engine<TechnicalResponse>;
   valuation: Engine<ValuationResponse>;
+  quality: Engine<QualityResponse>;
 }) {
-  const readings = [readAnomaly(anomaly), readTechnical(technical), readValuation(valuation)];
-  const live = readings.filter((r) => r.verdict !== "—");
+  const readings = [readAnomaly(anomaly), readTechnical(technical),
+                    readValuation(valuation), readQuality(quality)];
+  const live = readings.filter((r) => r.verdict !== "—" && r.verdict !== "n/a");
   const votes = live.map((r) => r.vote);
   const bulls = votes.filter((v) => v > 0).length;
   const bears = votes.filter((v) => v < 0).length;
@@ -124,14 +155,24 @@ export function ConfluenceRail({
       <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
         <div className="flex items-baseline gap-3">
           <h2 className="font-mono text-lg font-semibold tracking-[0.14em]">{ticker}</h2>
-          <span className="eyebrow">three lenses</span>
+          <span className="eyebrow">{live.length || "no"} lenses reading</span>
         </div>
         <span className="num text-xs font-semibold" style={{ color: agreementColor }}>
           {agreement}
         </span>
       </div>
+      <div className="border-b border-rule px-5 py-2">
+        {/* Agreement is the product's headline claim, so its main weakness
+            belongs next to it rather than in a footnote. */}
+        <p className="text-[0.68rem] leading-relaxed text-ash">
+          These lenses are not fully independent: flow and trend are both functions of the same
+          price and volume series, so they agree more often than four unrelated tests would.
+          Value and quality read the filings instead and carry most of the independent
+          information.
+        </p>
+      </div>
 
-      <div className="grid divide-y divide-rule md:grid-cols-3 md:divide-x md:divide-y-0">
+      <div className="grid divide-y divide-rule sm:grid-cols-2 sm:divide-x lg:grid-cols-4 lg:divide-y-0">
         {readings.map((r) => (
           <div key={r.lens} className="relative px-5 py-4">
             <span aria-hidden className="absolute left-0 top-4 h-[calc(100%-2rem)] w-[2px]"

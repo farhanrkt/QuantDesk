@@ -22,6 +22,9 @@ import type { ManualInputs } from "@/lib/types";
 const ENGINE_DEFAULTS = {
   DCF: { growth: 0.10, terminal: 0.025, sdGrowth: 0.020, sdRate: 0.010, sdTerminal: 0.005 },
   DDM: { growth: 0.05, terminal: 0.025, sdGrowth: 0.015, sdRate: 0.010, sdTerminal: 0.005 },
+  // Residual income: the "growth" slot carries the sustained ROE, and there is
+  // no terminal growth — abnormal earnings fade at a fixed persistence instead.
+  RI: { growth: 0.12, terminal: 0.0, sdGrowth: 0.030, sdRate: 0.010, sdTerminal: 0.0 },
 } as const;
 
 /**
@@ -88,7 +91,7 @@ export function ManualRescue({
 }
 
 export interface ValuationControlsProps {
-  engine: "DCF" | "DDM";
+  engine: "DCF" | "DDM" | "RI";
   rateName: string;
   currencySymbol: string;
   computedRate: number;
@@ -159,7 +162,8 @@ export function ValuationControls({
       manual: useManual ? manual : undefined,
     });
 
-  const streamLabel = engine === "DCF" ? "free cash flow" : "dividend per share";
+  const streamLabel = engine === "DCF" ? "free cash flow"
+    : engine === "RI" ? "book value per share" : "dividend per share";
 
   return (
     <Card>
@@ -178,14 +182,19 @@ export function ValuationControls({
                            { value: "auto", label: "Auto (sector routing)" },
                            { value: "dcf", label: "Force DCF" },
                            { value: "ddm", label: "Force DDM" },
+                           { value: "ri", label: "Force residual income" },
                          ]} />
           </Field>
-          <Field label={engine === "DCF" ? "FCF growth Y1–Y5" : "Dividend growth Y1–Y5"}>
+          <Field label={engine === "DCF" ? "FCF growth Y1–Y5"
+                        : engine === "RI" ? "Sustained return on equity"
+                        : "Dividend growth Y1–Y5"}>
             <PercentField value={growth} onChange={setGrowth} step={0.5} min={-0.5} max={1} />
           </Field>
-          <Field label="Perpetual growth" hint="At or below long-run nominal GDP.">
-            <PercentField value={terminal} onChange={setTerminal} step={0.1} min={0} max={0.05} />
-          </Field>
+          {engine !== "RI" && (
+            <Field label="Perpetual growth" hint="At or below long-run nominal GDP.">
+              <PercentField value={terminal} onChange={setTerminal} step={0.1} min={0} max={0.05} />
+            </Field>
+          )}
           <Field label={`Base ${engine === "DCF" ? "FCF" : "DPS"} anchor`}>
             <SelectField value={basisChoice} onChange={setBasisChoice}
                          options={basisOptions.length ? basisOptions : [basis]} />
@@ -255,8 +264,10 @@ export function ValuationControls({
                 <NumberField value={manual.price} onChange={setManualField("price")}
                              disabled={!useManual} step={0.01} min={0} />
               </Field>
-              {engine === "DDM" && (
-                <Field label="Payout ratio" hint="Diagnostic only — not the valuation.">
+              {engine !== "DCF" && (
+                <Field label="Payout ratio"
+                       hint={engine === "RI" ? "Sets how fast book value compounds."
+                                             : "Diagnostic only — not the valuation."}>
                   <PercentField value={manual.payout} onChange={setManualField("payout")}
                                 disabled={!useManual} step={1} min={0} max={1} />
                 </Field>
