@@ -223,3 +223,61 @@ def test_sign_changes_are_dropped_not_propagated():
     assert result["skipped"] == 2
     assert np.isfinite(result["sd"])
     assert result["sd"] < 10.0
+
+
+# --------------------------------------------------------------------------- #
+# The sanity clip must never bind silently
+# --------------------------------------------------------------------------- #
+def _stub_beta(adjusted, raw=None):
+    return R.BetaEstimate(
+        raw=raw if raw is not None else adjusted, adjusted=adjusted, stderr=0.05,
+        r_squared=0.01, observations=500, method="vasicek",
+        index_symbol="^GSPC", prior_weight=0.01,
+    )
+
+
+def _company():
+    import pandas as pd
+    return {
+        "ok": True, "name": "Test Co", "sector": "Consumer Defensive",
+        "industry": "Beverages", "price": 60.0, "shares": 1e9, "beta": 0.3,
+        "currency": "USD", "market_cap": 6e10, "dividend_rate": np.nan,
+        "trailing_dividend_rate": np.nan, "dividend_yield_raw": np.nan,
+        "trailing_dividend_yield_raw": np.nan, "payout_ratio": 0.5,
+        "roe_info": 0.2, "net_income_info": 5e9, "ttm_dividend": np.nan,
+        "dividend_history": pd.DataFrame(),
+        "income": pd.DataFrame({"2025": [1e10, 8e9, 2e9]},
+                               index=["Total Revenue", "Pretax Income", "Tax Provision"]),
+        "balance": pd.DataFrame({"2025": [1e9]}, index=["Total Debt"]),
+        "cashflow": pd.DataFrame({"2025": [6e9, -1e9]},
+                                 index=["Operating Cash Flow", "Capital Expenditure"]),
+    }
+
+
+@pytest.mark.parametrize(("adjusted", "expect_clip", "expect_used"),
+                         [(-0.01, True, 0.40), (3.4, True, 2.50), (1.10, False, 1.10)])
+def test_beta_clip_is_reported_when_it_binds(monkeypatch, adjusted, expect_clip, expect_used):
+    """Regression: the diagnostics table showed the SHRUNK beta while the cost of
+    equity was computed from the CLIPPED one — two different numbers on the same
+    screen, with nothing saying which was used."""
+    from _lib import valuation as V
+
+    monkeypatch.setattr(V, "fetch_company", lambda ticker: _company())
+    monkeypatch.setattr(V, "fetch_risk_free_rate", lambda *a, **k: (0.042, "test"))
+    monkeypatch.setattr(V.riskmodel, "estimate_beta_for_symbol",
+                        lambda *a, **k: _stub_beta(adjusted))
+
+    result = V.analyze("TEST", market_code="US")
+    estimate = result["betaEstimate"]
+
+    assert estimate["clipped"] is expect_clip
+    assert estimate["used"] == pytest.approx(expect_used)
+    # Whatever reached the discount rate is what the payload's `beta` reports.
+    assert result["beta"] == pytest.approx(estimate["used"])
+
+    mentions_clip = any("sanity bound" in n["text"] for n in result["notices"])
+    assert mentions_clip is expect_clip, "a binding clip must be announced, and only then"
+
+    trail = next(row["value"] for row in result["diagnostics"]
+                 if row["metric"] == "Beta estimate")
+    assert ("clipped (used)" in trail) is expect_clip

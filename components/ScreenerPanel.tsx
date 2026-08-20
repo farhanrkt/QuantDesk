@@ -169,7 +169,7 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
                 </span>
               )}
               {rows.length > 0 && onSelect && (
-                <span className="text-[0.65rem] text-ash">Select a ticker to run all three engines</span>
+                <span className="text-[0.65rem] text-ash">Select a ticker to load it</span>
               )}
               {rows.length > 0 && <DownloadButton onClick={download}>CSV</DownloadButton>}
             </div>
@@ -204,7 +204,7 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
                             <button
                               type="button"
                               onClick={() => onSelect(r.ticker)}
-                              title={`Run all three engines on ${r.ticker}`}
+                              title={`Load ${r.ticker} into every lens`}
                               className={cn(
                                 "underline decoration-dotted decoration-rule underline-offset-4",
                                 "transition-colors hover:text-tech hover:decoration-tech",

@@ -48,7 +48,7 @@ export function TickerBar({
           <option value="ID">IDX (.JK)</option>
         </Select>
         <Button type="submit" disabled={busy || !opts.ticker.trim()}>
-          {busy ? "Running" : "Run all three"}
+          {busy ? "Running" : "Run all lenses"}
         </Button>
       </div>
 
@@ -60,7 +60,7 @@ export function TickerBar({
           <span className="font-mono text-chalk/80">
             {opts.ticker.trim().toUpperCase()}.JK
           </span>{" "}
-          for all three engines.
+          for every engine.
         </p>
       )}
 

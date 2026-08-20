@@ -67,12 +67,23 @@ class ValuationError(Exception):
     """
 
     def __init__(self, message: str, manual_required: bool = False,
-                 missing=(), suggested: Optional[dict] = None):
+                 missing=(), suggested: Optional[dict] = None,
+                 engine: Optional[str] = None):
         super().__init__(message)
         self.message = message
         self.manual_required = bool(manual_required)
         self.missing = list(missing)
         self.suggested = suggested or {}
+        # WHICH ENGINE FAILED, stated rather than inferred.
+        #
+        # The client used to work this out from the SHAPE of `suggested` — a
+        # `netDebt` key meant DCF, a `payout` key meant DDM. Residual income
+        # sends `payout` and no `netDebt`, so it was read as a DDM failure: the
+        # rescue form asked for "annual dividend per share", the user typed a
+        # BOOK VALUE, and the DDM discounted it as a dividend. A confident wrong
+        # number, from guessing identity out of a dict's keys — the same mistake
+        # `_lib/symbols.py` exists to prevent.
+        self.engine = engine
 
     def as_detail(self) -> dict:
         return {
@@ -80,6 +91,7 @@ class ValuationError(Exception):
             "manualRequired": self.manual_required,
             "missing": self.missing,
             "suggested": self.suggested,
+            "engine": self.engine,
         }
 
 
@@ -811,6 +823,7 @@ def analyze(
             "the base figures yourself in manual input mode.",
             manual_required=True,
             missing=["price"],
+            engine=engine,
             suggested={"price": None, "shares": _nullable(data.get("shares"))},
         )
 
@@ -839,6 +852,20 @@ def analyze(
     beta_used = beta_estimate.adjusted
     for note in beta_estimate.notes:
         notices.append({"tone": "info", "text": note})
+
+    # The [0.4, 2.5] sanity bound is meant to be inert now that shrinkage does
+    # the real work — but when it DOES bind it changes the cost of equity, and
+    # it used to do so invisibly: the diagnostics table showed the shrunk beta
+    # while the discount rate was computed from the clipped one. Two different
+    # numbers on the same screen with nothing saying which was used.
+    beta_final = clip_beta(beta_used)
+    beta_clipped = abs(beta_final - beta_used) > 1e-6
+    if beta_clipped:
+        notices.append({"tone": "warn", "text":
+                        f"Measured beta of {beta_used:.2f} falls outside the [0.40, 2.50] "
+                        f"sanity bound, so {beta_final:.2f} was used for the cost of equity. "
+                        f"A beta this far from the market usually means a single-factor model "
+                        f"describes this security poorly, not that its risk is really that low."})
 
     cash_used = debt_used = 0.0
     diagnostics_rows = []
@@ -933,6 +960,7 @@ def analyze(
                     "input mode, force the DDM engine, or try another symbol.",
                     manual_required=True,
                     missing=["base"],
+                    engine="DCF",
                     suggested={"base": suggested_base,
                                "netDebt": float(debt_auto - cash_auto),
                                "shares": _nullable(shares), "price": _nullable(price)},
@@ -956,6 +984,7 @@ def analyze(
                 "cash flow in manual input mode, or value the company on another basis.",
                 manual_required=True,
                 missing=["base"],
+                engine="DCF",
                 suggested={"base": suggested_base,
                            "netDebt": float(debt_auto - cash_auto),
                            "shares": _nullable(shares), "price": _nullable(price)},
@@ -965,6 +994,7 @@ def analyze(
                 "Shares outstanding unavailable for this ticker. Enter it in manual input mode.",
                 manual_required=True,
                 missing=["shares"],
+                engine="DCF",
                 suggested={"base": suggested_base,
                            "netDebt": float(debt_auto - cash_auto),
                            "shares": None, "price": _nullable(price)},
@@ -1040,6 +1070,7 @@ def analyze(
                 "in manual input mode, or force the DCF engine.",
                 manual_required=True,
                 missing=["base"],
+                engine="RI",
                 suggested={"base": _nullable(inputs["bookPerShare"]),
                            "price": _nullable(price), "payout": inputs["payout"]},
             )
@@ -1140,6 +1171,7 @@ def analyze(
                     "genuinely pays no dividend, force the DCF engine instead.",
                     manual_required=True,
                     missing=["base"],
+                    engine="DDM",
                     suggested={"base": suggested_dps, "price": _nullable(price),
                                "payout": 0.40},
                 )
@@ -1297,12 +1329,12 @@ def analyze(
                             f"cushion, so the dividend growth assumption is fragile."})
 
     if beta_estimate.method == "vasicek":
-        diagnostics_rows.append((
-            "Beta estimate",
-            f"{beta_estimate.raw:.2f} raw (se {beta_estimate.stderr:.2f}, "
-            f"R2 {beta_estimate.r_squared:.0%}, {beta_estimate.observations}d vs "
-            f"{beta_estimate.index_symbol}) -> {beta_estimate.adjusted:.2f} shrunk",
-        ))
+        trail = (f"{beta_estimate.raw:.2f} raw (se {beta_estimate.stderr:.2f}, "
+                 f"R2 {beta_estimate.r_squared:.0%}, {beta_estimate.observations}d vs "
+                 f"{beta_estimate.index_symbol}) -> {beta_estimate.adjusted:.2f} shrunk")
+        if beta_clipped:
+            trail += f" -> {beta_final:.2f} clipped (used)"
+        diagnostics_rows.append(("Beta estimate", trail))
     if sd_growth_calibrated is not None:
         source = sd_growth_calibrated["source"]
         diagnostics_rows.append((
@@ -1411,7 +1443,9 @@ def analyze(
         "riskFreeSource": rf_source,
         "erp": market["erp"],
         "beta": float(rate_parts["beta"]),
-        "betaEstimate": beta_estimate.as_dict(),
+        "betaEstimate": {**beta_estimate.as_dict(),
+                         "used": float(beta_final),
+                         "clipped": bool(beta_clipped)},
         "assumptions": {
             "growth": growth_input,
             "terminalGrowth": terminal_growth,

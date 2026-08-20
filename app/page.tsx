@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { AnomalyPanel } from "@/components/AnomalyPanel";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
+import { EventStudyPanel } from "@/components/EventStudyPanel";
 import { NewsPanel } from "@/components/NewsPanel";
 import { QualityPanel } from "@/components/QualityPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
@@ -14,7 +15,7 @@ import { ValuationPanel } from "@/components/ValuationPanel";
 import { Card } from "@/components/ui/card";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
-import { useEngines, type RunOptions } from "@/lib/api";
+import { useEngines, useEventStudy, type RunOptions } from "@/lib/api";
 import type { Engine, EngineFailure } from "@/lib/types";
 
 const INITIAL: RunOptions = {
@@ -77,6 +78,7 @@ export default function Home() {
     anomaly, technical, valuation, quality, news,
     run, refineValuation, refineTechnical, csvUrl,
   } = useEngines();
+  const { state: eventStudy, validate, reset: resetEventStudy } = useEventStudy();
   // The ticker bar is controlled from here so the screener can drive it too.
   const [opts, setOpts] = useState<RunOptions>(INITIAL);
   // The last SUBMITTED symbol, which is not what is currently typed in the box.
@@ -90,6 +92,9 @@ export default function Home() {
     const cleaned = { ...next, ticker: next.ticker.trim().toUpperCase() };
     setOpts(cleaned);
     setTicker(cleaned.ticker);
+    // A study belongs to the ticker it was run for; carrying one across would
+    // put another company's abnormal returns under this company's header.
+    resetEventStudy();
     run(cleaned);
   };
 
@@ -158,6 +163,14 @@ export default function Home() {
               {tab === "flow" && (
                 <div className="space-y-4">
                   <Panel state={anomaly}>{(d) => <AnomalyPanel data={d} />}</Panel>
+                  <EventStudyPanel
+                    state={eventStudy}
+                    ticker={resolvedTicker}
+                    onValidate={() => validate({
+                      ticker: opts.ticker, market: opts.market,
+                      mode: opts.mode, scoreThreshold: opts.scoreThreshold,
+                    })}
+                  />
                   <NewsPanel state={news} />
                 </div>
               )}
@@ -174,6 +187,7 @@ export default function Home() {
                   state={valuation}
                   rescue={(failure) => (
                     <ManualRescue suggested={failure.suggested ?? {}}
+                                  engine={failure.engine}
                                   busy={valuation.status === "loading"}
                                   onApply={refineValuation} />
                   )}

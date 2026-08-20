@@ -27,7 +27,7 @@ interface Reading {
  *
  * `netFlowBias` sums flow across every anomaly in the look-back — on the default
  * 2y period that is a two-year verdict. Setting it beside a live trend reading
- * and a current valuation implied the three lenses were describing the same
+ * and a current valuation implied the lenses were describing the same
  * moment, when one of them was averaging over two years. The all-time figure is
  * still shown in the anomaly panel, labelled with its horizon.
  */

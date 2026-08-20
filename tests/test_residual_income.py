@@ -233,3 +233,69 @@ def test_ri_payload_is_json_safe(monkeypatch):
     json.dumps(clean(payload), allow_nan=False)
     assert payload["streamLabel"] == "Residual income / share"
     assert payload["schedule"] and payload["bridge"]
+
+
+# --------------------------------------------------------------------------- #
+# The rescue form must not have to guess which engine failed
+# --------------------------------------------------------------------------- #
+def _gapped_bank():
+    """A financial with neither dividends nor a usable book value."""
+    data = _bank_data(dividends=False)
+    data["balance"] = pd.DataFrame()
+    data["income"] = pd.DataFrame()
+    data["roe_info"] = 0.12
+    data["net_income_info"] = np.nan
+    return data
+
+
+def test_every_manual_required_failure_names_its_engine(monkeypatch):
+    """Regression: the client used to infer the engine from `suggested`'s keys.
+
+    Residual income sends `payout` and no `netDebt`, which the old inference read
+    as a DDM failure — so the rescue form asked for "annual dividend per share",
+    the user supplied a BOOK VALUE, and the DDM discounted it as a dividend.
+    A confident wrong number produced by guessing identity from a dict's shape.
+    """
+    monkeypatch.setattr(V, "fetch_company", lambda ticker: _gapped_bank())
+    monkeypatch.setattr(V, "fetch_risk_free_rate", lambda *a, **k: (0.065, "test"))
+    monkeypatch.setattr(V.riskmodel, "estimate_beta_for_symbol",
+                        lambda *a, **k: V.riskmodel.BetaEstimate(
+                            raw=1.0, adjusted=1.0, stderr=0.1, r_squared=0.4,
+                            observations=400, method="vasicek", index_symbol="^JKSE",
+                            prior_weight=0.04))
+
+    with pytest.raises(V.ValuationError) as caught:
+        V.analyze("GAPBANK.JK", market_code="ID", engine_choice="ri")
+
+    detail = caught.value.as_detail()
+    assert detail["manualRequired"] is True
+    assert detail["engine"] == "RI", "an RI failure must identify itself as RI"
+
+    # And the shape alone is genuinely ambiguous, which is why it cannot be used.
+    suggested = detail["suggested"]
+    assert suggested.get("payout") is not None
+    assert suggested.get("netDebt") is None      # identical to a DDM failure
+
+
+def test_dcf_and_ddm_failures_name_their_engines_too(monkeypatch):
+    monkeypatch.setattr(V, "fetch_risk_free_rate", lambda *a, **k: (0.065, "test"))
+    monkeypatch.setattr(V.riskmodel, "estimate_beta_for_symbol",
+                        lambda *a, **k: V.riskmodel.BetaEstimate(
+                            raw=1.0, adjusted=1.0, stderr=0.1, r_squared=0.4,
+                            observations=400, method="vasicek", index_symbol="^GSPC",
+                            prior_weight=0.04))
+
+    # DCF with no cash-flow statement.
+    non_financial = _bank_data(dividends=False)
+    non_financial.update(sector="Technology", industry="Software",
+                         cashflow=pd.DataFrame(), balance=pd.DataFrame())
+    monkeypatch.setattr(V, "fetch_company", lambda ticker: non_financial)
+    with pytest.raises(V.ValuationError) as caught:
+        V.analyze("TEST", market_code="US")
+    assert caught.value.as_detail()["engine"] == "DCF"
+
+    # DDM forced onto a company with no dividends.
+    monkeypatch.setattr(V, "fetch_company", lambda ticker: _bank_data(dividends=False))
+    with pytest.raises(V.ValuationError) as caught:
+        V.analyze("TEST", market_code="US", engine_choice="ddm")
+    assert caught.value.as_detail()["engine"] == "DDM"

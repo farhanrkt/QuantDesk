@@ -81,6 +81,27 @@ export interface ScreenerResponse {
   };
 }
 
+/** Cumulative abnormal returns after each detected anomaly. */
+export interface CarSummary {
+  meanCar: number; medianCar: number; sd: number; n: number;
+  tStat: number | null; pValue: number | null; hitRate: number;
+}
+export interface EventStudyResponse {
+  ticker: string; benchmark: string; period: string; anomalies: number;
+  study: {
+    events: number; usable: boolean; reason?: string;
+    horizons: Record<string, CarSummary | null>;
+    byDirection: Record<string, Record<string, CarSummary | null>>;
+    config?: { estimationWindow: number; gap: number; horizons: number[] };
+    caveat?: string;
+  };
+  earningsProximity: {
+    available: boolean; tagged: number; total: number;
+    share?: number; window?: number;
+    dates: { date: string; earnings: string; daysApart: number }[];
+  };
+}
+
 /** Engine 4 — Piotroski / Altman / Beneish. */
 export interface QualitySignal { name: string; passed: boolean | null; detail: string }
 export interface QualityResponse {
@@ -155,6 +176,8 @@ export interface ValuationResponse {
     raw: number | null; adjusted: number | null; stderr: number | null;
     rSquared: number | null; observations: number; method: string;
     indexSymbol: string; priorWeight: number | null; notes: string[];
+    /** The beta that actually reached the cost of equity, after the sanity clip. */
+    used: number; clipped: boolean;
   };
   assumptions: { growth: number; terminalGrowth: number; terminalRequested: number;
                  sdGrowth: number; sdRate: number; sdTerminal: number;
@@ -196,6 +219,14 @@ export interface EngineFailure {
   manualRequired?: boolean;
   missing?: string[];
   suggested?: ManualInputs;
+  /**
+   * Which engine produced the failure, stated by the server.
+   *
+   * The rescue form used to infer this from which keys `suggested` carried,
+   * which read a residual-income failure as a DDM one and would have valued a
+   * book value per share as a dividend.
+   */
+  engine?: "DCF" | "DDM" | "RI";
 }
 
 export type Engine<T> =

@@ -124,6 +124,9 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     "/api/screener": (3, 60),
     "/api/confluence": (20, 60),
     "/api/intrinsic-value/simulation": (10, 60),
+    # Five years of history plus the benchmark index, then a market model per
+    # event — the heaviest single-ticker route in the app.
+    "/api/event-study": (6, 60),
     None: (40, 60),                      # default for every other route
 }
 RATE_EXEMPT = {"/api/health", "/api/docs", "/openapi.json"}

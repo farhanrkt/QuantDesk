@@ -40,9 +40,21 @@ const ENGINE_DEFAULTS = {
  * sends a `netDebt` key, the DDM path sends `payout`.
  */
 export function ManualRescue({
-  suggested, busy, onApply,
-}: { suggested: ManualInputs; busy: boolean; onApply: (o: ValuationOptions) => void }) {
-  const isDdm = suggested.payout !== undefined && suggested.netDebt == null;
+  suggested, engine, busy, onApply,
+}: {
+  suggested: ManualInputs;
+  /** Stated by the server. Never inferred from the shape of `suggested`. */
+  engine?: "DCF" | "DDM" | "RI";
+  busy: boolean;
+  onApply: (o: ValuationOptions) => void;
+}) {
+  // Fall back to the old shape inference only for a failure that predates the
+  // server sending `engine` — and never let it produce "RI", which it cannot
+  // distinguish from DDM.
+  const resolved: "DCF" | "DDM" | "RI" =
+    engine ?? (suggested.payout !== undefined && suggested.netDebt == null ? "DDM" : "DCF");
+  const isDcf = resolved === "DCF";
+  const isRi = resolved === "RI";
   const [manual, setManual] = useState<ManualInputs>({
     // A negative base is what triggered the failure; do not prefill it back in.
     base: suggested.base != null && suggested.base > 0 ? suggested.base : null,
@@ -58,10 +70,11 @@ export function ManualRescue({
     <div className="mt-4 space-y-3 border-t border-rule/60 pt-4">
       <div className="eyebrow">Supply the missing figures</div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Field label={isDdm ? "Annual dividend / share" : "Base free cash flow"}>
-          <NumberField value={manual.base} onChange={set("base")} step={isDdm ? 0.01 : 1e8} />
+        <Field label={isRi ? "Book value per share"
+                      : isDcf ? "Base free cash flow" : "Annual dividend / share"}>
+          <NumberField value={manual.base} onChange={set("base")} step={isDcf ? 1e8 : 0.01} />
         </Field>
-        {!isDdm && (
+        {isDcf && (
           <>
             <Field label="Net debt" hint="Debt − cash.">
               <NumberField value={manual.netDebt} onChange={set("netDebt")} step={1e8} />
@@ -74,14 +87,15 @@ export function ManualRescue({
         <Field label="Share price">
           <NumberField value={manual.price} onChange={set("price")} step={0.01} min={0} />
         </Field>
-        {isDdm && (
-          <Field label="Payout ratio" hint="Diagnostic only.">
+        {!isDcf && (
+          <Field label="Payout ratio"
+                 hint={isRi ? "Sets how fast book value compounds." : "Diagnostic only."}>
             <PercentField value={manual.payout} onChange={set("payout")} step={1} min={0} max={1} />
           </Field>
         )}
       </div>
       <ApplyButton
-        onClick={() => onApply({ engine: isDdm ? "ddm" : "dcf", manual })}
+        onClick={() => onApply({ engine: resolved.toLowerCase(), manual })}
         busy={busy}
       >
         Value with these figures

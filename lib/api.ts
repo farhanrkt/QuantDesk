@@ -3,8 +3,8 @@
 import { useCallback, useRef, useState } from "react";
 import type {
   AnomalyResponse, ConfluenceResponse, Engine, EngineFailure, Leg, ManualInputs,
-  Market, NewsResponse, QualityResponse, ScreenerResponse, TechnicalResponse,
-  ValuationResponse,
+  EventStudyResponse, Market, NewsResponse, QualityResponse, ScreenerResponse,
+  TechnicalResponse, ValuationResponse,
 } from "./types";
 
 /** Drops undefined/null/empty/NaN so optional params never reach the API as "". */
@@ -288,6 +288,51 @@ export function useEngines() {
     run, refineValuation, refineTechnical, csvUrl,
     valuationOptions: lastValuation, technicalOptions: lastTechnical,
   };
+}
+
+/**
+ * Signal validation, on demand.
+ *
+ * Deliberately NOT part of a ticker run: it needs five years of history plus the
+ * benchmark index and is far slower than the other engines. It is also the one
+ * result a user should ask for consciously — the answer is frequently "this
+ * signal does not predict anything on this ticker", and that deserves a
+ * deliberate click rather than arriving unbidden beside the chart.
+ */
+export function useEventStudy() {
+  const [state, setState] = useState<Engine<EventStudyResponse>>({ status: "idle" });
+  const seq = useRef(0);
+  const inflight = useRef<AbortController | null>(null);
+
+  const validate = useCallback((o: { ticker: string; market: Market; mode: string;
+                                     scoreThreshold: number }) => {
+    inflight.current?.abort();
+    const controller = new AbortController();
+    inflight.current = controller;
+    const token = (seq.current += 1);
+    const live = () => seq.current === token;
+
+    setState({ status: "loading" });
+    get<EventStudyResponse>("/api/event-study", {
+      ticker: o.ticker, market: o.market,
+      // Walk-forward is not offered by the route; fall back to its default.
+      mode: o.mode === "walkforward" ? "threshold" : o.mode,
+      score_threshold: o.scoreThreshold,
+    }, controller.signal)
+      .then((data) => { if (live()) setState({ status: "ready", data }); })
+      .catch((err) => {
+        if (isAbort(err) || !live()) return;
+        setState({ status: "error", failure: asFailure(err) });
+      });
+  }, []);
+
+  const reset = useCallback(() => {
+    inflight.current?.abort();
+    seq.current += 1;
+    setState({ status: "idle" });
+  }, []);
+
+  return { state, validate, reset };
 }
 
 /** The screener is a separate, on-demand tool — it is not part of a ticker run. */
