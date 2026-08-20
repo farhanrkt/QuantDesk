@@ -75,15 +75,31 @@ export default function Home() {
     anomaly, technical, valuation, news,
     run, refineValuation, refineTechnical, csvUrl,
   } = useEngines();
+  // The ticker bar is controlled from here so the screener can drive it too.
+  const [opts, setOpts] = useState<RunOptions>(INITIAL);
+  // The last SUBMITTED symbol, which is not what is currently typed in the box.
   const [ticker, setTicker] = useState("");
   const [tab, setTab] = useState("flow");
 
   const busy = [anomaly, technical, valuation].some((s) => s.status === "loading");
   const started = anomaly.status !== "idle";
 
-  const handleRun = (opts: RunOptions) => {
-    setTicker(opts.ticker.trim().toUpperCase());
-    run(opts);
+  const handleRun = (next: RunOptions) => {
+    const cleaned = { ...next, ticker: next.ticker.trim().toUpperCase() };
+    setOpts(cleaned);
+    setTicker(cleaned.ticker);
+    run(cleaned);
+  };
+
+  /** A screener hit, loaded into the full three-engine view. Detection settings
+   *  carry over; the market is inferred from the symbol's own suffix. */
+  const handleSelect = (symbol: string) => {
+    handleRun({
+      ...opts,
+      ticker: symbol,
+      market: symbol.toUpperCase().endsWith(".JK") ? "ID" : "US",
+    });
+    setTab("flow");
   };
 
   // What the engines actually resolved to, which may carry a suffix the user
@@ -112,7 +128,7 @@ export default function Home() {
       </header>
 
       <div className="mb-8">
-        <TickerBar onRun={handleRun} busy={busy} initial={INITIAL} />
+        <TickerBar opts={opts} onChange={setOpts} onRun={handleRun} busy={busy} />
       </div>
 
       {!started ? (
@@ -125,7 +141,7 @@ export default function Home() {
               as <code className="font-mono text-chalk/80">BTC-USD</code>.
             </p>
           </div>
-          <ScreenerPanel />
+          <ScreenerPanel onSelect={handleSelect} />
         </div>
       ) : (
         <div className="space-y-6">
@@ -165,7 +181,7 @@ export default function Home() {
                   )}
                 </Panel>
               )}
-              {tab === "screen" && <ScreenerPanel />}
+              {tab === "screen" && <ScreenerPanel onSelect={handleSelect} />}
             </div>
           </div>
         </div>

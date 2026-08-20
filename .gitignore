@@ -34,6 +34,10 @@ Thumbs.db
 # would be committable; the .local one never is.
 .claude/settings.local.json
 
+# --- test / lint artefacts ---
+.pytest_cache/
+.ruff_cache/
+
 # --- logs ---
 *.log
 npm-debug.log*

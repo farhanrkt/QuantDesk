@@ -4,11 +4,12 @@ import {
   Area, Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer,
   Scatter, Tooltip, XAxis, YAxis,
 } from "recharts";
+import type { TooltipProps } from "recharts";
 import { useState } from "react";
 import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
 import { ApplyButton, DownloadButton, Field, NumberField } from "@/components/ui/controls";
 import type { TechnicalOptions } from "@/lib/api";
-import type { TechnicalResponse } from "@/lib/types";
+import type { TechPoint, TechnicalResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { TONE, cn, num, splitEmphasis } from "@/lib/utils";
 
@@ -19,9 +20,19 @@ const BAND = "#A78BFA";
 const UP = "#35C4A8";
 const DOWN = "#FF6B6B";
 
-function TechTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
-  const p = payload[0].payload;
+/** A series row plus the derived columns the band and marker layers read. */
+type ChartPoint = TechPoint & {
+  bbBase: number | null;
+  bbSpan: number | null;
+  buy: number | null;
+  sell: number | null;
+};
+
+function TechTooltip({ active, payload }: TooltipProps<number, string>) {
+  // Recharts types `payload[n].payload` as the untyped source row; this is the
+  // one place the cast belongs, and ChartPoint is exactly what we put in.
+  const p = payload?.[0]?.payload as ChartPoint | undefined;
+  if (!active || !p) return null;
   return (
     <div className="rounded border border-rule bg-ink/95 px-3 py-2 text-xs">
       <div className="num mb-1 text-ash">{p.date}</div>
@@ -198,8 +209,13 @@ export function TechnicalPanel({
               <YAxis tickLine={false} axisLine={false} width={56} />
               <ReferenceLine y={0} stroke="#7A8CA0" strokeOpacity={0.4} />
               <Bar dataKey="macdHist" isAnimationActive={false}
-                   shape={(props: any) => {
-                     const { x, y, width, height, payload } = props;
+                   shape={(props: unknown) => {
+                     // Recharts passes the rect geometry plus the source row;
+                     // it has no exported type for a custom Bar shape.
+                     const { x, y, width, height, payload } = props as {
+                       x: number; y: number; width: number; height: number;
+                       payload: ChartPoint;
+                     };
                      const positive = (payload.macdHist ?? 0) >= 0;
                      return <rect x={x} y={y} width={width} height={height}
                                   fill={positive ? UP : DOWN} opacity={0.5} />;

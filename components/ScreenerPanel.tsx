@@ -38,7 +38,7 @@ const DEFAULT_UNIVERSE = "AAPL, NVDA, TSLA, JPM, KO, BBCA.JK, BBRI.JK, TLKM.JK";
  * collapsed to its .JK members with no error. Switch to IDX only when the
  * whole list is bare Indonesian codes.
  */
-export function ScreenerPanel() {
+export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => void }) {
   const { state, scan } = useScreener();
   const [tickers, setTickers] = useState(DEFAULT_UNIVERSE);
   const [recentDays, setRecentDays] = useState(10);
@@ -78,7 +78,7 @@ export function ScreenerPanel() {
           <p className="text-xs leading-relaxed text-ash">
             Scan a universe and surface only the names showing fresh whale activity. Symbols
             carrying their own suffix keep it, so a mixed list works on the US setting — up to
-            50 at a time.
+            20 at a time, since each symbol costs an upstream fetch and a model fit.
           </p>
           <Field label="Universe" hint="Comma or newline separated.">
             <textarea
@@ -134,8 +134,8 @@ export function ScreenerPanel() {
           )}
           {mode === "walkforward" && (
             <p className="text-[0.7rem] text-warn">
-              Walk-forward refits per step and is slow across many symbols. Prefer Threshold or
-              Robust for screening.
+              Walk-forward refits per step, so the server caps it at 5 symbols per scan. Use
+              Threshold or Robust to screen a full universe.
             </p>
           )}
         </CardBody>
@@ -162,7 +162,12 @@ export function ScreenerPanel() {
               {rows.length} of {state.data.scanned} with activity in the last{" "}
               {state.data.recentDays} days
             </CardTitle>
-            {rows.length > 0 && <DownloadButton onClick={download}>CSV</DownloadButton>}
+            <div className="flex items-center gap-3">
+              {rows.length > 0 && onSelect && (
+                <span className="text-[0.65rem] text-ash">Select a ticker to run all three engines</span>
+              )}
+              {rows.length > 0 && <DownloadButton onClick={download}>CSV</DownloadButton>}
+            </div>
           </CardHeader>
           <CardBody className="px-0">
             {rows.length === 0 ? (
@@ -185,7 +190,27 @@ export function ScreenerPanel() {
                   <tbody>
                     {rows.map((r) => (
                       <tr key={r.ticker} className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
-                        <td className="num px-5 py-2 font-semibold">{r.ticker}</td>
+                        <td className="num px-5 py-2 font-semibold">
+                          {/* The point of a screener is to find a name worth
+                              looking at. Having found one, retyping it into the
+                              ticker bar was the only way through. */}
+                          {onSelect ? (
+                            <button
+                              type="button"
+                              onClick={() => onSelect(r.ticker)}
+                              title={`Run all three engines on ${r.ticker}`}
+                              className={cn(
+                                "underline decoration-dotted decoration-rule underline-offset-4",
+                                "transition-colors hover:text-tech hover:decoration-tech",
+                                "focus:outline-none focus-visible:ring-1 focus-visible:ring-tech",
+                              )}
+                            >
+                              {r.ticker}
+                            </button>
+                          ) : (
+                            r.ticker
+                          )}
+                        </td>
                         <td className="num px-5 py-2 text-right">{r.recentAnomalies}</td>
                         <td className="px-5 py-2" style={{ color: flowColor(r.dominantFlow) }}>
                           {r.dominantFlow}

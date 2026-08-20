@@ -1,19 +1,28 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
 import type { RunOptions } from "@/lib/api";
 
 const PRESETS = ["AAPL", "NVDA", "JPM", "BBCA.JK", "TLKM.JK", "BTC-USD"];
 
+/**
+ * Controlled by the page rather than holding its own state, so that anything
+ * else able to start a run — the screener's ticker buttons, a future deep
+ * link — is reflected here instead of leaving the bar showing a stale symbol
+ * beside results for a different one.
+ */
 export function TickerBar({
-  onRun, busy, initial,
-}: { onRun: (o: RunOptions) => void; busy: boolean; initial: RunOptions }) {
-  const [opts, setOpts] = useState<RunOptions>(initial);
+  opts, onChange, onRun, busy,
+}: {
+  opts: RunOptions;
+  onChange: (o: RunOptions) => void;
+  onRun: (o: RunOptions) => void;
+  busy: boolean;
+}) {
   const set = <K extends keyof RunOptions>(key: K, value: RunOptions[K]) =>
-    setOpts((prev) => ({ ...prev, [key]: value }));
+    onChange({ ...opts, [key]: value });
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,7 +127,7 @@ export function TickerBar({
             <button key={preset} type="button"
                     onClick={() => { const next = { ...opts, ticker: preset,
                                        market: preset.endsWith(".JK") ? "ID" as const : "US" as const };
-                                     setOpts(next); onRun(next); }}
+                                     onChange(next); onRun(next); }}
                     className="rounded border border-rule px-2 py-1 font-mono text-[0.65rem] text-ash transition-colors hover:border-tech/60 hover:text-chalk">
               {preset}
             </button>

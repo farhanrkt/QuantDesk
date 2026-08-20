@@ -4,9 +4,10 @@ import {
   Area, AreaChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer,
   Scatter, Tooltip, XAxis, YAxis,
 } from "recharts";
+import type { TooltipProps } from "recharts";
 import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
 import { DownloadButton } from "@/components/ui/controls";
-import type { AnomalyResponse } from "@/lib/types";
+import type { AnomalyPoint, AnomalyResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn, num, pct } from "@/lib/utils";
 
@@ -17,9 +18,18 @@ const NEU = "#7A8CA0";
 const flowColor = (flow?: string | null) =>
   flow === "Accumulation" ? ACC : flow === "Distribution" ? DIST : NEU;
 
-function AnomalyTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
-  const p = payload[0].payload;
+/** A series row plus the per-flow columns the Scatter layers read. */
+type ChartPoint = AnomalyPoint & {
+  acc: number | null;
+  dist: number | null;
+  neu: number | null;
+};
+
+function AnomalyTooltip({ active, payload }: TooltipProps<number, string>) {
+  // Recharts types `payload[n].payload` as the untyped source row; this is the
+  // one place the cast belongs, and ChartPoint is exactly what we put in.
+  const p = payload?.[0]?.payload as ChartPoint | undefined;
+  if (!active || !p) return null;
   return (
     <div className="rounded border border-rule bg-ink/95 px-3 py-2 text-xs shadow-xl">
       <div className="num mb-1 text-ash">{p.date}</div>

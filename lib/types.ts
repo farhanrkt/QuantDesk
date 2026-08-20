@@ -124,3 +124,21 @@ export type Engine<T> =
   | { status: "loading" }
   | { status: "error"; failure: EngineFailure }
   | { status: "ready"; data: T };
+
+/**
+ * One leg of a /api/confluence response. Each engine reports its own outcome,
+ * so a ticker with no dividend history still returns its anomaly and technical
+ * panels. `error` is a plain string for most failures and the structured
+ * EngineFailure for a valuation data gap the user can close.
+ */
+export type Leg<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: string | EngineFailure };
+
+export interface ConfluenceResponse {
+  ticker: string;
+  anomaly: Leg<AnomalyResponse>;
+  technical: Leg<TechnicalResponse>;
+  valuation: Leg<ValuationResponse>;
+  news: Leg<NewsResponse>;
+}

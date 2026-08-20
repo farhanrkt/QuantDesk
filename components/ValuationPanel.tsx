@@ -51,7 +51,13 @@ export function ValuationPanel({
 
   return (
     <div className="space-y-4 animate-rise">
+      {/* Remount on a new company or a new routed engine. Every control below
+          holds its value in useState, whose initialiser runs once — without
+          this key, manual figures entered for one listing stay loaded and get
+          applied to the next one on the first "Re-run valuation", and a DCF's
+          10% growth default survives a route into the DDM's 5%. */}
       <ValuationControls
+        key={`${data.ticker}:${data.engine}`}
         engine={data.engine}
         rateName={data.rateName}
         currencySymbol={data.market.symbol}

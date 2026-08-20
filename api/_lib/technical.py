@@ -218,9 +218,12 @@ def generate_signals(df: pd.DataFrame) -> pd.DataFrame:
     fast = frame["SMA_50"]
     slow = frame["SMA_200"]
     valid = fast.notna() & slow.notna()
-    valid_previous = valid.shift(1).fillna(False).astype(bool)
+    # `fill_value=` rather than `.fillna()`: shifting a bool Series introduces
+    # NaN, which upcasts to object, and pandas now warns that the silent
+    # downcast on fillna will be removed. Same result, no deprecation.
+    valid_previous = valid.shift(1, fill_value=False).astype(bool)
     above = (fast > slow) & valid
-    above_previous = above.shift(1).fillna(False).astype(bool)
+    above_previous = above.shift(1, fill_value=False).astype(bool)
 
     golden_cross = above & (~above_previous) & valid & valid_previous
     death_cross = (~above) & above_previous & valid & valid_previous

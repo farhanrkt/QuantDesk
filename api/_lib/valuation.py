@@ -17,6 +17,7 @@ arguments carrying the SAME default values the widgets had. Nothing else.
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Optional
 
 import numpy as np
@@ -189,15 +190,32 @@ def _nullable(value):
     return float(out) if np.isfinite(out) else None
 
 
+# The 10Y yield moves once a day; this used to be refetched on EVERY valuation
+# request, including all three legs of a confluence run. Keyed by date so it
+# expires on its own, and only successful fetches are stored — caching a failure
+# would pin the fallback for the rest of the day with no retry. Module scope
+# survives warm serverless invocations and costs nothing when it does not.
+_RISK_FREE_CACHE: dict[str, tuple[float, str]] = {}
+
+
 def fetch_risk_free_rate(market_code: str, fallback: float):
     if market_code != "US":
         return fallback, "IndoGB 10Y proxy (static assumption)"
+
+    today = dt.date.today().isoformat()
+    cached = _RISK_FREE_CACHE.get(today)
+    if cached is not None:
+        return cached
+
     try:
         hist = yf.Ticker("^TNX").history(period="5d")
         if not hist.empty:
             close = hist["Close"].dropna()
             if len(close):
-                return float(close.iloc[-1]) / 100.0, "US 10Y Treasury (^TNX, live)"
+                result = (float(close.iloc[-1]) / 100.0, "US 10Y Treasury (^TNX, live)")
+                _RISK_FREE_CACHE.clear()          # only ever hold the current day
+                _RISK_FREE_CACHE[today] = result
+                return result
     except Exception:
         pass
     return fallback, "US 10Y Treasury (fallback default)"
