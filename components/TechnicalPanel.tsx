@@ -113,7 +113,7 @@ export function TechnicalPanel({
       )}
 
       {section === "indicators" && (
-        <IndicatorGrid indicators={data.indicators} price={latest.close} />
+        <IndicatorGrid explanations={data.indicatorsExplain} />
       )}
 
       {!data.hasLongTerm && section === "chart" && (

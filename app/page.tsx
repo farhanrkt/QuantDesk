@@ -13,6 +13,7 @@ import { TickerBar } from "@/components/TickerBar";
 import { ManualRescue } from "@/components/ValuationControls";
 import { ValuationPanel } from "@/components/ValuationPanel";
 import { Card } from "@/components/ui/card";
+import { DetailProvider, DetailToggle, useDetailLevel } from "@/components/ui/explain";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
 import { useEngines, useEventStudy, type RunOptions } from "@/lib/api";
@@ -86,6 +87,10 @@ export default function Home() {
   // The last SUBMITTED symbol, which is not what is currently typed in the box.
   const [ticker, setTicker] = useState("");
   const [tab, setTab] = useState("flow");
+  // Simple/Detailed is app-wide rather than per-panel. Someone who wants the
+  // short version of the technical lens wants the short version of the quality
+  // lens too, and a per-panel switch makes them say so four times.
+  const [detail, setDetail] = useDetailLevel();
 
   const busy = [anomaly, technical, valuation].some((s) => s.status === "loading");
   const started = anomaly.status !== "idle";
@@ -120,6 +125,7 @@ export default function Home() {
           : ticker;
 
   return (
+    <DetailProvider level={detail}>
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <header className="mb-8 border-b border-rule pb-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -129,11 +135,15 @@ export default function Home() {
               Flow · Trend · Value · Quality — US &amp; IDX
             </p>
           </div>
-          <p className="max-w-sm text-xs leading-relaxed text-ash">
-            Four models read the same ticker from different data. Where they agree is more
-            interesting than what any one of them says alone — with the caveat that they are
-            not equally independent.
-          </p>
+          <div className="flex flex-col items-end gap-3">
+            <DetailToggle level={detail} onChange={setDetail} />
+            <p className="max-w-sm text-xs leading-relaxed text-ash">
+              Four models read the same ticker from different data. Where they agree is more
+              interesting than what any one of them says alone — with the caveat that they are
+              not equally independent. Every number has an{" "}
+              <span className="text-chalk/80">i</span> beside it explaining what it means.
+            </p>
+          </div>
         </div>
       </header>
 
@@ -215,5 +225,6 @@ export default function Home() {
         listings. Educational and research use only — not investment advice.
       </footer>
     </main>
+    </DetailProvider>
   );
 }

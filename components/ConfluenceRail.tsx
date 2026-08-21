@@ -3,7 +3,7 @@
 import type {
   AnomalyResponse, Engine, QualityResponse, TechnicalResponse, ValuationResponse,
 } from "@/lib/types";
-import { pct, signedPct } from "@/lib/utils";
+import { pct } from "@/lib/utils";
 
 const ACC = "#35C4A8";
 const DIST = "#FF6B6B";
@@ -15,12 +15,26 @@ const ASH = "#7A8CA0";
 
 interface Reading {
   lens: string;
+  /** The question this lens answers, in the reader's own words. */
+  question: string;
   verdict: string;
   detail: string;
   color: string;
   /** -1 bearish, 0 neutral, +1 bullish. Used only for the agreement count. */
   vote: number;
 }
+
+/**
+ * THE RAIL IS THE FIRST THING ANYONE READS, so it is the last place that should
+ * be speaking in acronyms. It used to summarise the quality lens as
+ * "F-Score 8/9 · Z'' 5.6 (grey) · M -2.29" — three published scores compressed
+ * into eleven characters of jargon, above the fold, before the reader has met
+ * any of them. Each line now says what the score MEANS; the numbers themselves
+ * are one click away in the lens that owns them.
+ */
+const blank = (lens: string, question: string): Reading => ({
+  lens, question, verdict: "—", detail: "no reading", color: ASH, vote: 0,
+});
 
 /**
  * Votes with the RECENT flow bias, not the all-time one.
@@ -32,20 +46,24 @@ interface Reading {
  * still shown in the anomaly panel, labelled with its horizon.
  */
 function readAnomaly(state: Engine<AnomalyResponse>): Reading {
-  if (state.status !== "ready")
-    return { lens: "Flow", verdict: "—", detail: "no reading", color: ASH, vote: 0 };
+  const question = "Is anyone unusual trading this?";
+  if (state.status !== "ready") return blank("Flow", question);
   const { stats } = state.data;
   const bias = stats.recentFlowBias;
   const color = bias === "Accumulation" ? ACC : bias === "Distribution" ? DIST : ASH;
   const drift =
-    stats.netFlowBias !== bias ? ` · ${stats.netFlowBias.toLowerCase()} over the full window` : "";
+    stats.netFlowBias !== bias
+      ? `, leaning ${stats.netFlowBias.toLowerCase()} over the full window`
+      : "";
   return {
     lens: "Flow",
-    verdict: stats.recentCount === 0 ? "Quiet" : bias,
+    question,
+    verdict: stats.recentCount === 0 ? "Quiet" : bias === "Accumulation" ? "Buying"
+      : bias === "Distribution" ? "Selling" : "Mixed",
     detail:
       stats.recentCount === 0
-        ? `no anomalies in the last ${stats.recentDays} days · ${stats.anomalyCount} across the window`
-        : `${stats.recentCount} event${stats.recentCount === 1 ? "" : "s"} in the last ${stats.recentDays} days · peak strength ${stats.maxStrength}${drift}`,
+        ? `Nothing unusual in the last ${stats.recentDays} days (${stats.anomalyCount} odd days across the whole window)`
+        : `${stats.recentCount} unusual day${stats.recentCount === 1 ? "" : "s"} in the last ${stats.recentDays}${drift}`,
     color: stats.recentCount === 0 ? ASH : color,
     vote:
       stats.recentCount === 0 ? 0 : bias === "Accumulation" ? 1 : bias === "Distribution" ? -1 : 0,
@@ -53,58 +71,92 @@ function readAnomaly(state: Engine<AnomalyResponse>): Reading {
 }
 
 function readTechnical(state: Engine<TechnicalResponse>): Reading {
-  if (state.status !== "ready")
-    return { lens: "Trend", verdict: "—", detail: "no reading", color: ASH, vote: 0 };
-  const { summary, latest } = state.data;
+  const question = "What has the price been doing?";
+  if (state.status !== "ready") return blank("Trend", question);
+  const { summary, latest, longTerm, hasLongTerm } = state.data;
   const tone = summary.trend_tone;
   const color = tone === "bull" ? ACC : tone === "bear" ? DIST : TECH;
-  const momentum = summary.chips.find((c) => c.label === "Momentum (RSI)")?.value ?? "—";
+  // Prefer the long-horizon verdict when there is enough history for one — it
+  // is the sentence a holder asked for. The 50/200-day trend label is a
+  // description of the last few months wearing the same word.
+  const context = hasLongTerm
+    ? longTerm.view.headline
+    : `Last close ${latest.close.toFixed(2)} (${latest.changePct >= 0 ? "+" : ""}${latest.changePct.toFixed(2)}% on the day)`;
   return {
     lens: "Trend",
+    question,
     verdict: summary.trend,
-    detail: `${momentum} · last close ${latest.close.toFixed(2)} (${latest.changePct >= 0 ? "+" : ""}${latest.changePct.toFixed(2)}%)`,
+    detail: context,
     color,
     vote: tone === "bull" ? 1 : tone === "bear" ? -1 : 0,
   };
 }
 
+const ENGINE_NAMES: Record<string, string> = {
+  DCF: "cash-flow model",
+  DDM: "dividend model",
+  RI: "book-value model",
+};
+
 function readValuation(state: Engine<ValuationResponse>): Reading {
-  if (state.status !== "ready")
-    return { lens: "Value", verdict: "—", detail: "no reading", color: ASH, vote: 0 };
+  const question = "What is the business worth?";
+  if (state.status !== "ready") return blank("Value", question);
   const d = state.data;
   const color =
     d.verdict === "UNDERVALUED" ? ACC : d.verdict === "OVERVALUED" ? DIST
       : d.engine === "DDM" ? DDM : DCF;
+  const gap = d.monteCarlo.upside;
+  const direction = gap == null ? "" : gap >= 0
+    ? `the market price is ${pct(Math.abs(gap), 0)} below that`
+    : `the market price is ${pct(Math.abs(gap), 0)} above that`;
   return {
     lens: "Value",
+    question,
     verdict: d.verdict.charAt(0) + d.verdict.slice(1).toLowerCase(),
-    detail: `${d.engine} median ${d.monteCarlo.p50Label} · ${signedPct(d.monteCarlo.upside)} vs market · P(under) ${pct(d.monteCarlo.probUndervalued, 0)}`,
+    detail: `The ${ENGINE_NAMES[d.engine] ?? d.engine} puts it near ${d.monteCarlo.p50Label}; ${direction}. `
+      + `${pct(d.monteCarlo.probUndervalued, 0)} of simulated runs came out cheap.`,
     color,
     vote: d.verdict === "UNDERVALUED" ? 1 : d.verdict === "OVERVALUED" ? -1 : 0,
   };
 }
 
+const DISTRESS_WORDS: Record<string, string> = {
+  safe: "balance sheet comfortably clear of distress",
+  grey: "balance sheet neither clearly safe nor distressed",
+  distress: "balance sheet in the distress zone",
+};
+
+const MANIPULATION_WORDS: Record<string, string> = {
+  clean: "no sign of massaged earnings",
+  borderline: "accruals close to the manipulation threshold",
+  flagged: "accounting pattern flags for a closer look",
+};
+
 function readQuality(state: Engine<QualityResponse>): Reading {
-  if (state.status !== "ready")
-    return { lens: "Quality", verdict: "—", detail: "no reading", color: ASH, vote: 0 };
+  const question = "Are the numbers real?";
+  if (state.status !== "ready") return blank("Quality", question);
   const d = state.data;
   if (!d.applicable)
     return {
-      lens: "Quality", verdict: "n/a",
-      detail: "the three accounting models do not apply to financials",
+      lens: "Quality", question, verdict: "n/a",
+      detail: "These three accounting models were built on non-financial firms and do not "
+        + "transfer to banks or insurers, so no score is reported.",
       color: ASH, vote: 0,
     };
 
   const parts: string[] = [];
-  if (d.piotroski) parts.push(`F-Score ${d.piotroski.score}/${d.piotroski.maxScore}`);
-  if (d.altman?.score != null) parts.push(`Z'' ${d.altman.score.toFixed(1)} (${d.altman.band})`);
-  if (d.beneish?.score != null) parts.push(`M ${d.beneish.score.toFixed(2)}`);
+  if (d.piotroski) {
+    parts.push(`${d.piotroski.score} of ${d.piotroski.maxScore} health checks passed`);
+  }
+  if (d.altman?.band) parts.push(DISTRESS_WORDS[d.altman.band] ?? d.altman.band);
+  if (d.beneish?.band) parts.push(MANIPULATION_WORDS[d.beneish.band] ?? d.beneish.band);
 
   return {
     lens: "Quality",
+    question,
     verdict: d.verdict === "SOUND" ? "Sound"
       : d.verdict === "CONCERNS" ? "Concerns" : "Neutral",
-    detail: parts.join(" · ") || (d.headline ?? ""),
+    detail: parts.length ? `${parts.join(", ")}.` : (d.headline ?? ""),
     color: d.verdict === "SOUND" ? ACC : d.verdict === "CONCERNS" ? DIST : QUAL,
     vote: d.verdict === "SOUND" ? 1 : d.verdict === "CONCERNS" ? -1 : 0,
   };
@@ -177,7 +229,10 @@ export function ConfluenceRail({
           <div key={r.lens} className="relative px-5 py-4">
             <span aria-hidden className="absolute left-0 top-4 h-[calc(100%-2rem)] w-[2px]"
                   style={{ background: r.color, opacity: r.verdict === "—" ? 0.25 : 1 }} />
-            <div className="eyebrow mb-1">{r.lens}</div>
+            <div className="eyebrow mb-0.5">{r.lens}</div>
+            <div className="mb-1.5 text-[0.65rem] italic leading-snug text-ash/70">
+              {r.question}
+            </div>
             <div className="num text-lg font-semibold leading-tight" style={{ color: r.color }}>
               {r.verdict}
             </div>

@@ -1,21 +1,14 @@
 "use client";
 
 import { Check, Minus, X } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
-import type { QualityResponse } from "@/lib/types";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Explain, ExplainedStat, TONE_HEX, useDetail,
+} from "@/components/ui/explain";
+import type { ExplainMap, QualityResponse } from "@/lib/types";
 import { num } from "@/lib/utils";
 
-const GOOD = "#35C4A8";
-const BAD = "#FF6B6B";
-const WARN = "#F2C14E";
 const ASH = "#7A8CA0";
-
-const BAND_COLOR: Record<string, string> = {
-  strong: GOOD, solid: GOOD, safe: GOOD, clean: GOOD,
-  mixed: ASH, grey: WARN, borderline: WARN,
-  weak: BAD, distress: BAD, flagged: BAD,
-  unknown: ASH,
-};
 
 /**
  * Engine 4 — the lens that opens the filings.
@@ -24,8 +17,19 @@ const BAND_COLOR: Record<string, string> = {
  * projections. None of them asks whether the business is solvent or whether the
  * earnings are real. A DCF on a company sliding toward insolvency is arithmetic,
  * and this is the panel that says so before the reader acts on it.
+ *
+ * THE COLOUR TRAP THIS PANEL SITS ON. Piotroski and Altman reward a HIGH number;
+ * Beneish punishes one. All three are "accounting quality scores" and they sit
+ * in the same row of tiles, so colouring them the same way would tell a reader
+ * that an earnings-manipulation flag is good news. The direction now comes from
+ * `explain[key].tone`, decided in Python with a test named after exactly that
+ * mistake (`test_beneish_and_altman_point_opposite_ways`).
  */
 export function QualityPanel({ data }: { data: QualityResponse }) {
+  const detail = useDetail();
+  const simple = detail === "simple";
+  const ex: ExplainMap = data.explain ?? {};
+
   if (!data.applicable) {
     return (
       <Card className="animate-rise">
@@ -43,49 +47,49 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
   }
 
   const { piotroski, altman, beneish } = data;
-  const verdictColor =
-    data.verdict === "SOUND" ? GOOD : data.verdict === "CONCERNS" ? BAD : ASH;
+  const verdictColor = TONE_HEX[
+    data.verdict === "SOUND" ? "good" : data.verdict === "CONCERNS" ? "bad" : "neutral"
+  ] ?? ASH;
 
   return (
     <div className="space-y-4 animate-rise">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Verdict" value={data.verdict ?? "—"}
-              tone={data.verdict === "SOUND" ? "text-acc"
-                    : data.verdict === "CONCERNS" ? "text-dist" : "text-ash"}
-              sub={data.headline} />
-        {piotroski && (
-          <Stat label="Piotroski F-Score" value={`${piotroski.score}/${piotroski.maxScore}`}
-                sub={piotroski.band}
-                tone={piotroski.band === "weak" ? "text-dist"
-                      : piotroski.band === "mixed" ? "text-ash" : "text-acc"} />
-        )}
-        {altman && (
-          <Stat label="Altman Z''-score (EM)"
-                value={altman.score === null ? "—" : num(altman.score)}
-                sub={altman.band}
-                tone={altman.band === "distress" ? "text-dist"
-                      : altman.band === "grey" ? "text-warn" : "text-acc"} />
-        )}
-        {beneish && (
-          <Stat label="Beneish M-Score"
-                value={beneish.score === null ? "—" : num(beneish.score)}
-                sub={`${beneish.band} · ${beneish.indicesAvailable}/${beneish.indicesTotal} indices`}
-                tone={beneish.band === "flagged" ? "text-dist"
-                      : beneish.band === "borderline" ? "text-warn" : "text-acc"} />
-        )}
+      {/* ---------------- the summary in plain English ---------------- */}
+      <Card accent={verdictColor}>
+        <CardHeader>
+          <CardTitle>What the filings say</CardTitle>
+          <span className="num text-xs font-semibold" style={{ color: verdictColor }}>
+            {data.verdict ?? "—"}
+          </span>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <p className="text-[0.95rem] leading-relaxed text-chalk/90">{data.headline}</p>
+          <p className="text-[0.78rem] leading-relaxed text-ash">
+            Three published tests, each asking something different: is the business improving
+            (Piotroski), is it far from running out of money (Altman), and do the numbers look
+            like they have been massaged (Beneish). They read the accounts, not the share price,
+            which is what makes them worth putting beside the other three lenses.
+          </p>
+        </CardBody>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {piotroski && <ExplainedStat explain={ex.piotroski} sub={piotroski.reading} />}
+        {altman && <ExplainedStat explain={ex.altman} sub={altman.reading} />}
+        {beneish && <ExplainedStat explain={ex.beneish} sub={beneish.reading} />}
       </div>
 
       {piotroski && piotroski.signals.length > 0 && (
-        <Card accent={verdictColor}>
+        <Card>
           <CardHeader>
-            <CardTitle>Piotroski signals</CardTitle>
+            <CardTitle>The nine health checks</CardTitle>
             <span className="font-mono text-[0.65rem] text-ash">
               {piotroski.signalsAvailable} of {piotroski.signalsTotal} computable
             </span>
           </CardHeader>
           <CardBody className="px-0">
             <ul>
-              {piotroski.signals.map((signal) => (
+              {(simple ? piotroski.signals.filter((s) => s.passed !== null)
+                       : piotroski.signals).map((signal) => (
                 <li key={signal.name}
                     className="flex items-baseline gap-3 border-b border-rule/60 px-5 py-2 last:border-0">
                   <span className="mt-0.5 shrink-0">
@@ -101,57 +105,74 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
               ))}
             </ul>
             <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
-              A signal that could not be computed scores nothing — it is never counted as a
-              pass, which is why the denominator moves with data coverage.
+              A tick means that measure improved on last year, or was already healthy. A check
+              that could not be computed scores nothing — it is never counted as a pass, which
+              is why the total moves with how complete the filings are.
             </p>
           </CardBody>
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {altman && (
-          <Card accent={BAND_COLOR[altman.band] ?? ASH}>
-            <CardHeader><CardTitle>Distress risk</CardTitle></CardHeader>
-            <CardBody className="space-y-3">
-              <p className="text-sm leading-relaxed text-chalk/80">{altman.reading}</p>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.7rem]">
-                {Object.entries(altman.components).map(([key, value]) => (
-                  <div key={key} className="flex justify-between gap-2">
-                    <dt className="text-ash">{LABELS[key] ?? key}</dt>
-                    <dd className="num text-chalk/80">{value === null ? "—" : num(value)}</dd>
-                  </div>
-                ))}
-              </dl>
-              <p className="text-[0.68rem] leading-relaxed text-ash">
-                Altman&apos;s Z&apos;&apos; with the emerging-market constant, so the scale is
-                the same for an IDX listing and a US one. Safe above 5.85, distress below 4.35.
-              </p>
-            </CardBody>
-          </Card>
-        )}
+      {!simple && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {altman && (
+            <Card accent={TONE_HEX[ex.altman?.tone ?? "neutral"]}>
+              <CardHeader><CardTitle>How far from running out of money</CardTitle></CardHeader>
+              <CardBody className="space-y-3">
+                <p className="text-sm leading-relaxed text-chalk/80">{altman.reading}</p>
+                <dl className="space-y-1 text-[0.72rem]">
+                  {Object.entries(altman.components).map(([key, value]) => {
+                    const explain = ex[`altmanComponent.${key}`];
+                    return (
+                      <div key={key} className="flex items-baseline justify-between gap-2">
+                        <dt className="flex items-center gap-1.5 text-ash">
+                          {explain?.label ?? key}
+                          <Explain explain={explain} />
+                        </dt>
+                        <dd className="num text-chalk/80">{value === null ? "—" : num(value)}</dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+                <p className="text-[0.68rem] leading-relaxed text-ash">
+                  This is the emerging-market version of Altman&apos;s score, so an Indonesian
+                  listing and a US one are measured on the same scale. Safe above 5.85, distress
+                  below 4.35, and the gap between them is a zone the model declines to call.
+                </p>
+              </CardBody>
+            </Card>
+          )}
 
-        {beneish && (
-          <Card accent={BAND_COLOR[beneish.band] ?? ASH}>
-            <CardHeader><CardTitle>Earnings manipulation screen</CardTitle></CardHeader>
-            <CardBody className="space-y-3">
-              <p className="text-sm leading-relaxed text-chalk/80">{beneish.reading}</p>
-              <dl className="grid grid-cols-4 gap-x-3 gap-y-1 text-[0.7rem]">
-                {Object.entries(beneish.indices).map(([key, value]) => (
-                  <div key={key} className="flex flex-col">
-                    <dt className="font-mono text-[0.6rem] uppercase text-ash">{key}</dt>
-                    <dd className="num text-chalk/80">{value === null ? "—" : num(value)}</dd>
-                  </div>
-                ))}
-              </dl>
-              <p className="text-[0.68rem] leading-relaxed text-ash">
-                A screen, not a finding. Beneish classified roughly three-quarters of known
-                manipulators correctly — which on a population where manipulation is rare also
-                means most flags are false positives.
-              </p>
-            </CardBody>
-          </Card>
-        )}
-      </div>
+          {beneish && (
+            <Card accent={TONE_HEX[ex.beneish?.tone ?? "neutral"]}>
+              <CardHeader><CardTitle>Do the earnings look massaged?</CardTitle></CardHeader>
+              <CardBody className="space-y-3">
+                <p className="text-sm leading-relaxed text-chalk/80">{beneish.reading}</p>
+                <dl className="space-y-1 text-[0.72rem]">
+                  {Object.entries(beneish.indices).map(([key, value]) => {
+                    const explain = ex[`beneishIndex.${key}`];
+                    return (
+                      <div key={key} className="flex items-baseline justify-between gap-2">
+                        <dt className="flex items-center gap-1.5 text-ash">
+                          {explain?.label ?? key}
+                          <Explain explain={explain} />
+                        </dt>
+                        <dd className="num text-chalk/80">{value === null ? "—" : num(value)}</dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+                <p className="text-[0.68rem] leading-relaxed text-ash">
+                  A screen, not a finding. Beneish classified roughly three-quarters of known
+                  manipulators correctly — which on a population where manipulation is rare also
+                  means most flags are false positives. Every index is a this-year-over-last-year
+                  ratio, so 1.00 means &quot;unchanged&quot; for all of them.
+                </p>
+              </CardBody>
+            </Card>
+          )}
+        </div>
+      )}
 
       <p className="text-xs leading-relaxed text-ash">
         Piotroski (2000) scores nine fundamental trends; Altman&apos;s Z&apos;&apos;-score (2005
@@ -162,10 +183,3 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
     </div>
   );
 }
-
-const LABELS: Record<string, string> = {
-  workingCapitalToAssets: "Working capital / assets",
-  retainedToAssets: "Retained earnings / assets",
-  ebitToAssets: "EBIT / assets",
-  equityToLiabilities: "Equity / liabilities",
-};

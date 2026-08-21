@@ -33,9 +33,11 @@ import pandas as pd
 import yfinance as yf
 from scipy.signal import argrelextrema
 
+from . import explain as ex
 from . import indicators as ind
 from . import longterm as lt
 from . import riskmodel
+from .valuation import MARKETS
 
 OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 CURRENCY_SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "IDR": "Rp", "AUD": "A$"}
@@ -319,6 +321,21 @@ def generate_signals(df: pd.DataFrame) -> pd.DataFrame:
 def _last_valid(series: pd.Series) -> Optional[float]:
     cleaned = series.dropna()
     return float(cleaned.iloc[-1]) if len(cleaned) else None
+
+
+def _percentile_of_last(series: pd.Series, window: int) -> Optional[float]:
+    """Where the latest reading sits within its own recent history, as 0-1.
+
+    An absolute band width is uninterpretable — 4% is tight on one stock and
+    wide on another — so the squeeze test has to be relative to the name's own
+    range. Returns the fraction of the last `window` readings that sit BELOW
+    today's, which makes 0.05 mean "narrower than 95% of the past year".
+    """
+    cleaned = series.dropna().tail(window)
+    if len(cleaned) < 20:
+        return None
+    latest = float(cleaned.iloc[-1])
+    return float((cleaned < latest).mean())
 
 
 def _format_currency(value: float, currency: str) -> str:
@@ -678,7 +695,15 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
     enough = len(data) >= MIN_LONGTERM_BARS
 
     drawdown = lt.drawdown_profile(close_series) if enough else {"usable": False}
-    risk = lt.risk_metrics(close_series) if enough else {"usable": False}
+    # Sharpe and Sortino used to divide by a risk-free rate of ZERO, which is not
+    # the textbook ratio and flatters every name by roughly rf/volatility. That
+    # went unnoticed while the panel printed the bare number; the moment it
+    # started saying "above 1.0 is good" the reader needed the number to mean
+    # what that sentence claims. The market convention is the same constant the
+    # valuation engine discounts with, so the two lenses now agree on what money
+    # costs.
+    risk_free = MARKETS.get((market_code or "US").upper(), MARKETS["US"])["risk_free_default"]
+    risk = lt.risk_metrics(close_series, risk_free=risk_free) if enough else {"usable": False}
     rolling = lt.rolling_returns(close_series) if enough else []
     seasonality = lt.monthly_seasonality(close_series) if enough else {"usable": False, "months": []}
     momentum = lt.time_series_momentum(close_series)
@@ -719,6 +744,54 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
                               / max(reg_upper.iloc[-1] - reg_lower.iloc[-1], 1e-9)),
         }
 
+    long_term = {
+        "view": view,
+        "drawdown": drawdown,
+        "risk": risk,
+        "rollingReturns": rolling,
+        "calendarReturns": calendar,
+        "seasonality": seasonality,
+        "momentum": momentum,
+        "position": position,
+        "faber": faber,
+        "relativeStrength": relative,
+        "hurst": hurst,
+        "regression": regression,
+        "coppock": coppock_points,
+    }
+    # Plain-language layer. Built here rather than in the component because every
+    # clause is conditional on a number existing and on which side of a threshold
+    # it falls — see `_lib/explain.py` for why that belongs somewhere testable.
+    if enough:
+        long_term["plainEnglish"] = ex.long_horizon_story(ticker, long_term)
+        long_term["explain"] = ex.for_long_term(long_term, ticker=ticker,
+                                                risk_free=risk_free, currency=currency)
+    else:
+        long_term["plainEnglish"] = None
+        long_term["explain"] = {}
+
+    indicator_notes = ex.for_indicators(
+        {
+            "sma50": _last_valid(data["SMA_50"]), "sma100": _last_valid(data["SMA_100"]),
+            "sma200": _last_valid(data["SMA_200"]),
+            "adx": _last_valid(data["ADX"]), "plusDi": _last_valid(data["PLUS_DI"]),
+            "minusDi": _last_valid(data["MINUS_DI"]),
+            "aroonUp": _last_valid(data["AROON_UP"]), "aroonDown": _last_valid(data["AROON_DOWN"]),
+            "rsi": _last_valid(data["RSI"]),
+            "stochK": _last_valid(data["STOCH_K"]), "stochD": _last_valid(data["STOCH_D"]),
+            "williamsR": _last_valid(data["WILLIAMS_R"]), "cci": _last_valid(data["CCI"]),
+            "macd": _last_valid(data["MACD"]), "macdSignal": _last_valid(data["MACD_SIGNAL"]),
+            "bbPercentB": _last_valid(data["BB_PERCENT_B"]),
+            "bbBandwidth": _last_valid(data["BB_BANDWIDTH"]),
+            "bbBandwidthPercentile": _percentile_of_last(data["BB_BANDWIDTH"], 252),
+            "atr": _last_valid(data["ATR"]), "atrPct": _last_valid(data["ATR_PCT"]),
+            "mfi": _last_valid(data["MFI"]), "cmf": _last_valid(data["CMF"]),
+            "volumeTrend": _last_valid(data["VOLUME_TREND"]),
+            "roc63": _last_valid(data["ROC_63"]), "roc252": _last_valid(data["ROC_252"]),
+        },
+        price=price,
+    )
+
     return {
         "ticker": ticker,
         "currency": currency,
@@ -726,21 +799,7 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
         "bars": len(data),
         "hasSma200": bool(data["SMA_200"].notna().sum() > 0),
         "hasLongTerm": bool(enough),
-        "longTerm": {
-            "view": view,
-            "drawdown": drawdown,
-            "risk": risk,
-            "rollingReturns": rolling,
-            "calendarReturns": calendar,
-            "seasonality": seasonality,
-            "momentum": momentum,
-            "position": position,
-            "faber": faber,
-            "relativeStrength": relative,
-            "hurst": hurst,
-            "regression": regression,
-            "coppock": coppock_points,
-        },
+        "longTerm": long_term,
         "indicators": {
             "adx": _last_valid(data["ADX"]),
             "plusDi": _last_valid(data["PLUS_DI"]),
@@ -758,6 +817,7 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
             "atrPct": _last_valid(data["ATR_PCT"]),
             "bbPercentB": _last_valid(data["BB_PERCENT_B"]),
             "bbBandwidth": _last_valid(data["BB_BANDWIDTH"]),
+            "bbBandwidthPercentile": _percentile_of_last(data["BB_BANDWIDTH"], 252),
             "cmf": _last_valid(data["CMF"]),
             "mfi": _last_valid(data["MFI"]),
             "volumeTrend": _last_valid(data["VOLUME_TREND"]),
@@ -774,6 +834,7 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
             "ichimokuConversion": _last_valid(data["ICHI_CONVERSION"]),
             "ichimokuBase": _last_valid(data["ICHI_BASE"]),
         },
+        "indicatorsExplain": indicator_notes,
         "latest": {
             "date": data.index[-1].strftime("%Y-%m-%d"),
             "close": price,

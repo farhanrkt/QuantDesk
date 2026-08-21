@@ -2,6 +2,42 @@
 
 export type Market = "US" | "ID";
 
+/**
+ * One metric explained in plain English, built by `api/_lib/explain.py`.
+ *
+ * `tone` is the ONLY thing the UI may colour from. It already accounts for
+ * metrics where a low number is the good one (drawdown, volatility, Ulcer
+ * index, Beneish), so no component should ever look at the raw value's sign to
+ * pick a colour — that is the bug this whole layer exists to make impossible.
+ * `goodDirection` is for the arrow glyph and for reading comprehension, never
+ * for the colour.
+ */
+export interface Explanation {
+  label: string;
+  /** What is this measuring, in one jargon-free sentence. */
+  what: string;
+  /** What THIS value means — the number quoted back and interpreted. */
+  reading: string;
+  /** What would make you act differently, or an admission that nothing would. */
+  action: string;
+  band: string;
+  tone: "good" | "bad" | "warn" | "neutral" | "none";
+  goodDirection: "high" | "low" | "none";
+  /** How well the published evidence supports acting on it. */
+  evidence: "strong" | "moderate" | "weak" | "none" | null;
+  valueText: string | null;
+}
+
+export type ExplainMap = Record<string, Explanation | undefined>;
+
+/** The long-horizon evidence retold as sentences a person would say aloud. */
+export interface PlainEnglish {
+  ticker: string;
+  paragraphs: string[];
+  /** The handful of metric keys Simple mode keeps, in the order to show them. */
+  simpleMetrics: string[];
+}
+
 export interface AnomalyPoint {
   date: string; close: number; volume: number; obv: number; mfi: number;
   rvol: number; anomalyScore: number | null; isAnomaly: boolean;
@@ -61,6 +97,7 @@ export interface AnomalyResponse {
   };
   series: AnomalyPoint[];
   anomalies: AnomalyEvent[];
+  explain?: ExplainMap;
 }
 
 export interface ScreenerRow {
@@ -125,6 +162,7 @@ export interface QualityResponse {
     indices: Record<string, number | null>;
     indicesAvailable: number; indicesTotal: number;
   } | null;
+  explain?: ExplainMap;
 }
 
 export interface NewsItem {
@@ -205,6 +243,8 @@ export interface LongTermBlock {
     series?: { date: string; ratio: number }[];
   };
   hurst: number | null;
+  plainEnglish: PlainEnglish | null;
+  explain: ExplainMap;
   regression: {
     slopePerYear: number | null; rSquared: number | null;
     lower: number; mid: number; upper: number; position: number;
@@ -228,6 +268,7 @@ export interface TechnicalResponse {
   hasLongTerm: boolean;
   longTerm: LongTermBlock;
   indicators: Record<string, number | null>;
+  indicatorsExplain: ExplainMap;
 }
 
 /** Figures the user can supply when Yahoo's filings have a gap. */
@@ -282,6 +323,7 @@ export interface ValuationResponse {
   diagnostics: { metric: string; value: string }[];
   history: Record<string, string>[];
   notices: { tone: string; text: string }[];
+  explain?: ExplainMap;
 }
 
 /**

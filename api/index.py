@@ -57,8 +57,8 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from _lib import (accumulation, eventstudy, microstructure, news, quality,
-                  riskmodel, symbols, technical, valuation)
+from _lib import (accumulation, eventstudy, explain, microstructure, news,
+                  quality, riskmodel, symbols, technical, valuation)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -319,7 +319,7 @@ def whale_payload(symbol: str, period: str = "2y", mode: str = "threshold",
     liquidity = microstructure.liquidity_profile(frame)
     episodes = accumulation.detect(frame)
 
-    return {
+    payload = {
         "ticker": result.ticker,
         "liquidity": liquidity,
         "accumulation": episodes,
@@ -352,6 +352,12 @@ def whale_payload(symbol: str, period: str = "2y", mode: str = "threshold",
         "series": series,
         "anomalies": anomalies,
     }
+    # Plain-language layer. Attached after the payload is assembled so it reads
+    # exactly the figures the panel renders rather than a parallel computation
+    # that could drift from them.
+    payload["explain"] = explain.for_flow(
+        payload, currency="IDR" if symbol.upper().endswith(".JK") else "USD")
+    return payload
 
 
 @app.get("/api/isolation-forest")
@@ -541,9 +547,11 @@ def valuation_payload(symbol: str, **kwargs) -> dict:
     silently costs the user the only path back from a Yahoo data gap.
     """
     try:
-        return valuation.analyze(symbol, **kwargs)
+        payload = valuation.analyze(symbol, **kwargs)
     except valuation.ValuationError as exc:
         raise HTTPException(status_code=422, detail=exc.as_detail()) from exc
+    payload["explain"] = explain.for_valuation(payload)
+    return payload
 
 
 @app.get("/api/intrinsic-value")
@@ -617,7 +625,9 @@ def intrinsic_value_simulation(
 # --------------------------------------------------------------------------- #
 def quality_payload(symbol: str) -> dict:
     """Piotroski / Altman / Beneish from the statements already fetched."""
-    return quality.analyze(valuation.fetch_company(symbol))
+    payload = quality.analyze(valuation.fetch_company(symbol))
+    payload["explain"] = explain.for_quality(payload)
+    return payload
 
 
 @app.get("/api/quality")

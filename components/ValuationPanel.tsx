@@ -6,10 +6,11 @@ import {
 } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
+import { ExplainedStat, useDetail } from "@/components/ui/explain";
 import { DownloadButton } from "@/components/ui/controls";
 import { ValuationControls } from "@/components/ValuationControls";
 import type { ValuationOptions } from "@/lib/api";
-import type { ValuationResponse } from "@/lib/types";
+import type { ExplainMap, ValuationResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { num, pct, signedPct } from "@/lib/utils";
 
@@ -27,6 +28,9 @@ export function ValuationPanel({
   busy: boolean;
   csvUrl: string;
 }) {
+  const detail = useDetail();
+  const simple = detail === "simple";
+  const ex: ExplainMap = data.explain ?? {};
   const accent = data.engine === "DDM" ? DDM : DCF;
   const mc = data.monteCarlo;
   const verdictColor =
@@ -82,14 +86,45 @@ export function ValuationPanel({
         </div>
       ))}
 
+      {/* WHAT THIS PANEL IS AND IS NOT, said before the first number rather
+          than in a footnote. A discounted cash flow is an opinion with
+          arithmetic attached; leading with a single "fair value" invites it to
+          be read as a price target, which is the one thing it cannot be. */}
+      <Card accent={accent}>
+        <CardHeader>
+          <CardTitle>What this is worth, and how sure the model is</CardTitle>
+          <span className="num text-xs font-semibold" style={{ color: verdictColor }}>
+            {data.verdict}
+          </span>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <p className="text-[0.95rem] leading-relaxed text-chalk/90">
+            Today the market prices {data.ticker} at {data.priceLabel}. Projecting the
+            {data.engine === "DCF" ? " cash the business generates" :
+             data.engine === "DDM" ? " dividends the business pays" :
+             " profits earned above the cost of its capital"} forward and discounting them back
+            at {pct(data.discountRate, 1)} a year puts it nearer {mc.p50Label} — a range of
+            {" "}{mc.p25Label} to {mc.p75Label} once the assumptions are allowed to vary.
+          </p>
+          <p className="text-[0.78rem] leading-relaxed text-ash">
+            This is not a forecast of the share price. It is what the business is worth IF the
+            growth and discount rates below are right, and they are estimates. That is why the
+            output is a range and why every input is editable.
+          </p>
+        </CardBody>
+      </Card>
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="Market price" value={data.priceLabel} />
-        <Stat label="Median intrinsic value" value={mc.p50Label}
-              tone={(mc.upside ?? 0) >= 0 ? "text-acc" : "text-dist"}
-              sub={`${signedPct(mc.upside)} vs market`} />
-        <Stat label="Bear · P25" value={mc.p25Label} />
-        <Stat label="Bull · P75" value={mc.p75Label} />
-        <Stat label="P(undervalued)" value={pct(mc.probUndervalued, 0)} />
+        <ExplainedStat label="Model's middle estimate" value={mc.p50Label}
+                       explain={ex.upside}
+                       tone={(mc.upside ?? 0) >= 0 ? "text-acc" : "text-dist"}
+                       sub={`${signedPct(mc.upside)} vs market`} />
+        <ExplainedStat explain={ex.valuationSpread}
+                       label="Pessimistic to optimistic"
+                       value={`${mc.p25Label} – ${mc.p75Label}`} />
+        <ExplainedStat explain={ex.probUndervalued} />
+        <ExplainedStat explain={ex.terminalShare} />
       </div>
 
       <Card accent={accent}>
@@ -135,7 +170,13 @@ export function ValuationPanel({
         </CardBody>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+      {!simple && ex.discountRate && (
+        <div className="grid grid-cols-1 gap-3">
+          <ExplainedStat explain={ex.discountRate} />
+        </div>
+      )}
+
+      <div className={simple ? "hidden" : "grid gap-4 lg:grid-cols-[1.4fr_1fr]"}>
         <Card>
           <CardHeader>
             <CardTitle>

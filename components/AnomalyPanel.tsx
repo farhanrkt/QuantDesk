@@ -6,8 +6,9 @@ import {
 } from "recharts";
 import type { TooltipProps } from "recharts";
 import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
+import { ExplainedStat, ExplanationBody, useDetail } from "@/components/ui/explain";
 import { DownloadButton } from "@/components/ui/controls";
-import type { AnomalyPoint, AnomalyResponse } from "@/lib/types";
+import type { AnomalyPoint, AnomalyResponse, ExplainMap } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn, num, pct } from "@/lib/utils";
 
@@ -47,6 +48,9 @@ function AnomalyTooltip({ active, payload }: TooltipProps<number, string>) {
 
 export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
   const { stats, series, anomalies, config, liquidity, accumulation } = data;
+  const detail = useDetail();
+  const simple = detail === "simple";
+  const ex: ExplainMap = data.explain ?? {};
 
   // Recharts renders a Scatter by reading one key off every row, so each flow
   // class gets its own column that is null everywhere it does not apply.
@@ -79,34 +83,27 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
     <div className="space-y-4 animate-rise">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="Latest close" value={num(stats.latestClose)} />
-        <Stat label="Anomalies found" value={stats.anomalyCount}
-              sub={`${pct(stats.anomalyRate)} of ${stats.totalDays} days`} />
+        <ExplainedStat label="Unusual days found" value={stats.anomalyCount}
+                       explain={ex.anomalyRate}
+                       sub={`${pct(stats.anomalyRate)} of ${stats.totalDays} days`} />
         {/* Two horizons, kept apart on purpose. The all-time figure summarises
             the whole look-back; only the recent one describes where flow is
             now, and that is what the confluence view votes with. */}
-        <Stat label={`Flow bias · last ${stats.recentDays}d`} value={stats.recentFlowBias}
-              tone={toneOf(stats.recentFlowBias)}
-              sub={`${stats.recentCount} fresh event${stats.recentCount === 1 ? "" : "s"}`} />
-        <Stat label={`Flow bias · full ${config.period}`} value={stats.netFlowBias}
-              tone={toneOf(stats.netFlowBias)}
-              sub="whole look-back" />
+        <ExplainedStat explain={ex.recentFlowBias} value={stats.recentFlowBias}
+                       tone={toneOf(stats.recentFlowBias)}
+                       sub={`${stats.recentCount} fresh event${stats.recentCount === 1 ? "" : "s"}`} />
+        <ExplainedStat explain={ex.netFlowBias} value={stats.netFlowBias}
+                       label={`Flow bias · full ${config.period}`}
+                       tone={toneOf(stats.netFlowBias)}
+                       sub="whole look-back" />
         <Stat label="Peak strength" value={`${stats.maxStrength}/100`} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Est. bid-ask spread"
-              value={liquidity?.spread == null ? "—" : pct(liquidity.spread, 2)}
-              sub={liquidity?.spreadDetail?.primarySource ?? ""} />
-        <Stat label="Move vs spread"
-              value={liquidity?.moveVsSpread == null ? "—" : `${num(liquidity.moveVsSpread, 1)}x`}
-              tone={liquidity?.insideSpreadNoise ? "text-warn" : "text-ash"}
-              sub="latest day, round trip" />
-        <Stat label="Volatility (Yang-Zhang)"
-              value={liquidity?.yangZhangVol == null ? "—" : pct(liquidity.yangZhangVol, 0)}
-              sub="annualised, gap-aware" />
-        <Stat label="Amihud illiquidity"
-              value={liquidity?.amihud == null ? "—" : liquidity.amihud.toExponential(1)}
-              sub="price impact per $ traded" />
+        <ExplainedStat explain={ex.spread} />
+        <ExplainedStat explain={ex.moveVsSpread} sub="latest day, in and out" />
+        <ExplainedStat explain={ex.yangZhangVol} />
+        <ExplainedStat explain={ex.amihud} sub="cost of putting size through it" />
       </div>
 
       <Card accent={biasColor}>
@@ -172,7 +169,9 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
         <Card accent={accumulation.current
           ? flowColor(accumulation.current.direction) : undefined}>
           <CardHeader>
-            <CardTitle>Sustained flow regimes</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              Slow, patient buying or selling
+            </CardTitle>
             <span className="font-mono text-[0.65rem] text-ash">
               CUSUM · h={accumulation.config.threshold} · k={accumulation.config.slack}
             </span>
@@ -212,12 +211,17 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
                 </tbody>
               </table>
             </div>
+            {ex.cusumEpisode && (
+              <div className="mx-5 mt-3 rounded border border-rule bg-ink/40 px-3 py-2">
+                <ExplanationBody explain={ex.cusumEpisode} />
+              </div>
+            )}
             <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
               An institution building a position splits the order over weeks so no single day
-              stands out — which makes it invisible to the day-by-day detector above. CUSUM
-              accumulates small deviations instead, so a run of unremarkable days trips a
-              threshold none of them would alone. &quot;Began&quot; is the estimated
-              changepoint; &quot;confirmed&quot; is when there was enough evidence to say so.
+              stands out — which makes it invisible to the day-by-day detector above. This test
+              adds up small deviations instead, so a run of unremarkable days trips a threshold
+              none of them would alone. &quot;Began&quot; is the estimated start;
+              &quot;confirmed&quot; is when there was enough evidence to say so.
             </p>
           </CardBody>
         </Card>
@@ -257,7 +261,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {anomalies.map((a) => (
+                  {(simple ? anomalies.slice(0, 8) : anomalies).map((a) => (
                     <tr key={a.date} className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
                       <td className="num px-5 py-2 text-ash">{a.date}</td>
                       <td className="px-5 py-2" style={{ color: flowColor(a.flow) }}>{a.flow}</td>
@@ -286,7 +290,14 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
         </CardBody>
       </Card>
 
-      <p className="text-xs leading-relaxed text-ash">
+      {simple && anomalies.length > 8 && (
+        <p className="text-[0.7rem] text-ash">
+          Showing the 8 strongest of {anomalies.length} flagged days. Switch to Detailed for the
+          full log and the model settings behind it.
+        </p>
+      )}
+
+      <p className={cn("text-xs leading-relaxed text-ash", simple && "hidden")}>
         Isolation Forest over six behavioural features (return, RVOL, |return|, MFI, OBV z-score,
         intraday range), 200 estimators, seed 42, fit with{" "}
         <span className="font-mono text-chalk/80">contamination=&quot;auto&quot;</span> so the
