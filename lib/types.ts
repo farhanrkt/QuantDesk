@@ -165,6 +165,98 @@ export interface QualityResponse {
   explain?: ExplainMap;
 }
 
+/* ------------------------------------------------------------------ */
+/* Breadth tier — rank a universe, then deepen a shortlist            */
+/* ------------------------------------------------------------------ */
+
+export interface UniverseSummary {
+  id: string; name: string; market: Market;
+  note: string; count: number; asOf: string;
+}
+
+export interface RankSignalDefinition {
+  key: string; label: string; question: string; detail: string;
+  direction: 1 | -1;
+  evidence: "strong" | "moderate" | "weak";
+  weight: number;
+}
+
+export interface RankSignalCell {
+  raw: number | null;
+  /** Position within THIS scan, 0-100. Direction is already applied. */
+  percentile: number | null;
+  weight: number;
+}
+
+export interface RankRow {
+  rank: number;
+  ticker: string;
+  composite: number | null;
+  /** Share of the intended weight that actually contributed. */
+  coverage: number;
+  signalsAvailable: number;
+  signalsTotal: number;
+  signals: Record<string, RankSignalCell>;
+  latestClose: number;
+  bars: number;
+  asOf: string;
+  explain: ExplainMap;
+}
+
+export interface SignalCorrelation {
+  available: boolean;
+  reason?: string;
+  signals?: string[];
+  matrix?: Record<string, Record<string, number | null>>;
+  pairs?: { a: string; b: string; correlation: number }[];
+  /** Participation ratio of the correlation matrix eigenvalues. */
+  effectiveSignals?: number | null;
+  measuredSignals?: number;
+  reading?: string;
+}
+
+export interface RankResponse {
+  universe: { id: string | null; name: string; market: Market;
+              asOf: string | null; symbols: string[] };
+  rows: RankRow[];
+  signals: RankSignalDefinition[];
+  weights: Record<string, number>;
+  correlation: SignalCorrelation;
+  requested: number;
+  fetched: number;
+  ranked: number;
+  benchmark: string | null;
+  /** Named rather than counted — a typo and a delisting look different. */
+  missing: string[];
+  minBars: number;
+  explain: ExplainMap;
+}
+
+export interface DeepenValuation {
+  engine: string; price: number; priceLabel: string; verdict: string;
+  medianLabel: string; upside: number | null; probUndervalued: number;
+  terminalShare: number | null;
+  explain?: ExplainMap;
+}
+
+export interface DeepenRow {
+  ticker: string;
+  quality: { ok: true; data: QualityResponse } | { ok: false; error: unknown };
+  valuation: { ok: true; data: DeepenValuation } | { ok: false; error: unknown };
+}
+
+export interface DeepenResponse {
+  rows: DeepenRow[];
+  caveat: string;
+}
+
+export interface UniversesResponse {
+  universes: UniverseSummary[];
+  asOf: string;
+  maxUniverse: number;
+  maxDeepen: number;
+}
+
 export interface NewsItem {
   title: string; source: string; link: string; published: string;
 }

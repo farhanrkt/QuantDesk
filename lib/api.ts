@@ -2,9 +2,10 @@
 
 import { useCallback, useRef, useState } from "react";
 import type {
-  AnomalyResponse, ConfluenceResponse, Engine, EngineFailure, Leg, ManualInputs,
-  EventStudyResponse, Market, NewsResponse, QualityResponse, ScreenerResponse,
-  TechnicalResponse, ValuationResponse,
+  AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
+  Leg, ManualInputs, EventStudyResponse, Market, NewsResponse, QualityResponse,
+  RankResponse, ScreenerResponse, TechnicalResponse, UniversesResponse,
+  ValuationResponse,
 } from "./types";
 
 /** Drops undefined/null/empty/NaN so optional params never reach the API as "". */
@@ -364,4 +365,98 @@ export function useScreener() {
   }, []);
 
   return { state, scan };
+}
+
+
+/**
+ * The breadth tier: rank a universe, then deepen a shortlist from it.
+ *
+ * Two hooks rather than one, because they are two requests with very different
+ * costs and the user chooses whether to pay the second. A scan is a handful of
+ * batched upstream calls; deepening is one fetch per name and takes seconds
+ * each, which is exactly why the shortlist is small and explicit.
+ */
+export function useUniverses() {
+  const [state, setState] = useState<Engine<UniversesResponse>>({ status: "idle" });
+
+  const load = useCallback(() => {
+    setState({ status: "loading" });
+    get<UniversesResponse>("/api/rank/universes", {})
+      .then((data) => setState({ status: "ready", data }))
+      .catch((err) => setState({ status: "error", failure: asFailure(err) }));
+  }, []);
+
+  return { state, load };
+}
+
+export function useRanking() {
+  const [state, setState] = useState<Engine<RankResponse>>({ status: "idle" });
+  const seq = useRef(0);
+  const inflight = useRef<AbortController | null>(null);
+
+  const scan = useCallback((params: {
+    universe?: string | null; tickers?: string; market: Market;
+  }) => {
+    // A second scan supersedes the first rather than racing it — the same
+    // guard the single-ticker lenses use, and for the same reason: two scans
+    // settling out of order would put one universe's rows under another's
+    // header.
+    inflight.current?.abort();
+    const controller = new AbortController();
+    inflight.current = controller;
+    const token = (seq.current += 1);
+    const live = () => seq.current === token;
+
+    setState({ status: "loading" });
+    get<RankResponse>("/api/rank", {
+      universe: params.universe ?? undefined,
+      tickers: params.universe ? undefined : params.tickers,
+      market: params.market,
+    }, controller.signal)
+      .then((data) => { if (live()) setState({ status: "ready", data }); })
+      .catch((err) => {
+        if (isAbort(err) || !live()) return;
+        setState({ status: "error", failure: asFailure(err) });
+      });
+  }, []);
+
+  const reset = useCallback(() => {
+    inflight.current?.abort();
+    seq.current += 1;
+    setState({ status: "idle" });
+  }, []);
+
+  return { state, scan, reset };
+}
+
+export function useDeepen() {
+  const [state, setState] = useState<Engine<DeepenResponse>>({ status: "idle" });
+  const seq = useRef(0);
+  const inflight = useRef<AbortController | null>(null);
+
+  const deepen = useCallback((tickers: string[], market: Market) => {
+    inflight.current?.abort();
+    const controller = new AbortController();
+    inflight.current = controller;
+    const token = (seq.current += 1);
+    const live = () => seq.current === token;
+
+    setState({ status: "loading" });
+    get<DeepenResponse>("/api/rank/deepen", {
+      tickers: tickers.join(","), market,
+    }, controller.signal)
+      .then((data) => { if (live()) setState({ status: "ready", data }); })
+      .catch((err) => {
+        if (isAbort(err) || !live()) return;
+        setState({ status: "error", failure: asFailure(err) });
+      });
+  }, []);
+
+  const reset = useCallback(() => {
+    inflight.current?.abort();
+    seq.current += 1;
+    setState({ status: "idle" });
+  }, []);
+
+  return { state, deepen, reset };
 }

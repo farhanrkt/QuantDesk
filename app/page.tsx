@@ -7,6 +7,7 @@ import { ConfluenceRail } from "@/components/ConfluenceRail";
 import { EventStudyPanel } from "@/components/EventStudyPanel";
 import { NewsPanel } from "@/components/NewsPanel";
 import { QualityPanel } from "@/components/QualityPanel";
+import { RankingPanel } from "@/components/RankingPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { TickerBar } from "@/components/TickerBar";
@@ -31,7 +32,7 @@ const TABS = [
   { id: "trend", label: "Technicals", accent: "#5B8DEF" },
   { id: "value", label: "Intrinsic value", accent: "#E8B44C" },
   { id: "quality", label: "Quality", accent: "#F2C14E" },
-  { id: "screen", label: "Screener", accent: "#A78BFA" },
+  { id: "screen", label: "Scan & rank", accent: "#A78BFA" },
 ];
 
 /** One wrapper so all three panels handle loading and failure identically. */
@@ -161,7 +162,7 @@ export default function Home() {
               as <code className="font-mono text-chalk/80">BTC-USD</code>.
             </p>
           </div>
-          <ScreenerPanel onSelect={handleSelect} />
+          <RankingPanel onSelect={handleSelect} />
         </div>
       ) : (
         <div className="space-y-6">
@@ -214,7 +215,21 @@ export default function Home() {
               {tab === "quality" && (
                 <Panel state={quality}>{(d) => <QualityPanel data={d} />}</Panel>
               )}
-              {tab === "screen" && <ScreenerPanel onSelect={handleSelect} />}
+              {tab === "screen" && (
+                <div className="space-y-8">
+                  <RankingPanel onSelect={handleSelect} />
+                  {/* The anomaly screener still answers a question the ranking
+                      cannot: "has anything UNUSUAL just happened here?" — a
+                      one-off event rather than a standing characteristic. It
+                      keeps its own multiple-testing correction, so it stays. */}
+                  <div>
+                    <h2 className="eyebrow mb-3">
+                      Or scan for fresh unusual activity instead
+                    </h2>
+                    <ScreenerPanel onSelect={handleSelect} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

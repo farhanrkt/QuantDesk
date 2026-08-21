@@ -2599,3 +2599,166 @@ def for_horizon(block: dict, currency_format=None) -> dict:
             out[f"vwapDistance.{anchor['label']}"] = result
 
     return {k: v for k, v in out.items() if v is not None}
+
+
+# ============================================================================ #
+# The breadth tier
+#
+# Percentiles, not scores. Every reading here has to say "within this scan",
+# because that is the only claim a cross-sectional rank supports — a name in the
+# top decile of the Nasdaq-100 on momentum may still be falling in absolute
+# terms if the whole index is.
+# ============================================================================ #
+def _percentile_words(value: float) -> str:
+    if value >= 90:
+        return "in the top tenth of this scan"
+    if value >= 75:
+        return "in the top quarter of this scan"
+    if value >= 60:
+        return "in the better half of this scan"
+    if value >= 40:
+        return "around the middle of this scan"
+    if value >= 25:
+        return "in the weaker half of this scan"
+    if value >= 10:
+        return "in the bottom quarter of this scan"
+    return "in the bottom tenth of this scan"
+
+
+@metric("compositeRank")
+def _composite(value, coverage=None, available=None, total=None, **_):
+    label = "Overall rank"
+    what = ("The weighted average of where this name sits on every signal, compared with the "
+            "others in the same scan. 100 would be best on everything.")
+    if not _known(value):
+        return unavailable(label, what, "no signal could be computed for this name")
+    band = _ladder(value, ((25, "poor"), (45, "fair"), (70, "good"), (None, "excellent")))
+    reading = (f"{value:.0f} out of 100, {_percentile_words(value)}. This is a position "
+               f"WITHIN this universe on this date, not a score on an absolute scale — if the "
+               f"whole list is falling, the top of it is still falling.")
+    if _known(available) and _known(total) and available < total:
+        reading += (f" Built from {int(available)} of {int(total)} signals; the rest had too "
+                    f"little history and were left out rather than filled in with a guess.")
+    return make(label, what, reading,
+                "A ranking is a shortlist, not a verdict. Its job is to decide which few names "
+                "are worth opening the four lenses on.",
+                band, "high", evidence="moderate", value_text=f"{value:.0f}")
+
+
+@metric("signalRank")
+def _signal_rank(value, signal=None, raw=None, raw_text=None, **_):
+    from . import ranking
+    definition = ranking.SIGNAL_BY_KEY.get(signal or "", {})
+    label = definition.get("label", "Signal")
+    what = f"{definition.get('question', '')} {definition.get('detail', '')}".strip()
+    if not _known(value):
+        return unavailable(label, what or "One ranking signal.",
+                           "not enough history for this name")
+    band = _ladder(value, ((25, "poor"), (45, "fair"), (70, "good"), (None, "excellent")))
+    reading = f"{value:.0f} out of 100 — {_percentile_words(value)}"
+    if raw_text:
+        reading += f", on a reading of {raw_text}"
+    reading += ". "
+    if definition.get("direction") == -1:
+        reading += ("Note the direction: a LOWER raw number ranks better here, and the "
+                    "percentile already accounts for that.")
+    return make(label, what or "One ranking signal.", reading,
+                "One input among several. The composite beside it is what orders the table, "
+                "and the overlap between signals is measured below it.",
+                band, "high", evidence=definition.get("evidence"),
+                value_text=f"{value:.0f}")
+
+
+@metric("signalOverlap")
+def _signal_overlap(value, a=None, b=None, **_):
+    label = "Signal overlap"
+    what = ("How much two of the ranking signals are measuring the same thing. 1.0 would mean "
+            "they are interchangeable.")
+    if not _known(value):
+        return unavailable(label, what, "too few complete rows to measure it")
+    magnitude = abs(value)
+    if magnitude > 0.7:
+        band = "caution"
+        verdict = (f"{_num(value)} — these two are close to the same measurement. The composite "
+                   f"is counting that one fact more than once, which makes it look like a "
+                   f"consensus of independent tests when it is not.")
+    elif magnitude > 0.4:
+        band = "context"
+        verdict = f"{_num(value)} — related, as you would expect, but not duplicates."
+    else:
+        band = "good"
+        verdict = f"{_num(value)} — largely independent of each other."
+    if a and b:
+        verdict = f"{a} and {b}: " + verdict
+    return make(label, what, verdict,
+                "Where two signals overlap heavily, treat their agreement as one opinion rather "
+                "than two. This is the same caveat the four-lens view carries, measured instead "
+                "of asserted.",
+                band, "low", evidence="strong", value_text=_num(value))
+
+
+def for_ranking(result: dict) -> dict:
+    """Explanations for the ranking table: the composite, each signal, the overlap."""
+    from . import ranking
+
+    out: dict = {}
+    for signal in result.get("signals") or ranking.SIGNALS:
+        key = signal["key"]
+        # A definition-level explanation for the column header, independent of
+        # any one row: the table needs to explain its columns before a reader
+        # has clicked into a name.
+        out[f"signalDefinition.{key}"] = make(
+            label=signal["label"],
+            what=f"{signal['question']} {signal['detail']}",
+            reading=("Ranked across every name in this scan"
+                     + (", with a LOWER raw reading ranking better."
+                        if signal["direction"] == -1 else ", highest first.")
+                     + f" Weighted {signal['weight']:.1f} in the composite, because the "
+                       f"published evidence for it is {signal['evidence']}."),
+            action=("One column among several. Sort by it to see the ranking that signal alone "
+                    "would produce."),
+            band="context", good_direction="none", evidence=signal["evidence"],
+        )
+
+    correlation = result.get("correlation") or {}
+    for pair in (correlation.get("pairs") or [])[:3]:
+        explanation = explain(
+            "signalOverlap", pair["correlation"],
+            a=ranking.SIGNAL_BY_KEY.get(pair["a"], {}).get("label", pair["a"]),
+            b=ranking.SIGNAL_BY_KEY.get(pair["b"], {}).get("label", pair["b"]))
+        if explanation:
+            out[f"signalOverlap.{pair['a']}.{pair['b']}"] = explanation
+
+    return {k: v for k, v in out.items() if v is not None}
+
+
+def for_ranking_row(row: dict) -> dict:
+    """Explanations for one ranked name, built on demand when a row expands."""
+    from . import ranking
+
+    out = {"compositeRank": explain("compositeRank", row.get("composite"),
+                                    coverage=row.get("coverage"),
+                                    available=row.get("signalsAvailable"),
+                                    total=row.get("signalsTotal"))}
+    for key, entry in (row.get("signals") or {}).items():
+        definition = ranking.SIGNAL_BY_KEY.get(key, {})
+        raw = entry.get("raw")
+        # Percent-shaped signals are quoted as percentages, the rest as numbers.
+        raw_text = None
+        if _known(raw):
+            raw_text = (_signed_pct(raw) if key in ("momentum", "trend", "nearHigh",
+                                                    "relativeStrength")
+                        else _pct(raw) if key in ("lowVolatility", "shallowDrawdown")
+                        else _num(raw, 3))
+        explanation = explain("signalRank", entry.get("percentile"), signal=key,
+                              raw=raw, raw_text=raw_text)
+        if explanation:
+            # `what` is the SIGNAL DEFINITION and is identical on every row. It
+            # already ships once per scan under `signalDefinition.<key>`, and
+            # repeating it here would be most of the payload: seven copies per
+            # row across a hundred names is a couple of hundred kilobytes of
+            # duplicated prose. The panel falls back to the definition.
+            explanation = {**explanation, "what": ""}
+            out[f"signal.{key}"] = explanation
+        _ = definition
+    return {k: v for k, v in out.items() if v is not None}

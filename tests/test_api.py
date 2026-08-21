@@ -236,3 +236,80 @@ def test_cors_honours_an_explicit_allowlist(monkeypatch):
     monkeypatch.setenv("VERCEL_ENV", "production")
     monkeypatch.setenv("ALLOWED_ORIGINS", "https://a.example, https://b.example")
     assert index._allowed_origins() == ["https://a.example", "https://b.example"]
+
+
+# ============================================================================ #
+# Breadth tier — the guards that bound amplification
+#
+# These matter more than they look. `/api/rank` fans out to upstream fetches and
+# `/api/rank/deepen` fans out to per-symbol filings requests, so the caps are
+# the only thing standing between a curl loop and both the function budget and
+# the shared yfinance rate budget.
+# ============================================================================ #
+def test_the_universe_catalogue_carries_an_as_of_date(client):
+    """A stale constituent list is invisible unless it is dated."""
+    body = client.get("/api/rank/universes").json()
+    assert body["universes"]
+    for entry in body["universes"]:
+        assert entry["asOf"]
+        assert entry["count"] > 0
+        assert entry["market"] in ("US", "ID")
+    assert body["maxUniverse"] > body["maxDeepen"]
+
+
+def test_there_is_deliberately_no_sp500_universe(client):
+    """Absence by decision, not omission — see `_lib/universes.py`.
+
+    Five hundred symbols is the length at which transcription goes wrong, and a
+    mistyped ticker is not inert: it produces a plausible ranking row for a
+    company nobody asked about.
+    """
+    ids = {entry["id"] for entry in client.get("/api/rank/universes").json()["universes"]}
+    assert not any("500" in name or "sp5" in name for name in ids)
+
+
+def test_an_unknown_universe_is_refused_by_name(client):
+    response = client.get("/api/rank", params={"universe": "sp500"})
+    assert response.status_code == 404
+    assert "sp500" in response.json()["detail"]
+
+
+def test_rank_needs_either_a_universe_or_a_list(client):
+    assert client.get("/api/rank").status_code == 400
+
+
+def test_rank_refuses_an_oversized_custom_universe(client):
+    tickers = ",".join(f"AA{i:03d}" for i in range(300))
+    response = client.get("/api/rank", params={"tickers": tickers})
+    assert response.status_code == 400
+    assert "250" in response.json()["detail"]
+
+
+def test_rank_names_an_invalid_symbol_rather_than_failing_anonymously(client):
+    response = client.get("/api/rank", params={"tickers": "AAPL, not a ticker"})
+    assert response.status_code == 400
+    assert "not valid ticker symbols" in response.json()["detail"].lower()
+
+
+def test_deepen_refuses_more_than_a_shortlist(client):
+    tickers = ",".join(f"AA{i:03d}" for i in range(20))
+    response = client.get("/api/rank/deepen", params={"tickers": tickers})
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "one symbol at a time" in detail
+
+
+def test_deepen_validates_its_symbols_too(client):
+    response = client.get("/api/rank/deepen", params={"tickers": "AAPL, ../etc/passwd"})
+    assert response.status_code == 400
+
+
+def test_the_ranking_routes_are_rate_limited_more_tightly_than_the_default(client):
+    """The amplifying routes must not inherit the ordinary per-IP allowance."""
+    from index import RATE_LIMITS
+
+    default_limit, _window = RATE_LIMITS[None]
+    assert RATE_LIMITS["/api/rank"][0] < default_limit
+    assert RATE_LIMITS["/api/rank/deepen"][0] < RATE_LIMITS["/api/rank"][0], (
+        "deepening does not batch, so it must be capped harder than ranking"
+    )

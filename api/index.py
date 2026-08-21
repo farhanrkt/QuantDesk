@@ -58,7 +58,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from _lib import (accumulation, eventstudy, explain, microstructure, news,
-                  quality, riskmodel, symbols, technical, valuation)
+                  quality, ranking, riskmodel, symbols, technical, universes,
+                  valuation)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -122,6 +123,14 @@ TICKER_RE = re.compile(TICKER_PATTERN)
 # to `universe` upstream fetches and `universe` model fits.
 RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     "/api/screener": (3, 60),
+    # The ranking tier fans out too, but through BATCH downloads rather than
+    # one fetch per name — a 100-symbol scan is a handful of upstream calls,
+    # not a hundred. The per-IP cap stays as strict as the screener's anyway,
+    # because the work per request is still far above a single-ticker route.
+    "/api/rank": (3, 60),
+    # Deepening runs the fundamentals lenses per name and does NOT batch, so
+    # this is the amplifying half of the funnel and is capped hardest.
+    "/api/rank/deepen": (2, 60),
     "/api/confluence": (20, 60),
     "/api/intrinsic-value/simulation": (10, 60),
     # Five years of history plus the benchmark index, then a market model per
@@ -136,6 +145,19 @@ RATE_EXEMPT = {"/api/health", "/api/docs", "/openapi.json"}
 # curl — against both the function budget and the shared yfinance rate budget.
 SCREENER_MAX_UNIVERSE = 20
 SCREENER_MAX_WALKFORWARD = 5
+
+# The ranking tier can afford a far larger universe because one batch call
+# covers fifty symbols. Measured: 99 Nasdaq-100 names in ~7s including the
+# benchmark, against a 60s function limit. 250 leaves room for a slow
+# upstream day rather than sitting on the edge of a 504.
+RANK_MAX_UNIVERSE = 250
+
+# Deepening is the un-batchable half: `Ticker.financials` and `.info` are one
+# call per symbol and take seconds each. Measured at ~2.9s per name cold, so
+# eight is roughly 23s and leaves headroom inside the 60s limit; twelve sat
+# close enough to the ceiling that one slow upstream response would have turned
+# the whole shortlist into a 504. This is a shortlist size, not a screen size.
+DEEPEN_MAX = 8
 
 _RATE_HITS: dict[tuple[str, str], deque] = defaultdict(deque)
 _RATE_LOCK = threading.Lock()
@@ -482,6 +504,176 @@ def screener(
 
 
 # --------------------------------------------------------------------------- #
+# Breadth tier — rank a universe, then deepen a shortlist
+#
+# THE TWO-TIER SHAPE IS FORCED BY WHAT BATCHES. Daily price history batches:
+# one `yf.download` covers fifty symbols, so a hundred-name universe is a
+# handful of upstream calls and ranks in about seven seconds. Fundamentals do
+# not batch — `Ticker.financials` and `.info` are one call per symbol and cost
+# seconds each — so quality and valuation cannot be computed universe-wide
+# inside a request at any universe size worth calling breadth.
+#
+# Rather than show an empty Quality column for two hundred names, /api/rank
+# ranks on price and volume alone and says so, and /api/rank/deepen runs the
+# expensive lenses on a shortlist the reader chose from that ranking.
+# --------------------------------------------------------------------------- #
+@app.get("/api/rank/universes")
+def rank_universes():
+    """The predefined lists, with the date each was last transcribed.
+
+    The as-of date is part of the payload rather than a comment in the source
+    because index membership decays invisibly: a dropped constituent still
+    fetches, so a stale list ranks a slightly wrong universe and reports no
+    error. See `_lib/universes.py` for why there is no S&P 500 here.
+    """
+    return ok({"universes": universes.catalogue(), "asOf": universes.AS_OF,
+               "maxUniverse": RANK_MAX_UNIVERSE, "maxDeepen": DEEPEN_MAX})
+
+
+@app.get("/api/rank")
+def rank(
+    universe: Optional[str] = Query(
+        None, pattern="^[a-z0-9]{1,24}$",
+        description="A predefined universe id from /api/rank/universes."),
+    tickers: Optional[str] = Query(
+        None, min_length=1, max_length=4000,
+        description="Comma or newline separated symbols, used when `universe` is absent."),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+):
+    """Score every name in a universe on price-derived signals and rank them.
+
+    Signals are converted to CROSS-SECTIONAL PERCENTILES before being combined,
+    so the composite is a weighted mean of ranks within this scan rather than an
+    absolute score on a scale nobody calibrated. The response carries the full
+    per-signal breakdown and the rank correlation between signals, because
+    momentum, nearness to the 52-week high and relative strength are three ways
+    of saying "it went up" and a composite that hides that is overstating its
+    own independence.
+    """
+    if universe:
+        entry = universes.get(universe)
+        if entry is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown universe '{universe}'. See /api/rank/universes.")
+        symbols_list = entry["tickers"]
+        market_code = entry["market"]
+        label = entry["name"]
+        as_of = entry["asOf"]
+    else:
+        if not tickers:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide either a `universe` id or a `tickers` list.")
+        raw = [t.strip() for t in tickers.replace("\n", ",").split(",") if t.strip()]
+        bad = [t for t in raw if not TICKER_RE.match(t)]
+        if bad:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                       f"{'...' if len(bad) > 5 else ''}.")
+        symbols_list = list(dict.fromkeys(resolved(t, market) for t in raw))
+        market_code = market.upper()
+        label = "Custom list"
+        as_of = None
+
+    if not symbols_list:
+        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+    if len(symbols_list) > RANK_MAX_UNIVERSE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Universe too large. The ranking tier scans up to "
+                   f"{RANK_MAX_UNIVERSE} symbols per request; this one has "
+                   f"{len(symbols_list)}. Split it, or narrow the list.")
+
+    result = ranking.scan(symbols_list, market_code=market_code)
+    result["explain"] = explain.for_ranking(result)
+    for row in result["rows"]:
+        row["explain"] = explain.for_ranking_row(row)
+    return ok({
+        "universe": {"id": universe, "name": label, "market": market_code,
+                     "asOf": as_of, "symbols": symbols_list},
+        **result,
+    })
+
+
+@app.get("/api/rank/deepen")
+def rank_deepen(
+    tickers: str = Query(..., min_length=1, max_length=300,
+                         description="Shortlist to run the fundamental lenses on."),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+):
+    """Quality and valuation for a shortlist, the un-batchable half of the funnel.
+
+    Each leg reports its own outcome, so a company with no usable dividend
+    history still returns its quality reading instead of collapsing the row —
+    the same contract `/api/confluence` uses, for the same reason.
+    """
+    raw = [t.strip() for t in tickers.replace("\n", ",").split(",") if t.strip()]
+    bad = [t for t in raw if not TICKER_RE.match(t)]
+    if bad:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                   f"{'...' if len(bad) > 5 else ''}.")
+    shortlist = list(dict.fromkeys(resolved(t, market) for t in raw))
+    if not shortlist:
+        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+    if len(shortlist) > DEEPEN_MAX:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Deepening runs the filings-based lenses one symbol at a time and "
+                   f"cannot do {len(shortlist)} inside the request limit. Pick at most "
+                   f"{DEEPEN_MAX} from the ranking above.")
+
+    rows = []
+    for symbol in shortlist:
+        row: dict = {"ticker": symbol}
+        try:
+            row["quality"] = {"ok": True, "data": quality_payload(symbol)}
+        except HTTPException as exc:
+            row["quality"] = {"ok": False, "error": exc.detail}
+        except Exception as exc:
+            row["quality"] = {"ok": False, "error": str(exc)}
+        try:
+            row["valuation"] = {"ok": True, "data": _deepen_valuation(symbol, market)}
+        except HTTPException as exc:
+            row["valuation"] = {"ok": False, "error": exc.detail}
+        except Exception as exc:
+            row["valuation"] = {"ok": False, "error": str(exc)}
+        rows.append(row)
+
+    return ok({
+        "rows": rows,
+        "caveat": ("Quality and valuation are computed one symbol at a time because the "
+                   "filings behind them cannot be fetched in batch. That is why they are "
+                   "a shortlist step rather than a column in the ranking table."),
+    })
+
+
+def _deepen_valuation(symbol: str, market: str) -> dict:
+    """The valuation summary a shortlist row needs, without the full payload.
+
+    The complete response carries a 10,000-point histogram and a full projection
+    schedule per name. Twelve of those is megabytes of JSON for a table that
+    shows four numbers, so the row carries the four.
+    """
+    payload = valuation_payload(symbol, **_valuation_kwargs(market=market))
+    monte = payload["monteCarlo"]
+    return {
+        "engine": payload["engine"],
+        "price": payload["price"],
+        "priceLabel": payload["priceLabel"],
+        "verdict": payload["verdict"],
+        "medianLabel": monte["p50Label"],
+        "upside": monte["upside"],
+        "probUndervalued": monte["probUndervalued"],
+        "terminalShare": payload["baseCase"].get("terminalShare"),
+        "explain": payload.get("explain", {}),
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Engine 2 — Technical analysis
 # --------------------------------------------------------------------------- #
 def technical_payload(symbol: str, range_key: str = "1y", sr_window: int = 10,
@@ -513,10 +705,20 @@ def technical_analysis(
 # Engine 3 — Intrinsic value
 # --------------------------------------------------------------------------- #
 def _valuation_kwargs(
-    market, engine, growth, terminal, rate, n_sims, sd_growth, sd_rate, sd_terminal,
-    seed, fcf_basis, dps_basis, manual_base, manual_net_debt, manual_shares,
-    manual_price, manual_payout,
+    market, engine="auto", growth=None, terminal=None, rate=None, n_sims=10000,
+    sd_growth=None, sd_rate=None, sd_terminal=None, seed=42,
+    fcf_basis="Latest fiscal year", dps_basis="Trailing 12 months",
+    manual_base=None, manual_net_debt=None, manual_shares=None,
+    manual_price=None, manual_payout=None,
 ) -> dict:
+    """Route query parameters mapped onto the engine's keyword names.
+
+    The defaults mirror the `/api/intrinsic-value` route's own, so a caller that
+    wants the routed behaviour and nothing custom — the shortlist deepen step —
+    can ask for it with `_valuation_kwargs(market=market)` instead of repeating
+    seventeen positional arguments that would then silently drift from the
+    route's defaults the next time one of them changes.
+    """
     return dict(
         market_code=market.upper(),
         engine_choice=engine.lower(),

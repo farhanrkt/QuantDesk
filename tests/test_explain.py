@@ -113,6 +113,9 @@ SAMPLES: dict[str, tuple] = {
     "volumeRatio": (1.7, {}),
     "divergenceState": (1, {"kind": "bearish"}),
     "gapState": (0.038, {"direction": "up", "size_atr": 1.4}),
+    "compositeRank": (78.0, {"coverage": 1.0, "available": 7, "total": 7}),
+    "signalRank": (93.0, {"signal": "lowVolatility", "raw": 0.14, "raw_text": "14.0%"}),
+    "signalOverlap": (0.98, {"a": "Momentum", "b": "Trend"}),
 }
 
 
@@ -186,6 +189,8 @@ def _monotone(key, values, ctx=None, improving=True):
 
 
 HIGHER_IS_BETTER = {
+    "compositeRank": [8.0, 30.0, 55.0, 80.0, 96.0],
+    "signalRank": [8.0, 30.0, 55.0, 80.0, 96.0],
     "riskReward": [0.6, 1.2, 2.0, 4.0],
     "upside": [-0.50, -0.20, 0.0, 0.20, 0.50],
     "probUndervalued": [0.05, 0.30, 0.60, 0.90],
@@ -202,6 +207,7 @@ HIGHER_IS_BETTER = {
 }
 
 LOWER_IS_BETTER = {
+    "signalOverlap": [0.95, 0.60, 0.20],
     "terminalShare": [0.95, 0.80, 0.65, 0.40],
     "valuationSpread": [1.60, 0.90, 0.45, 0.15],
     # The list that catches the backwards-colour bug. Values run BEST to WORST,
@@ -353,6 +359,36 @@ def test_overbought_is_a_caution_never_a_verdict():
     assert tone_of("rsi", 75) == "warn"
     assert tone_of("rsi", 25) == "warn"
     assert tone_of("rsi", 50) == "neutral"
+
+
+def test_a_ranking_percentile_always_says_which_universe_it_is_relative_to():
+    """A cross-sectional rank supports one claim and it has to be stated.
+
+    "82" looks like a score on some absolute scale. It is a position inside one
+    scan on one date, and a name at the top of a falling list is still falling.
+    """
+    for value in (12.0, 55.0, 94.0):
+        reading = E.explain("compositeRank", value)["reading"]
+        assert "this scan" in reading
+        assert "WITHIN this universe" in reading
+
+
+def test_a_low_is_good_ranking_signal_says_so_in_words():
+    """The percentile already flips the direction; the prose has to admit it."""
+    steadiness = E.explain("signalRank", 93.0, signal="lowVolatility",
+                           raw=0.14, raw_text="14.0%")
+    assert "LOWER raw number ranks better" in steadiness["reading"]
+    momentum = E.explain("signalRank", 93.0, signal="momentum",
+                         raw=0.4, raw_text="+40.0%")
+    assert "LOWER raw number ranks better" not in momentum["reading"]
+
+
+def test_heavily_overlapping_signals_are_flagged_as_double_counting():
+    duplicated = E.explain("signalOverlap", 0.95, a="Momentum", b="Trend")
+    assert duplicated["tone"] == "warn"
+    assert "more than once" in duplicated["reading"]
+    independent = E.explain("signalOverlap", 0.15, a="Momentum", b="Money flow")
+    assert independent["tone"] == "good"
 
 
 def test_short_horizon_signals_are_never_graded_strong():
