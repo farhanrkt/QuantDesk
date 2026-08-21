@@ -31,6 +31,41 @@ function heat(percentile: number | null): string {
   return "text-dist/80";
 }
 
+const HEAT_FILL = (percentile: number) =>
+  percentile >= 80 ? "#35C4A8" : percentile >= 60 ? "#35C4A899"
+    : percentile >= 40 ? "#7A8CA0" : percentile >= 20 ? "#F2C14E99" : "#FF6B6B99";
+
+/**
+ * One percentile cell: the number, over a bar as long as the number.
+ *
+ * A hundred bare figures in a twelve-column grid is a spreadsheet, and reading
+ * it means comparing three-digit strings by eye. The bar makes the shape of a
+ * row legible at a glance — which is the entire job of a shortlisting table —
+ * without adding a single fact the number did not already carry.
+ */
+function PercentileCell({ value }: { value: number | null }) {
+  return (
+    <td className="relative px-3 py-1.5 text-right">
+      {value != null && (
+        <>
+          {/* The empty track matters as much as the fill. Without it a reading
+              of 12 is a sliver floating in blank space and reads as "nothing
+              here" rather than "near the bottom of the range". */}
+          <span aria-hidden
+                className="absolute inset-y-[0.3rem] left-1 right-1 rounded-sm bg-rule/40" />
+          <span aria-hidden
+                className="absolute inset-y-[0.3rem] left-1 rounded-sm opacity-30"
+                style={{ width: `calc((100% - 0.5rem) * ${Math.max(value, 1.5) / 100})`,
+                         background: HEAT_FILL(value) }} />
+        </>
+      )}
+      <span className={cn("num relative font-medium", heat(value))}>
+        {value == null ? "—" : value.toFixed(0)}
+      </span>
+    </td>
+  );
+}
+
 const EVIDENCE_DOT: Record<string, string> = {
   strong: "bg-acc", moderate: "bg-acc/50", weak: "bg-warn/70",
 };
@@ -81,7 +116,14 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
   const maxDeepen = universeState.status === "ready" ? universeState.data.maxDeepen : 8;
   const selected = catalogue.find((u) => u.id === choice);
   const data = state.status === "ready" ? state.data : null;
-  const signals: RankSignalDefinition[] = data?.signals ?? [];
+  const allSignals: RankSignalDefinition[] = data?.signals ?? [];
+  // Twelve columns is a spreadsheet, not a shortlist. Simple mode keeps the
+  // signals carrying the most weight — which is the same thing as the ones with
+  // the best-supported evidence, since weight follows evidence grade.
+  const signals = simple
+    ? [...allSignals].sort((a, b) => b.weight - a.weight).slice(0, 3)
+        .sort((a, b) => allSignals.indexOf(a) - allSignals.indexOf(b))
+    : allSignals;
 
   const deepByTicker = useMemo(() => {
     const map = new Map<string, DeepenRow>();
@@ -136,6 +178,11 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
   };
 
   const scanMarket: Market = choice === CUSTOM ? customMarket : (selected?.market ?? "US");
+
+  // What the picker currently says, versus what the loaded table actually is.
+  const pendingName = choice === CUSTOM ? "your own list" : (selected?.name ?? choice);
+  const stale = data != null
+    && (choice === CUSTOM ? data.universe.id !== null : data.universe.id !== choice);
 
   const download = () => {
     if (!data) return;
@@ -242,7 +289,19 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
         </CardBody>
       </Card>
 
-      {state.status === "loading" && <Card><PanelSkeleton /></Card>}
+      {state.status === "loading" && (
+        <Card>
+          <CardBody>
+            <p className="mb-3 text-sm leading-relaxed text-ash">
+              Fetching {choice === CUSTOM ? "your list" : `${selected?.count ?? ""} symbols`} in
+              batches of fifty and ranking them against each other. This takes a few seconds —
+              one request per fifty names rather than one per name is what makes a universe
+              this size possible at all.
+            </p>
+            <PanelSkeleton />
+          </CardBody>
+        </Card>
+      )}
 
       {state.status === "error" && (
         <Card className="border-dist/40 bg-dist/5">
@@ -311,7 +370,18 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
           {/* ---------------- the table ---------------- */}
           <Card>
             <CardHeader>
-              <CardTitle>{data.universe.name}</CardTitle>
+              <CardTitle className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              {data.universe.name}
+              {/* Changing the picker does not re-scan, so the dropdown can say
+                  one universe while the table below shows another. Reading a
+                  Dow ranking as a Nasdaq one is exactly the class of quiet
+                  misattribution this codebase has been bitten by before. */}
+              {stale && (
+                <span className="font-mono text-[0.65rem] font-normal normal-case text-warn">
+                  showing the previous scan — press Rank them for {pendingName}
+                </span>
+              )}
+            </CardTitle>
               <div className="flex flex-wrap items-center gap-3">
                 <input
                   type="text"
@@ -337,20 +407,25 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               </div>
             </CardHeader>
             <CardBody className="px-0">
-              <div className="overflow-x-auto">
+              {/* The ticker column stays put while the signal columns scroll,
+                  because a row of seven percentiles is unreadable once you can
+                  no longer see which name it belongs to. */}
+              <div className="max-h-[36rem] overflow-auto">
                 <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="eyebrow border-b border-rule [&>th]:px-3 [&>th]:py-2 [&>th]:font-normal">
-                      <th className="w-8" />
-                      <th className="w-10 text-right">#</th>
+                  <thead className="sticky top-0 z-20 bg-panel">
+                    <tr className="eyebrow border-b border-rule [&>th]:px-3 [&>th]:py-2 [&>th]:font-normal [&>th]:align-bottom">
+                      <th scope="col" className="w-8 bg-panel" />
+                      <th scope="col" className="w-10 bg-panel text-right">#</th>
                       <SortHeader label="Ticker" active={sortKey === "ticker"}
-                                  ascending={ascending} onClick={() => toggleSort("ticker")} />
+                                  ascending={ascending} onClick={() => toggleSort("ticker")}
+                                  sticky />
                       <SortHeader label="Score" active={sortKey === "composite"}
                                   ascending={ascending} onClick={() => toggleSort("composite")}
                                   align="right" />
                       {signals.map((signal) => (
                         <SortHeader key={signal.key}
-                                    label={signal.label}
+                                    label={signal.short}
+                                    title={signal.label}
                                     hint={signal.evidence}
                                     active={sortKey === signal.key}
                                     ascending={ascending}
@@ -361,7 +436,8 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                       <SortHeader label="Close" active={sortKey === "close"}
                                   ascending={ascending} onClick={() => toggleSort("close")}
                                   align="right" />
-                      <th className="w-10 text-center" title={`Pick up to ${maxDeepen}`}>Pick</th>
+                      <th scope="col" className="w-10 bg-panel text-center"
+                          title={`Pick up to ${maxDeepen}`}>Pick</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -385,7 +461,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                               </button>
                             </td>
                             <td className="num px-3 py-1.5 text-right text-ash">{row.rank}</td>
-                            <td className="num px-3 py-1.5 font-semibold">
+                            <td className="num sticky left-0 z-10 bg-panel px-3 py-1.5 font-semibold">
                               {onSelect ? (
                                 <button
                                   type="button"
@@ -401,20 +477,11 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                                 </button>
                               ) : row.ticker}
                             </td>
-                            <td className={cn("num px-3 py-1.5 text-right font-semibold",
-                                              heat(row.composite))}>
-                              {row.composite == null ? "—" : row.composite.toFixed(0)}
-                            </td>
-                            {signals.map((signal) => {
-                              const cell = row.signals[signal.key];
-                              return (
-                                <td key={signal.key}
-                                    className={cn("num px-3 py-1.5 text-right",
-                                                  heat(cell?.percentile ?? null))}>
-                                  {cell?.percentile == null ? "—" : cell.percentile.toFixed(0)}
-                                </td>
-                              );
-                            })}
+                            <PercentileCell value={row.composite} />
+                            {signals.map((signal) => (
+                              <PercentileCell key={signal.key}
+                                              value={row.signals[signal.key]?.percentile ?? null} />
+                            ))}
                             <td className="num px-3 py-1.5 text-right text-ash">
                               {num(row.latestClose)}
                             </td>
@@ -432,7 +499,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                           {open && (
                             <tr className="border-b border-rule/60">
                               <td colSpan={signals.length + 6} className="bg-ink/40 px-5 py-4">
-                                <WhyRanked row={row} signals={signals} deep={deep} />
+                                <WhyRanked row={row} signals={allSignals} deep={deep} />
                               </td>
                             </tr>
                           )}
@@ -506,7 +573,15 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                 )}
               </div>
 
-              {deepState.status === "loading" && <PanelSkeleton />}
+              {deepState.status === "loading" && (
+                <>
+                  <p className="text-[0.75rem] leading-relaxed text-ash">
+                    Reading the filings for {picked.length} compan
+                    {picked.length === 1 ? "y" : "ies"}, one at a time — a few seconds each.
+                  </p>
+                  <PanelSkeleton />
+                </>
+              )}
 
               {deepState.status === "error" && (
                 <p className="text-xs leading-relaxed text-dist">
@@ -553,19 +628,22 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
 }
 
 function SortHeader({
-  label, active, ascending, onClick, align = "left", hint, explain,
+  label, active, ascending, onClick, align = "left", hint, explain, sticky, title,
 }: {
   label: string; active: boolean; ascending: boolean; onClick: () => void;
-  align?: "left" | "right"; hint?: string;
+  align?: "left" | "right"; hint?: string; sticky?: boolean; title?: string;
   explain?: React.ComponentProps<typeof Explain>["explain"];
 }) {
   return (
-    <th className={align === "right" ? "text-right" : undefined}
+    <th scope="col"
+        className={cn("bg-panel", align === "right" && "text-right",
+                      sticky && "sticky left-0 z-30")}
         aria-sort={active ? (ascending ? "ascending" : "descending") : "none"}>
       <span className={cn("inline-flex items-center gap-1",
                           align === "right" && "flex-row-reverse")}>
         <button type="button" onClick={onClick}
-                className={cn("transition-colors hover:text-chalk",
+                title={`Sort by ${title ?? label}`}
+                className={cn("whitespace-nowrap py-0.5 transition-colors hover:text-chalk",
                               active ? "text-chalk" : "")}>
           {label}{active && (ascending ? " ↑" : " ↓")}
         </button>

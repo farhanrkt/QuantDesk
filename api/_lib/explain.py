@@ -542,7 +542,8 @@ def _current_drawdown(value, **_):
     depth = abs(value)
     if depth < 0.02:
         return make(label, what,
-                    "Effectively at its high — everyone who has ever owned it is in profit.",
+                    f"{_pct(depth)} below its peak, which is effectively at the high — "
+                    f"everyone who has ever owned it is in profit.",
                     CONTEXT_NOT_TRIGGER, "good", "low", evidence="strong",
                     value_text=_pct(value, 1))
     band = _ladder(depth, ((0.10, "good"), (0.25, "fair"), (0.45, "poor"), (None, "bad")))
@@ -2508,16 +2509,7 @@ def horizon_story(ticker: str, block: dict, currency_format=None) -> dict:
     # ---- 4. the honesty paragraph, always present -----------------------
     paragraphs.append(_horizon_caveat(block))
 
-    return {
-        "ticker": name,
-        "paragraphs": paragraphs,
-        "simpleMetrics": (["riskReward", "stopDistance", "positionShare",
-                           "distanceToLevel.resistance", "distanceToLevel.support",
-                           "volumeRatio"]
-                          if plan.get("usable") else
-                          ["distanceToLevel.resistance", "distanceToLevel.support",
-                           "squeezePercentile", "volumeRatio", "divergenceState", "gapState"]),
-    }
+    return {"ticker": name, "paragraphs": paragraphs}
 
 
 def _horizon_caveat(block: dict) -> str:

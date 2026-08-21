@@ -170,7 +170,14 @@ def _universe():
     weak = rng.normal(-0.0012, 0.014, n)                     # worst of everything
     middling = rng.normal(0.0003, 0.011, n)
     scarred = rng.normal(0.0008, 0.012, n)
-    scarred[150:200] += np.log(0.40) / 50.0                  # the deepest planted fall
+    # A deep fall INSIDE the one-year window that then fully recovers. Both
+    # halves matter: the fall makes this the worst name on holdability, and the
+    # recovery keeps its momentum and nearness-to-high ordinary, so the test
+    # isolates the drawdown signal instead of making SCAR worst at everything.
+    # (Planted before the window, it would be correctly invisible — which is the
+    # whole point of RANK_WINDOW.)
+    scarred[-170:-140] += np.log(0.55) / 30.0                # the deepest planted fall
+    scarred[-140:-100] += np.log(1 / 0.55) / 40.0            # and back again
     return {
         "QUIET": path(quiet), "STRONG": path(strong), "WEAK": path(weak),
         "MID": path(middling), "SCAR": path(scarred),
@@ -213,7 +220,7 @@ def test_the_scarred_name_ranks_worst_on_holdability():
     # And the raw depth is the planted one, not just the ordering.
     raw = {row["ticker"]: row["signals"]["shallowDrawdown"]["raw"]
            for row in result["rows"]}
-    assert raw["SCAR"] > 0.5
+    assert raw["SCAR"] == pytest.approx(0.45, abs=0.06)   # the planted 55% floor
 
 
 def test_rows_come_back_ordered_by_composite_and_numbered():
@@ -276,6 +283,19 @@ def test_every_signal_declares_a_direction_and_an_evidence_grade():
         assert 0 < signal["weight"] <= 1.0
         assert len(signal["question"]) > 10
         assert len(signal["detail"]) > 40
+
+
+def test_every_signal_has_a_header_short_enough_for_a_scrolling_table():
+    """Long headers reveal a few letters at a time when a table scrolls sideways.
+
+    "Near its high" emerging from under the pinned ticker column as "igh" reads
+    as corruption rather than as a truncated word.
+    """
+    for signal in R.SIGNALS:
+        assert signal["short"], f"{signal['key']} has no compact header"
+        assert len(signal["short"]) <= 10, (
+            f"{signal['key']}: {signal['short']!r} is too long for a table header"
+        )
 
 
 def test_the_weight_of_a_signal_follows_its_evidence_grade():
@@ -433,3 +453,59 @@ def test_scan_names_the_symbols_it_could_not_rank(monkeypatch):
     assert result["requested"] == 3
     assert result["ranked"] == 2
     assert result["missing"] == ["GHOST"]
+
+
+# ============================================================================ #
+# The common window — the bias that is invisible in the output
+# ============================================================================ #
+def test_listing_age_does_not_change_a_name_s_signals():
+    """Two names with the IDENTICAL recent path must score identically.
+
+    THE BUG THIS CATCHES. Volatility, the worst drawdown and the distance from
+    the high were originally measured over "whatever history this symbol has".
+    A long-listed name's window reached back far enough to include an old crash
+    that a recently listed name's did not, so on a planted pair holdability came
+    out 0.44 for the older name and 0.34 for the younger — a systematic bias in
+    favour of recent listings, in a CROSS-SECTIONAL ranking, dressed up as a
+    measurement about the stock.
+    """
+    rng = np.random.default_rng(4)
+    returns = rng.normal(0.0005, 0.013, 620)
+    returns[50:100] += np.log(0.6) / 50          # an old crash, long ago
+
+    long_lived = path(returns)
+    # The same recent 300 bars, as if the name had only listed then.
+    young = path(returns[-300:], start_price=float(long_lived["Close"].iloc[-301]))
+
+    old_signals = R.price_signals(long_lived)
+    new_signals = R.price_signals(young)
+
+    for key in ("lowVolatility", "shallowDrawdown", "nearHigh", "momentum", "trend"):
+        assert old_signals[key] == pytest.approx(new_signals[key], rel=1e-9), (
+            f"{key} depends on how long the symbol has been listed"
+        )
+
+
+def test_the_window_is_a_year_regardless_of_how_much_history_was_fetched():
+    """A crash outside the window must not count; one inside must."""
+    outside = np.zeros(600)
+    outside[100:140] = np.log(0.5) / 40          # 460 bars ago — outside the year
+    assert R.price_signals(path(outside))["shallowDrawdown"] == pytest.approx(0.0, abs=0.01)
+
+    inside = np.zeros(600)
+    inside[500:540] = np.log(0.5) / 40           # ~80 bars ago — inside it
+    assert R.price_signals(path(inside))["shallowDrawdown"] == pytest.approx(0.5, abs=0.02)
+
+
+def test_the_minimum_history_covers_the_hungriest_signal():
+    """MIN_BARS is set by the trend slope, not by taste.
+
+    A genuine 200-day average read across the last quarter needs 200 + 63 bars.
+    Anything less and the "200-day average" is a shorter average wearing the
+    name, which is the same category of error as an inconsistent window.
+    """
+    assert R.MIN_BARS >= 200 + 63
+    just_enough = R.price_signals(path(steady(n=R.MIN_BARS)))
+    assert just_enough["trend"] is not None
+    too_few = R.price_signals(path(steady(n=R.MIN_BARS - 1)))
+    assert all(value is None for value in too_few.values())

@@ -441,7 +441,8 @@ def test_a_stop_tighter_than_one_average_range_is_widened_and_flagged():
     """A stop inside daily noise is not a risk control, and the plan says so."""
     plan = _plan_fixture(stop_level=99.5, atr=2.0)
     assert plan["stopWidened"] is True
-    assert plan["stopDistanceAtr"] >= S.MIN_STOP_ATR
+    assert plan["stopDistanceAtr"] == pytest.approx(S.MIN_STOP_ATR, abs=1e-9) \
+        or plan["stopDistanceAtr"] > S.MIN_STOP_ATR
     assert plan["stop"] == pytest.approx(100.0 - S.MIN_STOP_ATR * 2.0)
 
 
@@ -514,3 +515,60 @@ def test_the_horizons_use_different_breakout_windows():
     # Whatever setup fires, the two must be reading different lookbacks.
     assert S.HORIZONS["short"]["breakout_window"] != S.HORIZONS["mid"]["breakout_window"]
     assert result["short"]["levels"]["confirmationLag"] < result["mid"]["levels"]["confirmationLag"]
+
+
+# ============================================================================ #
+# Where a breakout's stop belongs
+# ============================================================================ #
+def _breakout_frame():
+    """A 20-day range between roughly 90 and 100, then a decisive break to 104."""
+    rng = np.random.default_rng(2)
+    rows = []
+    for _ in range(140):
+        close = 95 + rng.uniform(-5, 5)
+        rows.append((close, close + 0.6, close - 0.6, close, 1e6))
+    rows.append((101, 104.5, 100.5, 104.0, 3e6))
+    return bars(rows)
+
+
+def test_a_breakout_stop_sits_below_the_level_that_was_broken():
+    """Not below the far side of the range it just cleared.
+
+    THE BUG THIS CATCHES. `invalidation` pointed at the bottom of the Donchian
+    channel, so the stop landed 14.8% and 3.1 average daily ranges below entry
+    on a horizon designed around 1.5 — and dragged the reward-for-risk under 1
+    by construction, reporting an ordinary setup as a bad one because of where
+    the stop was put. A breakout fails when price closes back INSIDE the range.
+    """
+    frame = _breakout_frame()
+    config = S.HORIZONS["short"]
+    levels = S.support_resistance(frame, order=config["swing_order"])
+    setup = S.detect_setup(frame, config, levels,
+                           S.squeeze_state(frame), S.volume_confirmation(frame))
+    assert setup["name"] == "20-day breakout"
+    # The level that was broken, not the bottom of the range.
+    assert setup["invalidation"] == pytest.approx(setup["anchor"])
+
+    plan = S.build_plan(setup, levels, config)
+    assert plan["stopDistanceAtr"] <= config["stop_atr"] + 0.01, (
+        "a breakout stop must not be wider than the horizon's own ATR budget"
+    )
+    assert plan["stopDistanceAtr"] == pytest.approx(S.MIN_STOP_ATR, abs=1e-9) \
+        or plan["stopDistanceAtr"] > S.MIN_STOP_ATR
+
+
+def test_a_measured_move_target_excludes_the_breakout_bar_from_the_range():
+    """Otherwise the projection grows with the size of the move that triggered it."""
+    frame = _breakout_frame()
+    config = S.HORIZONS["short"]
+    before = S._consolidation(frame, config["breakout_window"])
+    # The breakout bar's high (104.5) is the highest in the frame; the range the
+    # price broke OUT of must not contain it.
+    assert before["high"] < float(frame["High"].iloc[-1])
+
+
+def test_the_consolidation_range_ignores_todays_bar():
+    calm = bars([(100, 101, 99, 100, 1e6)] * 40 + [(100, 140, 60, 130, 1e6)])
+    result = S._consolidation(calm, 20)
+    assert result["high"] == pytest.approx(101.0)
+    assert result["low"] == pytest.approx(99.0)

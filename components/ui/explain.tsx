@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useState } from "react";
+import {
+  createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState,
+} from "react";
 import { ArrowDown, ArrowUp, Info } from "lucide-react";
 import type { Explanation, ExplainMap } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -132,31 +134,40 @@ function ArrowFor({ direction }: { direction: Explanation["goodDirection"] }) {
   );
 }
 
-/** The three questions, laid out. Shared by every surface that expands one. */
+/**
+ * The three questions, laid out.
+ *
+ * BUILT FROM SPANS, NOT DIVS AND PARAGRAPHS, and that is not a style choice.
+ * This body renders inside `Explain`, which sits inline in table cells, list
+ * terms and running prose — so its wrapper has to be a `<span>`, and a `<div>`
+ * or `<p>` inside a `<span>` is invalid HTML. The browser silently reparents
+ * it, which is how the popover ended up escaping its own positioning context.
+ * `display: block` on a span gives identical layout and is legal anywhere.
+ */
 export function ExplanationBody({ explain }: { explain: Explanation }) {
   return (
-    <div className="space-y-2 text-[0.72rem] leading-relaxed">
-      <p className="text-ash">
+    <span className="block space-y-2 text-[0.72rem] leading-relaxed">
+      <span className="block text-ash">
         <span className="eyebrow mr-1.5">What it is</span>
         {explain.what}
-      </p>
-      <p className={cn(TONE_TEXT[explain.tone] ?? "text-chalk", "opacity-95")}>
+      </span>
+      <span className={cn("block", TONE_TEXT[explain.tone] ?? "text-chalk", "opacity-95")}>
         <span className="eyebrow mr-1.5 text-ash">This reading</span>
         {explain.reading}
-      </p>
-      <p className="text-chalk/70">
+      </span>
+      <span className="block text-chalk/70">
         <span className="eyebrow mr-1.5 text-ash">What to do</span>
         {explain.action}
-      </p>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5">
+      </span>
+      <span className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5">
         <ArrowFor direction={explain.goodDirection} />
         {explain.evidence && (
           <span className={cn("text-[0.6rem]", EVIDENCE_TONE[explain.evidence] ?? "text-ash")}>
             Evidence: {explain.evidence} — {EVIDENCE_NOTE[explain.evidence]}
           </span>
         )}
-      </div>
-    </div>
+      </span>
+    </span>
   );
 }
 
@@ -186,19 +197,63 @@ function InfoButton({
   );
 }
 
-/** An info affordance that expands its explanation directly underneath. */
+/**
+ * An info affordance that opens its explanation in a small floating panel.
+ *
+ * THREE THINGS A POPOVER OWES THE READER, all of which the first version
+ * skipped. It must not open off the side of the screen — pinned to `left-0` at
+ * 320px wide, the rightmost column of the ranking table put its right edge at
+ * 1391px on a 1400px viewport and past it on anything narrower, so on open it
+ * measures itself and flips to right-aligned when it would overflow. Escape
+ * must close it. And clicking anywhere else must close it, because a panel you
+ * can only dismiss by finding the same tiny button again is a trap.
+ */
 export function Explain({ explain }: { explain?: Explanation }) {
   const [open, setOpen] = useState(false);
+  const [flip, setFlip] = useState(false);
   const id = useId();
+  const wrapper = useRef<HTMLSpanElement>(null);
+  const panel = useRef<HTMLSpanElement>(null);
+
+  // Measure BEFORE paint so the reader never sees it in the wrong place.
+  useLayoutEffect(() => {
+    if (!open || !panel.current) return;
+    const box = panel.current.getBoundingClientRect();
+    setFlip(box.right > window.innerWidth - 8);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    const onDown = (event: MouseEvent) => {
+      if (!wrapper.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onDown);
+    };
+  }, [open]);
+
   if (!explain) return null;
   return (
-    <span className="relative inline-flex">
+    <span ref={wrapper} className="relative inline-flex">
       <InfoButton label={explain.label} open={open} controls={id} small
-                  onToggle={() => setOpen((v) => !v)} />
+                  onToggle={() => { setFlip(false); setOpen((v) => !v); }} />
       {open && (
-        <span id={id}
-              className="absolute left-0 top-5 z-20 block w-80 rounded border border-rule
-                         bg-ink/95 px-3 py-2 shadow-xl">
+        <span
+          ref={panel}
+          id={id}
+          role="tooltip"
+          className={cn(
+            "absolute top-5 z-30 block rounded border border-rule bg-ink/95 px-3 py-2 shadow-xl",
+            "w-[min(20rem,calc(100vw-2rem))]",
+            flip ? "right-0" : "left-0",
+          )}
+        >
           <ExplanationBody explain={explain} />
         </span>
       )}

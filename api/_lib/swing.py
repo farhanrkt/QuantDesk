@@ -680,12 +680,17 @@ def _trend_state(frame: pd.DataFrame, fast: int, slow: int) -> dict:
 
 
 def _consolidation(frame: pd.DataFrame, window: int) -> dict:
-    """Range height over the window, as a share of price.
+    """Range height over the window BEFORE today, as a share of price.
 
     A tight range is what makes a 'breakout' meaningful — a break out of a range
     that was already 40% wide has not resolved anything.
+
+    Today's bar is excluded on purpose. Including it lets a breakout day's own
+    high inflate the range it is breaking out of, which then inflates the
+    measured-move target derived from that range: the projection quietly grows
+    with the size of the move that triggered it.
     """
-    span = frame.tail(window)
+    span = frame.iloc[:-1].tail(window)
     if len(span) < max(10, window // 2):
         return {"usable": False}
     high = float(span["High"].max())
@@ -735,7 +740,17 @@ def detect_setup(frame: pd.DataFrame, config: dict, levels: dict,
                           "Volume was not unusually heavy, so the break is less well "
                           "supported than the rule would like.")),
             "anchor": channel_high,
-            "invalidation": channel_low if np.isfinite(channel_low) else None,
+            # INVALIDATION IS THE LEVEL THAT WAS BROKEN, not the far side of the
+            # range. This first shipped pointing at `channel_low`, which put the
+            # stop at the BOTTOM of the range the price had just cleared — 14.8%
+            # and 3.1 average daily ranges away on a planted breakout, on a
+            # horizon designed around 1.5. Two things were wrong with it. A
+            # breakout fails when the price closes back INSIDE the range, not
+            # when it traverses the whole of it; and a stop that wide drags the
+            # reward-for-risk under 1 by construction, so a perfectly ordinary
+            # setup was being reported as a bad one because of where the stop
+            # was put rather than because of anything the price did.
+            "invalidation": channel_high if np.isfinite(channel_high) else None,
             "consolidation": consolidation,
             "trend": trend,
         }

@@ -175,7 +175,12 @@ export interface UniverseSummary {
 }
 
 export interface RankSignalDefinition {
-  key: string; label: string; question: string; detail: string;
+  key: string;
+  /** Prose name, used wherever there is room. */
+  label: string;
+  /** Compact form for the table header, which scrolls sideways. */
+  short: string;
+  question: string; detail: string;
   direction: 1 | -1;
   evidence: "strong" | "moderate" | "weak";
   weight: number;

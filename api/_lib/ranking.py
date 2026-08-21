@@ -86,14 +86,35 @@ TRADING_DAYS = 252
 # enough to parse well inside the function's memory budget.
 CHUNK_SIZE = 50
 
-# Below this many bars a symbol is dropped from the scan rather than ranked on
-# whatever fraction of its signals happened to compute.
-MIN_BARS = 130
+# EVERY WINDOW-DEPENDENT SIGNAL IS MEASURED OVER EXACTLY THIS MANY BARS.
+#
+# This is not a tuning parameter, it is a correctness requirement, and getting it
+# wrong is invisible in the output. The first version measured volatility, the
+# worst drawdown and the distance from the high over "whatever history this
+# symbol has". Two names with the IDENTICAL recent price path then scored
+# differently purely because one listed earlier: on a planted pair, holdability
+# came out 0.44 for the long-listed name and 0.34 for the young one, because the
+# older name's window reached back far enough to include a crash the younger
+# one's did not. In a CROSS-SECTIONAL ranking that is a systematic bias in
+# favour of recently listed names, dressed up as a measurement about the stock.
+#
+# One year, the same year, for everyone.
+RANK_WINDOW = 252
+
+# Below this many bars a symbol is dropped rather than ranked on whatever
+# fraction of its signals happened to compute. It is set by the hungriest
+# signal, not by taste: the trend slope reads a genuine 200-day average across
+# the last quarter, so it needs 200 + 63 bars before it means what it says.
+MIN_BARS = 280
 
 
 # ============================================================================ #
 # Signal definitions
 # ============================================================================ #
+# `label` is the prose name used wherever there is room for it; `short` is the
+# table-header form, because a twelve-column table scrolls sideways and long
+# headers reveal a few letters at a time.
+#
 # `direction` is +1 when a HIGH raw value should rank well and -1 when a LOW one
 # should. It is applied once, when the percentile is taken, so nothing
 # downstream re-decides it — the same discipline as `_lib/explain.py`, and for
@@ -107,6 +128,7 @@ SIGNALS: list[dict] = [
     {
         "key": "momentum",
         "label": "Momentum",
+        "short": "Momentum",
         "question": "Has it been going up over the past year?",
         "direction": 1,
         "evidence": "strong",
@@ -118,6 +140,7 @@ SIGNALS: list[dict] = [
     {
         "key": "trend",
         "label": "Trend",
+        "short": "Trend",
         "question": "Is the long-run average itself rising?",
         "direction": 1,
         "evidence": "moderate",
@@ -129,6 +152,7 @@ SIGNALS: list[dict] = [
     {
         "key": "nearHigh",
         "label": "Near its high",
+        "short": "Near high",
         "question": "Is it close to the best price of the past year?",
         "direction": 1,
         "evidence": "moderate",
@@ -139,6 +163,7 @@ SIGNALS: list[dict] = [
     {
         "key": "lowVolatility",
         "label": "Steadiness",
+        "short": "Steady",
         "question": "Does it get there without wild swings?",
         "direction": -1,
         "evidence": "moderate",
@@ -150,6 +175,7 @@ SIGNALS: list[dict] = [
     {
         "key": "shallowDrawdown",
         "label": "Holdability",
+        "short": "Holdable",
         "question": "How painful has owning it been?",
         "direction": -1,
         # Graded WEAK deliberately, and it is the grade that decides the weight.
@@ -167,6 +193,7 @@ SIGNALS: list[dict] = [
     {
         "key": "relativeStrength",
         "label": "Versus the index",
+        "short": "Vs index",
         "question": "Has it beaten the market it belongs to?",
         "direction": 1,
         "evidence": "strong",
@@ -177,6 +204,7 @@ SIGNALS: list[dict] = [
     {
         "key": "flow",
         "label": "Money flow",
+        "short": "Flow",
         "question": "Are recent days closing strong on volume?",
         "direction": 1,
         "evidence": "weak",
@@ -298,6 +326,11 @@ def price_signals(frame: pd.DataFrame,
     if len(close) < MIN_BARS:
         return {key: None for key in SIGNAL_KEYS}
 
+    # The common window. Every signal below that depends on a lookback reads
+    # from these, never from the full fetched history — see RANK_WINDOW.
+    window_close = close.tail(RANK_WINDOW)
+    window_high = high.tail(RANK_WINDOW)
+
     out: dict[str, Optional[float]] = {}
 
     # --- momentum: 12 months ending one month ago -------------------------
@@ -305,7 +338,11 @@ def price_signals(frame: pd.DataFrame,
                        if len(close) > 253 else None)
 
     # --- trend: annualised slope of the 200-day average over a quarter ----
-    average = close.rolling(200, min_periods=150).mean().dropna()
+    # `min_periods=200` rather than a shorter warm-up: an average computed from
+    # 150 bars is a 150-day average, and comparing one name's 150-day slope with
+    # another's 200-day slope is the same category of error RANK_WINDOW exists
+    # to prevent. MIN_BARS guarantees there is enough history for the real thing.
+    average = close.rolling(200, min_periods=200).mean().dropna()
     if len(average) > 63 and float(average.iloc[-64]) > 0:
         quarterly = float(average.iloc[-1] / average.iloc[-64] - 1.0)
         out["trend"] = _finite((1.0 + quarterly) ** 4 - 1.0)
@@ -313,16 +350,15 @@ def price_signals(frame: pd.DataFrame,
         out["trend"] = None
 
     # --- distance from the 52-week high -----------------------------------
-    window = min(len(close), TRADING_DAYS)
-    year_high = float(high.tail(window).max())
+    year_high = float(window_high.max())
     out["nearHigh"] = (_finite(float(close.iloc[-1]) / year_high - 1.0)
                        if year_high > 0 else None)
 
-    # --- volatility and drawdown ------------------------------------------
-    returns = close.pct_change().dropna()
+    # --- volatility and drawdown, over the same year for every name --------
+    returns = window_close.pct_change().dropna()
     out["lowVolatility"] = (_finite(returns.std(ddof=1) * np.sqrt(TRADING_DAYS))
                             if len(returns) > 20 else None)
-    profile = lt.drawdown_profile(close)
+    profile = lt.drawdown_profile(window_close)
     out["shallowDrawdown"] = (abs(_finite(profile.get("maxDrawdown")) or 0.0)
                               if profile.get("usable") else None)
 
@@ -544,5 +580,6 @@ def scan(symbols: list[str], market_code: str = "US", period_days: int = 500,
         # list tells the reader whether it was a typo or a delisting.
         "missing": [s for s in requested if s not in ranked],
         "minBars": MIN_BARS,
+        "window": RANK_WINDOW,
     })
     return result
