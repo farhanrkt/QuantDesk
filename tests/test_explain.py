@@ -104,6 +104,15 @@ SAMPLES: dict[str, tuple] = {
     "terminalShare": (0.72, {}),
     "discountRate": (0.089, {"rate_name": "Cost of equity", "risk_free": 0.042, "beta": 1.15}),
     "valuationSpread": (0.55, {"p25_label": "$96", "p75_label": "$150"}),
+    "riskReward": (2.4, {"target_label": "Next resistance (3 prior turns)"}),
+    "stopDistance": (0.03, {"atr_multiple": 1.8, "basis": "structure"}),
+    "positionShare": (0.33, {"risk_budget": 0.01, "uncapped": 0.33}),
+    "distanceToLevel": (0.07, {"side": "resistance", "touches": 3, "price_text": "$232.06"}),
+    "vwapDistance": (0.12, {"anchor": "52-week low"}),
+    "squeezePercentile": (0.08, {"fired": None}),
+    "volumeRatio": (1.7, {}),
+    "divergenceState": (1, {"kind": "bearish"}),
+    "gapState": (0.038, {"direction": "up", "size_atr": 1.4}),
 }
 
 
@@ -155,9 +164,10 @@ def test_reading_quotes_the_actual_value(key):
 def test_missing_values_never_get_a_colour(key):
     """An absent number must never be rendered as good or bad news."""
     _value, ctx = SAMPLES[key]
-    if key in ("cusumEpisode", "maxDrawdownRecoveryDays"):
-        # These two READ their missing case: "no regime detected" and "never
-        # recovered" are findings, not gaps, so they are exempt by design.
+    if key in ("cusumEpisode", "maxDrawdownRecoveryDays", "divergenceState", "gapState"):
+        # These READ their missing case rather than lacking data: "no regime
+        # detected", "never recovered", "price and momentum agree", "no unfilled
+        # gap" are findings, not gaps, so they are exempt by design.
         return
     result = E.explain(key, None, **ctx)
     assert result["band"] == "unavailable"
@@ -176,6 +186,7 @@ def _monotone(key, values, ctx=None, improving=True):
 
 
 HIGHER_IS_BETTER = {
+    "riskReward": [0.6, 1.2, 2.0, 4.0],
     "upside": [-0.50, -0.20, 0.0, 0.20, 0.50],
     "probUndervalued": [0.05, 0.30, 0.60, 0.90],
     "cagr": [-0.20, -0.02, 0.03, 0.08, 0.15, 0.30],
@@ -279,6 +290,56 @@ def test_beneish_and_altman_point_opposite_ways():
     assert tone_of("beneish", -0.5) == "bad"
 
 
+def test_a_thin_reward_for_the_risk_is_not_dressed_up():
+    """0.8:1 has to read as bad, whatever the setup around it says."""
+    assert tone_of("riskReward", 0.8) == "bad"
+    assert "risking more than you stand to make" in E.explain("riskReward", 0.8)["reading"]
+    assert tone_of("riskReward", 3.0) == "good"
+
+
+def test_a_percentile_is_never_shown_as_a_bare_number_under_a_directional_label():
+    """The tile that said "How quiet it has gone: 94%" and meant *very lively*.
+
+    A percentile carries no direction of its own, so pairing one with a label
+    that does ("how quiet") inverts the reading for anyone who scans the tile
+    without opening the explanation. The displayed value now leads with the
+    word, and the word has to match the band.
+    """
+    lively = E.explain("squeezePercentile", 0.94)
+    assert lively["valueText"].startswith("Volatile")
+    quiet = E.explain("squeezePercentile", 0.05)
+    assert quiet["valueText"].startswith("Squeezed")
+    ordinary = E.explain("squeezePercentile", 0.50)
+    assert ordinary["valueText"].startswith("Ordinary")
+    # And the label itself must not smuggle a direction back in.
+    assert "quiet" not in lively["label"].lower()
+
+
+def test_a_volatility_squeeze_refuses_to_predict_a_direction():
+    """The claim most write-ups smuggle in, and the one the measure cannot make."""
+    reading = E.explain("squeezePercentile", 0.05)["reading"]
+    assert "which direction" in reading
+    action = E.explain("squeezePercentile", 0.05)["action"]
+    assert "never a direction forecast" in action
+
+
+def test_stop_distance_is_deliberately_non_directional():
+    """Tighter is not better.
+
+    A tight stop risks less per share and gets hit by ordinary noise more often;
+    a wide one is the reverse. Grading it high-is-good or low-is-good would
+    assert something the measure does not support, so it grades neither.
+    """
+    assert E.explain("stopDistance", 0.03, atr_multiple=1.8,
+                     basis="structure")["goodDirection"] == "none"
+
+
+def test_a_volatility_placed_stop_is_graded_below_a_structural_one():
+    structural = E.explain("stopDistance", 0.06, atr_multiple=2.0, basis="structure")
+    volatility = E.explain("stopDistance", 0.06, atr_multiple=2.0, basis="volatility")
+    assert TONE_ORDER[structural["tone"]] > TONE_ORDER[volatility["tone"]]
+
+
 def test_hurst_near_a_random_walk_is_a_warning_not_a_verdict():
     """The honesty check: a coin-flip series must not read as neutral-fine."""
     assert tone_of("hurst", 0.50) == "warn"
@@ -292,6 +353,14 @@ def test_overbought_is_a_caution_never_a_verdict():
     assert tone_of("rsi", 75) == "warn"
     assert tone_of("rsi", 25) == "warn"
     assert tone_of("rsi", 50) == "neutral"
+
+
+def test_short_horizon_signals_are_never_graded_strong():
+    """The whole shorter-horizon section rests on thin evidence and must say so."""
+    for key in ("squeezePercentile", "divergenceState", "gapState", "distanceToLevel",
+                "vwapDistance"):
+        value, ctx = SAMPLES[key]
+        assert E.explain(key, value, **ctx)["evidence"] == "weak"
 
 
 def test_weak_signals_are_labelled_weak():

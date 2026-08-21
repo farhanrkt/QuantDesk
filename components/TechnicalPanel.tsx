@@ -8,6 +8,7 @@ import type { TooltipProps } from "recharts";
 import { useState } from "react";
 import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
 import { IndicatorGrid } from "@/components/IndicatorGrid";
+import { HorizonPanel } from "@/components/HorizonPanel";
 import { LongTermPanel } from "@/components/LongTermPanel";
 import { Tabs } from "@/components/ui/tabs";
 import { ApplyButton, DownloadButton, Field, NumberField } from "@/components/ui/controls";
@@ -60,8 +61,12 @@ export function TechnicalPanel({
   const [srWindow, setSrWindow] = useState(10);
   const [srLevels, setSrLevels] = useState(6);
   // The long-horizon view leads, because that is the question this lens is
-  // most often asked and the one the chart alone cannot answer.
-  const [section, setSection] = useState(data.hasLongTerm ? "horizon" : "chart");
+  // most often asked and the one the chart alone cannot answer. The two shorter
+  // horizons sit beside it as siblings rather than underneath it: they answer a
+  // DIFFERENT question ("where would the levels be if I bought this month?"),
+  // not a more detailed version of the same one, and nesting them would imply
+  // otherwise.
+  const [section, setSection] = useState(data.hasLongTerm ? "long" : "chart");
 
   const downloadSeries = () =>
     downloadCsv(
@@ -98,9 +103,14 @@ export function TechnicalPanel({
     sell: p.signal === "Sell" ? p.high * 1.03 : null,
   }));
 
+  // Ordered longest-first, deliberately. Reading left to right walks from the
+  // question with the strongest evidence behind it to the one with the weakest,
+  // which is the order a reader should weigh them in.
   const SECTIONS = [
-    ...(data.hasLongTerm ? [{ id: "horizon", label: "Long horizon", accent: "#35C4A8" }] : []),
-    { id: "chart", label: "Chart & signals", accent: "#5B8DEF" },
+    ...(data.hasLongTerm ? [{ id: "long", label: "Long term · years", accent: "#35C4A8" }] : []),
+    { id: "mid", label: "Mid term · weeks–months", accent: "#5B8DEF" },
+    { id: "short", label: "Short term · days–weeks", accent: "#F2C14E" },
+    { id: "chart", label: "Chart & signals", accent: "#A78BFA" },
     { id: "indicators", label: "All indicators", accent: "#A78BFA" },
   ];
 
@@ -108,8 +118,16 @@ export function TechnicalPanel({
     <div className="space-y-4 animate-rise">
       <Tabs tabs={SECTIONS} active={section} onChange={setSection} />
 
-      {section === "horizon" && data.hasLongTerm && (
+      {section === "long" && data.hasLongTerm && (
         <LongTermPanel data={data.longTerm} currency={data.currency} />
+      )}
+
+      {section === "mid" && (
+        <HorizonPanel data={data.midTerm} currency={data.currency} />
+      )}
+
+      {section === "short" && (
+        <HorizonPanel data={data.shortTerm} currency={data.currency} />
       )}
 
       {section === "indicators" && (

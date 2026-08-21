@@ -251,6 +251,91 @@ export interface LongTermBlock {
   } | null;
   coppock: { date: string; value: number }[];
 }
+/** A defended price level with how many times the market actually turned there. */
+export interface SwingLevel {
+  price: number; touches: number;
+  distancePct: number; distanceAtr: number;
+  side: "support" | "resistance";
+}
+
+export interface SwingTarget {
+  label: string; price: number; basis: string;
+  rMultiple: number; distancePct: number;
+}
+
+export interface SwingPlan {
+  usable: boolean;
+  reason?: string;
+  entry?: number; entryNote?: string;
+  stop?: number; stopBasis?: "structure" | "volatility";
+  stopWidened?: boolean; stopDistancePct?: number; stopDistanceAtr?: number;
+  structuralLevel?: number | null; volatilityStop?: number;
+  targets?: SwingTarget[];
+  riskReward?: number;
+  riskBudget?: number; positionShare?: number; positionUncapped?: number;
+  atr?: number;
+}
+
+export interface PivotSet {
+  usable: boolean; style?: string; period?: string;
+  periodHigh?: number; periodLow?: number; periodClose?: number;
+  pivot?: number; r1?: number; r2?: number; r3?: number;
+  s1?: number; s2?: number; s3?: number;
+}
+
+/** One shorter-horizon readout. `usable: false` means it was withheld, not empty. */
+export interface HorizonBlock {
+  usable: boolean;
+  horizon: "short" | "mid";
+  label?: string;
+  window?: string;
+  reason?: string;
+  price?: number; atr?: number; atrPct?: number | null;
+  setup?: {
+    name: string | null; direction: "long" | "short" | "none";
+    evidence: "strong" | "moderate" | "weak" | null;
+    reason: string; anchor: number | null; invalidation: number | null;
+    consolidation?: { usable: boolean; high?: number; low?: number;
+                      height?: number; heightPct?: number; bars?: number; tight?: boolean };
+    trend?: { fastLength: number; slowLength: number;
+              fast: number | null; slow: number | null; long: number | null;
+              slowRising: boolean | null; alignment: "up" | "down" | "mixed";
+              aboveLong: boolean | null; price: number };
+  };
+  levels?: { usable: boolean; price?: number; atr?: number;
+             supports: SwingLevel[]; resistances: SwingLevel[];
+             confirmationLag?: number };
+  plan?: SwingPlan;
+  pivots?: { classic: PivotSet; fibonacci: PivotSet };
+  vwap?: { usable: boolean; price?: number; caveat?: string;
+           anchors: { label: string; anchoredOn: string; vwap: number;
+                      distancePct: number; above: boolean; note: string }[] };
+  squeeze?: { usable: boolean; bandwidth?: number; percentile?: number;
+              inSqueeze?: boolean; firedDirection?: "up" | "down" | null;
+              upperBand?: number | null; lowerBand?: number | null };
+  volume?: { usable: boolean; ratio?: number; average?: number;
+             latest?: number; confirms?: boolean; anaemic?: boolean };
+  gaps?: { usable: boolean; count?: number; unfilledCount?: number;
+           gaps: { date: string; direction: string; from: number; to: number;
+                   sizeAtr: number; filled: boolean; distancePct: number }[];
+           unfilled: { date: string; direction: string; from: number; to: number;
+                       sizeAtr: number; filled: boolean; distancePct: number }[] };
+  divergence?: { usable: boolean; swingOrder?: number; caveat?: string;
+                 bearish: DivergenceLeg | null; bullish: DivergenceLeg | null };
+  candlesticks?: { name: string; direction: string; meaning: string;
+                   date: string; evidence: string }[];
+  undetectable?: { name: string; why: string }[];
+  plainEnglish: PlainEnglish | null;
+  explain: ExplainMap;
+}
+
+export interface DivergenceLeg {
+  kind: "bullish" | "bearish";
+  from: string; to: string;
+  priceFrom: number; priceTo: number;
+  rsiFrom: number; rsiTo: number;
+}
+
 export interface TechnicalResponse {
   ticker: string; currency: string; range: string; bars: number; hasSma200: boolean;
   latest: { date: string; close: number; change: number; changePct: number;
@@ -267,6 +352,8 @@ export interface TechnicalResponse {
              price: number; changeSince: number }[];
   hasLongTerm: boolean;
   longTerm: LongTermBlock;
+  shortTerm: HorizonBlock;
+  midTerm: HorizonBlock;
   indicators: Record<string, number | null>;
   indicatorsExplain: ExplainMap;
 }

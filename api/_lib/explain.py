@@ -1794,6 +1794,261 @@ def _valuation_spread(value, p25_label=None, p75_label=None, **_):
 
 
 # ============================================================================ #
+# Shorter horizons — where the evidence is thinnest and says so
+# ============================================================================ #
+@metric("riskReward")
+def _risk_reward(value, target_label=None, **_):
+    label = "Reward for the risk"
+    what = ("How much you stand to make if the target is reached, for every unit you lose if "
+            "the stop is hit. 2.0 means twice as much up as down.")
+    if not _known(value):
+        return unavailable(label, what, "no entry and stop could be placed")
+    band = _ladder(value, ((1.0, "bad"), (1.5, "poor"), (2.5, "good"), (None, "excellent")))
+    reading = f"{_num(value, 1)} to 1"
+    if target_label:
+        reading += f", measuring to {target_label.lower()}"
+    reading += ". "
+    reading += {
+        "bad": "You are risking more than you stand to make. That needs a very high hit rate "
+               "to be worth doing, and nothing here estimates the hit rate.",
+        "poor": "Thin. After trading costs there is not much left of the edge.",
+        "good": "A conventional ratio for this kind of setup.",
+        "excellent": "Generous — check the target is a real level and not just the number that "
+                     "made the arithmetic look good.",
+    }[band]
+    return make(label, what, reading,
+                "A ratio is only half the sum. It tells you the payoff shape, not how often "
+                "the setup works, and this app does not claim to know that.",
+                band, "high", evidence="moderate", value_text=f"{_num(value, 1)}:1")
+
+
+@metric("stopDistance")
+def _stop_distance(value, atr_multiple=None, basis=None, **_):
+    label = "Distance to the stop"
+    what = ("How far the price would have to fall before the reason for the trade is wrong and "
+            "you would get out.")
+    if not _known(value):
+        return unavailable(label, what, "no stop could be placed")
+    reading = f"{_pct(value)} below the entry"
+    if _known(atr_multiple):
+        reading += f", which is {_num(atr_multiple, 1)} times an average day's range"
+    reading += ". "
+    if basis == "structure":
+        reading += ("It sits just under a level the market has actually defended, so if it is "
+                    "hit, something real has broken rather than the price having wobbled.")
+        band = "good"
+    else:
+        reading += ("There was no defended level below to anchor it to, so it is placed purely "
+                    "by how much this stock normally moves. That is weaker than a structural "
+                    "stop.")
+        band = "caution"
+    if _known(atr_multiple) and atr_multiple < 1.2:
+        band = "caution"
+        reading += (" It is close enough to the entry that ordinary daily noise could trigger "
+                    "it without anything meaningful happening.")
+    return make(label, what, reading,
+                "This is the input to position sizing. Halve the distance and you can hold "
+                "twice the position for the same money at risk — and get stopped out twice as "
+                "often.",
+                band, "none", evidence="strong", value_text=_pct(value))
+
+
+@metric("positionShare")
+def _position_share(value, risk_budget=None, uncapped=None, **_):
+    label = "Position size"
+    what = ("How much of your account this position would be, if a stop-out is not allowed to "
+            "cost you more than your chosen risk budget.")
+    if not _known(value):
+        return unavailable(label, what, "no stop distance to size against")
+    budget = risk_budget if _known(risk_budget) else 0.01
+    reading = (f"{_pct(value, 0)} of the account. That is the size at which being stopped out "
+               f"costs {_pct(budget, 0)} of the whole account — no more.")
+    band = "context"
+    if _known(uncapped) and uncapped > 1.0:
+        band = "caution"
+        reading += (f" The unconstrained arithmetic says {_pct(uncapped, 0)}, which is more "
+                    f"money than there is. The stop is tight enough that hitting the risk "
+                    f"budget would need borrowing; treat the shown figure as a cap, not a "
+                    f"recommendation.")
+    elif value > 0.25:
+        band = "caution"
+        reading += (" That is a large single holding. The arithmetic is correct and "
+                    "concentration is a separate risk it does not measure.")
+    return make(label, what, reading,
+                "Change the risk budget and this moves proportionally. It is the one number "
+                "here that is arithmetic rather than opinion.",
+                band, "none", evidence="strong", value_text=_pct(value, 0))
+
+
+@metric("distanceToLevel")
+def _distance_to_level(value, side=None, touches=None, price_text=None, **_):
+    label = ("Distance to the nearest ceiling" if side == "resistance"
+             else "Distance to the nearest floor")
+    what = ("How far the price is from the closest level where it has previously turned around. "
+            + ("A ceiling is where sellers showed up before."
+               if side == "resistance" else "A floor is where buyers showed up before."))
+    if not _known(value):
+        return unavailable(label, what, "no confirmed turning point on that side")
+    reading = (f"{_pct(abs(value))} "
+               + ("above" if side == "resistance" else "below")
+               + " today's price"
+               + (f", at {price_text}" if price_text else "") + ". ")
+    if _known(touches):
+        reading += (f"The price turned there {int(touches)} time"
+                    f"{'s' if touches != 1 else ''} before. "
+                    + ("A level tested once is barely a level."
+                       if touches < 2 else
+                       "A level tested repeatedly is one more participants are watching."))
+    band = "context"
+    if abs(value) < 0.02:
+        band = "caution"
+        reading += " The price is right on top of it, which is where the decision gets made."
+    return make(label, what, reading,
+                "Levels are where past participants transacted, not forecasts. They are most "
+                "useful for placing a stop beyond, which is what the plan above does.",
+                band, "none", evidence="weak", value_text=_signed_pct(value))
+
+
+@metric("vwapDistance")
+def _vwap_distance(value, anchor=None, **_):
+    label = (f"Average price paid since the {anchor.lower()}" if anchor
+             else "Versus the average price paid")
+    what = ("The volume-weighted average price everyone who bought since a chosen date has "
+            "paid. Above it, the average buyer since then is in profit; below it, under water.")
+    if not _known(value):
+        return unavailable(label, what, "not enough volume history since that anchor")
+    above = value >= 0
+    reading = (f"{_signed_pct(value)} versus that average. "
+               + ("The typical buyer since then is sitting on a gain, so there is less trapped "
+                  "supply overhead."
+                  if above else
+                  "The typical buyer since then is under water. People who bought there often "
+                  "sell into any rally back to break even, which is what makes this level act "
+                  "as resistance."))
+    return make(label, what, reading,
+                "It is a description of who is where, not a signal. Its usefulness is in "
+                "explaining WHY a level might hold.",
+                "good" if above else "caution", "high", evidence="weak",
+                value_text=_signed_pct(value))
+
+
+@metric("squeezePercentile")
+def _squeeze(value, fired=None, **_):
+    # THE LABEL AND THE FIGURE HAVE TO AGREE. This first shipped as "How quiet
+    # it has gone: 94%", where 94 is a percentile meaning *very lively* — a
+    # reader scanning the tile takes exactly the wrong reading, and nothing on
+    # the face of it corrects them. The value now leads with the word.
+    label = "How much it is moving"
+    what = ("How much the price has been moving lately compared with the rest of the past year. "
+            "Low means unusually calm.")
+    if not _known(value):
+        return unavailable(label, what, "needs about 40 bars of history")
+    if value <= 0.15:
+        band = "caution"
+        summary = f"Squeezed ({_pct(value, 0)})"
+        reading = (f"At the {_pct(value, 0)} mark of its own past year — quieter than "
+                   f"{_pct(1 - value, 0)} of it, which is a 'squeeze'. Calm "
+                   f"periods really are followed by loud ones more often than chance, because "
+                   f"volatility clusters. What that does NOT tell you is which direction the "
+                   f"loud move goes, and most write-ups quietly add that part.")
+    elif value >= 0.85:
+        band = "caution"
+        summary = f"Volatile ({_pct(value, 0)})"
+        reading = (f"At the {_pct(value, 0)} mark of its own past year — wider than most of "
+                   f"it, so this is a volatile stretch. "
+                   f"Stops need more room than usual and position sizes less.")
+    else:
+        band = "context"
+        summary = f"Ordinary ({_pct(value, 0)})"
+        reading = f"Ordinary — around the {_pct(value, 0)} mark of its own past year."
+    if fired:
+        reading += (f" The price has now closed outside the bands to the {fired}side, so the "
+                    f"quiet period has resolved in that direction.")
+    return make(label, what, reading,
+                "A volatility forecast, never a direction forecast. Wait for the break rather "
+                "than guessing it.",
+                band, "none", evidence="weak", value_text=summary)
+
+
+@metric("volumeRatio")
+def _volume_ratio(value, **_):
+    label = "Volume on the day"
+    what = "How much trading happened today compared with a normal day over the past month."
+    if not _known(value):
+        return unavailable(label, what, "needs a month of volume history")
+    if value >= 2.0:
+        band, verdict = "context", (f"{_num(value, 1)}x a normal day — a lot of people traded "
+                                    f"this. Heavy volume behind a move means more participants "
+                                    f"agreed with it.")
+    elif value >= 1.5:
+        band, verdict = "context", (f"{_num(value, 1)}x a normal day — heavier than usual, which "
+                                    f"is the confirmation a breakout rule normally asks for.")
+    elif value <= 0.6:
+        band, verdict = "caution", (f"{_num(value, 1)}x a normal day — thin. A move on volume "
+                                    f"this light involved few participants and is easier to "
+                                    f"reverse.")
+    else:
+        band, verdict = "context", f"{_num(value, 1)}x a normal day — ordinary participation."
+    return make(label, what, verdict,
+                "Volume confirms a move, it does not cause one. Heavy volume on its own, with "
+                "no move to confirm, means nothing.",
+                band, "none", evidence="moderate", value_text=f"{_num(value, 1)}x")
+
+
+@metric("divergenceState")
+def _divergence(value, kind=None, **_):
+    label = "Price versus momentum"
+    what = ("Whether the price is making new highs (or lows) that the momentum reading is not "
+            "matching. When the two disagree, the move is said to be losing steam.")
+    if not kind:
+        return make(label, what,
+                    "Price and momentum are moving together — no disagreement between them at "
+                    "the last two turning points.",
+                    CONTEXT_NOT_TRIGGER, "context", "none", evidence="weak",
+                    value_text="In step")
+    if kind == "bearish":
+        band = "caution"
+        reading = ("The price made a HIGHER high than last time, but momentum made a lower one. "
+                   "The advance is being driven by less force than before.")
+    else:
+        band = "caution"
+        reading = ("The price made a LOWER low than last time, but momentum made a higher one. "
+                   "The decline is being driven by less force than before.")
+    reading += (" Treat it lightly: divergence depends heavily on how a turning point is "
+                "defined, and it can persist for months without resolving.")
+    return make(label, what, reading,
+                "Not a trigger. At most a reason to want more confirmation before acting on "
+                "the move it is arguing with.",
+                band, "none", evidence="weak",
+                value_text="Losing steam" if kind == "bearish" else "Selling drying up")
+
+
+@metric("gapState")
+def _gap(value, direction=None, size_atr=None, **_):
+    label = "Unfilled gap"
+    what = ("A price band the stock jumped straight over between one day's close and the next "
+            "day's open. Almost nobody traded inside it, so there is no established support or "
+            "resistance in there.")
+    if not _known(value):
+        return make(label, what,
+                    "No unfilled gap of any size in the recent history — the price has traded "
+                    "through every level on its way here.",
+                    CONTEXT_NOT_TRIGGER, "context", "none", evidence="weak", value_text="None")
+    reading = (f"An unfilled gap {_pct(abs(value))} "
+               + ("below" if value < 0 else "above") + " today's price"
+               + (f", about {_num(size_atr, 1)} average daily ranges wide" if _known(size_atr)
+                  else "") + f", left by a jump {direction or ''}. ")
+    reading += ("Because there is no trading history inside it, price often moves through that "
+                "band quickly in either direction. The common claim that gaps always get filled "
+                "is not supported — many never do.")
+    return make(label, what, reading,
+                "Useful for knowing where price may move fast, which affects where a stop is "
+                "safe. Not a directional signal.",
+                "caution", "none", evidence="weak", value_text=_signed_pct(value))
+
+
+
+# ============================================================================ #
 # The plain-English story
 # ============================================================================ #
 def _years_of(observations: Optional[int]) -> Optional[float]:
@@ -2173,4 +2428,174 @@ def for_flow(payload: dict, currency: str = "") -> dict:
                                       direction=current.get("direction"),
                                       days=current.get("days"),
                                       avgRvol=current.get("avgRvol"))
+    return {k: v for k, v in out.items() if v is not None}
+
+
+# ============================================================================ #
+# The shorter-horizon story
+# ============================================================================ #
+def horizon_story(ticker: str, block: dict, currency_format=None) -> dict:
+    """The short- or mid-term readout, said out loud.
+
+    Deliberately opens by naming the setup or admitting there is none, because
+    "nothing here" is the most common honest answer and burying it under
+    paragraphs of context is how a tool teaches people to always find a trade.
+    """
+    money = currency_format or (lambda v: f"{v:,.2f}")
+    name = (ticker or "This stock").upper()
+    setup = block.get("setup") or {}
+    plan = block.get("plan") or {}
+    levels = block.get("levels") or {}
+    paragraphs: list[str] = []
+
+    # ---- 1. what the setup is ------------------------------------------
+    if setup.get("name"):
+        paragraphs.append(f"{name} is in a {setup['name'].lower()}. {setup['reason']}")
+    else:
+        paragraphs.append(setup.get("reason") or "No recognised setup is present.")
+
+    # ---- 2. the levels, if there are any -------------------------------
+    if plan.get("usable"):
+        target = (plan.get("targets") or [{}])[0]
+        line = (f"If you were taking it: entry around {money(plan['entry'])}, stop at "
+                f"{money(plan['stop'])} — that is {_pct(plan['stopDistancePct'])} below, "
+                f"placed just under "
+                + ("a level the price has previously turned at"
+                   if plan.get("stopBasis") == "structure"
+                   else f"{_num(plan['stopDistanceAtr'], 1)} average daily ranges")
+                + ". ")
+        if target.get("price") is not None:
+            line += (f"First target {money(target['price'])} "
+                     f"({_signed_pct(target.get('distancePct'))}), which is "
+                     f"{_num(plan['riskReward'], 1)} times what you are risking.")
+        paragraphs.append(line)
+
+        paragraphs.append(
+            f"Sized so that being stopped out costs {_pct(plan['riskBudget'], 0)} of your "
+            f"account, the position would be {_pct(plan['positionShare'], 0)} of it."
+            + (" The arithmetic wanted more than the whole account, so that figure is a cap."
+               if plan.get("positionUncapped", 0) > 1.0 else ""))
+    else:
+        supports = levels.get("supports") or []
+        resistances = levels.get("resistances") or []
+        if supports or resistances:
+            parts = []
+            if resistances:
+                parts.append(f"the nearest ceiling is {money(resistances[0]['price'])} "
+                             f"({_signed_pct(resistances[0]['distancePct'])} away)")
+            if supports:
+                parts.append(f"the nearest floor is {money(supports[0]['price'])} "
+                             f"({_signed_pct(supports[0]['distancePct'])} away)")
+            paragraphs.append("There is no trade to plan, but the structure is worth knowing: "
+                              + " and ".join(parts) + ".")
+
+    # ---- 3. what would change the picture -------------------------------
+    squeeze = block.get("squeeze") or {}
+    volume = block.get("volume") or {}
+    watch: list[str] = []
+    if squeeze.get("inSqueeze"):
+        watch.append("price movement has contracted to the quietest in about a year, so a "
+                     "larger move is more likely than usual — in an unknown direction")
+    if volume.get("anaemic"):
+        watch.append("trading volume is unusually thin, which makes every reading here noisier")
+    if (block.get("gaps") or {}).get("unfilled"):
+        gap = block["gaps"]["unfilled"][-1]
+        watch.append(f"there is an unfilled gap around {money(gap['from'])} that the price "
+                     f"jumped straight over, so it may move quickly through that band")
+    if watch:
+        paragraphs.append("Worth watching: " + "; ".join(watch) + ".")
+
+    # ---- 4. the honesty paragraph, always present -----------------------
+    paragraphs.append(_horizon_caveat(block))
+
+    return {
+        "ticker": name,
+        "paragraphs": paragraphs,
+        "simpleMetrics": (["riskReward", "stopDistance", "positionShare",
+                           "distanceToLevel.resistance", "distanceToLevel.support",
+                           "volumeRatio"]
+                          if plan.get("usable") else
+                          ["distanceToLevel.resistance", "distanceToLevel.support",
+                           "squeezePercentile", "volumeRatio", "divergenceState", "gapState"]),
+    }
+
+
+def _horizon_caveat(block: dict) -> str:
+    """The standing warning, phrased for how good the evidence actually is.
+
+    This is the paragraph the whole shorter-horizon section is built around. The
+    long-horizon panel earns its confidence from decades of published work; this
+    one does not, and printing both in the same voice would be the single most
+    misleading thing the app could do.
+    """
+    setup = block.get("setup") or {}
+    evidence = setup.get("evidence")
+    lead = "Be careful how much weight you put on this. "
+    if evidence == "moderate":
+        return (lead + "Breakout rules of this kind sit on the strongest evidence anything in "
+                "this section has — trends in price do persist over months, across many markets "
+                "and decades of data. That is a statement about averages over thousands of "
+                "trades, not a forecast for this one, and the edge is thin enough that trading "
+                "costs matter.")
+    if evidence == "weak":
+        return (lead + "This setup is widely taught and thinly evidenced. The mechanism is "
+                "plausible and the published out-of-sample support is close to absent once "
+                "trading costs are counted. The levels below are useful for deciding how much "
+                "to risk; they are not a reason to take the trade.")
+    return (lead + "Everything in this section describes the last few weeks of price movement. "
+            "Short-horizon technical signals have far weaker published support than the "
+            "long-horizon ones, and over one to four weeks prices have historically shown mild "
+            "REVERSAL rather than continuation — the opposite of the twelve-month effect. "
+            "Nothing here knows anything about the business.")
+
+
+def for_horizon(block: dict, currency_format=None) -> dict:
+    """Explanations for one shorter-horizon readout."""
+    if not block.get("usable"):
+        return {}
+    money = currency_format or (lambda v: f"{v:,.2f}")
+    plan = block.get("plan") or {}
+    levels = block.get("levels") or {}
+    squeeze = block.get("squeeze") or {}
+    volume = block.get("volume") or {}
+    divergence = block.get("divergence") or {}
+    gaps = block.get("gaps") or {}
+
+    out: dict = {}
+    if plan.get("usable"):
+        first = (plan.get("targets") or [{}])[0]
+        out["riskReward"] = explain("riskReward", plan.get("riskReward"),
+                                    target_label=first.get("label"))
+        out["stopDistance"] = explain("stopDistance", plan.get("stopDistancePct"),
+                                      atr_multiple=plan.get("stopDistanceAtr"),
+                                      basis=plan.get("stopBasis"))
+        out["positionShare"] = explain("positionShare", plan.get("positionShare"),
+                                       risk_budget=plan.get("riskBudget"),
+                                       uncapped=plan.get("positionUncapped"))
+
+    for side, key in (("resistance", "resistances"), ("support", "supports")):
+        nearest = (levels.get(key) or [None])[0]
+        if nearest:
+            out[f"distanceToLevel.{side}"] = explain(
+                "distanceToLevel", nearest.get("distancePct"), side=side,
+                touches=nearest.get("touches"), price_text=money(nearest["price"]))
+
+    out["squeezePercentile"] = explain("squeezePercentile", squeeze.get("percentile"),
+                                       fired=squeeze.get("firedDirection"))
+    out["volumeRatio"] = explain("volumeRatio", volume.get("ratio"))
+
+    active = divergence.get("bearish") or divergence.get("bullish")
+    out["divergenceState"] = explain("divergenceState", 1 if active else None,
+                                     kind=(active or {}).get("kind"))
+
+    unfilled = (gaps.get("unfilled") or [None])[-1]
+    out["gapState"] = explain("gapState", (unfilled or {}).get("distancePct"),
+                              direction=(unfilled or {}).get("direction"),
+                              size_atr=(unfilled or {}).get("sizeAtr"))
+
+    for anchor in (block.get("vwap") or {}).get("anchors") or []:
+        result = explain("vwapDistance", anchor.get("distancePct"), anchor=anchor.get("label"))
+        if result:
+            out[f"vwapDistance.{anchor['label']}"] = result
+
     return {k: v for k, v in out.items() if v is not None}

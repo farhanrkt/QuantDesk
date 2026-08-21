@@ -35,6 +35,7 @@ from scipy.signal import argrelextrema
 
 from . import explain as ex
 from . import indicators as ind
+from . import swing
 from . import longterm as lt
 from . import riskmodel
 from .valuation import MARKETS
@@ -770,6 +771,22 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
         long_term["plainEnglish"] = None
         long_term["explain"] = {}
 
+    # ---------------- shorter horizons ----------------
+    # Both run off the SAME frame the chart uses, so they cost no extra fetch.
+    # `analyse` withholds a horizon rather than computing it from too few bars,
+    # which is why a 3-month range returns a mid-term section that says so.
+    horizons = swing.analyse(data)
+    def money(value):
+        return _format_currency(float(value), currency)
+
+    for block in horizons.values():
+        if block.get("usable"):
+            block["plainEnglish"] = ex.horizon_story(ticker, block, currency_format=money)
+            block["explain"] = ex.for_horizon(block, currency_format=money)
+        else:
+            block["plainEnglish"] = None
+            block["explain"] = {}
+
     indicator_notes = ex.for_indicators(
         {
             "sma50": _last_valid(data["SMA_50"]), "sma100": _last_valid(data["SMA_100"]),
@@ -800,6 +817,8 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
         "hasSma200": bool(data["SMA_200"].notna().sum() > 0),
         "hasLongTerm": bool(enough),
         "longTerm": long_term,
+        "shortTerm": horizons["short"],
+        "midTerm": horizons["mid"],
         "indicators": {
             "adx": _last_valid(data["ADX"]),
             "plusDi": _last_valid(data["PLUS_DI"]),
