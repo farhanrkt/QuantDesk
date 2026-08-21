@@ -119,7 +119,7 @@ export function TickerBar({
         <label className="flex items-center gap-2 text-ash">
           <span className="eyebrow">Chart range</span>
           <Select value={opts.range} onChange={(e) => set("range", e.target.value)} className="h-8">
-            {["3mo", "6mo", "1y", "2y", "5y"].map((p) => <option key={p} value={p}>{p}</option>)}
+            {["3mo", "6mo", "1y", "2y", "5y", "10y", "max"].map((p) => <option key={p} value={p}>{p}</option>)}
           </Select>
         </label>
         <div className="flex flex-wrap items-center gap-1.5">

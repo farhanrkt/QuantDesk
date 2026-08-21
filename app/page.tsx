@@ -19,7 +19,9 @@ import { useEngines, useEventStudy, type RunOptions } from "@/lib/api";
 import type { Engine, EngineFailure } from "@/lib/types";
 
 const INITIAL: RunOptions = {
-  ticker: "", market: "US", period: "2y", range: "1y", mode: "threshold",
+  // `range` drives the technical lens. 5y is the shortest window where
+  // drawdown depth and rolling multi-year returns mean anything.
+  ticker: "", market: "US", period: "2y", range: "5y", mode: "threshold",
   contamination: 0.02, madK: 3.0, scoreThreshold: -0.10,
 };
 

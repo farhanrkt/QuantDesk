@@ -7,6 +7,9 @@ import {
 import type { TooltipProps } from "recharts";
 import { useState } from "react";
 import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
+import { IndicatorGrid } from "@/components/IndicatorGrid";
+import { LongTermPanel } from "@/components/LongTermPanel";
+import { Tabs } from "@/components/ui/tabs";
 import { ApplyButton, DownloadButton, Field, NumberField } from "@/components/ui/controls";
 import type { TechnicalOptions } from "@/lib/api";
 import type { TechPoint, TechnicalResponse } from "@/lib/types";
@@ -56,6 +59,9 @@ export function TechnicalPanel({
   // Defaults mirror api/_lib/technical.py analyze().
   const [srWindow, setSrWindow] = useState(10);
   const [srLevels, setSrLevels] = useState(6);
+  // The long-horizon view leads, because that is the question this lens is
+  // most often asked and the one the chart alone cannot answer.
+  const [section, setSection] = useState(data.hasLongTerm ? "horizon" : "chart");
 
   const downloadSeries = () =>
     downloadCsv(
@@ -92,8 +98,34 @@ export function TechnicalPanel({
     sell: p.signal === "Sell" ? p.high * 1.03 : null,
   }));
 
+  const SECTIONS = [
+    ...(data.hasLongTerm ? [{ id: "horizon", label: "Long horizon", accent: "#35C4A8" }] : []),
+    { id: "chart", label: "Chart & signals", accent: "#5B8DEF" },
+    { id: "indicators", label: "All indicators", accent: "#A78BFA" },
+  ];
+
   return (
     <div className="space-y-4 animate-rise">
+      <Tabs tabs={SECTIONS} active={section} onChange={setSection} />
+
+      {section === "horizon" && data.hasLongTerm && (
+        <LongTermPanel data={data.longTerm} currency={data.currency} />
+      )}
+
+      {section === "indicators" && (
+        <IndicatorGrid indicators={data.indicators} price={latest.close} />
+      )}
+
+      {!data.hasLongTerm && section === "chart" && (
+        <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-xs leading-relaxed text-warn">
+          The long-horizon section needs at least a year of history. Set the chart range to
+          5y, 10y or max to get drawdown depth, rolling multi-year returns and relative
+          strength — a &quot;worst 3-year window&quot; computed from one year of data would be
+          a statistic with nothing behind it.
+        </div>
+      )}
+
+      <div className={section === "chart" ? "space-y-4" : "hidden"}>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Latest close" value={num(latest.close)} sub={latest.date} />
         <Stat label="Change on the day" value={`${latest.change >= 0 ? "+" : ""}${num(latest.change)}`}
@@ -273,6 +305,7 @@ export function TechnicalPanel({
         dividends and timing, so treat it as a rough scorecard. Indicators are computed on the
         visible window only — a one-year range gives the 200-day average roughly fifty valid bars.
       </p>
+      </div>
     </div>
   );
 }

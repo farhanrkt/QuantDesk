@@ -78,15 +78,33 @@ estimates the **bid-ask spread** and warns when a move is small enough to be swa
 trading costs — on a thin stock, "heavy volume moved the price" often just means the order
 book is shallow.
 
-### Trend — "What is the price doing?"
+### Trend — "What is the price doing, and could I have held it?"
 
-**How.** The standard toolkit, hand-implemented rather than pulled from a library: SMA
-50/200, Wilder's RSI, MACD, Bollinger bands, and support/resistance levels clustered from
-local extrema. Golden and death crosses are detected as *events* (the bar where they
-happen), not states. It writes the result as a sentence in English.
+**How.** Three sections, ordered by horizon rather than by convention.
+
+**Long horizon** leads, because that is what a multi-year holder is actually asking. A
+checklist — 200-day average, Faber's 10-month rule, 12-1 momentum, ADX, Hurst exponent,
+trend-line fit, 52-week position, drawdown survivability — each line saying which way it
+points and why. Then the table that matters most: **every overlapping holding period in the
+history**, so "worst 3-year window" replaces a headline CAGR that only describes one lucky
+start date. Then what holding it *cost* — maximum drawdown with its depth, duration and
+recovery, plus the Ulcer index, which scores a long shallow grind as worse than a sharp
+fall, because that is how it feels. Then relative strength against the index, since the real
+alternative was never cash.
+
+**Chart & signals** is the price chart with moving averages, Bollinger/Keltner/Donchian
+bands, the Ichimoku cloud, and golden/death crosses detected as *events* rather than states.
+
+**All indicators** is everything else — ADX/DMI, Aroon, Stochastic, Williams %R, CCI, ROC,
+ATR, MFI, Chaikin money flow, Coppock — grouped by the horizon each one speaks to. That
+grouping is deliberate: a long-term investor shown "Stochastic 82, overbought" next to
+"price above its 200-day average" has been handed two statements of very different weight
+presented identically.
 
 **What it can't tell you.** Anything about the business. This lens is pure price history
-and would say the same things about a company that is about to be delisted.
+and would say the same things about a company that is about to be delisted. It also cannot
+tell you whether the trend is real: the Hurst exponent is there precisely to say when a
+price series is close enough to a random walk that the trend tools are describing noise.
 
 ### Value — "What is the business actually worth?"
 
@@ -157,6 +175,9 @@ where a constant was invented, it got replaced by an estimator.
 | A flat `σ = 2%` in the Monte Carlo | Dispersion from the company's own history | The old constant came from nowhere and set the entire width of the fan chart |
 | Close-to-close volatility | **Yang-Zhang (2000)** | Uses the high and low too — far less estimation noise from the same data |
 | Ignoring trading costs | **Abdi-Ranaldo (2017)** spread | Recovers a planted spread to ~1% in simulation; tells you when a move is smaller than the cost of trading it |
+| A headline CAGR | **Rolling-return distribution** | One CAGR describes one start date; the distribution shows the worst entry point you'd have survived |
+| Drawdown depth alone | **Ulcer index** (Martin & McCann 1989) | Duration breaks conviction as much as depth — a long shallow grind is harder to hold than a sharp fall |
+| Assuming a trend exists | **Hurst exponent** | If H sits near 0.5 the series is a random walk and every trend indicator is describing noise |
 | Assuming the signal works | **Event study** (Brown & Warner 1985) | Measures it, and reports null results |
 | Reporting raw screener hits | **Benjamini-Hochberg (1995)** | Scanning many names produces hits by construction |
 

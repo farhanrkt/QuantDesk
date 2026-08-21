@@ -479,12 +479,13 @@ def screener(
 # Engine 2 — Technical analysis
 # --------------------------------------------------------------------------- #
 def technical_payload(symbol: str, range_key: str = "1y", sr_window: int = 10,
-                      sr_levels: int = 6) -> dict:
+                      sr_levels: int = 6, market_code: str = "US") -> dict:
     """Engine 2 with its HTTP error mapping, so the route and the confluence
     leg fail identically instead of one of them leaking a class name."""
     try:
         return technical.analyze(
-            symbol, range_key=range_key, sr_window=sr_window, sr_levels=sr_levels
+            symbol, range_key=range_key, sr_window=sr_window, sr_levels=sr_levels,
+            market_code=market_code,
         )
     except technical.TechnicalError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -494,12 +495,12 @@ def technical_payload(symbol: str, range_key: str = "1y", sr_window: int = 10,
 def technical_analysis(
     ticker: str = Query(..., pattern=TICKER_PATTERN),
     market: str = Query("US", pattern="^(US|ID|us|id)$"),
-    range: str = Query("1y", pattern="^(3mo|6mo|1y|2y|5y)$"),
+    range: str = Query("1y", pattern="^(3mo|6mo|1y|2y|5y|10y|max)$"),
     sr_window: int = Query(10, ge=3, le=40),
     sr_levels: int = Query(6, ge=2, le=12),
 ):
     symbol = resolved(ticker, market)
-    return ok(technical_payload(symbol, range, sr_window, sr_levels))
+    return ok(technical_payload(symbol, range, sr_window, sr_levels, market.upper()))
 
 
 # --------------------------------------------------------------------------- #
@@ -727,7 +728,7 @@ async def confluence(
     ticker: str = Query(..., pattern=TICKER_PATTERN),
     market: str = Query("US", pattern="^(US|ID|us|id)$"),
     period: str = Query("2y", pattern="^(6mo|1y|2y|5y|max)$"),
-    range: str = Query("1y", pattern="^(3mo|6mo|1y|2y|5y)$"),
+    range: str = Query("1y", pattern="^(3mo|6mo|1y|2y|5y|10y|max)$"),
     mode: str = Query("threshold", pattern="^(threshold|mad|quota|walkforward)$"),
     contamination: float = Query(0.02, gt=0.0, lt=0.5),
     mad_k: float = Query(3.0, gt=0.0),
@@ -773,6 +774,7 @@ async def confluence(
         )),
         leg("technical", lambda: technical_payload(
             symbol, range_key=range, sr_window=sr_window, sr_levels=sr_levels,
+            market_code=market.upper(),
         )),
         leg("valuation", lambda: valuation_payload(symbol, market_code=market.upper())),
         leg("quality", lambda: quality_payload(symbol)),
