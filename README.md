@@ -8,6 +8,11 @@ they don't. Covers **US and Indonesian (IDX)** listings.
 
 > Educational and research tooling. Not investment advice.
 
+**Every number in the app explains itself.** Each figure carries an info icon that says
+what it measures in plain English, whether *this* value is good or bad and why, and what
+would make you act differently — or admits that nothing would. A Simple/Detailed toggle
+defaults to Simple: the handful of numbers that decide a holding, written as sentences.
+
 ---
 
 ## The idea in one paragraph
@@ -80,7 +85,8 @@ book is shallow.
 
 ### Trend — "What is the price doing, and could I have held it?"
 
-**How.** Three sections, ordered by horizon rather than by convention.
+**How.** Five sections behind a horizon selector, ordered longest-first so that reading
+left to right walks from the strongest evidence to the weakest.
 
 **Long horizon** leads, because that is what a multi-year holder is actually asking. A
 checklist — 200-day average, Faber's 10-month rule, 12-1 momentum, ADX, Hurst exponent,
@@ -91,6 +97,23 @@ start date. Then what holding it *cost* — maximum drawdown with its depth, dur
 recovery, plus the Ulcer index, which scores a long shallow grind as worse than a sharp
 fall, because that is how it feels. Then relative strength against the index, since the real
 alternative was never cash.
+
+**Mid term** (weeks to months) and **Short term** (days to a few weeks) answer a different
+question: not "could I have held this?" but "if I were buying in the next few weeks, where
+would the levels be?". Support and resistance from confirmed swing points, each reporting
+**how many times the market actually turned there**; a stop placed just beyond structure
+with an ATR buffer, and widened when structure would have put it inside daily noise; a
+target at real overhead resistance rather than at whatever number makes the arithmetic look
+good; position size as the share of an account that risks exactly your budget. Plus pivot
+points from the last *complete* period, anchored VWAP, Donchian breakouts, Bollinger
+squeeze, gap analysis and RSI divergence.
+
+**These sections never invent a setup.** Setups are pre-registered and checked in order,
+and "none of them is present" is the most common answer — a test fires the detector across
+twenty random walks and fails the build if a majority produce a trade. Candlestick patterns
+are detected, graded weak, and **firewalled**: none is allowed to place an entry, stop or
+target. Head and shoulders, flags, wedges and cup-and-handle are named on the panel as
+things the app will not claim to detect, with the reason for each.
 
 **Chart & signals** is the price chart with moving averages, Bollinger/Keltner/Donchian
 bands, the Ichimoku cloud, and golden/death crosses detected as *events* rather than states.
@@ -147,11 +170,30 @@ is rare also means most flags are false alarms.
 
 ## Three more tools
 
-**Screener.** Scan up to 20 tickers and surface only those with fresh activity. Critically,
-it reports **how many hits you'd expect from noise** — each ticker is tested against its
-*own* long-run flag rate, then a false-discovery-rate correction runs across the whole scan.
-A fixed count threshold silently favours chronically noisy stocks; this doesn't. Click any
-result to load it into all four lenses.
+**Scan & rank.** The breadth half of a two-tier workflow: rank a whole universe, then open
+the four lenses on the few names worth it.
+
+*Tier one* batch-downloads up to 250 symbols in a handful of upstream calls — the Nasdaq-100
+ranks in about six seconds — and scores every name on seven price-and-volume signals:
+momentum, trend, nearness to the 52-week high, steadiness, holdability, relative strength
+and money flow. Each becomes a **cross-sectional percentile** before anything is combined,
+because "top decile of this scan" is a claim the data supports and "82/100" is not. Click a
+row's arrow to see exactly how it earned its score.
+
+The panel then does something a composite score usually hides: it reports the **measured**
+rank correlation between every pair of signals and the participation ratio of that matrix —
+how many genuinely independent signals the composite is actually averaging. On a real Dow
+scan, momentum and trend correlate at +0.98 and seven columns carry about **3.4 signals'
+worth** of information. That is printed in the header.
+
+*Tier two* runs quality and valuation on a shortlist of up to eight. Those need the filings,
+which fetch one company at a time, which is exactly why they are a second step and not
+another column.
+
+**Anomaly screener.** Still there, answering what the ranking cannot: *has something unusual
+just happened here?* Scans up to 20 tickers and reports **how many hits you'd expect from
+noise** — each ticker tested against its *own* long-run flag rate, then a false-discovery-rate
+correction across the whole scan.
 
 **Event study.** The one that decides whether the Flow lens is worth your attention. It
 measures the cumulative abnormal return after *every* anomaly ever detected on a ticker,
@@ -180,6 +222,8 @@ where a constant was invented, it got replaced by an estimator.
 | Assuming a trend exists | **Hurst exponent** | If H sits near 0.5 the series is a random walk and every trend indicator is describing noise |
 | Assuming the signal works | **Event study** (Brown & Warner 1985) | Measures it, and reports null results |
 | Reporting raw screener hits | **Benjamini-Hochberg (1995)** | Scanning many names produces hits by construction |
+| A composite score across signals | **Percentile ranks + a measured overlap** | Momentum, 52-week-high and relative strength are three phrasings of "it went up"; the panel reports how many *independent* signals the composite really averages |
+| Colouring metrics at each call site | **One ladder per metric, in Python** | A third of them are "low is good" and sit in the same grid as the rest; direction is encoded once and asserted by tests |
 
 Full reasoning, effect sizes, and the validation results are in
 **[RESEARCH_ROADMAP.md](RESEARCH_ROADMAP.md)**.
@@ -203,10 +247,14 @@ api/
               microstructure.py Spread, illiquidity, volatility
               riskmodel.py      Beta estimation and shrinkage
               eventstudy.py     Abnormal returns, FDR correction
+              swing.py          Short/mid-horizon setups, levels, risk plans
+              ranking.py        Batch download + cross-sectional ranking
+              universes.py      Predefined ticker lists, each date-stamped
+              explain.py        Plain-English interpretation for every metric
               symbols.py        Ticker → Yahoo symbol, resolved once
               news.py           Google News RSS
               jsonsafe.py       NaN/inf → null before serialising
-tests/        257 offline tests
+tests/        698 offline tests
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -238,7 +286,10 @@ Everything the UI does is a plain `GET`. Interactive docs at `/api/docs`.
 | `GET /api/intrinsic-value` | Value: DCF / DDM / RI with Monte Carlo percentiles |
 | `GET /api/quality` | Quality: F-Score, Z''-score, M-Score |
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
-| `GET /api/screener` | Multi-ticker scan with FDR correction |
+| `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
+| `GET /api/rank/universes` | The predefined lists, each with its as-of date |
+| `GET /api/rank/deepen` | Quality + valuation for a shortlist of up to 8 |
+| `GET /api/screener` | Multi-ticker anomaly scan with FDR correction |
 | `GET /api/news` | Recent headlines |
 | `GET /api/intrinsic-value/simulation` | Every Monte Carlo draw, as CSV |
 | `GET /api/health` | Liveness and engine inventory |
@@ -250,9 +301,11 @@ curl "http://localhost:8000/api/confluence?ticker=BBCA.JK&market=ID"
 Each leg of `/api/confluence` reports its own success or failure, so a company with no
 dividend history still returns its other three panels.
 
-**Limits.** Per-IP rate limiting (40/min default, 3/min for the screener, 6/min for the
-event study). The screener caps at 20 symbols, or 5 on walk-forward mode. These exist
-because one screener request fans out to that many upstream fetches *and* model fits.
+**Limits.** Per-IP rate limiting (40/min default; 3/min for the screener and the ranking
+scan; 2/min for shortlist deepening, which is the one route that does *not* batch; 6/min for
+the event study). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
+8. These exist because each of those requests fans out to upstream calls — the caps are sized
+to what actually batches.
 
 **Market conventions** are configured per market — US uses a 4.2% risk-free rate, 5.5%
 equity risk premium, 21% tax and `^GSPC` as benchmark; IDX uses 6.5%, 7.0%, 22% and
@@ -295,8 +348,23 @@ project.
 The event study is indicative, not a backtest. The Flow lens has no walk-forward validation
 enabled by default because it costs minutes per ticker.
 
+**Constituent lists go stale.** Index membership is transcribed by hand and date-stamped in
+`_lib/universes.py`. It decays invisibly — a dropped name still fetches, a newly added one is
+simply absent — which is why the date is shown on the panel. There is deliberately **no S&P
+500 list**: five hundred symbols is the length at which transcription goes wrong, and a
+mistyped ticker produces a plausible ranking row for a company nobody asked about rather than
+an error. Paste your own from a source that maintains one.
+
+**Shorter horizons rest on weaker evidence, and say so.** The long-horizon section draws on
+decades of published work. The short- and mid-term sections mostly do not, and every reading
+there carries its evidence grade. Over one to four weeks prices have historically shown mild
+*reversal* rather than continuation — the opposite of the twelve-month effect — which the
+panel states rather than hides.
+
 **Not implemented on purpose.** Order-flow toxicity (VPIN/PIN) needs trade-level data; a
-daily approximation would be a different number wearing the name. Calendar effects
+daily approximation would be a different number wearing the name. Multi-bar chart patterns
+(head and shoulders, flags, wedges) are named and declined rather than matched with fixed
+thresholds that would fire on noise. Calendar effects
 (January, Halloween) are where the multiple-testing critique bites hardest. Headline
 sentiment would need full article text and a lexicon that covers Indonesian.
 
