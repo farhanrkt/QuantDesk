@@ -340,6 +340,20 @@ export interface LongTermBlock {
     series?: { date: string; ratio: number }[];
   };
   hurst: number | null;
+  /**
+   * Hurst with its sampling error. The verdict is sample-size aware: the band
+   * that counts as "indistinguishable from a random walk" widens when there is
+   * less history, because a fixed 0.45-0.55 band is barely one standard error
+   * wide and labelled genuine random walks as trending a third of the time.
+   */
+  hurstReading: {
+    hurst: number | null;
+    stderr: number | null;
+    observations: number;
+    randomWalkLow: number | null;
+    randomWalkHigh: number | null;
+    verdict: "persistent" | "meanReverting" | "indistinguishable" | "unavailable";
+  };
   plainEnglish: PlainEnglish | null;
   explain: ExplainMap;
   regression: {

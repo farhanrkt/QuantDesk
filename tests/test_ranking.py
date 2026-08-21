@@ -509,3 +509,21 @@ def test_the_minimum_history_covers_the_hungriest_signal():
     assert just_enough["trend"] is not None
     too_few = R.price_signals(path(steady(n=R.MIN_BARS - 1)))
     assert all(value is None for value in too_few.values())
+
+
+def test_every_measured_pair_gets_an_explanation():
+    """The panel decides how many overlap rows to show; the server must not cap.
+
+    When the server explained three pairs while the panel listed four, the last
+    row silently lost its info icon — two independent counts with nothing tying
+    them together.
+    """
+    from _lib import explain as E
+
+    result = R.rank_universe(_universe())
+    explanations = E.for_ranking(result)
+    pairs = result["correlation"]["pairs"]
+    assert pairs
+    for pair in pairs:
+        key = f"signalOverlap.{pair['a']}.{pair['b']}"
+        assert key in explanations, f"{key} is measured but never explained"

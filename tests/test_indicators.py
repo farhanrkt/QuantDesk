@@ -375,3 +375,87 @@ def test_accumulation_distribution_runs_up_when_closing_strong():
     line = I.accumulation_distribution(high, low, close, volume)
     assert line.iloc[-1] > line.iloc[0]
     assert line.is_monotonic_increasing
+
+
+# ============================================================================ #
+# Hurst: calibration against exact fractional Brownian motion
+#
+# The estimator's POINT VALUE was already exercised elsewhere. What was never
+# checked is its SAMPLING ERROR, and that turned out to be the problem: on five
+# years of daily bars the standard error is about 0.05, so the fixed 0.45-0.55
+# band the reading used to be judged against was barely one standard error wide
+# and labelled a genuine random walk "trending" or "mean-reverting" 35% of the
+# time. These tests pin the calibration that replaced it.
+# ============================================================================ #
+def _fbm(hurst: float, n: int, seed: int) -> np.ndarray:
+    """Exact fractional Brownian motion, by Cholesky of the fGn covariance.
+
+    Exact rather than approximate on purpose: the whole point is to compare the
+    estimator against a series whose true Hurst exponent is known by
+    construction, not against another estimate of it.
+    """
+    from scipy.linalg import cholesky
+
+    lags = np.arange(n)
+    gamma = 0.5 * (np.abs(lags + 1) ** (2 * hurst)
+                   - 2 * np.abs(lags) ** (2 * hurst)
+                   + np.abs(lags - 1) ** (2 * hurst))
+    covariance = np.empty((n, n))
+    for row in range(n):
+        covariance[row, :] = gamma[np.abs(lags - row)]
+    covariance += np.eye(n) * 1e-10
+    noise = np.random.default_rng(seed).standard_normal(n)
+    return np.cumsum(cholesky(covariance, lower=True) @ noise)
+
+
+def _fbm_prices(hurst: float, n: int, seed: int) -> pd.Series:
+    return pd.Series(100.0 * np.exp(_fbm(hurst, n, seed) * 0.01))
+
+
+@pytest.mark.parametrize("true_hurst", [0.3, 0.5, 0.7])
+def test_hurst_recovers_a_known_exponent(true_hurst):
+    """It must land near the H it was generated with, not merely be stable."""
+    estimates = np.array([I.hurst_exponent(_fbm_prices(true_hurst, 1200, seed))
+                          for seed in range(10)])
+    assert estimates.mean() == pytest.approx(true_hurst, abs=0.08)
+
+
+def test_the_random_walk_band_widens_when_there_is_less_history():
+    """Less evidence must buy less confidence, not the same confidence."""
+    long_reading = I.hurst_estimate(_fbm_prices(0.5, 2500, 1))
+    short_reading = I.hurst_estimate(_fbm_prices(0.5, 400, 1))
+    long_width = long_reading["randomWalkHigh"] - long_reading["randomWalkLow"]
+    short_width = short_reading["randomWalkHigh"] - short_reading["randomWalkLow"]
+    assert short_width > long_width * 1.5
+
+
+def test_a_genuine_random_walk_is_rarely_called_trending():
+    """The failure this calibration exists to prevent.
+
+    Against the old fixed 0.45-0.55 band this rate was 35% at five years of
+    daily bars. Anything above roughly one in ten makes the reading worse than
+    useless, because it is the number the rest of the lens is supposed to be
+    discounted against.
+    """
+    verdicts = [I.hurst_estimate(_fbm_prices(0.5, 1250, seed))["verdict"]
+                for seed in range(40)]
+    wrong = sum(1 for verdict in verdicts if verdict != "indistinguishable")
+    assert wrong / len(verdicts) <= 0.15, (
+        f"{wrong}/40 random walks were given a directional verdict"
+    )
+
+
+def test_real_persistence_is_still_detected():
+    """Widening the band must not make the measure blind."""
+    verdicts = [I.hurst_estimate(_fbm_prices(0.75, 1250, seed))["verdict"]
+                for seed in range(20)]
+    found = sum(1 for verdict in verdicts if verdict == "persistent")
+    assert found / len(verdicts) >= 0.7
+
+
+def test_hurst_estimate_declines_on_a_series_it_cannot_read():
+    flat = I.hurst_estimate(pd.Series(np.full(500, 100.0)))
+    assert flat["verdict"] == "unavailable"
+    assert flat["hurst"] is None
+    short = I.hurst_estimate(pd.Series(np.linspace(100, 110, 50)))
+    assert short["verdict"] == "unavailable"

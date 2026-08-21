@@ -94,10 +94,11 @@ SAMPLES: dict[str, tuple] = {
     "spread": (0.0018, {"source": "Abdi-Ranaldo"}),
     "moveVsSpread": (4.2, {}),
     "yangZhangVol": (0.27, {}),
-    "amihud": (0.002, {"currency": "USD"}),
+    "amihud": (2e-4, {"currency": "USD"}),
     "anomalyRate": (0.031, {"totalDays": 500}),
     "qValue": (0.02, {}),
-    "cusumEpisode": (None, {"direction": "Accumulation", "days": 27, "avgRvol": 1.04}),
+    "cusumEpisode": (None, {"direction": "Accumulation", "days": 27,
+                            "avgRvol": 1.04, "ongoing": True}),
     "flowBias": ("Accumulation", {"days": 10, "count": 3}),
     "upside": (-0.64, {"engine": "DCF", "price_label": "$311.30", "fair_label": "$112.00"}),
     "probUndervalued": (0.04, {"iterations": 10000}),
@@ -226,7 +227,7 @@ LOWER_IS_BETTER = {
     "beneish": [-1.0, -2.0, -3.0],
     "qValue": [0.5, 0.15, 0.01],
     "maxDrawdownRecoveryDays": [1500, 800, 300, 60],
-    "amihud": [0.20, 0.02, 0.001],
+    "amihud": [0.20, 0.02, 0.001, 8e-7],
 }
 
 
@@ -242,6 +243,22 @@ def test_low_is_good_metrics_are_not_coloured_backwards(key):
     assert E.explain(key, LOWER_IS_BETTER[key][-1])["goodDirection"] == "low", (
         f"{key} is a low-is-good metric but declares goodDirection 'high'"
     )
+
+
+def test_a_finished_flow_regime_is_still_explained():
+    """The panel shows its regimes table whenever any episode exists.
+
+    Emitting this only for an ONGOING regime left a ticker with two finished
+    ones showing the table with nothing saying what a regime is.
+    """
+    ended = E.explain("cusumEpisode", None, direction="Distribution", days=31,
+                      avgRvol=1.2, ongoing=False)
+    assert ended["band"] != "unavailable"
+    assert "since ended" in ended["reading"]
+    ongoing = E.explain("cusumEpisode", None, direction="Accumulation", days=27,
+                        avgRvol=1.04, ongoing=True)
+    assert "ongoing" in ongoing["reading"].lower()
+    assert "since ended" not in ongoing["reading"]
 
 
 def test_the_extremes_land_where_a_person_would_put_them():
@@ -303,6 +320,26 @@ def test_a_thin_reward_for_the_risk_is_not_dressed_up():
     assert tone_of("riskReward", 3.0) == "good"
 
 
+def test_a_real_quantity_is_never_formatted_into_nothing():
+    """Amihud on a mega-cap is about 8e-7 as a fraction-per-million.
+
+    Printed as a percentage that rounds to the literal string "0.00%" — a real
+    measurement rendered into a zero. Inverting it gives the same fact in money:
+    what it costs to move the price one percent.
+    """
+    mega_cap = E.explain("amihud", 8.17e-07, currency="USD")
+    assert mega_cap["valueText"] == "$12.2bn"
+    assert "0.00" not in mega_cap["valueText"]
+    thin = E.explain("amihud", 2e-2, currency="IDR")
+    assert thin["valueText"].startswith("Rp")
+    # A deeper book must always read as a larger sum, and the unit must scale.
+    deep = E.explain("amihud", 1e-8, currency="USD")
+    shallow = E.explain("amihud", 1e-3, currency="USD")
+    assert deep["valueText"].endswith("tn")
+    assert shallow["valueText"].endswith("m")
+    assert E.explain("amihud", 1e-7, currency="USD")["valueText"].endswith("bn")
+
+
 def test_a_percentile_is_never_shown_as_a_bare_number_under_a_directional_label():
     """The tile that said "How quiet it has gone: 94%" and meant *very lively*.
 
@@ -346,12 +383,49 @@ def test_a_volatility_placed_stop_is_graded_below_a_structural_one():
     assert TONE_ORDER[structural["tone"]] > TONE_ORDER[volatility["tone"]]
 
 
+def _hurst_ctx(value, observations=1260):
+    """The reading `indicators.hurst_estimate` would produce for that value."""
+    stderr = 1.92 / (observations ** 0.5)
+    low, high = 0.5 - 2 * stderr, 0.5 + 2 * stderr
+    verdict = ("persistent" if value >= high else "meanReverting" if value <= low
+               else "indistinguishable")
+    return {"stderr": stderr, "verdict": verdict, "low": low, "high": high,
+            "observations": observations}
+
+
 def test_hurst_near_a_random_walk_is_a_warning_not_a_verdict():
     """The honesty check: a coin-flip series must not read as neutral-fine."""
-    assert tone_of("hurst", 0.50) == "warn"
-    assert "noise" in E.explain("hurst", 0.50)["reading"]
-    assert tone_of("hurst", 0.68) == "good"
-    assert "reverse" in E.explain("hurst", 0.30)["reading"].lower()
+    assert tone_of("hurst", 0.50, **_hurst_ctx(0.50)) == "warn"
+    assert "noise" in E.explain("hurst", 0.50, **_hurst_ctx(0.50))["reading"]
+    assert tone_of("hurst", 0.72, **_hurst_ctx(0.72)) == "good"
+    assert "reverse" in E.explain("hurst", 0.25, **_hurst_ctx(0.25))["reading"].lower()
+
+
+def test_hurst_reports_its_own_error_bar():
+    """The point estimate alone overstates what this measure can support."""
+    reading = E.explain("hurst", 0.62, **_hurst_ctx(0.62))
+    assert "±" in reading["reading"]
+
+
+def test_a_hurst_verdict_needs_to_clear_its_own_uncertainty():
+    """0.62 is 'trending' on ten years of data and 'cannot tell' on two.
+
+    Same number, different amount of evidence behind it. The fixed 0.45-0.55
+    band this used to be read against ignored that entirely and called a
+    genuine random walk trending a third of the time on the app's own default
+    range.
+    """
+    long_history = E.explain("hurst", 0.62, **_hurst_ctx(0.62, observations=2520))
+    short_history = E.explain("hurst", 0.62, **_hurst_ctx(0.62, observations=500))
+    assert "trending" not in short_history["reading"]
+    assert "cannot tell" in short_history["reading"]
+    assert "have something" in long_history["reading"]
+
+
+def test_a_short_hurst_sample_says_it_is_short():
+    reading = E.explain("hurst", 0.52, **_hurst_ctx(0.52, observations=400))["reading"]
+    assert "400 days" in reading
+    assert "widen the range" in reading
 
 
 def test_overbought_is_a_caution_never_a_verdict():
@@ -436,6 +510,9 @@ def _block(**overrides):
         "position": {"usable": True, "fromHigh52w": -0.03},
         "faber": {"usable": True, "signal": "invested"},
         "hurst": 0.62,
+        "hurstReading": {"hurst": 0.62, "stderr": 0.05, "observations": 1260,
+                         "randomWalkLow": 0.40, "randomWalkHigh": 0.60,
+                         "verdict": "persistent"},
     }
     base.update(overrides)
     return base
@@ -455,7 +532,11 @@ def test_story_states_the_numbers_the_tables_state():
 
 
 def test_story_says_when_the_trend_is_noise():
-    story = E.long_horizon_story("XYZ", _block(hurst=0.50))
+    story = E.long_horizon_story("XYZ", _block(
+        hurst=0.50,
+        hurstReading={"hurst": 0.50, "stderr": 0.05, "observations": 1260,
+                      "randomWalkLow": 0.40, "randomWalkHigh": 0.60,
+                      "verdict": "indistinguishable"}))
     assert "random walk" in " ".join(story["paragraphs"])
 
 

@@ -632,28 +632,47 @@ def _recovery_days(value, **_):
 # Trend, momentum and position
 # ============================================================================ #
 @metric("hurst")
-def _hurst(value, **_):
+def _hurst(value, stderr=None, verdict=None, low=None, high=None, observations=None, **_):
     label = "Trend or noise? (Hurst exponent)"
     what = ("A test of whether this price series has real memory or is essentially a coin "
             "flip. 0.5 means a random walk — moves tell you nothing about the next move.")
     if not _known(value):
         return unavailable(label, what, "needs roughly 100 bars of history")
-    if value >= 0.55:
-        band, verdict = "good", (
-            f"{_num(value)} — above 0.55, so moves have tended to continue. Trend-following "
-            f"tools have something real to work with on this name.")
-    elif value >= 0.45:
-        band, verdict = "caution", (
-            f"{_num(value)} — close enough to 0.5 that this series is statistically hard to "
-            f"tell apart from a random walk. Every trend line, moving average and momentum "
-            f"reading on this page is probably describing noise.")
-    else:
-        band, verdict = "caution", (
-            f"{_num(value)} — below 0.45, meaning moves have tended to REVERSE. Rallies here "
+
+    # THE ERROR BAR IS NOT DECORATION. This measure is noisy: on five years of
+    # daily bars its standard error is about 0.05, so the fixed 0.45-0.55 band
+    # this reading used to be judged against was barely one standard error wide
+    # and called a genuine random walk "trending" a third of the time. The
+    # verdict now comes from `indicators.hurst_estimate`, whose band widens when
+    # there is less history — which is why a short range says "cannot tell"
+    # instead of confidently saying the wrong thing.
+    figure = f"{_num(value)}" + (f" ± {_num(stderr)}" if _known(stderr) else "")
+    span = (f"{_num(low)} to {_num(high)}" if _known(low) and _known(high)
+            else "0.45 to 0.55")
+
+    if verdict == "persistent":
+        band, reading = "good", (
+            f"{figure} — above {_num(high)}, which is further from 0.5 than the estimate's own "
+            f"error. Moves have tended to continue, so trend-following tools have something "
+            f"real to work with on this name.")
+    elif verdict == "meanReverting":
+        band, reading = "caution", (
+            f"{figure} — below {_num(low)}, meaning moves have tended to REVERSE. Rallies here "
             f"have historically been given back, and trend-following would have been punished.")
-    return make(label, what, verdict,
-                "This is the honesty check on the rest of the technical lens. When it sits "
-                "near 0.5, downgrade everything else here rather than acting on it.",
+    else:
+        band, reading = "caution", (
+            f"{figure} — inside {span}, which is the range a genuine random walk produces at "
+            f"this sample size. The measure simply cannot tell this series apart from a coin "
+            f"flip, so every trend line, moving average and momentum reading on this page is "
+            f"probably describing noise.")
+    if _known(observations) and observations < 750:
+        reading += (f" Note it has only {int(observations)} days to work with; this measure "
+                    f"needs several years before it can say much at all, so widen the range "
+                    f"before reading anything into it.")
+    return make(label, what, reading,
+                "This is the honesty check on the rest of the technical lens. When it cannot "
+                "separate the series from a random walk, downgrade everything else here rather "
+                "than acting on it.",
                 band, "none", evidence="moderate", value_text=_num(value))
 
 
@@ -1477,13 +1496,35 @@ def _beneish_index(value, part=None, **_):
 # Flow lens — liquidity, trading costs, anomaly statistics
 # ============================================================================ #
 @metric("spread")
-def _spread(value, source=None, **_):
+def _spread(value, source=None, floor=None, at_floor=False, **_):
     label = "Bid-ask spread"
     what = ("The invisible toll on every trade: the gap between what a buyer pays and what a "
             "seller receives at the same instant. Buy and sell immediately and you lose this "
             "much without the price moving at all.")
     if not _known(value):
         return unavailable(label, what, "not enough high-low data to estimate it")
+    # AT THE FLOOR, THE FIGURE IS NOT A MEASUREMENT. Both estimators have a
+    # noise floor proportional to the stock's own volatility — about 0.15x the
+    # daily standard deviation for the headline one — because volatility leaks
+    # into the estimate. On a liquid name that floor is an order of magnitude
+    # above the real spread, so quoting it as "0.29% per round trip" states a
+    # cost the stock does not charge, and does it most confidently on the names
+    # where it is most wrong. Below the floor the honest reading is an upper
+    # bound, and the band must not reward or punish a number that is noise.
+    if at_floor and _known(floor):
+        return make(label, what,
+                    f"At most about {_pct(max(value, floor), 2)} per round trip — and this is a "
+                    f"ceiling, not a measurement. Daily high-low data cannot separate a spread "
+                    f"from ordinary volatility below roughly {_pct(floor, 2)} on a stock that "
+                    f"moves like this one, and the estimate sits inside that range. A genuinely "
+                    f"liquid listing lands here, and so does anything whose real cost is too "
+                    f"small for this method to see.",
+                    "Read it as 'trading costs are small enough that this data cannot see "
+                    "them'. If you need the real number, it comes from a quote feed, not from "
+                    "daily bars.",
+                    "good", "low", evidence="moderate",
+                    value_text=f"≤{_pct(max(value, floor), 2)}")
+
     band = _ladder(value, ((0.001, "excellent"), (0.003, "good"), (0.01, "fair"),
                            (0.02, "poor"), (None, "bad")))
     reading = f"About {_pct(value, 2)} per round trip. "
@@ -1503,12 +1544,24 @@ def _spread(value, source=None, **_):
 
 
 @metric("moveVsSpread")
-def _move_vs_spread(value, **_):
+def _move_vs_spread(value, resolved=True, **_):
     label = "Move versus trading cost"
     what = ("How big the latest day's move was compared with what it costs to trade in and out. "
             "Below about 2, the move is smaller than the toll.")
     if not _known(value):
         return unavailable(label, what, "needs a spread estimate and a price move")
+    if not resolved:
+        # The denominator is the estimator's noise floor rather than a spread,
+        # so this ratio is a LOWER bound on the real one. Reporting it as though
+        # it were measured turns "we cannot see the cost" into "the cost is big".
+        return make(label, what,
+                    f"At least {_num(value, 1)}x the estimated cost, and in truth more — the "
+                    f"spread this divides by could not be resolved from daily data, so it is "
+                    f"an over-estimate of the real cost and this ratio is an under-estimate of "
+                    f"the real margin. On a liquid name the move clears the cost comfortably.",
+                    "No warning to draw from this. When the cost cannot be measured, the "
+                    "honest conclusion is that it is small, not that it is dangerous.",
+                    "good", "high", evidence="moderate", value_text=f"≥{_num(value, 1)}x")
     band = _ladder(value, ((1.0, "bad"), (2.0, "poor"), (5.0, "fair"), (None, "good")))
     reading = f"{_num(value, 1)}x the estimated round-trip cost. "
     reading += {
@@ -1541,35 +1594,48 @@ def _yang_zhang(value, **_):
                 band, "low", evidence="strong", value_text=_pct(value, 0))
 
 
+def _money(amount: float, currency: Optional[str]) -> str:
+    """A large sum written the way a person says it."""
+    symbol = {"USD": "$", "IDR": "Rp", "EUR": "\u20ac", "GBP": "\u00a3"}.get(currency or "", "")
+    for cutoff, suffix in ((1e12, "tn"), (1e9, "bn"), (1e6, "m"), (1e3, "k")):
+        if abs(amount) >= cutoff:
+            return f"{symbol}{amount / cutoff:,.1f}{suffix}"
+    return f"{symbol}{amount:,.0f}"
+
+
 @metric("amihud")
 def _amihud(value, currency=None, **_):
-    label = "Price impact (Amihud)"
-    what = ("How much the price moves when money is put through it — the cost of size, as "
-            "opposed to the spread, which is the cost of immediacy.")
-    if not _known(value):
+    label = "Depth (what it takes to move it)"
+    what = ("How much money has to trade before the price actually moves. It is the cost of "
+            "SIZE, as opposed to the spread, which is the cost of being in a hurry.")
+    if not _known(value) or value <= 0:
         return unavailable(label, what, "needs volume data")
-    unit = f"1 million {currency}" if currency else "1 million units of currency"
-    impact = value  # already scaled to a fractional move per 1e6 of turnover
-    reading = (f"Roughly a {_pct(impact, 2)} price move per {unit} traded, averaged over the "
-               f"last month. ")
-    if impact > 0.05:
+
+    # EXPRESSED AS MONEY, NOT AS A RATIO. The underlying figure is a fractional
+    # price move per million traded, which on a mega-cap is around 8e-7 — and
+    # formatting that as a percentage produced the literal string "0.00%", a
+    # real quantity rendered into nothing. Inverting it states the same fact in
+    # a unit a person can picture: what it costs to move the price one percent.
+    to_move_one_percent = 0.01 / value * 1e6
+    reading = (f"It takes roughly {_money(to_move_one_percent, currency)} of trading to move "
+               f"this price by 1%, averaged over the last month. ")
+    if value > 0.05:
         band = "poor"
-        reading += "That is a lot of impact — a meaningful order would move this price against itself."
-    elif impact > 0.005:
+        reading += ("That is very little depth — a meaningful order would move the price "
+                    "against itself.")
+    elif value > 0.005:
         band = "fair"
-        reading += "Moderate impact. Large orders would be felt."
+        reading += "Moderate depth. Large orders would be felt."
     else:
         band = "good"
-        reading += "Low impact — this absorbs size without much complaint."
-    reading += (" The level is not comparable between currencies, so it is most useful ranked "
-                "against other names in the same market.")
-    # Shown as the interpretable quantity, not the raw scaled figure. The raw
-    # number is dimensionless-looking and means nothing to a reader; the
-    # percent-per-million form is the same fact in units they can picture.
+        reading += "Deep — this absorbs size without much complaint."
+    reading += (" Currencies are not comparable here, so it is most useful ranked against "
+                "other names in the same market.")
     return make(label, what, reading,
                 "It tells you what size this can absorb, not whether to own it. "
                 + CONTEXT_NOT_TRIGGER,
-                band, "low", evidence="moderate", value_text=_pct(impact, 2))
+                band, "low", evidence="moderate",
+                value_text=_money(to_move_one_percent, currency))
 
 
 @metric("anomalyRate")
@@ -1619,16 +1685,20 @@ def _q_value(value, **_):
 
 
 @metric("cusumEpisode")
-def _cusum(value, direction=None, days=None, avgRvol=None, **_):
+def _cusum(value, direction=None, days=None, avgRvol=None, ongoing=False, **_):
     label = "Sustained flow regime (CUSUM)"
     what = ("A detector for slow, patient buying or selling. A fund building a position spreads "
             "it over weeks precisely so no single day looks unusual — this adds up the small "
             "daily deviations until the total is too big to be chance.")
     if not _known(days):
         return unavailable(label, what, "no sustained regime detected in this window")
-    reading = (f"A {direction or 'flow'} run lasting {int(days)} days"
+    # "A Accumulation" — the article has to agree with the word after it.
+    word = (direction or "flow").lower()
+    article = "An" if word[:1] in "aeiou" else "A"
+    reading = (f"{'An ongoing' if ongoing else article} {word} run lasting "
+               f"{int(days)} days"
                + (f", at an average of {_num(avgRvol)}x normal volume" if _known(avgRvol) else "")
-               + ". ")
+               + ". " + ("" if ongoing else "It has since ended. "))
     if _known(avgRvol) and avgRvol < 1.3:
         reading += ("Note how ordinary that volume is — this is exactly the pattern a "
                     "day-by-day detector cannot see, and the reason this test exists.")
@@ -2188,14 +2258,16 @@ def long_horizon_story(ticker: str, block: dict) -> dict:
     # ---- 5. The honesty paragraph --------------------------------------
     # Always present. If the series is indistinguishable from a random walk, the
     # reader is told before they read the trend section, not after.
-    hurst = block.get("hurst")
+    hurst_reading = block.get("hurstReading") or {}
+    hurst_verdict = hurst_reading.get("verdict")
     caveats = []
-    if _known(hurst) and 0.45 <= hurst <= 0.55:
+    if hurst_verdict == "indistinguishable":
         caveats.append(
-            "a statistical test on this price history cannot tell it apart from a random walk, "
-            "which means the trend lines and momentum readings further down are probably "
-            "describing noise rather than a real pattern")
-    elif _known(hurst) and hurst < 0.45:
+            "a statistical test on this price history cannot tell it apart from a random walk — "
+            "and that test is noisy enough that saying so is the honest answer rather than a "
+            "weak one — which means the trend lines and momentum readings further down are "
+            "probably describing noise rather than a real pattern")
+    elif hurst_verdict == "meanReverting":
         caveats.append(
             "this price series has historically tended to REVERSE rather than continue, so "
             "trend-following readings below should be discounted")
@@ -2265,7 +2337,11 @@ def for_long_term(block: dict, ticker: str = "", risk_free: float = 0.0,
     out["maxDrawdownRecoveryDays"] = explain(
         "maxDrawdownRecoveryDays", drawdown.get("maxDrawdownRecoveryDays"))
 
-    out["hurst"] = explain("hurst", block.get("hurst"))
+    reading = block.get("hurstReading") or {}
+    out["hurst"] = explain("hurst", block.get("hurst"),
+                           stderr=reading.get("stderr"), verdict=reading.get("verdict"),
+                           low=reading.get("randomWalkLow"), high=reading.get("randomWalkHigh"),
+                           observations=reading.get("observations"))
     out["momentum12_1"] = explain("momentum12_1", momentum.get("momentum12_1"))
 
     if faber.get("usable"):
@@ -2414,8 +2490,11 @@ def for_flow(payload: dict, currency: str = "") -> dict:
 
     out = {
         "spread": explain("spread", liquidity.get("spread"),
-                          source=(liquidity.get("spreadDetail") or {}).get("primarySource")),
-        "moveVsSpread": explain("moveVsSpread", liquidity.get("moveVsSpread")),
+                          source=(liquidity.get("spreadDetail") or {}).get("primarySource"),
+                          floor=(liquidity.get("spreadDetail") or {}).get("resolutionFloor"),
+                          at_floor=(liquidity.get("spreadDetail") or {}).get("atFloor")),
+        "moveVsSpread": explain("moveVsSpread", liquidity.get("moveVsSpread"),
+                                resolved=liquidity.get("spreadResolved", True)),
         "yangZhangVol": explain("yangZhangVol", liquidity.get("yangZhangVol")),
         "amihud": explain("amihud", liquidity.get("amihud"), currency=currency),
         "anomalyRate": explain("anomalyRate", stats.get("anomalyRate"),
@@ -2424,11 +2503,17 @@ def for_flow(payload: dict, currency: str = "") -> dict:
                                   days=stats.get("recentDays"), count=stats.get("recentCount")),
         "netFlowBias": explain("flowBias", stats.get("netFlowBias")),
     }
-    if current:
+    # The panel renders its regimes table whenever ANY episode exists, but this
+    # explanation was emitted only when one was still ONGOING — so a ticker with
+    # two finished regimes showed the table with nothing saying what a regime is.
+    # Describe the current one if there is one, otherwise the most recent.
+    episode = current or (accumulation.get("episodes") or [None])[-1]
+    if episode:
         out["cusumEpisode"] = explain("cusumEpisode", None,
-                                      direction=current.get("direction"),
-                                      days=current.get("days"),
-                                      avgRvol=current.get("avgRvol"))
+                                      direction=episode.get("direction"),
+                                      days=episode.get("days"),
+                                      avgRvol=episode.get("avgRvol"),
+                                      ongoing=bool(episode.get("ongoing")))
     return {k: v for k, v in out.items() if v is not None}
 
 
@@ -2713,7 +2798,12 @@ def for_ranking(result: dict) -> dict:
         )
 
     correlation = result.get("correlation") or {}
-    for pair in (correlation.get("pairs") or [])[:3]:
+    # EVERY pair, not the top few. The panel decides how many rows to show, and
+    # when the server explained three while the panel listed four, the last row
+    # lost its info icon — the two counts were free to drift apart because
+    # nothing tied them together. Seven signals make twenty-one pairs; that is
+    # cheap enough to send in full and removes the coupling.
+    for pair in (correlation.get("pairs") or []):
         explanation = explain(
             "signalOverlap", pair["correlation"],
             a=ranking.SIGNAL_BY_KEY.get(pair["a"], {}).get("label", pair["a"]),

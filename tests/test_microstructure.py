@@ -218,3 +218,116 @@ def test_liquidity_profile_is_json_safe():
 def test_liquidity_profile_survives_a_short_frame():
     profile = M.liquidity_profile(simulate(n_days=8, seed=1))
     assert set(profile) >= {"amihud", "spread", "yangZhangVol", "moveVsSpread"}
+
+
+# ============================================================================ #
+# The resolution floor
+#
+# Both spread estimators have a noise floor PROPORTIONAL TO VOLATILITY, because
+# volatility leaks into the estimate. Measured against a correct generative
+# model with the true spread set to zero, this module's own aggregation returns
+# 0.154 x the daily standard deviation for Abdi-Ranaldo and 0.401 x for
+# Corwin-Schultz — constant to three decimals across a five-fold range of
+# volatility, and unchanged when intraday sampling is refined 40x.
+#
+# On a stock moving 1.5% a day that floor is about 0.21% and 0.55%, an order of
+# magnitude above the true spread of a mega-cap. Unstated, it made the app quote
+# a round-trip cost the stock does not charge and warn that ordinary moves were
+# "inside the spread" — most confidently on exactly the names where it was most
+# wrong.
+# ============================================================================ #
+def _tick_frame(spread, sigma=0.015, n=900, ticks=80, seed=0):
+    """An efficient price diffusing INSIDE each day, every observed price a
+    transaction carrying a bid-ask bounce. Open/high/low/close come from those
+    transactions, which is the process these estimators were derived for."""
+    rng = np.random.default_rng(seed)
+    per_tick = sigma / np.sqrt(ticks)
+    opens, highs, lows, closes = [], [], [], []
+    log_price = np.log(100.0)
+    for _ in range(n):
+        path = log_price + np.cumsum(rng.normal(0, per_tick, ticks))
+        log_price = path[-1]
+        trades = np.exp(path) * (1 + rng.choice([-1.0, 1.0], ticks) * spread / 2)
+        opens.append(trades[0])
+        highs.append(trades.max())
+        lows.append(trades.min())
+        closes.append(trades[-1])
+    return pd.DataFrame(
+        {"Open": opens, "High": highs, "Low": lows, "Close": closes,
+         "Volume": rng.lognormal(15, 0.3, n)},
+        index=pd.bdate_range("2020-01-01", periods=n))
+
+
+def test_the_floor_scales_with_volatility_not_with_a_constant():
+    """Double the volatility and the unresolvable spread doubles with it."""
+    calm = _tick_frame(0.0, sigma=0.010, seed=1)
+    wild = _tick_frame(0.0, sigma=0.030, seed=1)
+    calm_floor = M.spread_resolution_floor(calm)
+    wild_floor = M.spread_resolution_floor(wild)
+    assert calm_floor is not None and wild_floor is not None
+    assert wild_floor / calm_floor == pytest.approx(3.0, rel=0.15)
+
+
+def test_a_zero_spread_series_is_reported_as_unresolvable_not_as_a_cost():
+    """The failure this exists to prevent: quoting noise as a trading cost."""
+    frame = _tick_frame(0.0, sigma=0.015, seed=2)
+    summary = M.spread_summary(frame)
+    assert summary["atFloor"] is True
+    assert summary["resolutionFloor"] > 0
+    # And the estimate really is sitting at that floor rather than near zero.
+    assert summary["primary"] <= summary["resolutionFloor"] * M.FLOOR_TOLERANCE
+
+
+def test_a_genuinely_wide_spread_is_still_measured():
+    """The floor must not swallow a real cost."""
+    frame = _tick_frame(0.02, sigma=0.015, seed=3)
+    summary = M.spread_summary(frame)
+    assert summary["atFloor"] is False
+    assert summary["primary"] == pytest.approx(0.02, rel=0.25)
+
+
+def test_inside_spread_noise_never_fires_on_an_unresolvable_spread():
+    """A move cannot be 'inside the spread' when the spread is the noise floor.
+
+    The warning divides by Corwin-Schultz, whose floor is 0.40x daily
+    volatility. On a liquid name that made the caveat fire on ordinary days.
+    """
+    liquid = M.liquidity_profile(_tick_frame(0.0, sigma=0.015, seed=4))
+    assert liquid["spreadResolved"] is False
+    assert liquid["insideSpreadNoise"] is False
+
+    thin = M.liquidity_profile(_tick_frame(0.05, sigma=0.010, seed=4))
+    assert thin["spreadResolved"] is True
+
+
+def test_the_headline_estimator_has_the_lower_floor():
+    """Which is the whole reason Abdi-Ranaldo is the headline rather than CS."""
+    assert M.AR_FLOOR_RATIO < M.CS_FLOOR_RATIO
+    frame = _tick_frame(0.0, sigma=0.015, seed=5)
+    summary = M.spread_summary(frame)
+    assert summary["abdiRanaldo"] < summary["corwinSchultz"]
+
+
+def test_the_floor_is_not_inflated_by_the_spread_it_is_measuring():
+    """The circularity that broke the first version of this guard.
+
+    The floor is expressed in units of daily volatility, so it needs a
+    volatility estimate the spread does not contaminate. Yang-Zhang reads the
+    high-low range, which is exactly where a bid-ask bounce lives: on a 5%
+    spread it reported four times the true volatility, inflating the floor until
+    a genuinely wide spread was marked unresolvable.
+    """
+    quiet = _tick_frame(0.0, sigma=0.015, seed=6)
+    wide = _tick_frame(0.05, sigma=0.015, seed=6)
+    # Same underlying volatility, wildly different spreads. The sigma behind the
+    # floor must barely move.
+    assert M._daily_sigma(wide) / M._daily_sigma(quiet) < 1.6
+
+    # And the wide spread must still be reported as a measurement.
+    assert M.liquidity_profile(wide)["spreadResolved"] is True
+
+
+@pytest.mark.parametrize("spread,vol", [(0.02, 0.015), (0.05, 0.010), (0.30, 0.005)])
+def test_wide_spreads_resolve_at_every_volatility(spread, vol):
+    profile = M.liquidity_profile(_tick_frame(spread, sigma=vol, seed=9))
+    assert profile["spreadResolved"] is True

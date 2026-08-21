@@ -43,6 +43,8 @@ Rogers, L. C. G., & Satchell, S. E. (1991). "Estimating Variance From High, Low
 
 from __future__ import annotations
 
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 
@@ -137,20 +139,118 @@ def abdi_ranaldo_spread(frame: pd.DataFrame, window: int = 21) -> pd.Series:
     return np.sqrt(mean_squared.clip(lower=0.0))
 
 
+# BOTH ESTIMATORS HAVE A NOISE FLOOR, AND IT SCALES WITH VOLATILITY.
+#
+# Measured against a correct generative model — an efficient price diffusing
+# inside each day, every observed price a transaction carrying a bid-ask bounce,
+# open/high/low/close taken from those transactions — with the TRUE spread set
+# to zero, the estimators still report:
+#
+#     Abdi-Ranaldo    ~0.148 x the daily standard deviation
+#     Corwin-Schultz  ~0.361 x
+#
+# Those ratios held to three decimals across daily sigmas of 0.008 to 0.040 — a
+# five-fold range — and did not shrink when intraday sampling was refined from
+# 40 ticks a day to 1500, so this is a property of inferring a spread from daily
+# bars rather than an artefact of the simulation. It is volatility leaking into
+# the spread estimate. The ratios are measured against THIS MODULE'S OWN
+# aggregation (median of the rolling series), not against the raw daily values,
+# because that is the number callers actually receive.
+#
+# WHY IT MATTERS MORE THAN IT LOOKS. On a stock with 1.5% daily volatility the
+# floor is about 0.29%, which is an order of magnitude above the true spread of
+# a mega-cap. Left unstated, the app reports a 0.29% round-trip cost on a name
+# that actually trades at a basis point or two, warns that ordinary moves are
+# "inside spread noise", and does it most confidently on exactly the names where
+# it is most wrong.
+AR_FLOOR_RATIO = 0.148
+CS_FLOOR_RATIO = 0.361
+
+# How close to the floor an estimate has to be before it is reported as
+# unresolvable rather than as a measurement.
+#
+# CHOSEN FROM THE ESTIMATOR'S DISPERSION, not from its mean. At a true spread of
+# zero the estimate is bimodal — the rolling median clips to exactly zero about
+# half the time and otherwise lands near 3x the floor — so a tolerance fitted to
+# the average (1.5) let a third of genuinely zero-spread names through as a
+# quoted cost. Measured over 40 seeds at 1.5% daily volatility, the share
+# correctly refused is:
+#
+#     true spread     tol 2.0    tol 3.0    tol 4.0
+#     0.0%              68%        88%       100%
+#     0.2%              65%        85%       100%
+#     1.0%              12%        52%        92%
+#     2.0%               0%         0%        30%
+#
+# 3.0 refuses to quote a figure below roughly half a percent, at the cost of
+# also refusing about half of true 1% spreads. That asymmetry is deliberate:
+# quoting a fabricated 0.3% cost on a mega-cap makes the app claim trading costs
+# matter when they do not, while declining to measure a real 1% spread only
+# withholds a number — and the reading still states the estimate as an upper
+# bound, which stays true either way.
+FLOOR_TOLERANCE = 3.0
+
+
+# The floor is measured in units of daily volatility, so it needs a volatility
+# estimate that the SPREAD ITSELF does not inflate — otherwise the two chase
+# each other and a genuinely wide spread produces a floor wide enough to hide
+# behind. Measured against a 1.5%-a-day series as the true spread went from 0
+# to 30%, the candidates read:
+#
+#     true spread      0%      0.5%      2%       5%      30%
+#     Yang-Zhang    0.0141   0.0170   0.0303   0.0587   0.3036
+#     1-day close   0.0145   0.0150   0.0205   0.0388   0.2216
+#     5-day close   0.0143   0.0144   0.0157   0.0214   0.0993
+#
+# Yang-Zhang is the worst possible choice here precisely because it reads the
+# high-low range, which is where the bounce lives: at a 5% spread it reported
+# four times the true volatility, inflating the floor until a genuinely wide
+# spread was marked unresolvable — the exact opposite of the intent, and caught
+# by two existing tests. A bid-ask bounce adds a FIXED amount to the variance of
+# a return over any holding period, so measuring over five days and scaling back
+# divides its contribution by five.
+SIGMA_HORIZON = 5
+
+
+def _daily_sigma(frame: pd.DataFrame, window: int = 252) -> Optional[float]:
+    """Daily volatility, measured so a wide spread does not inflate it."""
+    close = frame["Close"].astype("float64").tail(window)
+    log_returns = np.log(close.where(close > 0)).diff(SIGMA_HORIZON).dropna()
+    if len(log_returns) < 20:
+        return None
+    sigma = float(log_returns.std(ddof=1) / np.sqrt(SIGMA_HORIZON))
+    return sigma if np.isfinite(sigma) and sigma > 0 else None
+
+
+def spread_resolution_floor(frame: pd.DataFrame, window: int = 63,
+                            ratio: float = AR_FLOOR_RATIO) -> Optional[float]:
+    """The smallest spread this data can tell apart from zero, for this name.
+
+    Scales with the stock's own volatility, because that is what the floor is
+    made of. Returns None when there is not enough data to estimate volatility.
+    """
+    sigma = _daily_sigma(frame)
+    return ratio * sigma if sigma else None
+
+
 def spread_summary(frame: pd.DataFrame, window: int = 63) -> dict:
-    """Both spread estimates over the recent window.
+    """Both spread estimates over the recent window, against their noise floor.
 
     `window` defaults to a quarter of trading days: long enough for the noise in
     individual two-day estimates to average out, short enough to describe the
     stock's CURRENT trading conditions rather than last year's.
 
-    WHICH ONE IS THE HEADLINE, and why. Abdi-Ranaldo. Against simulated paths
-    with a planted spread (see tests/test_microstructure.py) it recovers the
-    truth to within about 1% across 0.5%-5% spreads, while Corwin-Schultz reads
-    ~0.7% on a zero-spread series — the upward bias its own authors describe,
-    which comes from clipping negative pair estimates at zero and is worst
-    exactly where it matters, on liquid names with tight spreads. CS is kept as
-    a cross-check: when the two disagree sharply, neither should be trusted.
+    WHICH ONE IS THE HEADLINE, and why. Abdi-Ranaldo, because its floor is
+    roughly half of Corwin-Schultz's. Neither is unbiased at the tight end: on a
+    planted-spread simulation Abdi-Ranaldo reads -3% at a 2% spread, -13% at
+    0.5%, +54% at 0.2% and +474% at 0.05%, and Corwin-Schultz is worse at every
+    point. An earlier version of this docstring claimed the headline estimator
+    recovered the truth to within about 1% and attributed the floor to CS alone;
+    that was true only for wide spreads. CS is kept as a cross-check: when the
+    two disagree sharply, neither should be trusted.
+
+    `resolutionFloor` and `atFloor` exist so a caller can say "at or below X"
+    instead of quoting a number the data cannot support.
     """
     corwin = corwin_schultz_spread(frame).tail(window).dropna()
     abdi = abdi_ranaldo_spread(frame).tail(window).dropna()
@@ -162,13 +262,20 @@ def spread_summary(frame: pd.DataFrame, window: int = 63) -> dict:
     if cs is not None and ar is not None and max(cs, ar) > 0:
         disagreement = abs(cs - ar) / max(cs, ar)
 
+    primary = ar if ar is not None else cs
+    floor = spread_resolution_floor(frame, window=window)
+    at_floor = bool(primary is not None and floor is not None
+                    and primary <= floor * FLOOR_TOLERANCE)
+
     return {
-        "primary": ar if ar is not None else cs,
+        "primary": primary,
         "primarySource": "Abdi-Ranaldo (2017)" if ar is not None else "Corwin-Schultz (2012)",
         "corwinSchultz": cs,
         "abdiRanaldo": ar,
         "disagreement": disagreement,
         "observations": int(min(len(corwin), len(abdi))),
+        "resolutionFloor": floor,
+        "atFloor": at_floor,
     }
 
 
@@ -243,6 +350,22 @@ def liquidity_profile(frame: pd.DataFrame, window: int = 21) -> dict:
                   if s is not None and np.isfinite(s) and s > 0]
     warning_spread = max(candidates) if candidates else None
 
+    # WHETHER THE WARNING SPREAD IS A MEASUREMENT AT ALL. Taking the larger of
+    # the two estimators means taking Corwin-Schultz on almost every liquid
+    # name, and its noise floor is 0.40 x daily volatility — about 0.55% on a
+    # stock that moves 1.5% a day, when the true spread of a mega-cap is a basis
+    # point or two. Comparing a day's move against a "spread" that is really
+    # volatility in disguise made the app announce "this move is inside the
+    # spread" on ordinary days, most confidently on exactly the names where it
+    # was most wrong. When the estimate sits at its own floor, the honest
+    # statement is that the cost could not be measured — not that it is large.
+    sigma = _daily_sigma(frame)
+    warning_floor = CS_FLOOR_RATIO * sigma if sigma else None
+    spread_resolved = bool(
+        warning_spread is not None and warning_floor is not None
+        and warning_spread > warning_floor * FLOOR_TOLERANCE
+    )
+
     close = frame["Close"].astype("float64")
     dollar_volume = (close * frame["Volume"].astype("float64")).tail(window)
     latest_move = abs(float(close.pct_change().iloc[-1])) if len(close) > 1 else None
@@ -262,6 +385,11 @@ def liquidity_profile(frame: pd.DataFrame, window: int = 21) -> dict:
         "moveVsSpread": move_vs_spread,
         # A single round trip costs the spread, so a move worth less than about
         # two spreads is not tradeable even if the model finds it interesting.
-        "insideSpreadNoise": bool(move_vs_spread is not None and move_vs_spread < 2.0),
+        "spreadResolved": spread_resolved,
+        "warningFloor": warning_floor,
+        # Only claim a move is inside the spread when the spread is a
+        # measurement rather than the estimator's own noise floor.
+        "insideSpreadNoise": bool(move_vs_spread is not None
+                                  and move_vs_spread < 2.0 and spread_resolved),
         "window": window,
     }

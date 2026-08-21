@@ -489,7 +489,7 @@ def _tone_for(passed: Optional[bool]) -> str:
 
 def long_term_view(frame: pd.DataFrame, drawdown: dict, risk: dict,
                    momentum: dict, position: dict, faber: dict,
-                   hurst: Optional[float], slope: Optional[float],
+                   hurst_reading: dict, slope: Optional[float],
                    r_squared: Optional[float]) -> dict:
     """One readout of the long-horizon evidence, as a checklist plus a verdict.
 
@@ -546,13 +546,29 @@ def long_term_view(frame: pd.DataFrame, drawdown: dict, risk: dict,
     else:
         add("Trend is strong enough to read", None, "insufficient history")
 
-    if hurst is not None and np.isfinite(hurst):
-        persistent = hurst > 0.55
-        add("Price series shows persistence", persistent if hurst > 0.45 else False,
-            f"Hurst {hurst:.2f} — "
-            + ("trending, so trend tools have something to work with" if persistent
-               else "near a random walk; trend signals here are mostly noise"
-               if hurst >= 0.45 else "mean-reverting; falls tend to be given back"))
+    # THE VERDICT IS SAMPLE-SIZE AWARE, not a fixed 0.45-0.55 band. The band was
+    # barely one standard error wide, so a genuine random walk tripped this line
+    # a third of the time on five years of data. `hurst_estimate` widens it when
+    # there is less history; "cannot tell" is scored as NO READING rather than
+    # as a failure, because it is the absence of evidence, not evidence against.
+    hurst = hurst_reading.get("hurst")
+    verdict = hurst_reading.get("verdict")
+    if hurst is not None and verdict != "unavailable":
+        stderr = hurst_reading.get("stderr") or 0.0
+        detail = f"Hurst {hurst:.2f} ± {stderr:.2f} — "
+        if verdict == "persistent":
+            add("Price series shows persistence", True,
+                detail + "trending by more than the estimate's own error, so trend tools "
+                         "have something to work with")
+        elif verdict == "meanReverting":
+            add("Price series shows persistence", False,
+                detail + "mean-reverting; falls tend to be given back")
+        else:
+            low = hurst_reading.get("randomWalkLow") or 0.0
+            high = hurst_reading.get("randomWalkHigh") or 0.0
+            add("Price series shows persistence", None,
+                detail + f"inside {low:.2f}-{high:.2f}, which is what a random walk produces "
+                         f"at this sample size. Trend signals here are probably noise")
     else:
         add("Price series shows persistence", None, "needs ~100 bars")
 
@@ -712,7 +728,9 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
     faber = lt.faber_timing(close_series) if enough else {"usable": False}
     calendar = lt.calendar_returns(close_series) if enough else []
 
-    hurst = ind.hurst_exponent(close_series) if enough else None
+    hurst_reading = (ind.hurst_estimate(close_series) if enough
+                     else {"hurst": None, "verdict": "unavailable"})
+    hurst = hurst_reading.get("hurst")
     slope, r_squared, reg_lower, reg_mid, reg_upper = (
         ind.linear_regression_channel(close_series, REGRESSION_WINDOW)
         if enough else (None, None, None, None, None)
@@ -733,7 +751,7 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
     ]
 
     view = long_term_view(data, drawdown, risk, momentum, position, faber,
-                          hurst, slope, r_squared)
+                          hurst_reading, slope, r_squared)
 
     regression = None
     if reg_mid is not None:
@@ -757,6 +775,7 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
         "faber": faber,
         "relativeStrength": relative,
         "hurst": hurst,
+        "hurstReading": hurst_reading,
         "regression": regression,
         "coppock": coppock_points,
     }

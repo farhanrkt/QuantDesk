@@ -220,6 +220,8 @@ where a constant was invented, it got replaced by an estimator.
 | A headline CAGR | **Rolling-return distribution** | One CAGR describes one start date; the distribution shows the worst entry point you'd have survived |
 | Drawdown depth alone | **Ulcer index** (Martin & McCann 1989) | Duration breaks conviction as much as depth — a long shallow grind is harder to hold than a sharp fall |
 | Assuming a trend exists | **Hurst exponent** | If H sits near 0.5 the series is a random walk and every trend indicator is describing noise |
+| A bare Hurst reading against a fixed 0.45–0.55 band | **A band scaled to the sample size** | Measured against exact fractional Brownian motion, the estimator's standard error is ~0.05 on five years of daily bars — so the fixed band was barely one standard error wide and called a *genuine random walk* trending 35% of the time. The band now widens when there is less history: 7% at five years, and real persistence (H = 0.7) is still detected 82% of the time |
+| Quoting an estimated bid-ask spread as a cost | **The estimator's own resolution floor** | Both spread estimators have a noise floor proportional to volatility — 0.148× and 0.361× the daily standard deviation, measured with the true spread set to zero. On a mega-cap that floor is an order of magnitude above the real spread, so the app reported a cost the stock does not charge. Below the floor it now reports a ceiling |
 | Assuming the signal works | **Event study** (Brown & Warner 1985) | Measures it, and reports null results |
 | Reporting raw screener hits | **Benjamini-Hochberg (1995)** | Scanning many names produces hits by construction |
 | A composite score across signals | **Percentile ranks + a measured overlap** | Momentum, 52-week-high and relative strength are three phrasings of "it went up"; the panel reports how many *independent* signals the composite really averages |
@@ -343,6 +345,8 @@ CI (`.github/workflows/ci.yml`) runs pytest + ruff, tsc + eslint + build, and a 
 Fundamentals for smaller IDX listings are patchy — where a figure is missing, the app offers
 a manual-input form rather than guessing. This is the single biggest fragility in the
 project.
+
+**Estimator resolution.** Two numbers are reported as bounds rather than measurements, because that is what the data supports. The bid-ask spread cannot be resolved below roughly 0.15× a stock's daily volatility from daily bars, so on liquid names the panel says "at most X" instead of quoting a figure. The Hurst exponent is noisy enough that its "random walk" band is sized from the sample, so a short range says "cannot tell" rather than guessing. Both floors were measured by simulation, not assumed — see `_lib/microstructure.py` and `_lib/indicators.py`.
 
 **Statistical.** Results are in-sample, on one ticker at a time, with overlapping windows.
 The event study is indicative, not a backtest. The Flow lens has no walk-forward validation
