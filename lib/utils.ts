@@ -70,3 +70,15 @@ export const VERDICT_LABEL: Record<string, string> = {
 };
 
 export const verdictLabel = (v: string) => VERDICT_LABEL[v] ?? v;
+
+/**
+ * English ordinal suffix. "72th" is the kind of small wrongness that makes a
+ * reader trust the arithmetic less, and the 11/12/13 exception is the half
+ * everybody forgets.
+ */
+export function ordinal(n: number) {
+  const value = Math.round(n);
+  const teens = value % 100;
+  if (teens >= 11 && teens <= 13) return "th";
+  return ["th", "st", "nd", "rd"][value % 10] ?? "th";
+}

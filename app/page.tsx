@@ -6,6 +6,7 @@ import { AnomalyPanel } from "@/components/AnomalyPanel";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
 import { EventStudyPanel } from "@/components/EventStudyPanel";
 import { NewsPanel } from "@/components/NewsPanel";
+import { PeersPanel } from "@/components/PeersPanel";
 import { QualityPanel } from "@/components/QualityPanel";
 import { RankingPanel } from "@/components/RankingPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
@@ -18,7 +19,7 @@ import { Card } from "@/components/ui/card";
 import { DetailProvider, DetailToggle, useDetailLevel } from "@/components/ui/explain";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
-import { useEngines, useEventStudy, type RunOptions } from "@/lib/api";
+import { useEngines, useEventStudy, usePeers, type RunOptions } from "@/lib/api";
 import type { Engine, EngineFailure } from "@/lib/types";
 
 const INITIAL: RunOptions = {
@@ -84,6 +85,7 @@ export default function Home() {
     run, refineValuation, refineTechnical, csvUrl,
   } = useEngines();
   const { state: eventStudy, validate, reset: resetEventStudy } = useEventStudy();
+  const { state: peers, compare, reset: resetPeers } = usePeers();
   // The ticker bar is controlled from here so the screener can drive it too.
   const [opts, setOpts] = useState<RunOptions>(INITIAL);
   // The last SUBMITTED symbol, which is not what is currently typed in the box.
@@ -117,6 +119,7 @@ export default function Home() {
     // A study belongs to the ticker it was run for; carrying one across would
     // put another company's abnormal returns under this company's header.
     resetEventStudy();
+    resetPeers();
     run(cleaned);
   };
 
@@ -212,12 +215,22 @@ export default function Home() {
                 </div>
               )}
               {tab === "trend" && (
-                <Panel state={technical}>
-                  {(d) => (
-                    <TechnicalPanel data={d} onApply={refineTechnical}
-                                    busy={technical.status === "loading"} />
-                  )}
-                </Panel>
+                <div className="space-y-4">
+                  <Panel state={technical}>
+                    {(d) => (
+                      <TechnicalPanel data={d} onApply={refineTechnical}
+                                      busy={technical.status === "loading"} />
+                    )}
+                  </Panel>
+                  {/* Sits on the Trend tab because the seven signals it compares
+                      are price and volume — the same data this lens reads. It
+                      would be a category error on the Value tab, where nothing
+                      has a peer comparison. */}
+                  <PeersPanel state={peers} ticker={resolvedTicker}
+                              onCompare={(universe) => compare({
+                                ticker: opts.ticker, market: opts.market, universe,
+                              })} />
+                </div>
               )}
               {tab === "value" && (
                 <Panel

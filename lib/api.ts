@@ -4,7 +4,8 @@ import { useCallback, useRef, useState } from "react";
 import type {
   AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
   Leg, ManualInputs, EventStudyResponse, Market, NewsResponse, QualityResponse,
-  RankResponse, ScreenerResponse, Synthesis, TechnicalResponse, UniversesResponse,
+  PeersResponse, RankResponse, ScreenerResponse, Synthesis, TechnicalResponse,
+  UniversesResponse,
   ValuationResponse,
 } from "./types";
 
@@ -471,4 +472,50 @@ export function useDeepen() {
   }, []);
 
   return { state, deepen, reset };
+}
+
+/**
+ * Peer comparison, on demand.
+ *
+ * NOT part of a ticker run, and that is a cost decision rather than a taste one:
+ * placing a name against the Nasdaq-100 means scanning the Nasdaq-100, which is
+ * about six seconds and shares the ranking tier's 3-per-minute cap. Attaching
+ * that to `/api/confluence` would multiply the cost of the app's most-used route
+ * for something most readers will not open.
+ *
+ * `reset` exists because a peer placing belongs to the ticker it was run for.
+ * Carrying one across a new company would put another firm's percentiles under
+ * this firm's header — the same class of mistake `_lib/symbols.py` exists to
+ * prevent, arriving through the UI instead of the API.
+ */
+export function usePeers() {
+  const [state, setState] = useState<Engine<PeersResponse>>({ status: "idle" });
+  const seq = useRef(0);
+  const inflight = useRef<AbortController | null>(null);
+
+  const compare = useCallback((o: { ticker: string; market: Market; universe?: string }) => {
+    inflight.current?.abort();
+    const controller = new AbortController();
+    inflight.current = controller;
+    const token = (seq.current += 1);
+    const live = () => seq.current === token;
+
+    setState({ status: "loading" });
+    get<PeersResponse>("/api/peers", {
+      ticker: o.ticker, market: o.market, universe: o.universe,
+    }, controller.signal)
+      .then((data) => { if (live()) setState({ status: "ready", data }); })
+      .catch((err) => {
+        if (isAbort(err) || !live()) return;
+        setState({ status: "error", failure: asFailure(err) });
+      });
+  }, []);
+
+  const reset = useCallback(() => {
+    inflight.current?.abort();
+    seq.current += 1;
+    setState({ status: "idle" });
+  }, []);
+
+  return { state, compare, reset };
 }

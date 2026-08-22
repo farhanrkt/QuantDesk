@@ -3304,3 +3304,143 @@ def for_synthesis(payload: dict) -> dict:
             "here is a forecast, and no combination of these readings is a reason to buy "
             "or sell on its own."),
     }
+
+
+# ============================================================================ #
+# Peer comparison — where one name sits among its own index
+#
+# THE PROBLEM THIS SOLVES IS CALIBRATION, NOT RANKING.
+#
+# The single-ticker view reports every figure in absolute terms: a 33% worst
+# fall, 28% volatility, 16% a year. To a reader with no priors those numbers are
+# unreadable — not because they are complicated, but because nothing on the page
+# says whether they are ordinary or alarming. A first-time investor cannot tell
+# a normal drawdown from a catastrophic one, and the app never offers a frame.
+#
+# The ranking tier already computes the frame. `ranking.py` argues that a
+# percentile "is a claim about this universe on this date" while a score out of
+# a hundred "implies an absolute scale that was never calibrated", and that
+# argument applies at least as hard to a lone ticker as it does to a table.
+#
+# So this restates one row of a scan as sentences. "Its worst fall was milder
+# than 68% of the Nasdaq-100" teaches more in one line than the drawdown section
+# does in a screen, and it commits to nothing the data does not support.
+#
+# WHAT IT DELIBERATELY DOES NOT DO: rank the name, or imply that a high position
+# is a reason to buy. The percentile is a description of where it sits among a
+# named group on a named date. The composite is carried through with the same
+# caveat the ranking panel prints, and the peer group is named in every sentence
+# so the denominator can never go unnoticed.
+# ============================================================================ #
+
+# One phrasing per signal, written so the percentile reads as a comparison
+# rather than a score. `{pct}` is the direction-adjusted percentile, so a high
+# number is always the favourable end — including for the two signals where a
+# LOW raw value is the good one, which is exactly the confusion this avoids.
+PEER_PHRASING: dict[str, str] = {
+    "momentum": "Has risen more than {pct} of {group} over the past year.",
+    "trend": "Its long-run average is rising faster than {pct} of {group}.",
+    "nearHigh": "Sitting closer to its 52-week high than {pct} of {group}.",
+    "lowVolatility": "Calmer day to day than {pct} of {group}.",
+    "shallowDrawdown": "Its worst fall was milder than {pct} of {group}.",
+    "relativeStrength": "Beat the index by more than {pct} of {group}.",
+    "flow": "Recent days closed stronger on volume than {pct} of {group}.",
+}
+
+# Where a percentile stops being unremarkable. Deliberately wide: the middle of a
+# distribution is the most common place to be and colouring it would invent a
+# verdict out of an ordinary reading.
+PEER_HIGH, PEER_LOW = 75.0, 25.0
+
+
+def _peer_band(percentile: float, evidence: Optional[str]) -> str:
+    """A tone for one peer reading, damped by how well the signal is supported.
+
+    A weak-evidence signal never gets a strong colour no matter where the name
+    sits, because "top decile on a measure that does not predict anything" is
+    not good news and should not be green. Same discipline as everywhere else
+    here: the band decides the colour, and the band knows about the evidence.
+    """
+    if evidence in ("weak", "none"):
+        return "context"
+    if percentile >= PEER_HIGH:
+        return "good"
+    if percentile <= PEER_LOW:
+        return "poor"
+    return "fair"
+
+
+def for_peers(row: dict, universe: dict, signals: Sequence[dict],
+              correlation: Optional[dict] = None) -> dict:
+    """One scanned row, restated as where this name sits among its peers."""
+    # "72% of Nasdaq-100" reads like a typo; "of the Nasdaq-100" reads like
+    # English. Guarded so a name that already carries an article is left alone.
+    name = universe.get("name")
+    group = "its peers" if not name else (
+        name if name.lower().startswith("the ") else f"the {name}")
+    scanned = universe.get("scanned")
+    breakdown = row.get("signals") or {}
+
+    readings = []
+    for signal in signals:
+        key = signal["key"]
+        entry = breakdown.get(key) or {}
+        percentile = entry.get("percentile")
+        if not _known(percentile):
+            readings.append({
+                "key": key, "label": signal["label"], "percentile": None,
+                "sentence": (f"Not enough history to place {row.get('ticker', 'this name')} "
+                             f"against {group} on this measure."),
+                "tone": "none", "band": "unavailable", "evidence": signal["evidence"],
+                "rawText": None,
+            })
+            continue
+
+        band = _peer_band(float(percentile), signal["evidence"])
+        template = PEER_PHRASING.get(key, "Ranks above {pct} of {group} on this measure.")
+        raw = entry.get("raw")
+        raw_text = None
+        if _known(raw):
+            raw_text = (_signed_pct(raw) if key in ("momentum", "trend", "nearHigh",
+                                                    "relativeStrength")
+                        else _pct(raw) if key in ("lowVolatility", "shallowDrawdown")
+                        else _num(raw, 3))
+        readings.append({
+            "key": key,
+            "label": signal["label"],
+            "percentile": float(percentile),
+            "rawText": raw_text,
+            "sentence": template.format(pct=_pct(float(percentile) / 100.0, 0), group=group),
+            "tone": TONE_FOR_BAND[band],
+            "band": band,
+            "evidence": signal["evidence"],
+        })
+
+    composite = row.get("composite")
+    rank, of = row.get("rank"), scanned
+    if _known(composite) and rank and of:
+        headline = (f"Against {group}, {row.get('ticker', 'this name')} places "
+                    f"{rank} of {of} on the seven price signals combined.")
+    else:
+        headline = f"Placed against {group}, on price and volume alone."
+
+    effective = (correlation or {}).get("effectiveSignals")
+    overlap = None
+    if _known(effective):
+        overlap = (f"Those seven columns carry about {_num(effective, 1)} signals' worth of "
+                   f"independent information — several of them are different ways of saying "
+                   f"\"it went up\", so treat the combined placing as weaker than seven "
+                   f"separate tests.")
+
+    return {
+        "headline": headline,
+        "readings": readings,
+        "overlap": overlap,
+        "caveat": (
+            f"Every line here is a position within {group} on this date, not a score and not "
+            f"a verdict. Change the peer group and the same company moves. These seven "
+            f"measures are computed from price and volume alone and know nothing about the "
+            f"business — the Value and Quality lenses have no peer comparison here, because "
+            f"the filings behind them cannot be fetched in batch."
+        ),
+    }

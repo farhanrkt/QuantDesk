@@ -128,6 +128,9 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # not a hundred. The per-IP cap stays as strict as the screener's anyway,
     # because the work per request is still far above a single-ticker route.
     "/api/rank": (3, 60),
+    # Runs the identical universe scan and keeps one row of it, so it carries
+    # the identical cost and the identical cap.
+    "/api/peers": (3, 60),
     # Deepening runs the fundamentals lenses per name and does NOT batch, so
     # this is the amplifying half of the funnel and is capped hardest.
     "/api/rank/deepen": (2, 60),
@@ -594,6 +597,79 @@ def rank(
         "universe": {"id": universe, "name": label, "market": market_code,
                      "asOf": as_of, "symbols": symbols_list},
         **result,
+    })
+
+
+@app.get("/api/peers")
+def peers(
+    ticker: str = Query(..., pattern=TICKER_PATTERN),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+    universe: Optional[str] = Query(
+        None, pattern="^[a-z0-9]{1,24}$",
+        description="Peer group id. Defaults to the largest predefined universe "
+                    "this ticker belongs to."),
+):
+    """Where one ticker sits among its own index, on the seven price signals.
+
+    THIS IS A CALIBRATION AID, NOT A RANKING. The single-ticker lenses report
+    everything in absolute terms — a 33% worst fall, 28% volatility — and a
+    reader with no priors cannot tell an ordinary number from an alarming one.
+    The ranking tier already computes the frame that answers it; this restates
+    one row of that scan as sentences.
+
+    It is a SEPARATE, DELIBERATE REQUEST rather than part of `/api/confluence`
+    because it costs a whole universe scan — about six seconds for the
+    Nasdaq-100 — and attaching that to every ticker run would multiply the cost
+    of the app's most-used route by an order of magnitude for something most
+    readers will not open.
+
+    The peer group is echoed in the response and named in every sentence the
+    explanation layer produces. Change the group and the same company moves,
+    which is the one thing a percentile must never let a reader forget.
+    """
+    symbol = resolved(ticker, market)
+    candidates = universes.containing(symbol)
+
+    if universe:
+        entry = universes.get(universe)
+        if entry is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown peer group '{universe}'. See /api/rank/universes.")
+    elif candidates:
+        entry = universes.get(candidates[0]["id"])
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{symbol} is not in any of the predefined universes, so there is no "
+                   f"peer group to place it against. Pass `universe` explicitly, or use "
+                   f"the Scan & rank tab with a list of your own.")
+
+    result = ranking.scan(entry["tickers"], market_code=entry["market"])
+    row = next((r for r in result["rows"] if r["ticker"] == symbol), None)
+    if row is None:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{symbol} could not be ranked against {entry['name']}: it needs at "
+                   f"least {ranking.MIN_BARS} trading days of history, and either the "
+                   f"fetch failed or the listing is too recent.")
+
+    context = {"id": entry["id"], "name": entry["name"], "market": entry["market"],
+               "asOf": entry["asOf"], "count": entry["count"],
+               "scanned": result["ranked"], "note": entry["note"]}
+
+    return ok({
+        "ticker": symbol,
+        "universe": context,
+        # Every group this name belongs to, so the panel can offer the switch
+        # rather than presenting one denominator as if it were the only choice.
+        "candidates": candidates,
+        "rank": row.get("rank"),
+        "composite": row.get("composite"),
+        "coverage": row.get("coverage"),
+        "benchmark": result.get("benchmark"),
+        "explain": explain.for_peers(row, context, result["signals"],
+                                     result.get("correlation")),
     })
 
 

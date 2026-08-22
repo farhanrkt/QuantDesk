@@ -123,6 +123,35 @@ def get(universe_id: str) -> Optional[dict]:
     }
 
 
+def containing(symbol: str) -> list[dict]:
+    """Every predefined universe this symbol belongs to, largest first.
+
+    Used to give a single-ticker view a peer group without asking the reader to
+    choose one before they know what the choice means. Ordered by size because a
+    percentile against ninety-nine names is better resolved than one against
+    twenty-nine — the Dow places a stock in thirds, which is barely a comparison.
+
+    The membership test runs against RESOLVED symbols so that "BBCA" typed on the
+    IDX market matches the "BBCA.JK" stored in the list. Matching raw strings
+    would silently find nothing for every Indonesian ticker.
+    """
+    from . import symbols as sym
+
+    target = (symbol or "").strip().upper()
+    if not target:
+        return []
+
+    found = []
+    for entry in UNIVERSES.values():
+        resolved = {sym.resolve(t, entry["market"]) for t in entry["tickers"]}
+        if target in resolved:
+            found.append({"id": entry["id"], "name": entry["name"],
+                          "market": entry["market"], "note": entry["note"],
+                          "count": len(entry["tickers"]), "asOf": AS_OF})
+    found.sort(key=lambda e: -e["count"])
+    return found
+
+
 def catalogue() -> list[dict]:
     """Every predefined universe, without the ticker lists, for the picker."""
     return [

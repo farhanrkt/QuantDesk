@@ -203,6 +203,14 @@ worth** of information. That is printed in the header.
 which fetch one company at a time, which is exactly why they are a second step and not
 another column.
 
+**Compare with peers.** The ranking tier's percentiles, pointed at a single name. Every other
+figure in the app is absolute — a 33% worst fall, 28% volatility — and a reader with no priors
+cannot tell an ordinary number from an alarming one. On the Trend tab, one button places the
+ticker against its own index and says it in sentences: *"its worst fall was milder than 95% of
+the Nasdaq-100"*. It is a button rather than a column because it costs a whole universe scan,
+and it covers the price family only — the filings do not batch, so Value and Quality have no
+peer comparison and the panel says so.
+
 **Anomaly screener.** Still there, answering what the ranking cannot: *has something unusual
 just happened here?* Scans up to 20 tickers and reports **how many hits you'd expect from
 noise** — each ticker tested against its *own* long-run flag rate, then a false-discovery-rate
@@ -308,6 +316,7 @@ Everything the UI does is a plain `GET`. Interactive docs at `/api/docs`.
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
 | `GET /api/rank/universes` | The predefined lists, each with its as-of date |
+| `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
 | `GET /api/rank/deepen` | Quality + valuation for a shortlist of up to 8 |
 | `GET /api/screener` | Multi-ticker anomaly scan with FDR correction |
 | `GET /api/news` | Recent headlines |

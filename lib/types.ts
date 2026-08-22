@@ -611,3 +611,42 @@ export interface ConfluenceResponse {
   news: Leg<NewsResponse>;
   synthesis: Synthesis;
 }
+
+/**
+ * Where one ticker sits among its own index, on the seven price signals.
+ *
+ * A calibration aid, not a ranking. Every `percentile` is direction-adjusted, so
+ * 100 is always the favourable end — including for the two signals where a LOW
+ * raw value is the good one. Never re-derive a direction from `percentile` at a
+ * call site; the sentence already carries it.
+ */
+export interface PeerReading {
+  key: string;
+  label: string;
+  percentile: number | null;
+  rawText: string | null;
+  sentence: string;
+  tone: string;
+  band: string;
+  evidence: string;
+}
+
+export interface PeersResponse {
+  ticker: string;
+  universe: {
+    id: string; name: string; market: string; asOf: string;
+    count: number; scanned: number; note: string;
+  };
+  /** Every predefined group this name belongs to, so the panel can offer a switch. */
+  candidates: { id: string; name: string; market: string; count: number; asOf: string }[];
+  rank: number | null;
+  composite: number | null;
+  coverage: number | null;
+  benchmark: string | null;
+  explain: {
+    headline: string;
+    readings: PeerReading[];
+    overlap: string | null;
+    caveat: string;
+  };
+}
