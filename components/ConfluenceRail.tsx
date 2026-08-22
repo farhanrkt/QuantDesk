@@ -13,6 +13,18 @@ const DDM = "#A78BFA";
 const QUAL = "#E8B44C";
 const ASH = "#7A8CA0";
 
+/**
+ * WHICH BODY OF DATA A LENS READS. This is the field the agreement count is
+ * built on, so it is part of the type rather than a lookup table off to one
+ * side: adding a fifth lens forces you to say what it reads.
+ */
+type Family = "price" | "filings";
+
+const FAMILY_LABEL: Record<Family, string> = {
+  price: "price and volume",
+  filings: "the filings",
+};
+
 interface Reading {
   lens: string;
   /** The question this lens answers, in the reader's own words. */
@@ -22,6 +34,94 @@ interface Reading {
   color: string;
   /** -1 bearish, 0 neutral, +1 bullish. Used only for the agreement count. */
   vote: number;
+  family: Family;
+}
+
+export interface Agreement {
+  /** Lenses with a reading — the raw headcount, kept because it is honest. */
+  lenses: number;
+  /** Distinct data sources behind them. The number the headline speaks in. */
+  independent: number;
+  headline: string;
+  color: string;
+  /** The sentence reconciling the two counts, or null when they are equal. */
+  footnote: string | null;
+}
+
+/**
+ * AGREEMENT IS COUNTED IN DATA SOURCES, NOT IN PANELS.
+ *
+ * This used to be `bulls === live.length` over four lenses, printing "All 4
+ * lenses constructive" directly beneath the paragraph explaining that flow and
+ * trend are both functions of the same OHLCV series and are therefore not two
+ * opinions. The caveat and the arithmetic contradicted each other, and the
+ * arithmetic was the part in large type.
+ *
+ * So each family collapses to ONE vote before anything is tallied. Four
+ * agreeing lenses over two sources is "both independent readings constructive,
+ * across 4 lenses" — the same facts, without the inflation. A family whose
+ * members disagree votes zero and is named as split, because two readings of
+ * one dataset pointing opposite ways is a real finding and averaging it away
+ * would be the same sin in the other direction.
+ *
+ * WHAT THIS IS NOT: a measurement. `ranking.signal_correlation` computes its
+ * overlap from the scan's own cross-section; there is no cross-section here, so
+ * the grouping is a DECLARED assumption about what shares a source. It is
+ * deliberately coarse and it is stated on the panel.
+ */
+export function agreementOf(readings: Reading[]): Agreement {
+  const live = readings.filter((r) => r.verdict !== "—" && r.verdict !== "n/a");
+  if (live.length === 0) {
+    return { lenses: 0, independent: 0, headline: "Awaiting data",
+             color: ASH, footnote: null };
+  }
+
+  const families = new Map<Family, number[]>();
+  for (const r of live) families.set(r.family, [...(families.get(r.family) ?? []), r.vote]);
+
+  const split: Family[] = [];
+  const votes: number[] = [];
+  for (const [family, member] of families) {
+    const up = member.filter((v) => v > 0).length;
+    const down = member.filter((v) => v < 0).length;
+    if (up > 0 && down > 0) split.push(family);
+    votes.push(up > down ? 1 : down > up ? -1 : 0);
+  }
+
+  const total = votes.length;
+  const bulls = votes.filter((v) => v > 0).length;
+  const bears = votes.filter((v) => v < 0).length;
+  const noun = total === 1 ? "reading" : "readings";
+  // "Both" only when there are exactly two. There are two families today, so
+  // `total` cannot exceed two — but the Family type is meant to be extended,
+  // and "Both independent readings" over three sources is the kind of wrong
+  // that survives review because it reads fluently.
+  const all = total === 2 ? "Both" : "All";
+
+  let headline = "Mixed signals";
+  let color = ASH;
+  if (bulls === total && total > 1) {
+    headline = `${all} independent ${noun} constructive`;
+    color = ACC;
+  } else if (bears === total && total > 1) {
+    headline = `${all} independent ${noun} negative`;
+    color = DIST;
+  } else if (bulls > bears) {
+    headline = `${bulls} of ${total} independent ${noun} constructive`;
+    color = ACC;
+  } else if (bears > bulls) {
+    headline = `${bears} of ${total} independent ${noun} negative`;
+    color = DIST;
+  }
+
+  const notes: string[] = [];
+  if (live.length > total) {
+    notes.push(`${live.length} lenses, ${total} independent ${total === 1 ? "source" : "sources"}`);
+  }
+  for (const family of split) notes.push(`split on ${FAMILY_LABEL[family]}`);
+
+  return { lenses: live.length, independent: total, headline, color,
+           footnote: notes.length ? notes.join(" · ") : null };
 }
 
 /**
@@ -32,8 +132,8 @@ interface Reading {
  * any of them. Each line now says what the score MEANS; the numbers themselves
  * are one click away in the lens that owns them.
  */
-const blank = (lens: string, question: string): Reading => ({
-  lens, question, verdict: "—", detail: "no reading", color: ASH, vote: 0,
+const blank = (lens: string, question: string, family: Family): Reading => ({
+  lens, question, verdict: "—", detail: "no reading", color: ASH, vote: 0, family,
 });
 
 /**
@@ -47,7 +147,7 @@ const blank = (lens: string, question: string): Reading => ({
  */
 function readAnomaly(state: Engine<AnomalyResponse>): Reading {
   const question = "Is anyone unusual trading this?";
-  if (state.status !== "ready") return blank("Flow", question);
+  if (state.status !== "ready") return blank("Flow", question, "price");
   const { stats } = state.data;
   const bias = stats.recentFlowBias;
   const color = bias === "Accumulation" ? ACC : bias === "Distribution" ? DIST : ASH;
@@ -67,12 +167,13 @@ function readAnomaly(state: Engine<AnomalyResponse>): Reading {
     color: stats.recentCount === 0 ? ASH : color,
     vote:
       stats.recentCount === 0 ? 0 : bias === "Accumulation" ? 1 : bias === "Distribution" ? -1 : 0,
+    family: "price",
   };
 }
 
 function readTechnical(state: Engine<TechnicalResponse>): Reading {
   const question = "What has the price been doing?";
-  if (state.status !== "ready") return blank("Trend", question);
+  if (state.status !== "ready") return blank("Trend", question, "price");
   const { summary, latest, longTerm, hasLongTerm } = state.data;
   const tone = summary.trend_tone;
   const color = tone === "bull" ? ACC : tone === "bear" ? DIST : TECH;
@@ -89,6 +190,7 @@ function readTechnical(state: Engine<TechnicalResponse>): Reading {
     detail: context,
     color,
     vote: tone === "bull" ? 1 : tone === "bear" ? -1 : 0,
+    family: "price",
   };
 }
 
@@ -100,7 +202,7 @@ const ENGINE_NAMES: Record<string, string> = {
 
 function readValuation(state: Engine<ValuationResponse>): Reading {
   const question = "What is the business worth?";
-  if (state.status !== "ready") return blank("Value", question);
+  if (state.status !== "ready") return blank("Value", question, "filings");
   const d = state.data;
   const color =
     d.verdict === "UNDERVALUED" ? ACC : d.verdict === "OVERVALUED" ? DIST
@@ -117,6 +219,7 @@ function readValuation(state: Engine<ValuationResponse>): Reading {
       + `${pct(d.monteCarlo.probUndervalued, 0)} of simulated runs came out cheap.`,
     color,
     vote: d.verdict === "UNDERVALUED" ? 1 : d.verdict === "OVERVALUED" ? -1 : 0,
+    family: "filings",
   };
 }
 
@@ -134,14 +237,14 @@ const MANIPULATION_WORDS: Record<string, string> = {
 
 function readQuality(state: Engine<QualityResponse>): Reading {
   const question = "Are the numbers real?";
-  if (state.status !== "ready") return blank("Quality", question);
+  if (state.status !== "ready") return blank("Quality", question, "filings");
   const d = state.data;
   if (!d.applicable)
     return {
       lens: "Quality", question, verdict: "n/a",
       detail: "These three accounting models were built on non-financial firms and do not "
         + "transfer to banks or insurers, so no score is reported.",
-      color: ASH, vote: 0,
+      color: ASH, vote: 0, family: "filings",
     };
 
   const parts: string[] = [];
@@ -159,6 +262,7 @@ function readQuality(state: Engine<QualityResponse>): Reading {
     detail: parts.length ? `${parts.join(", ")}.` : (d.headline ?? ""),
     color: d.verdict === "SOUND" ? ACC : d.verdict === "CONCERNS" ? DIST : QUAL,
     vote: d.verdict === "SOUND" ? 1 : d.verdict === "CONCERNS" ? -1 : 0,
+    family: "filings",
   };
 }
 
@@ -179,48 +283,39 @@ export function ConfluenceRail({
 }) {
   const readings = [readAnomaly(anomaly), readTechnical(technical),
                     readValuation(valuation), readQuality(quality)];
-  const live = readings.filter((r) => r.verdict !== "—" && r.verdict !== "n/a");
-  const votes = live.map((r) => r.vote);
-  const bulls = votes.filter((v) => v > 0).length;
-  const bears = votes.filter((v) => v < 0).length;
-
-  let agreement = "Mixed signals";
-  let agreementColor = ASH;
-  if (live.length === 0) {
-    agreement = "Awaiting data";
-  } else if (bulls === live.length && bulls > 1) {
-    agreement = `All ${bulls} lenses constructive`;
-    agreementColor = ACC;
-  } else if (bears === live.length && bears > 1) {
-    agreement = `All ${bears} lenses negative`;
-    agreementColor = DIST;
-  } else if (bulls > bears) {
-    agreement = `${bulls} of ${live.length} constructive`;
-    agreementColor = ACC;
-  } else if (bears > bulls) {
-    agreement = `${bears} of ${live.length} negative`;
-    agreementColor = DIST;
-  }
+  const agreement = agreementOf(readings);
 
   return (
     <section className="animate-rise rounded border border-rule bg-panel">
       <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
         <div className="flex items-baseline gap-3">
           <h2 className="font-mono text-lg font-semibold tracking-[0.14em]">{ticker}</h2>
-          <span className="eyebrow">{live.length || "no"} lenses reading</span>
+          <span className="eyebrow">{agreement.lenses || "no"} lenses reading</span>
         </div>
-        <span className="num text-xs font-semibold" style={{ color: agreementColor }}>
-          {agreement}
-        </span>
+        <div className="text-right">
+          <span className="num block text-xs font-semibold"
+                style={{ color: agreement.color }}>
+            {agreement.headline}
+          </span>
+          {/* The reconciliation sits WITH the headline, not in the paragraph
+              below it. A reader who takes the top line at face value and never
+              reads on should still have been told what it counts. */}
+          {agreement.footnote && (
+            <span className="mt-0.5 block text-[0.6rem] text-ash">{agreement.footnote}</span>
+          )}
+        </div>
       </div>
       <div className="border-b border-rule px-5 py-2">
         {/* Agreement is the product's headline claim, so its main weakness
             belongs next to it rather than in a footnote. */}
         <p className="text-[0.68rem] leading-relaxed text-ash">
           These lenses are not fully independent: flow and trend are both functions of the same
-          price and volume series, so they agree more often than four unrelated tests would.
-          Value and quality read the filings instead and carry most of the independent
-          information.
+          price and volume series, while value and quality both read the filings — so four
+          panels rest on two bodies of data. The verdict above counts those two rather than the
+          four, which is why it can say &ldquo;both&rdquo; where the grid shows four. The
+          grouping is a stated assumption about what shares a source, not a measured
+          correlation; the ranking panel measures its own overlap because a scan gives it a
+          cross-section to measure from, and a single ticker does not.
         </p>
       </div>
 

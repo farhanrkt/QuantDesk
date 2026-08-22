@@ -9,7 +9,12 @@ itself.
 
 from __future__ import annotations
 
+import threading
+import time
+from typing import ClassVar
+
 import numpy as np
+import pandas as pd
 import pytest
 
 from _lib import valuation as V
@@ -193,3 +198,238 @@ def test_detect_engine_routes_financials_to_ddm():
     assert V.detect_engine("Financial Services", "Banks—Diversified")[0] == "DDM"
     assert V.detect_engine("Technology", "Consumer Electronics")[0] == "DCF"
     assert V.detect_engine("", "Regional Banking")[0] == "DDM"
+
+
+# --------------------------------------------------------------------------- #
+# The company cache — two bugs that were invisible to a numerical audit
+# --------------------------------------------------------------------------- #
+def _stub_company(monkeypatch, calls: list, delay: float = 0.0) -> None:
+    """Replace the network fetch with a counter, and clear the day's cache."""
+    def fake(ticker: str) -> dict:
+        calls.append(ticker)
+        if delay:
+            time.sleep(delay)
+        return {
+            "ok": True, "name": ticker, "sector": "Technology",
+            "industry": "Software", "price": 100.0, "shares": 1e9,
+            "income": pd.DataFrame({"a": [1.0]}),
+            "balance": pd.DataFrame({"a": [1.0]}),
+            "cashflow": pd.DataFrame({"a": [1.0]}),
+        }
+    monkeypatch.setattr(V, "_fetch_company_uncached", fake)
+    V._COMPANY_CACHE.clear()
+    V._COMPANY_LOCKS.clear()
+
+
+def test_mutating_a_fetched_company_cannot_poison_the_cache(monkeypatch):
+    """`analyze` overwrites data["price"] for a manual override.
+
+    While `fetch_company` returned the cached object itself, that assignment
+    rewrote the day's cache: every later request for the symbol — including the
+    quality lens, which never asked for an override — saw a price one user
+    typed into the rescue form. The regression is asserted on the exact
+    mutation `analyze` performs, not on a stand-in.
+    """
+    calls: list = []
+    _stub_company(monkeypatch, calls)
+
+    first = V.fetch_company("TEST")
+    first["price"] = 42.0                     # what analyze() does on manual_price
+
+    second = V.fetch_company("TEST")
+    assert second["price"] == 100.0, "a caller's edit escaped into the shared cache"
+    assert calls == ["TEST"], "the copy must not cost an extra upstream fetch"
+
+    # The copy is deliberately SHALLOW: statements are read-only everywhere, so
+    # they stay shared. Asserted so that boundary is a decision, not an accident.
+    assert first is not second
+    assert first["income"] is second["income"]
+
+
+def test_concurrent_callers_for_one_symbol_fetch_it_once(monkeypatch):
+    """/api/confluence runs the valuation and quality legs at the same instant.
+
+    Both call `fetch_company` for the same symbol; without locking both saw an
+    empty cache and both ran the full four-or-five-call fetch, doubling the
+    heaviest leg's load on a rate-limited upstream. The delay is what makes the
+    race deterministic — with an instant stub the first caller would finish
+    before the second started and the bug would hide.
+    """
+    calls: list = []
+    _stub_company(monkeypatch, calls, delay=0.2)
+
+    results: list = []
+    threads = [threading.Thread(target=lambda: results.append(V.fetch_company("RACE")))
+               for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert calls == ["RACE"], f"one symbol, {len(calls)} upstream fetches"
+    assert len(results) == 4
+    assert all(r["price"] == 100.0 for r in results)
+    # Every caller still owns its own dict, even the ones served from the cache.
+    assert len({id(r) for r in results}) == 4
+
+
+def test_distinct_symbols_are_not_serialised_by_the_lock(monkeypatch):
+    """The lock is per key. A global one would make unrelated symbols queue.
+
+    Four symbols at 0.2s each: concurrent finishes near 0.2s, serialised near
+    0.8s. The 0.5s bound separates the two without being tight enough to flake.
+    """
+    calls: list = []
+    _stub_company(monkeypatch, calls, delay=0.2)
+
+    threads = [threading.Thread(target=V.fetch_company, args=(f"SYM{i}",))
+               for i in range(4)]
+    started = time.monotonic()
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    elapsed = time.monotonic() - started
+
+    assert sorted(calls) == ["SYM0", "SYM1", "SYM2", "SYM3"]
+    assert elapsed < 0.5, f"different symbols queued behind each other ({elapsed:.2f}s)"
+
+
+class _FakeFastInfo:
+    """yfinance's `FastInfo` semantics, reproduced exactly.
+
+    `keys()` is camel case; `__getitem__` translates snake case; `get()` tests
+    membership against `keys()` BEFORE translating, so it misses snake-case
+    lookups and silently returns the default. Written from the real class's own
+    source rather than from memory, because a fake that is merely dict-like
+    would pass whatever the code does and prove nothing.
+    """
+
+    _CC: ClassVar[dict] = {"lastPrice": 309.35, "shares": 14_594_180_000,
+                           "currency": "USD"}
+    _SC_TO_CC: ClassVar[dict] = {"last_price": "lastPrice"}
+
+    def keys(self):
+        return list(self._CC)
+
+    def __getitem__(self, key):
+        return self._CC[self._SC_TO_CC.get(key, key)]
+
+    def get(self, key, default=None):
+        return self[key] if key in self.keys() else default
+
+
+def test_fake_fast_info_reproduces_the_real_get_semantics():
+    """Guards the fake itself: if this stops matching yfinance, the test below
+    is measuring nothing."""
+    fi = _FakeFastInfo()
+    assert fi.get("last_price") is None      # the trap
+    assert fi["last_price"] == 309.35        # the way through
+    assert fi.get("shares") == 14_594_180_000   # unaffected: same spelling
+
+
+def test_price_comes_from_fast_info_not_the_info_scrape(monkeypatch):
+    """`fi.get("last_price")` returned None on every valuation.
+
+    The engine then always fell through to `info["currentPrice"]`, so the
+    primary source was dead code. `info` here deliberately carries NO quote
+    field: with the bug, price is NaN and the caller is pushed to the manual
+    rescue form for a figure fast_info was holding all along.
+    """
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.fast_info = _FakeFastInfo()
+            self.info = {"longName": "Test", "sector": "Technology",
+                         "industry": "Software"}      # no currentPrice
+            self.dividends = None
+
+        def __getattr__(self, name):
+            return pd.DataFrame()
+
+    monkeypatch.setattr(V.yf, "Ticker", FakeTicker)
+    data = V._fetch_company_uncached("TEST")
+
+    assert data["price"] == pytest.approx(309.35), "price did not come from fast_info"
+    assert data["shares"] == pytest.approx(14_594_180_000)
+    assert data["currency"] == "USD"
+
+
+def test_info_still_backfills_when_fast_info_has_no_price(monkeypatch):
+    """The fallback stays. fast_info is the primary source, not the only one."""
+    class Empty(_FakeFastInfo):
+        _CC: ClassVar[dict] = {}
+        def __getitem__(self, key):
+            raise KeyError(key)
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.fast_info = Empty()
+            self.info = {"currentPrice": 12.5, "sharesOutstanding": 1e6}
+            self.dividends = None
+
+        def __getattr__(self, name):
+            return pd.DataFrame()
+
+    monkeypatch.setattr(V.yf, "Ticker", FakeTicker)
+    data = V._fetch_company_uncached("TEST")
+
+    assert data["price"] == pytest.approx(12.5)
+    assert data["shares"] == pytest.approx(1e6)
+
+
+def test_the_daily_bar_close_beats_the_quote_endpoint(monkeypatch):
+    """Yahoo's quote and chart endpoints do not always agree.
+
+    Observed on a live AAPL request: the quote said 308.37 while the chart's
+    last bar said 309.35, at rest, in the same request. Flow and Trend read the
+    chart, so the valuation reading the quote put a price on the rail that no
+    other panel displayed. The bar close is canonical; the planted gap here is
+    the one that was actually measured.
+    """
+    bars = pd.DataFrame(
+        {"Close": [311.30, 309.35]},
+        index=pd.to_datetime(["2026-08-20", "2026-08-21"]),
+    )
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.fast_info = _FakeFastInfo()          # lastPrice = 308.37 below
+            self.fast_info._CC = dict(_FakeFastInfo._CC, lastPrice=308.37)
+            self.info = {"currentPrice": 308.37}
+            self.dividends = None
+
+        def history(self, period, auto_adjust=True):
+            return bars
+
+        def __getattr__(self, name):
+            return pd.DataFrame()
+
+    monkeypatch.setattr(V.yf, "Ticker", FakeTicker)
+    data = V._fetch_company_uncached("TEST")
+
+    assert data["price"] == pytest.approx(309.35), "the quote endpoint won"
+    assert data["price_source"] == "last daily close"
+    assert data["price_as_of"] == "2026-08-21"
+
+
+def test_the_quote_endpoint_still_backfills_when_there_are_no_bars(monkeypatch):
+    """History is preferred, not required. A listing with no usable bars must
+    still value rather than fall to the manual-rescue form."""
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.fast_info = _FakeFastInfo()
+            self.info = {}
+            self.dividends = None
+
+        def history(self, period, auto_adjust=True):
+            return pd.DataFrame()
+
+        def __getattr__(self, name):
+            return pd.DataFrame()
+
+    monkeypatch.setattr(V.yf, "Ticker", FakeTicker)
+    data = V._fetch_company_uncached("TEST")
+
+    assert data["price"] == pytest.approx(309.35)     # from fast_info
+    assert data["price_source"] == "quote endpoint (fast_info)"
+    assert data["price_as_of"] is None

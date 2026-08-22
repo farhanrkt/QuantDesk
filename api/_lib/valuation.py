@@ -18,6 +18,7 @@ arguments carrying the SAME default values the widgets had. Nothing else.
 from __future__ import annotations
 
 import datetime as dt
+import threading
 from typing import Optional
 
 import numpy as np
@@ -274,6 +275,26 @@ def fetch_risk_free_rate(market_code: str, fallback: float):
 
 _COMPANY_CACHE: dict[tuple[str, str], dict] = {}
 
+# Guards `_COMPANY_CACHE` and `_COMPANY_LOCKS` below. Held for dictionary
+# operations only, NEVER across a network call — a global lock spanning the
+# fetch would serialise unrelated symbols.
+_COMPANY_GUARD = threading.Lock()
+_COMPANY_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+
+
+def _company_lock(key: tuple[str, str]) -> threading.Lock:
+    """One lock per cache key, so two callers race only when they want the
+    same symbol."""
+    with _COMPANY_GUARD:
+        if len(_COMPANY_LOCKS) > 256 and key not in _COMPANY_LOCKS:
+            # Bound the table. A lock currently held stays alive in its holder's
+            # own frame; dropping it here only means a concurrent caller for
+            # that key would mint a fresh one and could double-fetch — the old
+            # behaviour, at a boundary reached once per 256 distinct symbols in
+            # one warm instance.
+            _COMPANY_LOCKS.clear()
+        return _COMPANY_LOCKS.setdefault(key, threading.Lock())
+
 
 def fetch_company(ticker: str) -> dict:
     """Statements, price and dividends for one symbol, cached for the day.
@@ -281,16 +302,78 @@ def fetch_company(ticker: str) -> dict:
     Four or five network calls sit behind this. The quality lens (`_lib/quality`)
     reads the SAME statements, so without a cache a confluence run would fetch
     every filing twice. Keyed by date because filings do not change intraday.
+
+    THE CALLER GETS ITS OWN DICT, and that is not defensive habit — it is the
+    fix for a cache-poisoning bug. `analyze()` overwrites `data["price"]` when
+    the user supplies a manual price through the rescue form. While this
+    returned the cached object itself, that assignment rewrote the cache: every
+    later request for the same symbol on the same warm instance — including
+    other people's, including the quality lens, which never asked for an
+    override — was valued at a price one user typed into a form. A plausible
+    wrong answer with no error, which is the failure mode `_lib/symbols.py`
+    exists to prevent, arriving through a different door.
+    The copy is SHALLOW, which is exactly the boundary that is needed: the
+    mutable-by-assignment fields are the top-level scalars, and the statement
+    frames underneath are read-only everywhere (`quality.analyze` and the
+    extractors here only index into them). Deep-copying three DataFrames per
+    call would buy nothing and cost real time.
+
+    CONCURRENT CALLERS FOR THE SAME SYMBOL FETCH ONCE, NOT TWICE. The docstring
+    above promised this and did not deliver it: `/api/confluence` launches the
+    valuation and quality legs simultaneously, so both looked at an empty cache
+    in the same instant, both missed, and both ran the full four-or-five-call
+    fetch — doubling the heaviest leg's load on a rate-limited scraper at the
+    exact moment the cache was meant to halve it. The second caller now waits
+    on the first and re-checks (double-checked locking) rather than repeating
+    its work.
     """
     key = (ticker.upper(), dt.date.today().isoformat())
+
     cached = _COMPANY_CACHE.get(key)
     if cached is not None:
-        return cached
-    result = _fetch_company_uncached(ticker)
-    if len(_COMPANY_CACHE) > 128:
-        _COMPANY_CACHE.clear()
-    _COMPANY_CACHE[key] = result
-    return result
+        return dict(cached)
+
+    with _company_lock(key):
+        # Re-read: whoever held this lock before us has already filled it in.
+        cached = _COMPANY_CACHE.get(key)
+        if cached is not None:
+            return dict(cached)
+
+        result = _fetch_company_uncached(ticker)
+        with _COMPANY_GUARD:
+            if len(_COMPANY_CACHE) > 128:
+                _COMPANY_CACHE.clear()
+            _COMPANY_CACHE[key] = result
+
+    return dict(result)
+
+
+def _fast_info(fast_info, key: str):
+    """Read one field from a yfinance `FastInfo`, which is NOT a dict.
+
+    `FastInfo.get()` looks the key up in `self.keys()` before translating it,
+    and `keys()` is CAMEL CASE — `lastPrice`, not `last_price`. Subscripting
+    translates snake case; `.get()` does not. So `fast_info.get("last_price")`
+    silently returns the default while `fast_info["last_price"]` returns 309.35.
+
+    That is not a hypothetical. `.get("last_price")` was returning None on every
+    single valuation, so the primary price source was dead and the engine always
+    fell through to `info["currentPrice"]`. Two consequences, both quiet: the
+    price depended on the slow `.info` scrape carrying a quote field, and on a
+    thin listing where it does not — precisely the IDX names the manual-rescue
+    form exists for — the user was sent to that form for a price `fast_info`
+    was holding all along.
+
+    `shares` and `currency` were unaffected only by luck: those two keys happen
+    to be spelled identically in both conventions.
+
+    Subscript-and-catch is the idiom that actually works, and it is the one
+    `technical.fetch_currency` already uses.
+    """
+    try:
+        return fast_info[key]
+    except Exception:
+        return None
 
 
 def _fetch_company_uncached(ticker: str) -> dict:
@@ -310,9 +393,9 @@ def _fetch_company_uncached(ticker: str) -> dict:
     if tk is not None:
         try:
             fi = tk.fast_info
-            price = _safe_float(fi.get("last_price"))
-            shares = _safe_float(fi.get("shares"))
-            currency = fi.get("currency")
+            price = _safe_float(_fast_info(fi, "last_price"))
+            shares = _safe_float(_fast_info(fi, "shares"))
+            currency = _fast_info(fi, "currency")
         except Exception:
             pass
 
@@ -320,6 +403,38 @@ def _fetch_company_uncached(ticker: str) -> dict:
         price = _safe_float(info.get("currentPrice"), _safe_float(info.get("regularMarketPrice")))
     if not np.isfinite(shares):
         shares = _safe_float(info.get("sharesOutstanding"))
+
+    # THE PRICE EVERY OTHER LENS DISPLAYS WINS.
+    #
+    # The two figures above come from Yahoo's QUOTE endpoint. The technical and
+    # flow lenses read its CHART endpoint, and the two do not always agree: on
+    # one observed AAPL request the quote said 308.37 while the chart's last bar
+    # said 309.35, at rest, in the same request. The rail then reported how far
+    # the market price sat from fair value using a number no other panel on the
+    # page displayed — one ticker in the header, two prices underneath, and no
+    # error. That is the shape of the bug `_lib/symbols.py` exists to prevent.
+    #
+    # So the last daily bar close is canonical and the quote is the fallback,
+    # not the other way round. This costs nothing in freshness: during a session
+    # the daily series carries a forming bar whose close IS the last trade, and
+    # outside one the bar close is the official close — which is the right
+    # anchor for a valuation regardless. It costs one extra call, cached for the
+    # day with everything else here, and it buys the bar's DATE, which is the
+    # only thing in the payload that can say how old this reading is.
+    price_source = "quote endpoint (fast_info)" if np.isfinite(price) else None
+    price_as_of = None
+    if tk is not None:
+        try:
+            bars = tk.history(period="5d", auto_adjust=True)
+            closes = bars["Close"].dropna() if bars is not None and not bars.empty else None
+            if closes is not None and len(closes):
+                bar_close = _safe_float(closes.iloc[-1])
+                if np.isfinite(bar_close) and bar_close > 0:
+                    price = bar_close
+                    price_source = "last daily close"
+                    price_as_of = closes.index[-1].strftime("%Y-%m-%d")
+        except Exception:
+            pass
 
     def _statement(attr):
         if tk is None:
@@ -365,6 +480,8 @@ def _fetch_company_uncached(ticker: str) -> dict:
         "net_income_info": _safe_float(info.get("netIncomeToCommon")),
         "ttm_dividend": ttm_dividend,
         "dividend_history": div_history,
+        "price_source": price_source,
+        "price_as_of": price_as_of,
         "income": _statement("income_stmt"),
         "balance": _statement("balance_sheet"),
         "cashflow": _statement("cashflow"),
@@ -815,6 +932,9 @@ def analyze(
 
     manual_price_f = _safe_float(manual_price)
     if np.isfinite(manual_price_f) and manual_price_f > 0:
+        # Safe to write only because `fetch_company` hands back a per-caller
+        # copy. If that copy is ever removed, this line silently rewrites the
+        # day's cached price for this symbol for every other request.
         data["price"] = manual_price_f
 
     if not data["ok"] or not np.isfinite(data["price"]):
@@ -1438,6 +1558,13 @@ def analyze(
         "rateName": RATE_NAME,
         "price": float(price),
         "priceLabel": fmt_price(price, market),
+        # Where this price came from and which bar it belongs to. On the panel
+        # so a reader can tell a Friday close from a live quote rather than
+        # assuming the number is current.
+        "priceSource": ("manual entry" if np.isfinite(manual_price_f) and manual_price_f > 0
+                        else data.get("price_source")),
+        "priceAsOf": (None if np.isfinite(manual_price_f) and manual_price_f > 0
+                      else data.get("price_as_of")),
         "discountRate": float(discount_rate),
         "riskFree": float(rf_rate),
         "riskFreeSource": rf_source,

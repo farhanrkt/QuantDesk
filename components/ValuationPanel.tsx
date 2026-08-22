@@ -115,7 +115,9 @@ export function ValuationPanel({
       </Card>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label="Market price" value={data.priceLabel} />
+        <Stat label="Market price" value={data.priceLabel}
+              sub={data.priceAsOf ? `close of ${data.priceAsOf}`
+                                  : data.priceSource ?? undefined} />
         <ExplainedStat label="Model's middle estimate" value={mc.p50Label}
                        explain={ex.upside}
                        tone={(mc.upside ?? 0) >= 0 ? "text-acc" : "text-dist"}

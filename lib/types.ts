@@ -483,6 +483,10 @@ export interface ValuationResponse {
   market: { code: string; name: string; symbol: string };
   engine: "DCF" | "DDM" | "RI"; autoEngine: "DCF" | "DDM"; routeReason: string;
   rateName: string; price: number; priceLabel: string;
+  /** Which Yahoo endpoint the price came from, and the bar it belongs to.
+   *  The valuation used to read the quote endpoint while every other lens
+   *  read the chart endpoint; they do not always agree. */
+  priceSource: string | null; priceAsOf: string | null;
   discountRate: number; riskFree: number; riskFreeSource: string;
   erp: number; beta: number;
   /** Vasicek-shrunk beta with the error bars that justify the shrinkage. */
