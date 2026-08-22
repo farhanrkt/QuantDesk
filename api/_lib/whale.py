@@ -76,6 +76,8 @@ except ImportError as exc:  # pragma: no cover
         "yfinance is required. Install with `pip install -r requirements.txt`."
     ) from exc
 
+from . import symbols
+
 try:
     from sklearn.ensemble import IsolationForest
     from sklearn.preprocessing import StandardScaler
@@ -280,8 +282,7 @@ class WhaleTracker:
 
         if history is None or history.empty:
             raise DataFetchError(
-                f"No data found for '{ticker}'. Check the symbol "
-                "(Indonesian stocks need a '.JK' suffix, e.g. BBCA.JK)."
+                f"No data found for '{ticker}'. {symbols.hint(ticker)}"
             )
 
         required = {"High", "Low", "Close", "Volume"}
@@ -308,7 +309,7 @@ class WhaleTracker:
             df["Open"] = df["Close"].shift(1)
 
         # --- basic returns / relative volume ---
-        df["Price_Change_%"] = df["Close"].pct_change() * 100
+        df["Price_Change_%"] = df["Close"].pct_change(fill_method=None) * 100
         df["Abs_Price_Change_%"] = df["Price_Change_%"].abs()
         rolling_vol = df["Volume"].rolling(w, min_periods=1).mean()
         df["Volume_vs_Avg"] = df["Volume"] / rolling_vol.replace(0, np.nan)   # RVOL

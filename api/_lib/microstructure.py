@@ -74,7 +74,7 @@ def amihud_illiquidity(frame: pd.DataFrame, window: int = 21,
     the usable signal, which is how Amihud (2002) uses it.
     """
     close = _positive(frame["Close"].astype("float64"))
-    returns = close.pct_change().abs()
+    returns = close.pct_change(fill_method=None).abs()
     dollar_volume = (close * frame["Volume"].astype("float64")).replace(0.0, np.nan)
     daily = (returns / dollar_volume) * scale
     return daily.rolling(window, min_periods=max(2, window // 2)).mean()
@@ -368,7 +368,7 @@ def liquidity_profile(frame: pd.DataFrame, window: int = 21) -> dict:
 
     close = frame["Close"].astype("float64")
     dollar_volume = (close * frame["Volume"].astype("float64")).tail(window)
-    latest_move = abs(float(close.pct_change().iloc[-1])) if len(close) > 1 else None
+    latest_move = abs(float(close.pct_change(fill_method=None).iloc[-1])) if len(close) > 1 else None
 
     move_vs_spread = None
     if warning_spread and latest_move is not None:

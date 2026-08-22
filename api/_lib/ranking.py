@@ -355,7 +355,13 @@ def price_signals(frame: pd.DataFrame,
                        if year_high > 0 else None)
 
     # --- volatility and drawdown, over the same year for every name --------
-    returns = window_close.pct_change().dropna()
+    # `fill_method=None` everywhere returns are computed, and it is a
+    # correctness choice rather than a deprecation fix. The pandas default pads
+    # a missing price forward, which FABRICATES a 0% return on the gap day and
+    # then dumps the entire real move into the next one — understating
+    # volatility, mistiming drawdowns, and handing the anomaly detector a
+    # wrong-sized single-day move. Propagating NaN and dropping it is honest.
+    returns = window_close.pct_change(fill_method=None).dropna()
     out["lowVolatility"] = (_finite(returns.std(ddof=1) * np.sqrt(TRADING_DAYS))
                             if len(returns) > 20 else None)
     profile = lt.drawdown_profile(window_close)
@@ -408,10 +414,15 @@ def signal_correlation(rows: list[dict]) -> dict:
     opinions, and this table is what lets a reader see that rather than take the
     caveat on trust.
     """
+    # `columns=` is load-bearing: pd.DataFrame([]) has NO columns, so the
+    # membership test below raised KeyError on an empty scan rather than
+    # reporting that there was nothing to measure. Not reachable from
+    # `rank_universe`, which returns early on an empty universe — but a latent
+    # crash in a function that is otherwise safe to call with anything.
     frame = pd.DataFrame([
         {key: (row["signals"].get(key) or {}).get("percentile") for key in SIGNAL_KEYS}
         for row in rows
-    ])
+    ], columns=SIGNAL_KEYS)
     usable = [key for key in SIGNAL_KEYS if frame[key].notna().sum() >= 5]
     if len(usable) < 2:
         return {"available": False,

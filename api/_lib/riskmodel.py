@@ -174,7 +174,7 @@ def _index_returns(market_code: str, period: str = "2y") -> Optional[pd.Series]:
     close = history["Close"].dropna()
     if getattr(close.index, "tz", None) is not None:
         close.index = close.index.tz_localize(None)
-    returns = close.pct_change().dropna()
+    returns = close.pct_change(fill_method=None).dropna()
     returns.index = pd.to_datetime(returns.index).normalize()
 
     _INDEX_CACHE.clear()          # only ever hold the current day
@@ -261,7 +261,7 @@ def estimate_beta(price_history: pd.DataFrame, market_code: str = "US",
     close = price_history["Close"].astype("float64").dropna()
     if getattr(close.index, "tz", None) is not None:
         close.index = close.index.tz_localize(None)
-    stock_returns = close.pct_change().dropna()
+    stock_returns = close.pct_change(fill_method=None).dropna()
     stock_returns.index = pd.to_datetime(stock_returns.index).normalize()
 
     paired = pd.concat([stock_returns, market_returns], axis=1, join="inner").dropna()

@@ -161,7 +161,7 @@ def risk_metrics(close: pd.Series, risk_free: float = 0.0) -> dict:
     for a long-horizon holder is the most decision-relevant ratio of the three.
     """
     prices = close.dropna()
-    returns = prices.pct_change().dropna()
+    returns = prices.pct_change(fill_method=None).dropna()
     if len(returns) < 20:
         return {"usable": False}
 
@@ -275,7 +275,7 @@ def monthly_seasonality(close: pd.Series) -> dict:
     if len(prices) < TRADING_DAYS:
         return {"usable": False, "months": []}
 
-    monthly = prices.resample("ME").last().pct_change().dropna()
+    monthly = prices.resample("ME").last().pct_change(fill_method=None).dropna()
     if monthly.empty:
         return {"usable": False, "months": []}
 
@@ -453,8 +453,8 @@ def relative_strength(close: pd.Series, benchmark: pd.Series,
     x = np.arange(len(recent), dtype=float)
     slope = float(np.polyfit(x, recent.to_numpy(), 1)[0]) if len(recent) > 10 else np.nan
 
-    stock_returns = joined["stock"].pct_change().dropna()
-    index_returns = joined["benchmark"].pct_change().dropna()
+    stock_returns = joined["stock"].pct_change(fill_method=None).dropna()
+    index_returns = joined["benchmark"].pct_change(fill_method=None).dropna()
     correlation = float(stock_returns.corr(index_returns))
 
     return {

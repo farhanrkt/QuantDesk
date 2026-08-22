@@ -143,8 +143,8 @@ def run_event_study(price_history: pd.DataFrame, market_history: pd.DataFrame,
         return {"events": 0, "horizons": {}, "byDirection": {}, "usable": False,
                 "reason": "No events to study."}
 
-    stock = price_history["Close"].astype("float64").pct_change()
-    market = market_history["Close"].astype("float64").pct_change()
+    stock = price_history["Close"].astype("float64").pct_change(fill_method=None)
+    market = market_history["Close"].astype("float64").pct_change(fill_method=None)
     market = market.reindex(stock.index)
 
     positions = {date: i for i, date in enumerate(stock.index)}

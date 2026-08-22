@@ -8,6 +8,8 @@ way, agreeing would prove nothing.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -459,3 +461,61 @@ def test_hurst_estimate_declines_on_a_series_it_cannot_read():
     assert flat["hurst"] is None
     short = I.hurst_estimate(pd.Series(np.linspace(100, 110, 50)))
     assert short["verdict"] == "unavailable"
+
+
+# --------------------------------------------------------------------------- #
+# NaN policy on returns
+# --------------------------------------------------------------------------- #
+def test_a_missing_price_never_becomes_a_zero_return():
+    """pandas' pct_change default pads a gap forward, which FABRICATES a 0%
+    return on the missing day and dumps the real move into the next one.
+
+    Every returns calculation in the app passes `fill_method=None`, so both the
+    gap and the return spanning it come back NaN and get dropped. Asserted here rather than trusted,
+    because the wrong behaviour is silent: it understates volatility, mistimes
+    drawdowns, and hands the anomaly detector a single-day move twice its true
+    size. Written against the failure, not against the fix.
+    """
+    import numpy as np
+    import pandas as pd
+
+    from _lib import longterm as L
+    from _lib import ranking as R
+
+    prices = pd.Series([100.0, np.nan, 110.0, 110.0, 110.0])
+
+    with warnings.catch_warnings():                    # the default is deprecated
+        warnings.simplefilter("ignore", FutureWarning)
+        padded = prices.pct_change()                   # what pandas does by default
+    honest = prices.pct_change(fill_method=None)       # what the app asks for
+
+    # The default invents a 0% day where the price was MISSING, then reports the
+    # whole 10% move on the following day as though it happened in one session.
+    assert padded.iloc[1] == 0.0
+    assert padded.iloc[2] == pytest.approx(0.10)
+
+    # `fill_method=None` refuses both. The gap is unknown, and so is the return
+    # spanning it — you cannot say when a move happened across missing data, and
+    # the app would rather report nothing than pick a day for it.
+    assert np.isnan(honest.iloc[1])
+    assert np.isnan(honest.iloc[2])
+    assert list(honest.dropna()) == [0.0, 0.0], "only the days it can actually see"
+
+    # The engines that consume returns must not raise on an internal gap. Date
+    # indexed, because that is these functions' documented contract — `cagr`
+    # measures elapsed time from the index itself.
+    values = np.r_[np.linspace(100, 120, 300), [np.nan], np.linspace(120, 130, 60)]
+    gapped = pd.Series(values, index=pd.bdate_range("2023-01-02", periods=len(values)))
+    assert L.risk_metrics(gapped) is not None
+    assert L.drawdown_profile(gapped)["usable"] is True
+    assert R.percentile_ranks([1.0, 2.0, np.nan], 1)[2] is None
+
+
+def test_signal_correlation_survives_an_empty_scan():
+    """Not reachable from rank_universe, which returns early — but the function
+    is otherwise safe to call with anything, and it used to raise KeyError."""
+    from _lib import ranking as R
+
+    result = R.signal_correlation([])
+    assert result["available"] is False
+    assert "reason" in result

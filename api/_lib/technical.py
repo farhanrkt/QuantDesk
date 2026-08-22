@@ -35,6 +35,7 @@ from scipy.signal import argrelextrema
 
 from . import explain as ex
 from . import indicators as ind
+from . import symbols
 from . import swing
 from . import longterm as lt
 from . import riskmodel
@@ -653,9 +654,7 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
     data = fetch_data(ticker, start_date, end_date)
     if data.empty:
         raise TechnicalError(
-            f"No market data came back for '{ticker}'. Check the spelling, add the pair "
-            "suffix for crypto (BTC-USD) or the exchange suffix for non-US listings, "
-            "then try a wider date range."
+            f"No market data came back for '{ticker}'. {symbols.hint(ticker)}"
         )
 
     data = calculate_indicators(data)

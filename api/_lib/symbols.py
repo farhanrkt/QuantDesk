@@ -70,3 +70,35 @@ def market_of(symbol: str) -> str:
         if suffix and out.endswith(suffix):
             return code
     return DEFAULT_MARKET
+
+
+def hint(symbol: str) -> str:
+    """A specific next thing to try when a symbol returned no data.
+
+    WHY THIS IS NOT JUST "CHECK THE SPELLING". A US class share is written
+    BRK.B or BF.B everywhere a human reads one, and Yahoo spells it BRK-B. The
+    dotted form passes this app's ticker validation — it looks exactly like an
+    exchange suffix — so the request goes through, finds nothing, and comes back
+    telling the reader to check a spelling that was never wrong. Verified live:
+    BRK-B and BF-B both return data, BRK.B and BRK.A do not.
+
+    The app does NOT rewrite the symbol on the reader's behalf. `symbols.py`
+    exists because silently reinterpreting what someone typed is how this
+    codebase once valued one company while charting another; suggesting a
+    correction and letting them retype it keeps the resolution visible.
+    """
+    raw = (symbol or "").strip().upper()
+    if not raw:
+        return "Enter a ticker symbol."
+
+    base, _, suffix = raw.rpartition(".")
+    # A single trailing letter after a dot is a share class, not an exchange.
+    # Real exchange suffixes are two or more letters (.JK, .L, .TO — .L being the
+    # exception, which is why the class-share test also requires a short base).
+    if base and len(suffix) == 1 and suffix.isalpha():
+        return (f"US class shares use a hyphen on this data source: try "
+                f"{base}-{suffix} rather than {raw}.")
+    if "." not in raw and "-" not in raw:
+        return ("Non-US listings need their exchange suffix — Indonesian tickers "
+                "end in .JK. Crypto takes a pair, such as BTC-USD.")
+    return "Check the symbol, or try a wider date range."

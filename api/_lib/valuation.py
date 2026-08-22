@@ -939,8 +939,8 @@ def analyze(
 
     if not data["ok"] or not np.isfinite(data["price"]):
         raise ValuationError(
-            f"No usable market data returned for '{symbol}'. Check the symbol, or supply "
-            "the base figures yourself in manual input mode.",
+            f"No usable market data returned for '{symbol}'. {symbols.hint(symbol)} "
+            f"Or supply the base figures yourself in manual input mode.",
             manual_required=True,
             missing=["price"],
             engine=engine,

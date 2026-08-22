@@ -7,7 +7,8 @@
     "dev:api": "uvicorn index:app --app-dir api --reload --port 8000",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint . --ext .js,.jsx,.ts,.tsx"
+    "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+    "check:frontend": "node scripts/check_frontend.mjs"
   },
   "dependencies": {
     "class-variance-authority": "^0.7.1",

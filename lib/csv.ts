@@ -11,10 +11,30 @@
 
 type Cell = string | number | boolean | null | undefined;
 
-/** RFC 4180: quote when the value contains a delimiter, quote or newline. */
+/**
+ * RFC 4180 quoting, plus a guard against spreadsheet formula injection.
+ *
+ * A cell whose text begins with `=`, `+`, `-`, `@`, or a leading tab is
+ * interpreted as a FORMULA by Excel, Sheets and Numbers rather than as text.
+ * This app's ticker pattern deliberately allows `=` — FX symbols look like
+ * `EURUSD=X` — so `=HYPERLINK` passes validation, reaches the Ticker column of
+ * the screener and ranking exports, and executes when the file is opened.
+ *
+ * THE GUARD IS RESTRICTED TO STRINGS, WHICH IS THE WHOLE DIFFICULTY. Numeric
+ * cells legitimately begin with a minus sign, and prefixing those would turn
+ * every negative return in every export into text that no spreadsheet will sum.
+ * A `number` is therefore never escaped; only text that arrived as text is.
+ */
+const FORMULA_LEAD = /^[=+\-@\t\r]/;
+
 function escapeCell(value: Cell): string {
   if (value === null || value === undefined) return "";
-  const text = String(value);
+  let text = String(value);
+  if (typeof value === "string" && FORMULA_LEAD.test(text)) {
+    // A leading apostrophe is the conventional "treat as text" marker and is
+    // not displayed by the spreadsheet that consumes it.
+    text = `'${text}`;
+  }
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 

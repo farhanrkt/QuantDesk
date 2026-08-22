@@ -46,6 +46,12 @@ jobs:
         run: npx tsc --noEmit
       - name: lint
         run: npm run lint
+      - name: frontend logic
+        # The Python suite cannot reach the pure functions that only run in a
+        # browser — `agreementOf` decides the confluence rail's headline claim
+        # and shipped untested. Compiles them with the tsc already in the tree
+        # and asserts on bare node; no test framework, no new dependency.
+        run: npm run check:frontend
       - name: build
         run: npm run build
 
