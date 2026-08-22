@@ -4,15 +4,16 @@ import {
   Bar, BarChart, CartesianGrid, ReferenceArea, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { CornerUpLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
-import { ExplainedStat, useDetail } from "@/components/ui/explain";
+import { ExplainedStat, TONE_TEXT, useDetail } from "@/components/ui/explain";
 import { DownloadButton } from "@/components/ui/controls";
 import { ValuationControls } from "@/components/ValuationControls";
 import type { ValuationOptions } from "@/lib/api";
 import type { ExplainMap, ValuationResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
-import { num, pct, signedPct, verdictLabel } from "@/lib/utils";
+import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
 
 const DCF = "#E8B44C";
 const DDM = "#A78BFA";
@@ -128,6 +129,49 @@ export function ValuationPanel({
         <ExplainedStat explain={ex.probUndervalued} />
         <ExplainedStat explain={ex.terminalShare} />
       </div>
+
+      {/* THE REVERSE DCF, AND IT SITS ABOVE THE FORWARD ONE ON PURPOSE.
+          Run forwards the model says "this is worth X" — an answer whose whole
+          width comes from assumptions the reader has no basis to judge, and
+          which invites being read as a price target. Run backwards it says
+          "the market is assuming Y% a year", which is a claim about the world
+          a reader can agree or disagree with using things they know about the
+          business and the model does not. That is the question worth putting
+          first. */}
+      {ex.impliedGrowth && (
+        <Card accent={accent}>
+          <CardBody className="py-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="eyebrow mb-1.5 flex items-center gap-1.5">
+                  <CornerUpLeft aria-hidden className="h-3 w-3" />
+                  Working the model backwards
+                </div>
+                <p className="text-[0.95rem] leading-relaxed text-chalk/90">
+                  {ex.impliedGrowth.reading}
+                </p>
+                <p className="mt-1.5 text-[0.78rem] leading-relaxed text-ash">
+                  {ex.impliedGrowth.action}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="eyebrow mb-1">Implied growth</div>
+                <div className={cn("num text-2xl font-semibold leading-none",
+                                   TONE_TEXT[ex.impliedGrowth.tone])}>
+                  {ex.impliedGrowth.valueText}
+                </div>
+                <div className="mt-1 text-[0.65rem] text-ash">
+                  a year, for five years
+                </div>
+                <div className="mt-2 border-t border-rule pt-2 text-[0.65rem] text-ash">
+                  you assumed{" "}
+                  <span className="num text-chalk/80">{pct(data.baseCase.assumedGrowth)}</span>
+                </div>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       <Card accent={accent}>
         <CardHeader>

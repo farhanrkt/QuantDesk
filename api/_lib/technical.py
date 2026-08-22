@@ -30,11 +30,11 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
 from scipy.signal import argrelextrema
 
 from . import explain as ex
 from . import indicators as ind
+from . import market_data
 from . import symbols
 from . import swing
 from . import longterm as lt
@@ -122,58 +122,18 @@ def _flatten_columns(frame: pd.DataFrame, ticker: str) -> pd.DataFrame:
 
 
 def fetch_data(ticker: str, start: dt.date, end: dt.date) -> pd.DataFrame:
-    symbol = ticker.strip().upper()
-    if not symbol:
-        return pd.DataFrame()
-    try:
-        raw = yf.download(
-            symbol,
-            start=start,
-            end=end + dt.timedelta(days=1),
-            interval="1d",
-            auto_adjust=True,
-            actions=False,
-            progress=False,
-            threads=False,
-        )
-    except Exception:
-        return pd.DataFrame()
-    if raw is None or raw.empty:
-        return pd.DataFrame()
+    """Daily history for the range, on the shared OHLCV contract.
 
-    frame = _flatten_columns(raw, symbol)
-    available = [column for column in OHLCV_COLUMNS if column in frame.columns]
-    if not {"Open", "High", "Low", "Close"}.issubset(set(available)):
-        return pd.DataFrame()
-
-    frame = frame.loc[:, available].copy()
-    frame.index = pd.to_datetime(frame.index)
-    if getattr(frame.index, "tz", None) is not None:
-        frame.index = frame.index.tz_localize(None)
-    frame = frame[~frame.index.duplicated(keep="last")].sort_index()
-
-    for column in available:
-        frame[column] = pd.to_numeric(frame[column], errors="coerce")
-    if "Volume" not in frame.columns:
-        frame["Volume"] = 0.0
-
-    frame[["Open", "High", "Low", "Close"]] = frame[["Open", "High", "Low", "Close"]].ffill()
-    frame["Volume"] = frame["Volume"].fillna(0.0)
-    frame = frame.dropna(subset=["Open", "High", "Low", "Close"])
-    frame = frame[frame["Close"] > 0]
-    frame.index.name = "Date"
-    return frame
+    Returns an EMPTY frame rather than None where nothing came back, because
+    `analyze` below branches on `.empty` and every caller of this function has
+    always done so.
+    """
+    frame = market_data.ohlcv(ticker, start=start, end=end)
+    return frame if frame is not None else pd.DataFrame()
 
 
 def fetch_currency(ticker: str) -> str:
-    try:
-        fast_info = yf.Ticker(ticker).fast_info
-        currency = fast_info["currency"] if "currency" in fast_info else None
-        if isinstance(currency, str) and currency:
-            return currency.upper()
-    except Exception:
-        return "USD"
-    return "USD"
+    return market_data.currency(ticker)
 
 
 def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:

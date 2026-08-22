@@ -103,6 +103,7 @@ SAMPLES: dict[str, tuple] = {
     "upside": (-0.64, {"engine": "DCF", "price_label": "$311.30", "fair_label": "$112.00"}),
     "probUndervalued": (0.04, {"iterations": 10000}),
     "terminalShare": (0.72, {}),
+    "impliedGrowth": (0.18, {"assumedGrowth": 0.10, "engine": "DCF"}),
     "discountRate": (0.089, {"rate_name": "Cost of equity", "risk_free": 0.042, "beta": 1.15}),
     "valuationSpread": (0.55, {"p25_label": "$96", "p75_label": "$150"}),
     "riskReward": (2.4, {"target_label": "Next resistance (3 prior turns)"}),
@@ -210,6 +211,7 @@ HIGHER_IS_BETTER = {
 LOWER_IS_BETTER = {
     "signalOverlap": [0.95, 0.60, 0.20],
     "terminalShare": [0.95, 0.80, 0.65, 0.40],
+    "impliedGrowth": [0.50, 0.25, 0.15, 0.06, 0.01],
     "valuationSpread": [1.60, 0.90, 0.45, 0.15],
     # The list that catches the backwards-colour bug. Values run BEST to WORST,
     # so the tone must still be non-increasing in quality — the assertion is

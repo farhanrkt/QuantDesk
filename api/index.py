@@ -52,14 +52,13 @@ sys.path.append(str(Path(__file__).parent))
 from typing import Optional
 
 import numpy as np
-import yfinance as yf
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from _lib import (accumulation, eventstudy, explain, microstructure, news,
-                  quality, ranking, riskmodel, symbols, technical, universes,
-                  valuation)
+from _lib import (accumulation, eventstudy, explain, market_data, microstructure,
+                  news, quality, ranking, riskmodel, symbols, technical,
+                  universes, valuation)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -952,43 +951,31 @@ def event_study(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     index_symbol = riskmodel.MARKET_INDEX.get(market.upper(), "^GSPC")
-    try:
-        market_history = yf.Ticker(index_symbol).history(period=period, auto_adjust=True)
-    except Exception:
-        market_history = None
-    if market_history is None or market_history.empty:
+    market_history = market_data.index_history(index_symbol, period)
+    if market_history is None:
         raise HTTPException(
             status_code=503,
             detail=f"Could not fetch {index_symbol}, so abnormal returns cannot "
                    f"be measured against a market model.",
         )
-    if getattr(market_history.index, "tz", None) is not None:
-        market_history.index = market_history.index.tz_localize(None)
 
-    prices = result.data.copy()
-    if getattr(prices.index, "tz", None) is not None:
-        prices.index = prices.index.tz_localize(None)
-    events = result.anomalies.copy()
-    if getattr(events.index, "tz", None) is not None:
-        events.index = events.index.tz_localize(None)
-
-    study = eventstudy.run_event_study(prices, market_history, events)
+    # No timezone stripping here any more. Three frames used to be localised by
+    # hand at this call site because the flow engine handed back whatever
+    # yfinance returned; `market_data.normalise` now guarantees a tz-naive index
+    # on everything, so alignment is the boundary's job rather than the route's.
+    study = eventstudy.run_event_study(result.data, market_history, result.anomalies)
 
     # Bernard & Thomas: an anomaly beside an earnings print has a benign
     # explanation, and the drift afterwards is a documented effect rather than
     # anyone's footprint.
-    try:
-        earnings = yf.Ticker(symbol).earnings_dates
-        earnings_index = list(earnings.index) if earnings is not None else []
-    except Exception:
-        earnings_index = []
-    pead = eventstudy.tag_earnings_proximity(events, earnings_index)
+    pead = eventstudy.tag_earnings_proximity(
+        result.anomalies, market_data.earnings_dates(symbol))
 
     return ok({
         "ticker": symbol,
         "benchmark": index_symbol,
         "period": period,
-        "anomalies": len(events),
+        "anomalies": len(result.anomalies),
         "study": study,
         "earningsProximity": pead,
     })

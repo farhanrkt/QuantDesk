@@ -72,8 +72,8 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
 
+from . import market_data
 from . import indicators as ind
 from . import longterm as lt
 from . import riskmodel
@@ -230,83 +230,10 @@ def _finite(value) -> Optional[float]:
 # ============================================================================ #
 # Batch fetching
 # ============================================================================ #
-def _normalise(frame: pd.DataFrame) -> Optional[pd.DataFrame]:
-    """One symbol's slice of a batch download, cleaned to the OHLCV contract."""
-    if frame is None or frame.empty:
-        return None
-    needed = {"Open", "High", "Low", "Close"}
-    if not needed.issubset(set(frame.columns)):
-        return None
-
-    out = frame.loc[:, [c for c in ("Open", "High", "Low", "Close", "Volume")
-                        if c in frame.columns]].copy()
-    out.index = pd.to_datetime(out.index)
-    if getattr(out.index, "tz", None) is not None:
-        out.index = out.index.tz_localize(None)
-    out = out[~out.index.duplicated(keep="last")].sort_index()
-    for column in out.columns:
-        out[column] = pd.to_numeric(out[column], errors="coerce")
-    if "Volume" not in out.columns:
-        out["Volume"] = 0.0
-    out[["Open", "High", "Low", "Close"]] = out[["Open", "High", "Low", "Close"]].ffill()
-    out["Volume"] = out["Volume"].fillna(0.0)
-    out = out.dropna(subset=["Open", "High", "Low", "Close"])
-    out = out[out["Close"] > 0]
-    return out if not out.empty else None
-
-
-def batch_download(symbols: list[str], start: dt.date, end: dt.date,
-                   chunk_size: int = CHUNK_SIZE) -> dict[str, pd.DataFrame]:
-    """Daily history for many symbols in as few upstream calls as possible.
-
-    THIS IS THE WHOLE UNLOCK for the breadth tier. The per-symbol path costs one
-    HTTP round trip each; this costs one per chunk. A symbol that fails to fetch
-    is simply absent from the result — a scan should not abort because one name
-    was delisted last week.
-    """
-    frames: dict[str, pd.DataFrame] = {}
-    unique = list(dict.fromkeys(s.strip().upper() for s in symbols if s and s.strip()))
-
-    for position in range(0, len(unique), chunk_size):
-        chunk = unique[position:position + chunk_size]
-        try:
-            raw = yf.download(
-                chunk,
-                start=start,
-                end=end + dt.timedelta(days=1),
-                interval="1d",
-                auto_adjust=True,
-                actions=False,
-                progress=False,
-                group_by="ticker",
-                threads=True,
-            )
-        except Exception:
-            continue
-        if raw is None or raw.empty:
-            continue
-
-        # DO NOT special-case a one-symbol chunk on the assumption it arrives
-        # flat. With `group_by="ticker"` yfinance returns a two-level column
-        # index even for a single ticker, so the "obvious" shortcut handed a
-        # MultiIndex frame to the normaliser, failed its column check and
-        # dropped the symbol without a word. That silently lost the benchmark
-        # index on every scan, and would lose the last chunk of any universe
-        # whose length is one more than a multiple of the chunk size. Branch on
-        # the SHAPE that came back, never on the length of the request.
-        if isinstance(raw.columns, pd.MultiIndex):
-            present = set(raw.columns.get_level_values(0))
-            for symbol in chunk:
-                if symbol not in present:
-                    continue
-                cleaned = _normalise(raw[symbol])
-                if cleaned is not None:
-                    frames[symbol] = cleaned
-        elif len(chunk) == 1:
-            cleaned = _normalise(raw)
-            if cleaned is not None:
-                frames[chunk[0]] = cleaned
-    return frames
+# Fetching and normalisation live in `_lib/market_data.py`. This module used to
+# own a private `_normalise` that was a near-copy of the technical lens's, which
+# is exactly the duplication one boundary module exists to remove.
+batch_download = market_data.ohlcv_batch
 
 
 # ============================================================================ #

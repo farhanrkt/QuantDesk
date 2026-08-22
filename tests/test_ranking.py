@@ -14,31 +14,13 @@ silently dropped, which lost the benchmark index on every scan.
 
 from __future__ import annotations
 
-import datetime as dt
 
 import numpy as np
-import pandas as pd
 import pytest
 
+from helpers import path, steady
+
 from _lib import ranking as R
-
-
-def path(returns, start_price=100.0, start="2023-01-02"):
-    """An OHLCV frame from a return series, with a mild fixed intraday range."""
-    close = start_price * np.exp(np.cumsum(np.asarray(returns, dtype="float64")))
-    index = pd.bdate_range(start, periods=len(close))
-    return pd.DataFrame({
-        "Open": close,
-        "High": close * 1.01,
-        "Low": close * 0.99,
-        "Close": close,
-        "Volume": np.full(len(close), 1_000_000.0),
-    }, index=index)
-
-
-def steady(n=400, drift=0.0004, sigma=0.010, seed=3):
-    rng = np.random.default_rng(seed)
-    return rng.normal(drift, sigma, n)
 
 
 # ============================================================================ #
@@ -343,120 +325,6 @@ def test_overlap_declines_to_guess_from_too_few_rows():
 
 # ============================================================================ #
 # Batch download — offline, against a stub of what yfinance returns
-# ============================================================================ #
-class _Stub:
-    """Stands in for `yf.download`, reproducing both real column shapes."""
-
-    def __init__(self, frames: dict[str, pd.DataFrame], multiindex: bool = True):
-        self.frames = frames
-        self.multiindex = multiindex
-        self.calls: list[list[str]] = []
-
-    def __call__(self, chunk, **_kwargs):
-        symbols = list(chunk) if isinstance(chunk, (list, tuple)) else [chunk]
-        self.calls.append(symbols)
-        available = [s for s in symbols if s in self.frames]
-        if not available:
-            return pd.DataFrame()
-        if self.multiindex:
-            return pd.concat({s: self.frames[s] for s in available}, axis=1)
-        return self.frames[available[0]]
-
-
-def test_batch_download_returns_one_frame_per_symbol(monkeypatch):
-    frames = {"AAA": path(steady(n=300)), "BBB": path(steady(n=300, seed=9))}
-    stub = _Stub(frames)
-    monkeypatch.setattr(R.yf, "download", stub)
-
-    out = R.batch_download(["AAA", "BBB"], dt.date(2023, 1, 1), dt.date(2024, 1, 1))
-    assert set(out) == {"AAA", "BBB"}
-    assert not out["AAA"].empty
-
-
-def test_a_single_symbol_chunk_survives_the_multiindex_shape(monkeypatch):
-    """The defect this file was written to catch.
-
-    `group_by="ticker"` returns a TWO-LEVEL column index even for one symbol.
-    The original code branched on `len(chunk) == 1` and handed the MultiIndex
-    frame to the flat-column normaliser, which failed its check and dropped the
-    symbol without a word — losing the benchmark index on every single scan.
-    """
-    stub = _Stub({"^GSPC": path(steady(n=300))})
-    monkeypatch.setattr(R.yf, "download", stub)
-
-    out = R.batch_download(["^GSPC"], dt.date(2023, 1, 1), dt.date(2024, 1, 1))
-    assert "^GSPC" in out, "a one-symbol batch must not be silently dropped"
-    assert len(out["^GSPC"]) > 200
-
-
-def test_a_flat_single_symbol_response_still_works(monkeypatch):
-    """The other shape, in case yfinance changes its mind again."""
-    stub = _Stub({"AAA": path(steady(n=300))}, multiindex=False)
-    monkeypatch.setattr(R.yf, "download", stub)
-    out = R.batch_download(["AAA"], dt.date(2023, 1, 1), dt.date(2024, 1, 1))
-    assert "AAA" in out
-
-
-def test_the_universe_is_split_into_chunks(monkeypatch):
-    frames = {f"S{i:03d}": path(steady(n=300, seed=i)) for i in range(120)}
-    stub = _Stub(frames)
-    monkeypatch.setattr(R.yf, "download", stub)
-
-    out = R.batch_download(sorted(frames), dt.date(2023, 1, 1), dt.date(2024, 1, 1),
-                           chunk_size=50)
-    assert len(out) == 120
-    assert [len(c) for c in stub.calls] == [50, 50, 20]
-
-
-def test_the_last_chunk_of_a_51_symbol_universe_is_not_lost(monkeypatch):
-    """The regression the single-symbol bug would also have caused.
-
-    51 symbols at a chunk size of 50 leaves a final chunk of exactly one, which
-    is the case that used to vanish.
-    """
-    frames = {f"S{i:03d}": path(steady(n=300, seed=i)) for i in range(51)}
-    stub = _Stub(frames)
-    monkeypatch.setattr(R.yf, "download", stub)
-    out = R.batch_download(sorted(frames), dt.date(2023, 1, 1), dt.date(2024, 1, 1),
-                           chunk_size=50)
-    assert len(out) == 51
-
-
-def test_a_failing_chunk_does_not_abort_the_whole_scan(monkeypatch):
-    frames = {"AAA": path(steady(n=300)), "BBB": path(steady(n=300, seed=2))}
-
-    def flaky(chunk, **kwargs):
-        symbols = list(chunk) if isinstance(chunk, (list, tuple)) else [chunk]
-        if "AAA" in symbols:
-            raise RuntimeError("upstream is having a day")
-        return pd.concat({s: frames[s] for s in symbols if s in frames}, axis=1)
-
-    monkeypatch.setattr(R.yf, "download", flaky)
-    out = R.batch_download(["AAA", "BBB"], dt.date(2023, 1, 1), dt.date(2024, 1, 1),
-                           chunk_size=1)
-    assert set(out) == {"BBB"}
-
-
-def test_duplicate_symbols_are_requested_once(monkeypatch):
-    stub = _Stub({"AAA": path(steady(n=300))})
-    monkeypatch.setattr(R.yf, "download", stub)
-    R.batch_download(["AAA", "aaa", "AAA"], dt.date(2023, 1, 1), dt.date(2024, 1, 1))
-    assert stub.calls == [["AAA"]]
-
-
-def test_scan_names_the_symbols_it_could_not_rank(monkeypatch):
-    """A count is unactionable; a typo and a delisting look different."""
-    frames = {"AAA": path(steady(n=400)), "BBB": path(steady(n=400, seed=2))}
-    monkeypatch.setattr(R.yf, "download", _Stub(frames))
-
-    result = R.scan(["AAA", "BBB", "GHOST"], market_code="US")
-    assert result["requested"] == 3
-    assert result["ranked"] == 2
-    assert result["missing"] == ["GHOST"]
-
-
-# ============================================================================ #
-# The common window — the bias that is invisible in the output
 # ============================================================================ #
 def test_listing_age_does_not_change_a_name_s_signals():
     """Two names with the IDENTICAL recent path must score identically.

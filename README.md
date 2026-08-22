@@ -155,6 +155,12 @@ price series is close enough to a random walk that the trend tools are describin
 Each runs a 5-year projection plus a terminal value, then a 10,000-draw Monte Carlo
 simulation to produce a range rather than a single number.
 
+**Run it backwards.** The panel also solves the model in reverse: what growth rate would make
+today's price correct? On AAPL that came out at **37% a year for five years** against a 10%
+assumption — which is a claim about the world you can agree or disagree with, rather than a fair
+value you have no basis to judge. It is stated as conditional on the other inputs, because it is:
+across plausible discount rates the same price implies anywhere from 24% to 42%.
+
 **What it can't tell you.** Anything with confidence. A DCF is an opinion with arithmetic
 attached — the answer moves enormously with the growth and discount rate you assume, which
 is exactly why the output is a P5–P95 range and why every assumption is an editable field.
@@ -262,6 +268,8 @@ lib/          API client, wire types, CSV export, formatting
 api/
   index.py    One FastAPI app — routing, rate limiting, validation
   _lib/       The engines:
+              market_data.py    THE ONLY MODULE THAT IMPORTS YFINANCE —
+                                one fetch, one normalisation, one cache
               whale.py          Isolation Forest anomaly detection
               technical.py      Indicators and narrative readout
               valuation.py      DCF / DDM / residual income

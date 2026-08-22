@@ -1789,6 +1789,61 @@ def _prob_undervalued(value, iterations=None, **_):
                 band, "high", evidence="weak", value_text=_pct(value, 0))
 
 
+@metric("impliedGrowth")
+def _implied_growth(value, assumedGrowth=None, engine=None, **_):
+    label = "What the price is assuming"
+    what = ("The growth rate the market must be expecting for today's share price "
+            "to be correct, working the model backwards. Instead of asking what the "
+            "business is worth, it asks what would have to be true for the current "
+            "price to be right.")
+    if not _known(value):
+        return unavailable(label, what,
+                           "today's price cannot be reproduced by this model at any "
+                           "growth rate between -60% and +60% a year")
+
+    band = _ladder(value, ((0.03, "good"), (0.10, "fair"), (0.20, "caution"), (None, "bad")))
+    gap = ""
+    if _known(assumedGrowth):
+        difference = value - assumedGrowth
+        if abs(difference) < 0.005:
+            gap = (f" That is almost exactly the {_pct(assumedGrowth)} this model was run "
+                   f"with, so the model and the market agree.")
+        elif difference > 0:
+            gap = (f" The model was run at {_pct(assumedGrowth)}, so the market is pricing "
+                   f"in {_pct(difference)} a year MORE growth than you assumed.")
+        else:
+            gap = (f" The model was run at {_pct(assumedGrowth)}, so the market is pricing "
+                   f"in {_pct(abs(difference))} a year LESS growth than you assumed.")
+
+    reading = {
+        "good": (f"The price implies about {_pct(value)} a year for the next five years — "
+                 f"a modest bar for the business to clear."),
+        "fair": (f"The price implies about {_pct(value)} a year for the next five years, "
+                 f"which is a real but ordinary expectation."),
+        "caution": (f"The price implies about {_pct(value)} a year for five years. That is a "
+                    f"demanding assumption; it needs the business to keep compounding hard."),
+        "bad": (f"The price implies about {_pct(value)} a year for five years, which very few "
+                f"companies sustain. The price is carrying an expectation the cash flows would "
+                f"have to work hard to meet."),
+    }[band]
+
+    return make(
+        label=label, what=what, reading=reading + gap,
+        action=("This is the number to argue with. Ask whether you believe THIS company can "
+                "grow at that rate for five years — you know things about the business the "
+                "model does not. If you think it can do better, the price is cheap on this "
+                "model; if worse, expensive. That judgement is yours, and it is a far more "
+                "answerable question than whether a fair-value estimate is right. "
+                "It is NOT independent of the other assumptions, though: it is the growth "
+                "implied GIVEN this discount rate, this terminal growth and this starting "
+                "cash flow. Lower the discount rate and the implied growth falls with it. "
+                "Change one on the panel and watch this move before you treat it as a fact "
+                "about the company."),
+        band=band, good_direction="low", evidence="moderate",
+        value_text=_pct(value),
+    )
+
+
 @metric("terminalShare")
 def _terminal_share(value, **_):
     label = "Share of value that is guesswork"
@@ -2471,6 +2526,9 @@ def for_valuation(payload: dict) -> dict:
         "probUndervalued": explain("probUndervalued", mc.get("probUndervalued"),
                                    iterations=assumptions.get("iterations")),
         "terminalShare": explain("terminalShare", base.get("terminalShare")),
+        "impliedGrowth": explain("impliedGrowth", base.get("impliedGrowth"),
+                                 assumedGrowth=base.get("assumedGrowth"),
+                                 engine=payload.get("engine")),
         "discountRate": explain("discountRate", payload.get("discountRate"),
                                 rate_name=payload.get("rateName"),
                                 risk_free=payload.get("riskFree"),

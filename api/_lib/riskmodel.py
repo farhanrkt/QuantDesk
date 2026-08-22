@@ -46,7 +46,8 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
+
+from . import market_data
 
 MARKET_INDEX = {"US": "^GSPC", "ID": "^JKSE"}
 
@@ -164,16 +165,11 @@ def _index_returns(market_code: str, period: str = "2y") -> Optional[pd.Series]:
     cached = _INDEX_CACHE.get(key)
     if cached is not None:
         return cached
-    try:
-        history = yf.Ticker(symbol).history(period=period, auto_adjust=True)
-    except Exception:
-        return None
-    if history is None or history.empty or "Close" not in history:
+    history = market_data.index_history(symbol, period)
+    if history is None or "Close" not in history:
         return None
 
     close = history["Close"].dropna()
-    if getattr(close.index, "tz", None) is not None:
-        close.index = close.index.tz_localize(None)
     returns = close.pct_change(fill_method=None).dropna()
     returns.index = pd.to_datetime(returns.index).normalize()
 
@@ -225,11 +221,8 @@ def estimate_beta_for_symbol(symbol: str, market_code: str = "US", period: str =
     key = (symbol.upper(), period, dt.date.today().isoformat())
     history = _HISTORY_CACHE.get(key)
     if history is None:
-        try:
-            history = yf.Ticker(symbol).history(period=period, auto_adjust=True)
-        except Exception:
-            history = None
-        if history is None or history.empty:
+        history = market_data.ohlcv(symbol, period=period)
+        if history is None:
             return estimate_beta(pd.DataFrame(), market_code, period, fallback_beta)
         if len(_HISTORY_CACHE) > 256:
             _HISTORY_CACHE.clear()

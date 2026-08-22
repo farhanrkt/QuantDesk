@@ -78,7 +78,7 @@ _group("trend-swing", """
     squeezePercentile volumeRatio divergenceState gapState""")
 _group("quality", "piotroski altman beneish altmanComponent beneishIndex")
 _group("flow", "spread moveVsSpread yangZhangVol amihud anomalyRate qValue cusumEpisode flowBias")
-_group("value", "upside probUndervalued terminalShare discountRate valuationSpread")
+_group("value", "upside probUndervalued terminalShare discountRate valuationSpread impliedGrowth")
 _group("rank", "compositeRank signalRank signalOverlap")
 
 # Values chosen to land inside SOME band of every ladder in the registry. An

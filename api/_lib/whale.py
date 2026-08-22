@@ -69,14 +69,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-try:
-    import yfinance as yf
-except ImportError as exc:  # pragma: no cover
-    raise ImportError(
-        "yfinance is required. Install with `pip install -r requirements.txt`."
-    ) from exc
-
-from . import symbols
+from . import market_data, symbols
 
 try:
     from sklearn.ensemble import IsolationForest
@@ -275,19 +268,14 @@ class WhaleTracker:
         period = period or self.config.period
 
         logger.info("Fetching %s (period=%s)", ticker, period)
-        try:
-            history = yf.Ticker(ticker).history(period=period, auto_adjust=True)
-        except Exception as exc:
-            raise DataFetchError(f"Failed to download data for '{ticker}': {exc}") from exc
-
-        if history is None or history.empty:
-            raise DataFetchError(
-                f"No data found for '{ticker}'. {symbols.hint(ticker)}"
-            )
-
-        required = {"High", "Low", "Close", "Volume"}
-        if not required.issubset(history.columns):
-            raise DataFetchError(f"Data for '{ticker}' is missing required columns {required}.")
+        # NORMALISED AT THE BOUNDARY, not here. This method used to pass
+        # yfinance's frame through untouched — tz-aware index and all — which is
+        # why `index.py` had to strip the timezone from three frames by hand
+        # before the event study could align them. Every frame now arrives on
+        # the same contract.
+        history = market_data.ohlcv(ticker, period=period)
+        if history is None:
+            raise DataFetchError(f"No data found for '{ticker}'. {symbols.hint(ticker)}")
 
         df = self._engineer_features(history)
 

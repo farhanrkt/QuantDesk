@@ -508,7 +508,14 @@ export interface ValuationResponse {
                    horizon: number; observations: number; skipped: number;
                    priorSd: number; priorWeight: number; source: string;
                  } | null };
-  baseCase: { impliedPrice: number; impliedPriceLabel: string; terminalShare: number | null };
+  baseCase: {
+    impliedPrice: number; impliedPriceLabel: string; terminalShare: number | null;
+    /** The growth rate today's price implies, and the one the model was run with.
+     *  `impliedGrowth` is null when the price is unreachable in the solver's
+     *  bracket, and for the residual-income engine, where a single growth rate
+     *  is not the lever that moves the value. */
+    impliedGrowth: number | null; assumedGrowth: number;
+  };
   monteCarlo: {
     p05: number; p25: number; p50: number; p75: number; p95: number;
     p05Label: string; p25Label: string; p50Label: string; p75Label: string; p95Label: string;
