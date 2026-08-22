@@ -2994,8 +2994,15 @@ def _read_value(data: dict) -> Optional[dict]:
             if _known(prob) else "")
 
     vote = 1 if verdict == "UNDERVALUED" else -1 if verdict == "OVERVALUED" else 0
+    # The wire verdict is an enum; the LABEL is deliberately not the word
+    # "overvalued". Rendered large beside a price, that word is read as a
+    # forecast of a fall, which is the one thing a discounted cash flow cannot
+    # be. Mirrors `verdictLabel` in lib/utils.ts.
+    label = {"UNDERVALUED": "Below model range",
+             "OVERVALUED": "Above model range",
+             "FAIRLY VALUED": "Within model range"}.get(verdict, str(verdict).capitalize())
     return _reading(
-        "Value", "value", str(verdict).capitalize(),
+        "Value", "value", label,
         f"The {engine} puts fair value near {monte['p50Label']}{where}.{runs}",
         "good" if vote > 0 else "bad" if vote < 0 else "neutral", vote)
 

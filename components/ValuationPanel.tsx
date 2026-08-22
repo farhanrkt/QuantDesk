@@ -12,7 +12,7 @@ import { ValuationControls } from "@/components/ValuationControls";
 import type { ValuationOptions } from "@/lib/api";
 import type { ExplainMap, ValuationResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
-import { num, pct, signedPct } from "@/lib/utils";
+import { num, pct, signedPct, verdictLabel } from "@/lib/utils";
 
 const DCF = "#E8B44C";
 const DDM = "#A78BFA";
@@ -94,7 +94,7 @@ export function ValuationPanel({
         <CardHeader>
           <CardTitle>What this is worth, and how sure the model is</CardTitle>
           <span className="num text-xs font-semibold" style={{ color: verdictColor }}>
-            {data.verdict}
+            {verdictLabel(data.verdict)}
           </span>
         </CardHeader>
         <CardBody className="space-y-3">
@@ -134,7 +134,7 @@ export function ValuationPanel({
           <CardTitle>Distribution of simulated fair value</CardTitle>
           <div className="flex items-center gap-2">
             <Badge color={accent}>{data.engine}</Badge>
-            <Badge color={verdictColor}>{data.verdict}</Badge>
+            <Badge color={verdictColor}>{verdictLabel(data.verdict)}</Badge>
             {/* The full draw set never crosses the wire, so this one is a
                 server round trip rather than a client-side export. */}
             <DownloadButton href={csvUrl}>Simulation CSV</DownloadButton>

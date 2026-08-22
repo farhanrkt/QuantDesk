@@ -48,3 +48,25 @@ export const TONE: Record<string, string> = {
   warn: "text-warn",
   neutral: "text-ash",
 };
+
+/**
+ * The valuation verdict, as words a reader cannot mistake for a price target.
+ *
+ * The wire value stays `UNDERVALUED` / `OVERVALUED` / `FAIRLY VALUED` — it is an
+ * enum other code branches on, and renaming it would ripple into the ranking
+ * table and the types for no gain. What changes is the LABEL.
+ *
+ * "Overvalued", rendered large and red above a paragraph explaining it, is read
+ * by a newcomer as "this will fall". It does not mean that. It means a
+ * discounted cash flow, typically 60-80% of which is a perpetuity assumption,
+ * produced a lower number than today's price. "Above the model's range" says
+ * exactly as much, and cannot be read as a forecast — which is the one thing the
+ * panel spends three paragraphs insisting it is not.
+ */
+export const VERDICT_LABEL: Record<string, string> = {
+  UNDERVALUED: "Below model range",
+  OVERVALUED: "Above model range",
+  "FAIRLY VALUED": "Within model range",
+};
+
+export const verdictLabel = (v: string) => VERDICT_LABEL[v] ?? v;

@@ -16,7 +16,7 @@ import { DownloadButton } from "@/components/ui/controls";
 import type {
   DeepenRow, Market, RankRow, RankSignalDefinition,
 } from "@/lib/types";
-import { cn, num, pct, signedPct } from "@/lib/utils";
+import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
 
 const CUSTOM = "__custom__";
 const DEFAULT_CUSTOM = "AAPL, NVDA, TSLA, JPM, KO, BBCA.JK, BBRI.JK, TLKM.JK";
@@ -740,7 +740,7 @@ function DeepRow({ row }: { row: DeepenRow }) {
         {value == null ? <span className="text-ash">—</span>
           : <span className={value.verdict === "UNDERVALUED" ? "text-acc"
               : value.verdict === "OVERVALUED" ? "text-dist" : "text-ash"}>
-              {value.medianLabel} · {value.verdict.toLowerCase()}
+              {value.medianLabel} · {verdictLabel(value.verdict).toLowerCase()}
             </span>}
       </td>
       {/* One decimal, and signedPct rather than a hand-rolled sign. Rounding a

@@ -27,12 +27,14 @@ const PRESETS = ["AAPL", "NVDA", "JPM", "BBCA.JK", "TLKM.JK", "BTC-USD"];
  * as it always has.
  */
 export function TickerBar({
-  opts, onChange, onRun, busy,
+  opts, onChange, onRun, busy, progress,
 }: {
   opts: RunOptions;
   onChange: (o: RunOptions) => void;
   onRun: (o: RunOptions) => void;
   busy: boolean;
+  /** How many lenses have settled, so the wait says something while it lasts. */
+  progress?: { done: number; total: number };
 }) {
   const guided = useDetail() === "simple";
 
@@ -125,7 +127,9 @@ export function TickerBar({
           <option value="ID">IDX (.JK)</option>
         </Select>
         <Button type="submit" disabled={busy || !opts.ticker.trim()}>
-          {busy ? "Running" : "Run all lenses"}
+          {busy
+            ? progress ? `Running ${progress.done}/${progress.total}` : "Running"
+            : "Run all lenses"}
         </Button>
       </div>
 

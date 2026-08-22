@@ -88,13 +88,26 @@ export default function Home() {
   const [opts, setOpts] = useState<RunOptions>(INITIAL);
   // The last SUBMITTED symbol, which is not what is currently typed in the box.
   const [ticker, setTicker] = useState("");
-  const [tab, setTab] = useState("flow");
+  // TREND, NOT FLOW. The first drill-down a newcomer takes should land on the
+  // strongest evidence in the app, and Flow is the weakest: it is the densest
+  // lens to read and the one whose own event study frequently returns "no
+  // significant effect". The Trend tab opens on its long-horizon section —
+  // rolling returns, drawdown, relative strength — which is the most useful and
+  // least misreadable surface here.
+  const [tab, setTab] = useState("trend");
   // Simple/Detailed is app-wide rather than per-panel. Someone who wants the
   // short version of the technical lens wants the short version of the quality
   // lens too, and a per-panel switch makes them say so four times.
   const [detail, setDetail] = useDetailLevel();
 
-  const busy = [anomaly, technical, valuation].some((s) => s.status === "loading");
+  // PROGRESS, NOT JUST BUSY. One shared spinner gated on the SLOWEST lens meant a
+  // ten-to-sixteen-second first run behind a dead button with nothing to say
+  // which engine was holding it up. The count is reported to the ticker bar and
+  // the per-lens state to the rail, so the wait is legible while it happens.
+  const lenses = [anomaly, technical, valuation, quality];
+  const busy = lenses.some((s) => s.status === "loading");
+  const settled = lenses.filter((s) => s.status === "ready" || s.status === "error").length;
+  const progress = busy ? { done: settled, total: lenses.length } : undefined;
   const started = anomaly.status !== "idle";
 
   const handleRun = (next: RunOptions) => {
@@ -115,7 +128,7 @@ export default function Home() {
       ticker: symbol,
       market: symbol.toUpperCase().endsWith(".JK") ? "ID" : "US",
     });
-    setTab("flow");
+    setTab("trend");
   };
 
   // What the engines actually resolved to, which may carry a suffix the user
@@ -153,7 +166,8 @@ export default function Home() {
       </header>
 
       <div className="mb-8">
-        <TickerBar opts={opts} onChange={setOpts} onRun={handleRun} busy={busy} />
+        <TickerBar opts={opts} onChange={setOpts} onRun={handleRun} busy={busy}
+                   progress={progress} />
       </div>
 
       {!started ? (

@@ -3,7 +3,7 @@
 import type {
   AnomalyResponse, Engine, QualityResponse, TechnicalResponse, ValuationResponse,
 } from "@/lib/types";
-import { pct } from "@/lib/utils";
+import { cn, pct, verdictLabel } from "@/lib/utils";
 
 const ACC = "#35C4A8";
 const DIST = "#FF6B6B";
@@ -32,6 +32,8 @@ interface Reading {
   verdict: string;
   detail: string;
   color: string;
+  /** Still running, as opposed to failed or absent. Drives the pulse only. */
+  pending?: boolean;
   /** -1 bearish, 0 neutral, +1 bullish. Used only for the agreement count. */
   vote: number;
   family: Family;
@@ -132,8 +134,19 @@ export function agreementOf(readings: Reading[]): Agreement {
  * any of them. Each line now says what the score MEANS; the numbers themselves
  * are one click away in the lens that owns them.
  */
-const blank = (lens: string, question: string, family: Family): Reading => ({
-  lens, question, verdict: "—", detail: "no reading", color: ASH, vote: 0, family,
+/**
+ * A lens with nothing to show yet. `state` separates the two reasons for that,
+ * because they deserve different treatment: a lens still fetching gets a pulsing
+ * rule and the word "running", one that failed or never started stays inert. A
+ * ten-to-sixteen-second first run behind four identical dashes gave a reader no
+ * way to tell a slow engine from a broken one.
+ */
+const blank = (lens: string, question: string, family: Family,
+               state?: string): Reading => ({
+  lens, question, family, color: ASH, vote: 0,
+  pending: state === "loading",
+  verdict: state === "loading" ? "…" : "—",
+  detail: state === "loading" ? "running" : "no reading",
 });
 
 /**
@@ -147,7 +160,7 @@ const blank = (lens: string, question: string, family: Family): Reading => ({
  */
 function readAnomaly(state: Engine<AnomalyResponse>): Reading {
   const question = "Is anyone unusual trading this?";
-  if (state.status !== "ready") return blank("Flow", question, "price");
+  if (state.status !== "ready") return blank("Flow", question, "price", state.status);
   const { stats } = state.data;
   const bias = stats.recentFlowBias;
   const color = bias === "Accumulation" ? ACC : bias === "Distribution" ? DIST : ASH;
@@ -173,7 +186,7 @@ function readAnomaly(state: Engine<AnomalyResponse>): Reading {
 
 function readTechnical(state: Engine<TechnicalResponse>): Reading {
   const question = "What has the price been doing?";
-  if (state.status !== "ready") return blank("Trend", question, "price");
+  if (state.status !== "ready") return blank("Trend", question, "price", state.status);
   const { summary, latest, longTerm, hasLongTerm } = state.data;
   const tone = summary.trend_tone;
   const color = tone === "bull" ? ACC : tone === "bear" ? DIST : TECH;
@@ -202,7 +215,7 @@ const ENGINE_NAMES: Record<string, string> = {
 
 function readValuation(state: Engine<ValuationResponse>): Reading {
   const question = "What is the business worth?";
-  if (state.status !== "ready") return blank("Value", question, "filings");
+  if (state.status !== "ready") return blank("Value", question, "filings", state.status);
   const d = state.data;
   const color =
     d.verdict === "UNDERVALUED" ? ACC : d.verdict === "OVERVALUED" ? DIST
@@ -214,7 +227,7 @@ function readValuation(state: Engine<ValuationResponse>): Reading {
   return {
     lens: "Value",
     question,
-    verdict: d.verdict.charAt(0) + d.verdict.slice(1).toLowerCase(),
+    verdict: verdictLabel(d.verdict),
     detail: `The ${ENGINE_NAMES[d.engine] ?? d.engine} puts it near ${d.monteCarlo.p50Label}; ${direction}. `
       + `${pct(d.monteCarlo.probUndervalued, 0)} of simulated runs came out cheap.`,
     color,
@@ -237,7 +250,7 @@ const MANIPULATION_WORDS: Record<string, string> = {
 
 function readQuality(state: Engine<QualityResponse>): Reading {
   const question = "Are the numbers real?";
-  if (state.status !== "ready") return blank("Quality", question, "filings");
+  if (state.status !== "ready") return blank("Quality", question, "filings", state.status);
   const d = state.data;
   if (!d.applicable)
     return {
@@ -284,13 +297,18 @@ export function ConfluenceRail({
   const readings = [readAnomaly(anomaly), readTechnical(technical),
                     readValuation(valuation), readQuality(quality)];
   const agreement = agreementOf(readings);
+  const pending = readings.filter((r) => r.pending).length;
 
   return (
     <section className="animate-rise rounded border border-rule bg-panel">
       <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
         <div className="flex items-baseline gap-3">
           <h2 className="font-mono text-lg font-semibold tracking-[0.14em]">{ticker}</h2>
-          <span className="eyebrow">{agreement.lenses || "no"} lenses reading</span>
+          <span className="eyebrow">
+            {pending > 0
+              ? `${readings.length - pending} of ${readings.length} lenses in`
+              : `${agreement.lenses || "no"} lenses reading`}
+          </span>
         </div>
         <div className="text-right">
           <span className="num block text-xs font-semibold"
@@ -322,8 +340,14 @@ export function ConfluenceRail({
       <div className="grid divide-y divide-rule sm:grid-cols-2 sm:divide-x lg:grid-cols-4 lg:divide-y-0">
         {readings.map((r) => (
           <div key={r.lens} className="relative px-5 py-4">
-            <span aria-hidden className="absolute left-0 top-4 h-[calc(100%-2rem)] w-[2px]"
-                  style={{ background: r.color, opacity: r.verdict === "—" ? 0.25 : 1 }} />
+            {/* Same `animate-pulseline` the panel skeletons use, so a lens that
+                is still fetching pulses in the rail and in its own panel at the
+                same rate rather than inventing a second idea of "loading". */}
+            <span aria-hidden
+                  className={cn("absolute left-0 top-4 h-[calc(100%-2rem)] w-[2px]",
+                                r.pending && "animate-pulseline")}
+                  style={{ background: r.pending ? TECH : r.color,
+                           opacity: r.verdict === "—" ? 0.25 : 1 }} />
             <div className="eyebrow mb-0.5">{r.lens}</div>
             <div className="mb-1.5 text-[0.65rem] italic leading-snug text-ash/70">
               {r.question}
