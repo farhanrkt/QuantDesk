@@ -1,5 +1,6 @@
 "use client";
 
+import { track } from "@vercel/analytics";
 import { useCallback, useRef, useState } from "react";
 import type {
   AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
@@ -281,6 +282,23 @@ export function useEngines() {
     if (current("quality")) setQuality(fromLeg(payload.quality));
     if (current("news")) setNews(fromLeg(payload.news));
     if (current("anomaly")) setSynthesis(payload.synthesis ?? null);
+
+    // ONE AGGREGATE EVENT, AND DELIBERATELY NOT THE TICKER.
+    //
+    // "How many analyses has this run?" is a fair thing to measure and a far
+    // better description of the app than a page-view count. "Which companies is
+    // this person looking up?" is a different question, it is behavioural data
+    // about an individual, and this app has no business collecting it — a
+    // watchlist is one of the more revealing things someone can tell you.
+    //
+    // So the event carries the MARKET (US or ID, which says something about
+    // reach) and HOW MANY LENSES SUCCEEDED (which is really a measure of how
+    // often the upstream data source lets us down). Neither identifies anyone
+    // or anything they looked at. `track` is a no-op off Vercel, so local runs
+    // and self-hosted copies send nothing at all.
+    const succeeded = [payload.anomaly, payload.technical,
+                       payload.valuation, payload.quality].filter((leg) => leg?.ok).length;
+    track("analysis", { market: o.market, lenses: succeeded });
   }, [claim]);
 
   /** Re-run one engine against the ticker already loaded. */

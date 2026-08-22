@@ -381,6 +381,32 @@ build, and a production `npm audit`.
 
 ---
 
+## Analytics
+
+Visitor counts come from **Vercel Web Analytics**, chosen because it was the only option
+that did not require relaxing anything:
+
+- **Same origin.** The script loads from `/_vercel/insights/script.js` and beacons to
+  `/_vercel/insights/event`, both proxied by the platform on this app's own domain — so
+  `script-src 'self'` and `connect-src 'self'` already permit it and the CSP is unchanged.
+  Every third-party alternative would have meant adding an external host to both.
+- **No cookies, no storage.** Verified in the package source rather than taken on trust:
+  zero references to `document.cookie`, `localStorage` or `sessionStorage`. That is what
+  keeps this app free of a consent banner.
+- **One aggregate event, and not the ticker.** A run reports the market (`US`/`ID`) and how
+  many of the four lenses succeeded. *Which* companies someone looks up is behavioural data
+  about an individual — a watchlist is one of the more revealing things a person can tell
+  you — and this app has no business collecting it.
+
+It renders in production only, so local development neither pollutes the numbers nor trips
+the CSP on the debug script. `track()` is a no-op off Vercel, so a self-hosted copy sends
+nothing.
+
+**It still has to be switched on in the dashboard** — Vercel project → Analytics → Enable.
+The code alone does not start collection.
+
+---
+
 ## Known limits
 
 **Data.** yfinance is an unofficial scraper against an undocumented endpoint, with no SLA.
