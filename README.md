@@ -13,6 +13,10 @@ what it measures in plain English, whether *this* value is good or bad and why, 
 would make you act differently — or admits that nothing would. A Simple/Detailed toggle
 defaults to Simple: the handful of numbers that decide a holding, written as sentences.
 
+**New to any of this?** Start with the
+**[QuantDesk Field Manual](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009)**
+— every lens and every term explained from scratch, no prior finance assumed.
+
 ---
 
 ## The idea in one paragraph
@@ -378,6 +382,10 @@ sentiment would need full article text and a lexicon that covers Indonesian.
 
 ## Further reading
 
+- **[The QuantDesk Field Manual](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009)**
+  — a beginner's guide to the whole app. Explains all four lenses, the statistics that decide
+  whether to believe them, and every one of the 78 metrics in a searchable glossary. Assumes no
+  prior finance. The glossary is generated from `_lib/explain.py`, so it cannot drift from the app.
 - **[RESEARCH_ROADMAP.md](RESEARCH_ROADMAP.md)** — every model, why that estimator, what it
   doesn't claim, with citations and validation results.
 - **[CODEBASE_REVIEW.md](CODEBASE_REVIEW.md)** — engineering review: security, architecture,
