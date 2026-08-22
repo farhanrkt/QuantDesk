@@ -10,12 +10,21 @@ they don't. Covers **US and Indonesian (IDX)** listings.
 
 **Every number in the app explains itself.** Each figure carries an info icon that says
 what it measures in plain English, whether *this* value is good or bad and why, and what
-would make you act differently — or admits that nothing would. A Simple/Detailed toggle
-defaults to Simple: the handful of numbers that decide a holding, written as sentences.
+would make you act differently — or admits that nothing would. A **Guided/Full** toggle
+defaults to Guided: headline figures show their reading without a click, the expert tuning
+controls fold behind one labelled disclosure, and the raw indicator grid steps aside. Full is
+every control and every indicator, unchanged.
 
-**New to any of this?** Start with the
-**[QuantDesk Field Manual](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009)**
-— every lens and every term explained from scratch, no prior finance assumed.
+**And it says what the four add up to.** Above the tabs, a plain-English summary reports what
+the lenses agree on, *names where they disagree*, states what it cannot tell you about this
+particular company, and lists what to check next. It is deliberately prose and not a score —
+see [the field manual](docs/field-manual.html) for why a single buy/hold/sell number would
+discard every finding the rest of the app works to establish.
+
+**New to any of this?** Start with the **QuantDesk Field Manual** —
+[read it online](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009) or open
+[`docs/field-manual.html`](docs/field-manual.html) locally. Every lens and every term explained
+from scratch, no prior finance assumed.
 
 ---
 
@@ -256,11 +265,16 @@ api/
               swing.py          Short/mid-horizon setups, levels, risk plans
               ranking.py        Batch download + cross-sectional ranking
               universes.py      Predefined ticker lists, each date-stamped
-              explain.py        Plain-English interpretation for every metric
+              explain.py        Plain-English interpretation for every metric,
+                                and the cross-lens synthesis
               symbols.py        Ticker → Yahoo symbol, resolved once
               news.py           Google News RSS
               jsonsafe.py       NaN/inf → null before serialising
-tests/        698 offline tests
+docs/
+  field-manual.html   Beginner's guide; glossary generated from _lib/explain.py
+scripts/
+  build_glossary.py   Regenerates that glossary, and CI's drift check
+tests/        826 offline tests
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -286,7 +300,7 @@ Everything the UI does is a plain `GET`. Interactive docs at `/api/docs`.
 
 | Endpoint | What it returns |
 |---|---|
-| `GET /api/confluence` | **All four lenses in one call** — what the UI actually uses |
+| `GET /api/confluence` | **All four lenses in one call, plus the synthesis** — what the UI actually uses |
 | `GET /api/isolation-forest` | Flow: anomalies, accumulation regimes, liquidity profile |
 | `GET /api/technical-analysis` | Trend: indicators, levels, signals, narrative |
 | `GET /api/intrinsic-value` | Value: DCF / DDM / RI with Monte Carlo percentiles |
@@ -324,7 +338,7 @@ equity risk premium, 21% tax and `^GSPC` as benchmark; IDX uses 6.5%, 7.0%, 22% 
 Python engines:
 
 ```bash
-.venv/bin/python -m pytest && .venv/bin/ruff check api tests
+.venv/bin/python -m pytest && .venv/bin/ruff check api tests scripts
 ```
 
 Frontend:
@@ -338,8 +352,15 @@ are exercised against deterministic synthetic data with a *planted* ground truth
 estimator has to recover a number it was never given. A suite that needs the network is a
 suite that gets skipped, and an upstream outage can never redden CI.
 
-CI (`.github/workflows/ci.yml`) runs pytest + ruff, tsc + eslint + build, and a production
-`npm audit`.
+The field manual's glossary is generated, so regenerate it after touching the explanation
+layer — CI fails if you forget:
+
+```bash
+.venv/bin/python scripts/build_glossary.py
+```
+
+CI (`.github/workflows/ci.yml`) runs pytest + ruff, the manual's drift check, tsc + eslint +
+build, and a production `npm audit`.
 
 ---
 
@@ -382,10 +403,18 @@ sentiment would need full article text and a lexicon that covers Indonesian.
 
 ## Further reading
 
-- **[The QuantDesk Field Manual](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009)**
-  — a beginner's guide to the whole app. Explains all four lenses, the statistics that decide
-  whether to believe them, and every one of the 78 metrics in a searchable glossary. Assumes no
-  prior finance. The glossary is generated from `_lib/explain.py`, so it cannot drift from the app.
+- **[docs/field-manual.html](docs/field-manual.html)** — a beginner's guide to the whole app
+  ([published copy](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009)). All four
+  lenses, the synthesis that reads them together, the statistics that decide whether to believe any
+  of it, and every one of the 78 metrics in a searchable glossary. Assumes no prior finance.
+
+  Its glossary is **generated**, not transcribed: `scripts/build_glossary.py` injects the same
+  strings `_lib/explain.py` puts on screen, and CI fails if a metric is added without regenerating.
+  Run it after touching the explanation layer:
+
+  ```bash
+  python scripts/build_glossary.py
+  ```
 - **[RESEARCH_ROADMAP.md](RESEARCH_ROADMAP.md)** — every model, why that estimator, what it
   doesn't claim, with citations and validation results.
 - **[CODEBASE_REVIEW.md](CODEBASE_REVIEW.md)** — engineering review: security, architecture,

@@ -4,7 +4,7 @@
   "functions": {
     "api/index.py": {
       "maxDuration": 60,
-      "excludeFiles": "{.next/**,node_modules/**,.venv/**,venv/**,app/**,components/**,lib/**,public/**,tests/**,.github/**,**/__pycache__/**,**/*.pyc}"
+      "excludeFiles": "{.next/**,node_modules/**,.venv/**,venv/**,app/**,components/**,lib/**,public/**,tests/**,docs/**,scripts/**,.github/**,**/__pycache__/**,**/*.pyc}"
     }
   },
   "rewrites": [

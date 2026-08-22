@@ -21,10 +21,16 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt
       - name: ruff
-        run: ruff check api tests
+        run: ruff check api tests scripts
       - name: pytest
         # The suite is fully offline, so a Yahoo outage can never redden CI.
         run: pytest
+      - name: field manual is in sync with the explanation layer
+        # docs/field-manual.html documents every metric in _lib/explain.py, with
+        # the definitions injected from the registry rather than transcribed.
+        # This fails when a metric is added without regenerating it, which is the
+        # only way the manual can silently go stale.
+        run: python scripts/build_glossary.py --check
 
   web:
     name: Web — types + lint + build

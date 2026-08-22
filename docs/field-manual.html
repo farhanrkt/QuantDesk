@@ -1,0 +1,1603 @@
+<title>The QuantDesk Field Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+/* ==========================================================================
+   Tokens. DARK FIRST, because this manual is the companion to a dark app and
+   shares its palette exactly &mdash; the five lens hues below are lifted from
+   tailwind.config.ts, where each engine owns one and nothing else may use it.
+   :root carries the dark set; light is redefined for an explicit light choice
+   and for a light OS that has not been overridden.
+   ========================================================================== */
+:root {
+  --ground:   #080C10;
+  --surface:  #111820;
+  --raised:   #161F29;
+  --rule:     #1E2A36;
+  --rule-soft:#161F29;
+  --text:     #E7EEF5;
+  --muted:    #7A8CA0;
+  --dim:      #55667A;
+
+  /* Cool hues = lenses computed from price and volume. */
+  --flow:     #35C4A8;
+  --trend:    #5B8DEF;
+  /* Warm hues = lenses computed from the filings. */
+  --value:    #E8B44C;
+  --quality:  #F2C14E;
+  /* The breadth tier sits outside both families. */
+  --rank:     #A78BFA;
+
+  --good:     #35C4A8;
+  --bad:      #FF6B6B;
+  --warn:     #F2C14E;
+
+  --tint:     rgba(255,255,255,0.035);
+  --shadow:   0 1px 2px rgba(0,0,0,0.4);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground:   #F7F8FA;
+    --surface:  #FFFFFF;
+    --raised:   #EEF2F6;
+    --rule:     #DCE3EB;
+    --rule-soft:#E7ECF2;
+    --text:     #0D1620;
+    --muted:    #56677A;
+    --dim:      #7C8A99;
+
+    --flow:     #0C7F6B;
+    --trend:    #2C57C0;
+    --value:    #96660C;
+    --quality:  #7A5C00;
+    --rank:     #6541B8;
+
+    --good:     #0C7F6B;
+    --bad:      #C43443;
+    --warn:     #8A6205;
+
+    --tint:     rgba(13,22,32,0.03);
+    --shadow:   0 1px 2px rgba(13,22,32,0.06);
+  }
+}
+:root[data-theme="light"] {
+  --ground:   #F7F8FA;
+  --surface:  #FFFFFF;
+  --raised:   #EEF2F6;
+  --rule:     #DCE3EB;
+  --rule-soft:#E7ECF2;
+  --text:     #0D1620;
+  --muted:    #56677A;
+  --dim:      #7C8A99;
+
+  --flow:     #0C7F6B;
+  --trend:    #2C57C0;
+  --value:    #96660C;
+  --quality:  #7A5C00;
+  --rank:     #6541B8;
+
+  --good:     #0C7F6B;
+  --bad:      #C43443;
+  --warn:     #8A6205;
+
+  --tint:     rgba(13,22,32,0.03);
+  --shadow:   0 1px 2px rgba(13,22,32,0.06);
+}
+
+/* ========================================================================== */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--text);
+  font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  font-size: 16.5px;
+  line-height: 1.68;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono, .eyebrow, code, kbd, th, .num, nav, .chip, .tag, .lede-meta {
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.eyebrow {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+a { color: inherit; }
+a:focus-visible, button:focus-visible, input:focus-visible {
+  outline: 2px solid var(--trend);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* --- shell ---------------------------------------------------------------- */
+.shell {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  gap: 3.5rem;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 1.5rem 6rem;
+}
+/* --- left rail ------------------------------------------------------------ */
+.rail {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  padding: 2.5rem 0 2rem;
+  border-right: 1px solid var(--rule);
+}
+.rail-scroll { max-height: calc(100vh - 7rem); overflow-y: auto; padding-right: 0.75rem; }
+
+/* NARROW LAYOUT. This block MUST come after the .rail rules above: it has the
+   same specificity, so whichever is written last wins. It originally sat higher
+   up, next to .shell, which meant `height: 100vh` below it silently overrode
+   `height: auto` here at every width, so the rail then claimed a whole screen on a
+   phone and pushed the first paragraph below the fold. */
+@media (max-width: 900px) {
+  .shell { grid-template-columns: minmax(0,1fr); gap: 0; }
+  .rail {
+    position: static;
+    height: auto;
+    padding: 1.5rem 0 1rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 2rem;
+  }
+  .rail-scroll { max-height: none; padding-right: 0; }
+  .masthead { padding-top: 2rem; }
+}
+.rail ol { list-style: none; margin: 0; padding: 0; }
+.rail li { margin: 0; }
+.rail a {
+  display: flex;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.32rem 0.7rem 0.32rem 0.75rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--muted);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  transition: color 120ms, border-color 120ms;
+}
+.rail a:hover { color: var(--text); }
+.rail a.on { color: var(--text); border-left-color: var(--accent, var(--muted)); }
+.rail .n { color: var(--dim); font-variant-numeric: tabular-nums; }
+.rail-head {
+  padding: 0 0.75rem 0.9rem;
+  margin-bottom: 0.6rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+/* --- masthead ------------------------------------------------------------- */
+.masthead { padding: 4.5rem 0 2.5rem; border-bottom: 1px solid var(--rule); }
+h1 {
+  font-size: clamp(2rem, 4.6vw, 3.05rem);
+  font-weight: 600;
+  letter-spacing: -0.018em;
+  line-height: 1.14;
+  margin: 1rem 0 0;
+  max-width: 19ch;
+  text-wrap: balance;
+}
+.lede {
+  max-width: 62ch;
+  font-size: 1.14rem;
+  line-height: 1.66;
+  color: var(--text);
+  margin: 1.4rem 0 0;
+}
+.lede-meta {
+  display: flex; flex-wrap: wrap; gap: 0.5rem 1.4rem;
+  margin-top: 1.9rem; font-size: 0.68rem; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.14em;
+}
+
+/* --- sections ------------------------------------------------------------- */
+section { padding-top: 4rem; scroll-margin-top: 1.5rem; }
+h2 {
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  line-height: 1.28;
+  margin: 0.5rem 0 1.4rem;
+  max-width: 28ch;
+  text-wrap: balance;
+}
+h3 {
+  font-family: "IBM Plex Serif", Georgia, serif;
+  font-size: 1.06rem;
+  font-weight: 600;
+  margin: 2.4rem 0 0.5rem;
+  text-wrap: balance;
+}
+h4 {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--muted);
+  font-weight: 500;
+  margin: 1.9rem 0 0.5rem;
+}
+p, ul, ol.body { max-width: 68ch; }
+p { margin: 0 0 1.05rem; }
+ul, ol.body { margin: 0 0 1.15rem; padding-left: 1.15rem; }
+li { margin: 0 0 0.42rem; }
+
+/* The section head carries the lens hue. It is the only place a hue appears
+   as a rule, so colour always means "which lens is speaking". */
+.sec-head { border-top: 2px solid var(--accent, var(--rule)); padding-top: 1rem; }
+.sec-head .eyebrow { color: var(--accent, var(--muted)); }
+
+.flow    { --accent: var(--flow); }
+.trend   { --accent: var(--trend); }
+.value   { --accent: var(--value); }
+.quality { --accent: var(--quality); }
+.rank    { --accent: var(--rank); }
+.plain   { --accent: var(--muted); }
+
+strong { font-weight: 600; }
+em { font-style: italic; }
+
+code {
+  font-size: 0.86em;
+  background: var(--raised);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.08em 0.35em;
+}
+
+/* --- the triad card: the app's own What / Reading / Action shape ----------- */
+.triad {
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--accent, var(--muted));
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 1.15rem 1.3rem 1.25rem;
+  margin: 1.5rem 0;
+  max-width: 68ch;
+  box-shadow: var(--shadow);
+}
+.triad h5 {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  letter-spacing: -0.01em;
+}
+.triad dl { margin: 0; display: grid; gap: 0.7rem; }
+.triad dt {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.15em;
+  color: var(--muted); margin-bottom: 0.16rem;
+}
+.triad dd { margin: 0; font-size: 0.94rem; line-height: 1.6; }
+
+/* --- callouts ------------------------------------------------------------- */
+.note {
+  border: 1px solid var(--rule);
+  background: var(--tint);
+  border-radius: 4px;
+  padding: 0.95rem 1.15rem;
+  margin: 1.5rem 0;
+  max-width: 68ch;
+  font-size: 0.95rem;
+}
+.note.warnbox { border-left: 2px solid var(--warn); }
+.note.badbox  { border-left: 2px solid var(--bad); }
+.note p:last-child { margin-bottom: 0; }
+.note .eyebrow { display: block; margin-bottom: 0.4rem; }
+
+/* --- tables --------------------------------------------------------------- */
+.tablewrap { overflow-x: auto; margin: 1.5rem 0; border: 1px solid var(--rule); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th {
+  text-align: left; font-size: 0.62rem; text-transform: uppercase;
+  letter-spacing: 0.13em; color: var(--muted); font-weight: 500;
+  padding: 0.7rem 0.9rem; background: var(--raised);
+  border-bottom: 1px solid var(--rule); white-space: nowrap;
+}
+td { padding: 0.62rem 0.9rem; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* --- evidence + direction tags -------------------------------------------- */
+.tag {
+  display: inline-block; font-size: 0.58rem; text-transform: uppercase;
+  letter-spacing: 0.11em; padding: 0.14em 0.45em; border-radius: 2px;
+  border: 1px solid var(--rule); color: var(--muted); white-space: nowrap;
+}
+.tag.strong   { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.tag.moderate { color: var(--muted); }
+.tag.weak     { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+.tag.none     { color: var(--dim); }
+.tag.hi { color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+.tag.lo { color: var(--trend); border-color: color-mix(in srgb, var(--trend) 40%, transparent); }
+.tag.no { color: var(--dim); }
+
+/* --- glossary ------------------------------------------------------------- */
+.glass-controls {
+  display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: center;
+  margin: 1.5rem 0 0.5rem; position: sticky; top: 0; z-index: 5;
+  background: var(--ground); padding: 0.9rem 0; border-bottom: 1px solid var(--rule);
+}
+#gsearch {
+  flex: 1 1 220px; min-width: 180px;
+  font-family: "IBM Plex Mono", monospace; font-size: 0.8rem;
+  padding: 0.5rem 0.7rem; color: var(--text);
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 3px;
+}
+#gsearch::placeholder { color: var(--dim); }
+.chip {
+  font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em;
+  padding: 0.36rem 0.6rem; border-radius: 3px; cursor: pointer;
+  background: var(--surface); color: var(--muted);
+  border: 1px solid var(--rule); transition: color 120ms, border-color 120ms;
+}
+.chip:hover { color: var(--text); }
+.chip[aria-pressed="true"] { color: var(--text); border-color: var(--chipc, var(--muted)); }
+.chip[aria-pressed="true"]::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--chipc, var(--muted)); margin-right: 0.45rem; vertical-align: middle;
+}
+.glist { display: grid; gap: 0; margin-top: 0.5rem; }
+.gitem {
+  display: grid; grid-template-columns: minmax(160px, 230px) minmax(0, 1fr);
+  gap: 0.4rem 1.6rem; padding: 0.85rem 0 0.85rem 0.9rem;
+  border-bottom: 1px solid var(--rule-soft); border-left: 2px solid var(--accent, var(--rule));
+}
+@media (max-width: 640px) { .gitem { grid-template-columns: minmax(0,1fr); } }
+.gterm { font-family: "IBM Plex Mono", monospace; font-size: 0.83rem; font-weight: 500; }
+.gmeta { margin-top: 0.3rem; display: flex; gap: 0.35rem; flex-wrap: wrap; }
+.gdef { font-size: 0.94rem; line-height: 1.58; color: var(--text); }
+.gcount { font-size: 0.66rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+.gempty { padding: 2rem 0; color: var(--muted); font-size: 0.9rem; }
+
+/* --- misc ----------------------------------------------------------------- */
+.rule { border: 0; border-top: 1px solid var(--rule); margin: 3rem 0 0; max-width: none; }
+.steps { counter-reset: s; list-style: none; padding: 0; max-width: 68ch; }
+.steps > li {
+  counter-increment: s; position: relative; padding-left: 2.4rem; margin-bottom: 1.1rem;
+}
+.steps > li::before {
+  content: counter(s, decimal-leading-zero);
+  position: absolute; left: 0; top: 0.16rem;
+  font-family: "IBM Plex Mono", monospace; font-size: 0.7rem;
+  color: var(--accent, var(--muted)); letter-spacing: 0.06em;
+}
+footer {
+  margin-top: 4rem; padding-top: 1.6rem; border-top: 1px solid var(--rule);
+  font-size: 0.8rem; color: var(--muted); max-width: 68ch;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+html { scroll-behavior: smooth; }
+</style>
+
+<div class="shell">
+
+<nav class="rail" aria-label="Contents">
+  <div class="rail-scroll">
+    <div class="rail-head"><span class="eyebrow">Field manual</span></div>
+    <ol id="toc">
+      <li class="plain"><a href="#start"><span class="n">00</span><span>Start here</span></a></li>
+      <li class="plain"><a href="#words"><span class="n">01</span><span>Words before numbers</span></a></li>
+      <li class="plain"><a href="#session"><span class="n">02</span><span>Your first session</span></a></li>
+      <li class="plain"><a href="#synthesis"><span class="n">03</span><span>What it adds up to</span></a></li>
+      <li class="flow"><a href="#flow"><span class="n">04</span><span>Flow &middot; who trades</span></a></li>
+      <li class="trend"><a href="#trend"><span class="n">05</span><span>Trend &middot; the price</span></a></li>
+      <li class="value"><a href="#value"><span class="n">06</span><span>Value &middot; the worth</span></a></li>
+      <li class="quality"><a href="#quality"><span class="n">07</span><span>Quality &middot; the books</span></a></li>
+      <li class="rank"><a href="#rank"><span class="n">08</span><span>Scan &amp; rank</span></a></li>
+      <li class="plain"><a href="#honesty"><span class="n">09</span><span>The honesty layer</span></a></li>
+      <li class="plain"><a href="#glossary"><span class="n">10</span><span>Glossary &mdash; 78 terms</span></a></li>
+      <li class="plain"><a href="#become"><span class="n">11</span><span>Becoming a quant</span></a></li>
+    </ol>
+  </div>
+</nav>
+
+<main>
+
+<header class="masthead">
+  <span class="eyebrow">A beginner's guide to QuantDesk</span>
+  <h1>Four models read the same stock. Here is how to read them back.</h1>
+  <p class="lede">
+    QuantDesk shows you a company through four independent lenses &mdash; who is trading it,
+    what its price has done, what the business is worth, and whether its accounts can be
+    trusted. This manual explains every one of those lenses, and every term on every
+    screen, assuming you have never opened a financial statement in your life.
+  </p>
+  <div class="lede-meta">
+    <span>78 metrics defined</span>
+    <span>Updated for the synthesis panel</span>
+    <span>No prior finance assumed</span>
+    <span>Educational use only</span>
+  </div>
+</header>
+
+<!-- ===================================================================== -->
+<section id="start" class="plain">
+  <div class="sec-head"><span class="eyebrow">00 &mdash; Start here</span>
+  <h2>What this tool is, and what it refuses to be</h2></div>
+
+  <p>
+    Most stock research tools give you one opinion. QuantDesk gives you four, computed from
+    deliberately different data, and shows you where they agree and where they don't. The bet
+    behind the whole design is simple: <strong>any single method can be fooled.</strong> A company
+    can look cheap on a spreadsheet while quietly running out of cash. A chart can look strong
+    because one large fund happened to rebalance that week. When methods that share no inputs
+    land in the same place, that agreement is worth more than any one of them shouting.
+  </p>
+
+  <h3>The two families, and why colour means something here</h3>
+  <p>
+    The four lenses do not split evenly. Two of them &mdash; <strong>Flow</strong> and
+    <strong>Trend</strong> &mdash; are computed from the same daily record of prices and trading
+    volume. They are not two independent opinions; they are two questions asked of one dataset.
+    The other two &mdash; <strong>Value</strong> and <strong>Quality</strong> &mdash; read the company's
+    financial statements, and carry most of the genuinely separate information.
+  </p>
+  <p>
+    That split is why this manual is coloured the way it is, and why the app is too.
+    <strong>Cool hues are the price family. Warm hues are the filings family.</strong> A colour
+    in this document never decorates &mdash; it tells you which body of data is speaking.
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Lens</th><th>Family</th><th>Reads</th><th>The question it answers</th></tr></thead>
+      <tbody>
+        <tr><td><strong style="color:var(--flow)">Flow</strong></td><td>Price</td><td>Daily prices and volumes</td><td>Is anyone unusual trading this?</td></tr>
+        <tr><td><strong style="color:var(--trend)">Trend</strong></td><td>Price</td><td>Daily prices and volumes</td><td>What has the price been doing?</td></tr>
+        <tr><td><strong style="color:var(--value)">Value</strong></td><td>Filings</td><td>Cash flows, dividends, book value</td><td>What is the business worth?</td></tr>
+        <tr><td><strong style="color:var(--quality)">Quality</strong></td><td>Filings</td><td>Income, balance sheet, cash flow</td><td>Are the numbers real?</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note badbox">
+    <span class="eyebrow">Read this before anything else</span>
+    <p>
+      This is a research and teaching tool. It is <strong>not investment advice</strong>, and
+      nothing in it is a recommendation to buy or sell. Every number it shows is an estimate
+      built on assumptions you can change, on data scraped from a free source that is sometimes
+      wrong or missing. A tool that says &ldquo;undervalued&rdquo; is telling you what a model
+      concluded from the inputs it was given &mdash; not what will happen. Losing money in markets is
+      normal and easy; the purpose of learning this material is to understand what you don't know,
+      not to acquire confidence.
+    </p>
+  </div>
+
+  <h3>The one habit worth taking from this app</h3>
+  <p>
+    QuantDesk was built around an unusual discipline: <em>every number has to say how much it can
+    be trusted.</em> Where an estimate is too noisy to report, the app reports a bound instead of a
+    figure. Where a model doesn't apply to a company, it refuses rather than printing a number
+    anyway. Where a signal has been tested and found not to work, it says so on screen.
+  </p>
+  <p>
+    If you take one thing from this manual into the rest of your life as an analyst, take that.
+    The skill that separates a quant from someone with a spreadsheet is not knowing more formulas.
+    It is knowing which of your numbers are load-bearing and which are decoration.
+  </p>
+  <p>
+    That discipline is also why the app answers &ldquo;so what?&rdquo; in sentences rather than with
+    a rating. The panel that does it is covered in <a href="#synthesis">section 03</a>, and it is the
+    fastest route into everything else here.
+  </p>
+</section>
+
+<!-- ===================================================================== -->
+<section id="words" class="plain">
+  <div class="sec-head"><span class="eyebrow">01 &mdash; Foundations</span>
+  <h2>Words you need before any of the numbers make sense</h2></div>
+
+  <p>
+    Skip this if you already know what a drawdown is. If you don't, everything downstream will be
+    fog until you do. These fifteen ideas are the entire vocabulary the rest of the manual assumes.
+  </p>
+
+  <h4>The instrument</h4>
+  <ul>
+    <li><strong>Share (or stock, or equity).</strong> A unit of ownership in a company. Own one
+      share of a company that has issued a hundred, and you own one percent of it.</li>
+    <li><strong>Ticker.</strong> The short code a stock trades under. <code>AAPL</code> is Apple.
+      Indonesian listings carry a <code>.JK</code> suffix &mdash; <code>BBCA.JK</code> is Bank Central
+      Asia. The suffix is not cosmetic: <code>BBCA</code> without it is a completely different
+      security listed in the US, and confusing the two is a real failure mode this app is
+      explicitly built to prevent.</li>
+    <li><strong>Shares outstanding.</strong> How many shares exist. Needed to turn
+      &ldquo;the whole business is worth X&rdquo; into &ldquo;one share is worth X divided by
+      that.&rdquo;</li>
+    <li><strong>Market capitalisation (market cap).</strong> Share price &times; shares outstanding.
+      What the market currently says the whole company is worth.</li>
+  </ul>
+
+  <h4>The data</h4>
+  <ul>
+    <li><strong>OHLCV.</strong> The five numbers recorded for every trading day: the
+      <strong>O</strong>pen, the <strong>H</strong>igh, the <strong>L</strong>ow, the
+      <strong>C</strong>lose, and the <strong>V</strong>olume (how many shares changed hands).
+      Nearly every price-based calculation in this app is built from these five columns and
+      nothing else.</li>
+    <li><strong>Bar (or candle).</strong> One day's OHLCV, drawn as one mark on a chart.</li>
+    <li><strong>Trading day.</strong> Markets are shut at weekends and on holidays, so a year is
+      roughly <strong>252 trading days</strong>, not 365. When you see 252 in a formula, that is
+      what it means.</li>
+  </ul>
+
+  <h4>Return and risk</h4>
+  <ul>
+    <li><strong>Return.</strong> The percentage change in price over some period. Up from 100 to
+      110 is a 10% return.</li>
+    <li><strong>Compounding.</strong> Returns stack multiplicatively, not additively. Up 50% then
+      down 50% leaves you at 75, not 100. This is why a big loss hurts more than an equal-sized
+      gain helps, and it is the single most important piece of arithmetic in investing.</li>
+    <li><strong>CAGR.</strong> Compound Annual Growth Rate &mdash; the one steady yearly rate that would
+      have produced the actual start-to-finish result. It smooths away everything that happened in
+      between, which is both its use and its danger.</li>
+    <li><strong>Volatility.</strong> How much the price bounces around, usually expressed as an
+      annualised percentage. High volatility means a wilder ride in <em>both</em> directions.</li>
+    <li><strong>Drawdown.</strong> How far the price has fallen from its own previous peak. The
+      <strong>maximum drawdown</strong> is the worst such fall in the history you're looking at &mdash;
+      the number that tells you what holding this actually felt like.</li>
+    <li><strong>Benchmark.</strong> The thing you compare against. For a US stock it's usually the
+      S&amp;P 500 (<code>^GSPC</code>); for an Indonesian one, the Jakarta Composite
+      (<code>^JKSE</code>). This matters because your real alternative was never cash &mdash; it was
+      buying the whole market instead.</li>
+    <li><strong>Liquidity.</strong> How easily you can buy or sell without moving the price
+      against yourself. A thinly traded stock is illiquid: your own order pushes the price.</li>
+    <li><strong>Bid&ndash;ask spread.</strong> At any instant there is a highest price a buyer will pay
+      (the bid) and a lowest a seller will accept (the ask). The gap between them is a cost you pay
+      on every round trip, before the price has moved at all.</li>
+  </ul>
+
+  <div class="note">
+    <span class="eyebrow">The idea that makes the rest click</span>
+    <p>
+      A <strong>percentile</strong> is a position within a group, not a score. If a stock is at the
+      90th percentile for momentum in a scan of the Nasdaq-100, that means it beat 90% of the other
+      names <em>in that scan, on that day</em>. It does not mean it scored 90 out of 100 on some
+      absolute scale. QuantDesk converts nearly everything in its ranking tier to percentiles for
+      exactly this reason: a position within a stated group is a claim the data supports, and a
+      score out of 100 usually isn't.
+    </p>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section id="session" class="plain">
+  <div class="sec-head"><span class="eyebrow">02 &mdash; Walkthrough</span>
+  <h2>Your first session, step by step</h2></div>
+
+  <ol class="steps">
+    <li><strong>Type a ticker and press Run all lenses.</strong> Start with something large and
+      familiar &mdash; <code>AAPL</code>, <code>MSFT</code>, <code>BBCA.JK</code>. Large companies have
+      complete data, so you see the app working as designed before you meet its gaps.</li>
+    <li><strong>Leave the mode on Guided.</strong> Guided is not a lesser mode. It shows each
+      headline number with its interpretation already written out, folds the expert tuning
+      controls behind one labelled disclosure, and drops the raw indicator grid. <strong>Full</strong>
+      is every control and every indicator, unchanged. Nothing is computed differently between
+      them &mdash; only what is put in front of you.</li>
+    <li><strong>Read the top strip &mdash; the confluence rail.</strong> Four panels, one per
+      lens, each with the question it answers written above its verdict. Above them sits the
+      agreement line: something like <em>&ldquo;1 of 2 independent readings negative &middot; 4 lenses,
+      2 independent sources.&rdquo;</em> Note that it counts <em>sources</em>, not panels, for the
+      reason explained in section 00.</li>
+    <li><strong>Then read &ldquo;What this adds up to&rdquo; underneath it.</strong> This is the
+      answer to <em>so what?</em>, written as sentences, and it is where a beginner should spend
+      their first five minutes. Section 03 is entirely about how to read it.</li>
+    <li><strong>Click any <span class="mono">i</span> icon.</strong> Every number in the app has
+      one. It opens three sentences: what the metric measures, what <em>this particular value</em>
+      means, and what would make you act differently &mdash; or an explicit admission that nothing
+      would, because most numbers are context rather than triggers.</li>
+    <li><strong>Now open the tabs, in this order:</strong> Value and Quality first, then Trend,
+      then Flow. That is roughly the order of how much the evidence supports them &mdash; which is the
+      opposite of the order most beginners read in.</li>
+    <li><strong>When something is missing, believe the gap.</strong> If Quality says
+      &ldquo;not applicable&rdquo; for a bank, that is a designed refusal, not a bug. If Value
+      offers you a manual-input form, the data source genuinely had a hole in it.</li>
+  </ol>
+
+  <div class="note warnbox">
+    <span class="eyebrow">A word on evidence grades</span>
+    <p>
+      Throughout the app, readings carry a grade: <span class="tag strong">strong</span>
+      <span class="tag moderate">moderate</span> <span class="tag weak">weak</span>
+      <span class="tag none">none</span>. This is not how confident the app is in the arithmetic &mdash;
+      the arithmetic is always right. It is how well the underlying <em>effect</em> is supported by
+      published, replicated, out-of-sample research. A twelve-month momentum reading and a
+      candlestick pattern are not the same class of claim, and showing them in identical type would
+      be the lie. Weight what you read accordingly.
+    </p>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section id="synthesis" class="plain">
+  <div class="sec-head"><span class="eyebrow">03 &mdash; The answer to &ldquo;so what?&rdquo;</span>
+  <h2>What it adds up to, and why there is no score</h2></div>
+
+  <p>
+    Four verdicts side by side is progress, but it is not an answer. The panel below the
+    confluence rail &mdash; <strong>What this adds up to</strong> &mdash; is the app saying, in
+    plain sentences, what the four lenses collectively found. It is the first thing a beginner
+    should read and the part this manual would point you to if you only had five minutes.
+  </p>
+
+  <h3>The five blocks, in the order they appear</h3>
+  <p>
+    The order is the argument, and it is deliberate. The evidence comes before the summary, and
+    what the app <em>cannot</em> tell you comes before what to do next.
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Block</th><th>What it gives you</th><th>Why it sits there</th></tr></thead>
+      <tbody>
+        <tr><td><strong>The four readings</strong></td><td>One sentence per lens, colour-keyed, each labelled with the data it reads</td><td>A summary that hides its inputs is a verdict. You see what it is summarising first.</td></tr>
+        <tr><td><strong>Do they agree?</strong></td><td>Whether the two <em>bodies of data</em> point the same way</td><td>Agreement between price and filings is the product's whole claim, because they share no inputs.</td></tr>
+        <tr><td><strong>Where they pull against each other</strong></td><td>Named conflicts, each a recognised failure shape</td><td>Usually the most useful sentences on the page.</td></tr>
+        <tr><td><strong>What this cannot tell you</strong></td><td>The limits in force for <em>this</em> company right now</td><td>Placed <em>above</em> the next steps on purpose, so nobody reaches &ldquo;what to do&rdquo; without passing it.</td></tr>
+        <tr><td><strong>What to check next</strong></td><td>Concrete things to open or change, tied to this ticker's own numbers</td><td>Last, and never a trade instruction.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Why there is no buy / hold / sell</h3>
+  <p>
+    The obvious version of this feature is a single verdict, or a conviction score out of 100.
+    It is refused, permanently, and the reasoning is worth understanding because it applies far
+    beyond this app.
+  </p>
+  <p>
+    Everything in QuantDesk works to establish how much its own numbers can bear: that the four
+    lenses rest on two datasets, that seven ranking columns carry about 3.4 signals' worth of
+    information, that a discounted cash flow is typically 60&ndash;80% perpetuity guess, that
+    several readings are graded weak. <strong>A composite score discards every one of those
+    findings</strong> &mdash; and it discards them in the one field everybody would read. The
+    moment it exists, nobody opens the four lenses again.
+  </p>
+
+  <div class="note">
+    <span class="eyebrow">The general lesson</span>
+    <p>
+      Averaging things you have just finished proving are correlated, and presenting the result as
+      a consensus, is the easiest way to build a model that looks robust and is not. If you take
+      one habit from this section: when you are tempted to collapse several measurements into one
+      number, ask what the number destroys. Usually it is the disagreement, and usually the
+      disagreement was the finding.
+    </p>
+  </div>
+
+  <h3>A worked example</h3>
+  <p>
+    Run on Apple, the panel reported four readings &mdash; Flow quiet, Trend constructive on 6 of
+    8 long-horizon checks, Value overvalued, Quality neutral &mdash; and then said this:
+  </p>
+
+  <div class="triad">
+    <h5>What it actually printed</h5>
+    <dl>
+      <div><dt>Do they agree?</dt><dd>&ldquo;They disagree: price and volume read constructively
+        while the filings do not. The disagreement is the finding. It usually means the market is
+        pricing something the accounts have not shown yet, or that the accounts are showing
+        something the price has not reacted to &mdash; and which of those it is cannot be settled
+        from this page.&rdquo;</dd></div>
+      <div><dt>The tension, named</dt><dd>&ldquo;<strong>Rising past what the business supports.</strong>
+        The price trend is constructive and the model says the price has run beyond what the cash
+        flows justify. Both can be true, and both can persist for years &mdash; momentum and
+        valuation operate on completely different clocks.&rdquo;</dd></div>
+      <div><dt>What it could not tell you</dt><dd>That the Hurst exponent cannot separate this
+        price series from a random walk, so every price-based reading on the page should be
+        downgraded &mdash; and that <strong>71%</strong> of the fair value came from the terminal
+        assumption rather than the forecast years.</dd></div>
+    </dl>
+  </div>
+
+  <p>
+    Now notice what a score would have done to that. Three constructive-ish readings and one
+    negative averages to something mildly positive, and the two sentences that actually matter
+    &mdash; the trend tools may be measuring noise, and most of the valuation is one assumption
+    &mdash; disappear entirely. The number would have been more confident and less true.
+  </p>
+
+  <h3>How to read a disagreement</h3>
+  <p>
+    Disagreement between the price family and the filings family is the most common result, and it
+    is not a failure of the tool. It means one of two things, and the app is explicit that it
+    cannot tell you which:
+  </p>
+  <ul>
+    <li><strong>The market knows something the accounts have not shown yet.</strong> Filings are
+      backward-looking and quarterly; prices move on expectations. A stock can look expensive on
+      last year's cash flows precisely because next year's will be larger.</li>
+    <li><strong>The accounts are showing something the price has not reacted to.</strong> The
+      opposite case, and the one where the filings-based lenses earn their weight.</li>
+  </ul>
+  <p>
+    Settling it requires information from outside this app &mdash; the business, the industry, the
+    filings themselves. What the synthesis does is make sure you <em>know</em> there is a question
+    to settle, rather than reading three green panels and stopping.
+  </p>
+
+  <div class="note warnbox">
+    <span class="eyebrow">When a lens refuses, the count changes</span>
+    <p>
+      On a bank, the Quality lens returns an explicit refusal rather than a score, and the
+      synthesis then reports <strong>three</strong> lenses reporting rather than four &mdash; and
+      states plainly that half the filings-side evidence is missing, so the valuation is carrying
+      that side alone. Watch for that line. A cross-check with one leg missing is a much weaker
+      claim than one with two, and it would be easy to miss if the panel simply showed a gap.
+    </p>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section id="flow" class="flow">
+  <div class="sec-head"><span class="eyebrow">04 &mdash; Lens one &middot; price family</span>
+  <h2>Flow: is anyone unusual trading this?</h2></div>
+
+  <p>
+    Every day, a stock produces a price move and a volume figure. Most days are unremarkable.
+    Occasionally a day looks nothing like the others &mdash; a big move on enormous volume, or heavy
+    volume with almost no move at all. The Flow lens hunts for those days and asks whether they
+    look like buying or selling.
+  </p>
+
+  <h3>How it finds them: the Isolation Forest</h3>
+  <p>
+    An <strong>Isolation Forest</strong> is a machine-learning method for finding oddities without
+    being told in advance what odd looks like. The intuition is genuinely simple. Imagine
+    repeatedly splitting your data with random cuts. A point sitting in the middle of the crowd
+    takes many cuts to isolate from its neighbours. A point way out on its own takes very few.
+    The algorithm builds hundreds of random splitting trees, measures how quickly each day gets
+    isolated, and the easily-isolated days are the anomalies.
+  </p>
+  <p>
+    It is <strong>unsupervised</strong> &mdash; nobody labelled which days were &ldquo;real&rdquo;
+    institutional activity. That is a strength (no human bias about what to look for) and a
+    weakness (no guarantee what it finds means anything). QuantDesk feeds it six numbers per day:
+    the return, volume relative to average, the size of the move ignoring direction, the Money Flow
+    Index, an on-balance-volume z-score, and the intraday range.
+  </p>
+
+  <div class="triad">
+    <h5>Jargon in that paragraph, unpacked</h5>
+    <dl>
+      <div><dt>Relative volume (RVOL)</dt><dd>Today's volume divided by the recent average. 3.0
+        means three times a normal day's trading.</dd></div>
+      <div><dt>On-balance volume (OBV)</dt><dd>A running total that adds the day's volume when the
+        price closed up and subtracts it when the price closed down. It asks whether volume has
+        been arriving on up days or down days.</dd></div>
+      <div><dt>Z-score</dt><dd>How many standard deviations a value sits from its own average.
+        A z-score of +2 means &ldquo;unusually high, in the top few percent.&rdquo; It is the
+        universal way to make different quantities comparable.</dd></div>
+      <div><dt>Money Flow Index (MFI)</dt><dd>Like a speedometer of buying vs selling pressure from
+        0 to 100, but weighted by how much money changed hands rather than price alone.</dd></div>
+    </dl>
+  </div>
+
+  <h3>The second detector: CUSUM, and the problem it solves</h3>
+  <p>
+    There is something the first model structurally cannot see. A large institution building a
+    position <em>deliberately</em> splits its order across weeks precisely so that no single day
+    stands out. A detector that scores each day on its own merits can only ever catch the impatient
+    buyer.
+  </p>
+  <p>
+    <strong>CUSUM</strong> &mdash; cumulative sum &mdash; solves this by accumulating small deviations instead
+    of judging them individually. Each day's small excess is added to a running total; when the
+    total crosses a threshold, an episode is flagged. A long run of unremarkable days can trip it
+    even though no individual day would. On Apple this surfaced a 27-day accumulation episode at
+    just 1.04&times; average volume &mdash; completely invisible to any volume-spike rule.
+  </p>
+
+  <h3>Trading costs, and why the panel sometimes says "at most"</h3>
+  <p>
+    A move of 0.3% sounds like information until you learn it costs 0.4% to get in and out. The
+    Flow panel therefore estimates the <strong>bid&ndash;ask spread</strong> from daily bars using two
+    published estimators (Corwin&ndash;Schultz and Abdi&ndash;Ranaldo), and compares the day's move against it.
+  </p>
+  <p>
+    Here is the part worth internalising, because it is a general lesson about estimation. Both
+    estimators have a <strong>noise floor</strong> &mdash; a level of resolution below which they cannot
+    distinguish a real spread from zero. That floor was <em>measured by simulation</em>, with the
+    true spread set to zero, and comes out proportional to the stock's volatility. On a mega-cap
+    with a genuinely tiny spread, the floor sits an order of magnitude above the real number, so
+    the estimator would happily report a cost the stock does not charge. Below the floor the app
+    now reports a <strong>ceiling</strong> &mdash; &ldquo;at most X&rdquo; &mdash; instead of a measurement.
+  </p>
+
+  <div class="note">
+    <span class="eyebrow">The transferable idea</span>
+    <p>
+      Every estimator has a resolution limit, and it is your job to know it. An instrument that
+      cannot measure below a certain size does not return zero when the true value is small &mdash; it
+      returns noise, and noise reported as a measurement is worse than no answer.
+    </p>
+  </div>
+
+  <h4>What this lens cannot tell you</h4>
+  <p>
+    Whether the trader was an institution at all. Index rebalances, options expiry, dividend dates
+    and earnings announcements all produce identical footprints. &ldquo;Unusual&rdquo; means
+    statistically unusual, nothing more. On a thinly traded stock, &ldquo;heavy volume moved the
+    price&rdquo; often just means the order book was shallow.
+  </p>
+  <p>
+    The app is unusually blunt about this: it ships an <strong>event study</strong> (section 09)
+    whose entire job is to measure whether these flags predict anything at all, and on some tickers
+    the honest answer is no.
+  </p>
+</section>
+
+<!-- ===================================================================== -->
+<section id="trend" class="trend">
+  <div class="sec-head"><span class="eyebrow">05 &mdash; Lens two &middot; price family</span>
+  <h2>Trend: what the price did, across three horizons</h2></div>
+
+  <p>
+    This is the largest lens, and it is organised by <strong>holding period</strong>, longest
+    first. That ordering is deliberate: reading it left to right walks you from the strongest
+    evidence to the weakest.
+  </p>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Horizon</th><th>Holding period</th><th>Asks</th><th>Evidence base</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Long term</strong></td><td>Years</td><td>Could I have held this?</td><td>Decades of published work</td></tr>
+        <tr><td><strong>Mid term</strong></td><td>Weeks to months</td><td>Where are the levels?</td><td>Mixed, mostly weak</td></tr>
+        <tr><td><strong>Short term</strong></td><td>Days to weeks</td><td>Where are the levels?</td><td>Weak; mild reversal, not continuation</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Long horizon &mdash; the section that matters most</h3>
+  <p>
+    A checklist runs first: is price above its 200-day average, does Faber's 10-month rule say
+    invested or out, what is 12-1 momentum doing, how strong is the trend, is the series even
+    trending at all. Then come the three ideas worth understanding properly.
+  </p>
+
+  <div class="triad">
+    <h5>Rolling returns &mdash; the fix for a lying CAGR</h5>
+    <dl>
+      <div><dt>The problem</dt><dd>A headline CAGR describes exactly one start date and one end
+        date. Change the start by six months and the number can double or vanish. Quoting it as
+        &ldquo;the return&rdquo; is describing one lucky draw as if it were the population.</dd></div>
+      <div><dt>What the app does</dt><dd>It computes <strong>every overlapping holding period</strong>
+        in the history &mdash; every possible 1-year window, every 3-year window, every 5-year &mdash; and
+        reports the distribution. So instead of one CAGR you get &ldquo;the worst 3-year window in
+        this history returned &minus;4%, and 87% of them were positive.&rdquo;</dd></div>
+      <div><dt>Why you should care</dt><dd>It answers the question you actually have &mdash; &ldquo;what
+        if I buy at a bad moment?&rdquo; &mdash; rather than the question a single CAGR answers, which is
+        &ldquo;what if I had bought on precisely this date years ago?&rdquo;</dd></div>
+    </dl>
+  </div>
+
+  <div class="triad">
+    <h5>The Ulcer index &mdash; measuring what holding actually feels like</h5>
+    <dl>
+      <div><dt>The problem</dt><dd>Maximum drawdown records depth and forgets duration. A 30% fall
+        that recovers in two months and a 30% fall that grinds sideways for three years produce the
+        same number, and are nothing like the same experience.</dd></div>
+      <div><dt>What it is</dt><dd>The Ulcer index (Martin &amp; McCann, 1989) squares the depth
+        below the previous peak at every point and averages it over time &mdash; so both how far and how
+        long enter the score. A long shallow grind scores worse than a sharp crash that
+        recovers.</dd></div>
+      <div><dt>Why you should care</dt><dd>Most people don't sell at the bottom because the loss was
+        large. They sell because it went on for so long that they stopped believing. This is the
+        metric that models that.</dd></div>
+    </dl>
+  </div>
+
+  <div class="triad">
+    <h5>The Hurst exponent &mdash; the app's own honesty check</h5>
+    <dl>
+      <div><dt>What it measures</dt><dd>Whether a price series has memory. <strong>H = 0.5</strong>
+        is a pure random walk: past moves tell you nothing about the next one. Above 0.5 suggests
+        persistence (trends continue); below suggests mean reversion (moves snap back).</dd></div>
+      <div><dt>Why it is the honesty check</dt><dd>If H sits near 0.5, then every trend indicator on
+        the page is describing noise. It is the one reading whose job is to tell you the other
+        readings may be meaningless.</dd></div>
+      <div><dt>The part worth studying</dt><dd>The estimator is <em>noisy</em>. Tested against
+        artificially generated series with a known true H, its standard error is about
+        <strong>0.05</strong> on five years of daily bars. The app originally judged it against a
+        fixed 0.45&ndash;0.55 band &mdash; barely one standard error wide &mdash; which labelled a genuine random walk
+        as trending 35% of the time. The band is now sized from how much data you actually have, and
+        a short history returns &ldquo;cannot tell&rdquo; rather than a guess.</dd></div>
+    </dl>
+  </div>
+
+  <h3>Short and mid horizons &mdash; and an unusual warning</h3>
+  <p>
+    These sections answer a different question: not &ldquo;could I have held this?&rdquo; but
+    &ldquo;if I were buying in the next few weeks, where are the levels?&rdquo; They produce
+    support and resistance, a stop-loss, a target, and a position size.
+  </p>
+
+  <div class="note warnbox">
+    <span class="eyebrow">The app argues against its own feature here</span>
+    <p>
+      Over one to four weeks, prices have historically shown mild <strong>reversal</strong> rather
+      than continuation &mdash; the opposite of the twelve-month momentum effect. The panel states this
+      rather than hiding it. Short-horizon technical analysis is where the published evidence is
+      weakest and where costs bite hardest, and the app grades it accordingly.
+    </p>
+  </div>
+
+  <h4>The short-horizon vocabulary</h4>
+  <ul>
+    <li><strong>Support and resistance.</strong> Price levels where the market has previously
+      turned around &mdash; a floor buyers defended, a ceiling sellers defended. QuantDesk reports
+      <em>how many times</em> price actually turned at each level, because a level touched once is
+      a coincidence and a level touched five times is a fact about the order book.</li>
+    <li><strong>Stop-loss.</strong> A pre-decided exit price at which you accept the trade idea was
+      wrong. Placed just beyond structure, with a buffer of one or more <strong>ATR</strong>.</li>
+    <li><strong>ATR (Average True Range).</strong> How much this stock typically moves in a day,
+      including overnight gaps. It is the natural unit for stop placement: a stop 1 ATR away will be
+      hit by ordinary noise, which is why the app refuses to place one tighter than that and says
+      why.</li>
+    <li><strong>Risk/reward ratio.</strong> Distance to your target divided by distance to your
+      stop. 2.0 means you stand to make twice what you'd lose. It says nothing about
+      <em>probability</em> &mdash; a 5:1 setup that works one time in ten is a losing strategy.</li>
+    <li><strong>Position size.</strong> How much of your account to commit so that being stopped
+      out costs exactly your chosen risk budget and no more. This is the single most useful idea in
+      the section, and the least glamorous.</li>
+    <li><strong>Pivot points.</strong> Levels arithmetically derived from the previous complete
+      period's high, low and close. Widely watched, which is arguably why they sometimes work.</li>
+    <li><strong>VWAP (volume-weighted average price).</strong> The average price actually paid by
+      everyone who traded over a window. Above it, the average buyer since the anchor date is in
+      profit; below it, under water.</li>
+    <li><strong>Donchian breakout.</strong> Price closing above the highest high of the last N days.
+      The classic trend-following entry rule.</li>
+    <li><strong>Bollinger squeeze.</strong> A period when volatility bands narrow unusually &mdash; the
+      price has gone quiet. Often precedes a large move, though it does not tell you which way.</li>
+    <li><strong>Divergence.</strong> Price making a new high that the momentum reading does not
+      confirm. Read as a move losing steam. Evidence for it is weak.</li>
+    <li><strong>Gap.</strong> A price band the stock jumped straight over between one close and the
+      next open. Almost nobody traded inside it, so there is no established support in there.</li>
+  </ul>
+
+  <div class="note">
+    <span class="eyebrow">Two design decisions worth copying</span>
+    <p>
+      <strong>Setups are pre-registered.</strong> The app checks a fixed list of configurations in a
+      fixed order, and &ldquo;none of them is present&rdquo; is the most common answer. A test fires
+      the detector across twenty random walks and <em>fails the build</em> if a majority produce a
+      trade. This is how you stop a pattern detector from finding patterns in noise.
+    </p>
+    <p>
+      <strong>Candlestick patterns are firewalled.</strong> They are detected, graded weak, and
+      forbidden from placing an entry, stop or target. Multi-bar chart patterns &mdash; head and
+      shoulders, flags, wedges, cup-and-handle &mdash; are named on the panel as things the app
+      <em>will not</em> claim to detect, with the reason for each. Declining to guess is a feature.
+    </p>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section id="value" class="value">
+  <div class="sec-head"><span class="eyebrow">06 &mdash; Lens three &middot; filings family</span>
+  <h2>Value: what is the business actually worth?</h2></div>
+
+  <p>
+    Everything so far looked at the price. This lens ignores the price entirely until the last
+    step, works out what the company is worth from its own cash flows, and only then compares that
+    to what the market is charging.
+  </p>
+
+  <h3>The one idea underneath all of it: discounting</h3>
+  <p>
+    A dollar next year is worth less than a dollar today &mdash; you could have invested today's dollar,
+    and next year's might not arrive. So to value a company you forecast the cash it will produce
+    and then shrink each future year's cash by a rate reflecting how long you wait and how risky
+    the wait is. That rate is the <strong>discount rate</strong>. Add up all the shrunk future cash
+    and you have the <strong>present value</strong> of the business. That is the whole of valuation
+    theory in three sentences; everything else is argument about the inputs.
+  </p>
+
+  <h4>The three models, routed automatically by sector</h4>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Model</th><th>Used for</th><th>Discounts</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td><strong>DCF</strong><br><span class="eyebrow">Discounted cash flow</span></td><td>Most companies</td><td>Free cash flow</td><td>Cash the business generates after paying to keep itself running</td></tr>
+        <tr><td><strong>DDM</strong><br><span class="eyebrow">Dividend discount</span></td><td>Banks and insurers</td><td>Dividends</td><td>A bank's &ldquo;free cash flow&rdquo; is not meaningful &mdash; its balance sheet <em>is</em> the business</td></tr>
+        <tr><td><strong>RI</strong><br><span class="eyebrow">Residual income</span></td><td>Financials with no usable dividend history</td><td>Book value + excess returns</td><td>Values what the firm earns <em>above</em> the cost of its capital</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h4>Terms you will meet on this panel</h4>
+  <ul>
+    <li><strong>Free cash flow (FCF).</strong> Cash from operations minus the money spent
+      maintaining and growing the asset base. Roughly, what's genuinely left over.</li>
+    <li><strong>Beta.</strong> How much this stock moves when the whole market moves. Beta 1.5
+      means it historically moved 1.5&times; as hard as the index, in both directions. It feeds the
+      discount rate: more market-sensitive, higher required return.</li>
+    <li><strong>Equity risk premium (ERP).</strong> The extra annual return investors demand for
+      holding shares instead of government bonds. QuantDesk uses 5.5% for the US and 7.0% for
+      Indonesia.</li>
+    <li><strong>Risk-free rate.</strong> What you'd earn with (near) certainty &mdash; the government
+      bond yield. The floor every other required return is built on.</li>
+    <li><strong>WACC.</strong> Weighted Average Cost of Capital. A company funded by both equity
+      and debt has a blended cost of money; the DCF discounts at this.</li>
+    <li><strong>Terminal value.</strong> The model forecasts five years explicitly and then assumes
+      the business continues forever at a fixed modest growth rate. The value of that
+      &ldquo;forever&rdquo; is the terminal value.</li>
+    <li><strong>Book value.</strong> Assets minus liabilities as recorded in the accounts &mdash; the
+      company's net worth on paper.</li>
+    <li><strong>Payout ratio.</strong> The share of earnings paid out as dividends.</li>
+  </ul>
+
+  <div class="note warnbox">
+    <span class="eyebrow">The number that should worry you</span>
+    <p>
+      The panel reports <strong>what share of the answer is terminal value</strong>, and on a
+      typical DCF that share is <strong>60&ndash;80%</strong>. Read that carefully: most of the valuation
+      is not coming from the five years you forecast. It is coming from a guess about a perpetuity.
+      A DCF is an opinion with arithmetic attached, and this is the number that tells you how much
+      opinion is in there.
+    </p>
+  </div>
+
+  <h3>Monte Carlo: why the output is a range, not a number</h3>
+  <p>
+    Change the growth assumption by two percentage points and a DCF answer can move by half.
+    Reporting a single &ldquo;fair value&rdquo; from assumptions that uncertain is false precision.
+    So instead of running the model once, QuantDesk runs it <strong>10,000 times</strong>, each run
+    drawing slightly different values for growth, discount rate and terminal growth from plausible
+    distributions. The result is a spread of outcomes.
+  </p>
+  <ul>
+    <li><strong>Monte Carlo simulation.</strong> Any method that answers a question by running it
+      thousands of times with randomly varied inputs and looking at the distribution of answers.
+      Named after the casino.</li>
+    <li><strong>P5 / P50 / P95.</strong> Percentiles of that distribution. P50 is the median &mdash; half
+      the runs came out above, half below. P5 and P95 bracket the middle 90%. A wide P5&ndash;P95 gap is
+      the model telling you it isn't confident.</li>
+    <li><strong>Probability undervalued.</strong> The fraction of the 10,000 runs in which the
+      business came out worth more than its market price. This is <em>not</em> the probability the
+      stock goes up &mdash; it is the probability that <em>this model, with these assumptions</em>, calls
+      it cheap.</li>
+  </ul>
+
+  <p>
+    The dispersion used in those draws is not an invented constant. An earlier version used a flat
+    2% standard deviation that, as the project's own notes put it, came from nowhere and set the
+    entire width of the fan chart. It now comes from the company's own historical variability.
+  </p>
+
+  <h4>What this lens cannot tell you</h4>
+  <p>
+    Anything with confidence. That is not modesty, it is arithmetic &mdash; which is exactly why every
+    assumption is an editable field. <strong>The most valuable way to use this panel is backwards:
+    </strong> instead of asking &ldquo;what does the model say it's worth?&rdquo;, change the growth
+    rate until the model's answer equals today's price, and read off what growth rate the market is
+    already assuming. Then ask yourself whether you believe it. That converts an opinion into a
+    testable claim, and it is how professionals actually use a DCF.
+  </p>
+</section>
+
+<!-- ===================================================================== -->
+<section id="quality" class="quality">
+  <div class="sec-head"><span class="eyebrow">07 &mdash; Lens four &middot; filings family</span>
+  <h2>Quality: is the business sound, and are the numbers real?</h2></div>
+
+  <p>
+    A valuation is only as good as the accounts it was built from, and accounts are prepared by
+    people with incentives. This lens runs three published academic screens over the same filings
+    the Value lens used.
+  </p>
+
+  <h3>Piotroski F-Score &mdash; nine yes/no health checks</h3>
+  <p>
+    Joseph Piotroski (2000) asked whether simple accounting signals could separate improving
+    companies from deteriorating ones. His score is nine binary tests; you score one point per pass,
+    so the range is 0&ndash;9. Higher is better. These are the nine, as QuantDesk computes them:
+  </p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>#</th><th>Check</th><th>In plain English</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td>Return on assets positive</td><td>Is it profitable at all, relative to its size?</td></tr>
+        <tr><td class="num">2</td><td>Operating cash flow positive</td><td>Is real cash coming in, not just accounting profit?</td></tr>
+        <tr><td class="num">3</td><td>Return on assets improving</td><td>Is profitability better than last year?</td></tr>
+        <tr><td class="num">4</td><td>Cash flow exceeds accounting profit</td><td>Is reported profit backed by cash? If not, the profit is a promise.</td></tr>
+        <tr><td class="num">5</td><td>Leverage falling</td><td>Is it taking on less debt?</td></tr>
+        <tr><td class="num">6</td><td>Current ratio improving</td><td>Can it cover short-term bills more easily than before?</td></tr>
+        <tr><td class="num">7</td><td>No dilution</td><td>Did it avoid issuing new shares? New shares shrink your slice.</td></tr>
+        <tr><td class="num">8</td><td>Gross margin expanding</td><td>Is it keeping more of each sale?</td></tr>
+        <tr><td class="num">9</td><td>Asset turnover improving</td><td>Is it generating more sales per unit of assets?</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Altman Z''-score &mdash; distance from financial distress</h3>
+  <p>
+    Edward Altman (1968) fitted a formula on companies that later went bankrupt versus ones that
+    survived. It combines working capital, retained earnings, operating profit and equity &mdash; each
+    scaled by total assets &mdash; into a single distance-from-distress number. QuantDesk uses the
+    <strong>Z''</strong> emerging-market variant so an Indonesian listing and a US one land on the
+    same scale.
+  </p>
+  <ul>
+    <li><strong>Above 2.6</strong> &mdash; comfortably outside the distress zone.</li>
+    <li><strong>1.1 to 2.6</strong> &mdash; the grey zone. Neither safe nor distressed.</li>
+    <li><strong>Below 1.1</strong> &mdash; inside the distress zone.</li>
+  </ul>
+  <p>
+    <strong>Working capital</strong>, if it's new to you, is current assets minus current
+    liabilities &mdash; roughly, what the company could pay its near-term bills with.
+  </p>
+
+  <h3>Beneish M-Score &mdash; does this look like manipulated earnings?</h3>
+  <p>
+    Messod Beneish (1999) built a model from eight ratios comparing this year to last, fitted on
+    companies later found to have manipulated their earnings. Above <strong>&minus;1.78</strong> is a
+    flag; below <strong>&minus;2.22</strong> is clean; between them is borderline. The eight inputs:
+  </p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Index</th><th>Full name</th><th>What a high reading suggests</th></tr></thead>
+      <tbody>
+        <tr><td class="num">DSRI</td><td>Days sales in receivables</td><td>Sales booked but not yet collected &mdash; possibly aggressive revenue recognition</td></tr>
+        <tr><td class="num">GMI</td><td>Gross margin</td><td>Margins deteriorating, creating pressure to flatter results</td></tr>
+        <tr><td class="num">AQI</td><td>Asset quality</td><td>More of the balance sheet in soft, hard-to-verify assets</td></tr>
+        <tr><td class="num">SGI</td><td>Sales growth</td><td>Rapid growth &mdash; not fraud itself, but the environment where it happens</td></tr>
+        <tr><td class="num">DEPI</td><td>Depreciation</td><td>Slowing depreciation, which flatters current profit</td></tr>
+        <tr><td class="num">SGAI</td><td>Selling, general &amp; admin</td><td>Overheads rising faster than sales</td></tr>
+        <tr><td class="num">LVGI</td><td>Leverage</td><td>Debt rising relative to assets</td></tr>
+        <tr><td class="num">TATA</td><td>Total accruals to assets</td><td>Profit increasingly made of accounting entries rather than cash</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    <strong>Accruals</strong> is the key word. Accounting profit records revenue when earned and
+    costs when incurred, not when cash moves; the gap between profit and cash is accruals. It is
+    where judgement lives, which is where manipulation lives.
+  </p>
+
+  <div class="note badbox">
+    <span class="eyebrow">How to read a Beneish flag &mdash; this matters</span>
+    <p>
+      Beneish catches roughly three-quarters of actual manipulators. That sounds strong until you
+      apply it to a population where manipulation is <em>rare</em>. If 1 in 100 companies
+      manipulates, a screen that catches 75% of them while false-alarming on 5% of honest ones
+      produces about 0.75 true flags and 5 false ones per hundred companies &mdash; so
+      <strong>most flags are false alarms.</strong> This is the base-rate problem, and it is one of
+      the most important ideas in all of applied statistics. A flag means &ldquo;look closer&rdquo;,
+      never &ldquo;fraud found.&rdquo;
+    </p>
+  </div>
+
+  <h4>Why banks get a refusal instead of a score</h4>
+  <p>
+    None of the three models was built on financial firms, and none transfers. A bank has no
+    operating cycle for &ldquo;working capital&rdquo; to describe; its revenue is not a
+    receivables-and-inventory process. So for a bank or insurer, QuantDesk prints an explicit
+    refusal rather than a number. A score there would be arithmetic without meaning &mdash; and printing
+    it anyway is how tools lose the right to be trusted on the numbers they <em>can</em> compute.
+  </p>
+</section>
+
+<!-- ===================================================================== -->
+<section id="rank" class="rank">
+  <div class="sec-head"><span class="eyebrow">08 &mdash; Breadth</span>
+  <h2>Scan &amp; rank: from a universe to a shortlist</h2></div>
+
+  <p>
+    Everything above examines one company. Professionals work in two tiers: a script ranks a large
+    universe on cheap signals, then a human examines the top few in depth. QuantDesk's
+    <strong>Scan &amp; rank</strong> tab is the first tier.
+  </p>
+  <ul>
+    <li><strong>Universe.</strong> The list of stocks you're comparing &mdash; the Dow 30, the Nasdaq-100,
+      Indonesia's LQ45 or IDX30, or your own pasted list.</li>
+    <li><strong>Cross-sectional.</strong> Comparing many stocks <em>at one moment</em>, as opposed
+      to one stock across time. The whole ranking tier is cross-sectional.</li>
+  </ul>
+
+  <h3>The seven signals, and their honest weights</h3>
+  <p>
+    Every signal is converted to a percentile within the scan before anything is combined, and each
+    signal's weight is set by <em>how well the effect is supported</em>, not how interesting it is.
+  </p>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Signal</th><th>Asks</th><th>Better when</th><th>Evidence</th><th>Weight</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Momentum</strong></td><td>Has it risen over the past year?</td><td><span class="tag hi">higher</span></td><td><span class="tag strong">strong</span></td><td class="num">1.0</td></tr>
+        <tr><td><strong>Versus the index</strong></td><td>Has it beaten its market?</td><td><span class="tag hi">higher</span></td><td><span class="tag strong">strong</span></td><td class="num">1.0</td></tr>
+        <tr><td><strong>Trend</strong></td><td>Is the long-run average rising?</td><td><span class="tag hi">higher</span></td><td><span class="tag moderate">moderate</span></td><td class="num">0.7</td></tr>
+        <tr><td><strong>Near its high</strong></td><td>Close to its best price of the year?</td><td><span class="tag hi">higher</span></td><td><span class="tag moderate">moderate</span></td><td class="num">0.7</td></tr>
+        <tr><td><strong>Steadiness</strong></td><td>Does it get there without wild swings?</td><td><span class="tag lo">lower</span></td><td><span class="tag moderate">moderate</span></td><td class="num">0.7</td></tr>
+        <tr><td><strong>Holdability</strong></td><td>How painful has owning it been?</td><td><span class="tag lo">lower</span></td><td><span class="tag weak">weak</span></td><td class="num">0.4</td></tr>
+        <tr><td><strong>Money flow</strong></td><td>Do recent days close strong on volume?</td><td><span class="tag hi">higher</span></td><td><span class="tag weak">weak</span></td><td class="num">0.4</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Note that three of those seven &mdash; momentum, near-its-high, and versus-the-index &mdash; are three ways
+    of saying <em>&ldquo;it went up.&rdquo;</em> A composite that averages them looks like a
+    consensus of three tests when it is closer to one.
+  </p>
+
+  <div class="triad">
+    <h5>Effective signals: the best idea in the app</h5>
+    <dl>
+      <div><dt>What it does</dt><dd>Rather than warn you about that redundancy in a footnote, the
+        panel <em>measures</em> it. It computes the rank correlation between every pair of signals
+        across the actual scan, then reports the <strong>participation ratio</strong> of that
+        correlation matrix &mdash; a number that equals the column count when signals are independent and
+        collapses toward 1 as they become redundant.</dd></div>
+      <div><dt>A real result</dt><dd>On a Dow scan, momentum and trend correlated at
+        <strong>+0.98</strong>, and the seven columns carried about <strong>3.4 signals'
+        worth</strong> of independent information. That number is printed in the header.</dd></div>
+      <div><dt>Why it is worth copying</dt><dd>It converts a caveat into a measurement the reader
+        can check. Anyone can write &ldquo;these signals overlap&rdquo;; showing that seven is
+        really 3.4 is a different kind of claim.</dd></div>
+    </dl>
+  </div>
+
+  <h3>Why quality and valuation are a second step</h3>
+  <p>
+    Daily price history <strong>batches</strong> &mdash; one request fetches fifty symbols, so ranking a
+    hundred names costs a handful of calls. Financial statements do not; they come one company at a
+    time and take seconds each. That is a hard architectural constraint, not a design preference,
+    and it is why the ranking table has no Quality column. You pick a shortlist of up to eight and
+    <em>deepen</em> those. Showing an empty Quality column for two hundred names would be worse
+    than admitting the limit.
+  </p>
+
+  <div class="note warnbox">
+    <span class="eyebrow">Index lists go stale, invisibly</span>
+    <p>
+      Index membership is transcribed by hand and stamped with the date it was written. It decays
+      silently: a dropped constituent still fetches happily, and a newly added one is simply absent.
+      That is why the date is shown on the panel. There is deliberately <strong>no S&amp;P 500
+      list</strong> &mdash; five hundred symbols is the length at which transcription goes wrong, and a
+      mistyped ticker produces a plausible ranking row for a company nobody asked about rather than
+      an error.
+    </p>
+  </div>
+
+  <h3>The anomaly screener, which answers a different question</h3>
+  <p>
+    Ranking asks &ldquo;which of these is best on standing characteristics?&rdquo; The screener asks
+    &ldquo;has something unusual just <em>happened</em> here?&rdquo; It scans up to 20 tickers and &mdash;
+    crucially &mdash; reports how many hits you should have expected from pure chance. That leads directly
+    into the next section.
+  </p>
+</section>
+
+<!-- ===================================================================== -->
+<section id="honesty" class="plain">
+  <div class="sec-head"><span class="eyebrow">09 &mdash; The part that makes you a quant</span>
+  <h2>The honesty layer: six ideas that separate analysis from astrology</h2></div>
+
+  <p>
+    Everything up to here was <em>what the app computes</em>. This section is <em>why you should
+    or shouldn't believe it</em>, and it is the genuinely transferable material. These six ideas
+    apply to every model you will ever build, in any field.
+  </p>
+
+  <h3>1 &middot; Multiple testing &mdash; hits appear by construction</h3>
+  <p>
+    Scan twenty stocks for &ldquo;unusual activity&rdquo; at a 5% threshold and you will average one
+    hit even if nothing unusual is happening anywhere. Scan two hundred and you get ten. The hits
+    are not evidence; they are arithmetic.
+  </p>
+  <p>
+    QuantDesk's screener therefore tests each ticker against <em>that ticker's own</em> long-run
+    flag rate, then applies a <strong>Benjamini&ndash;Hochberg</strong> correction across the whole scan.
+    The result is a <strong>q-value</strong> per row &mdash; the probability that this particular hit is a
+    false alarm <em>given</em> that you went looking across many names &mdash; and a headline saying how
+    many hits noise alone would have produced.
+  </p>
+  <ul>
+    <li><strong>p-value.</strong> The probability of seeing a result at least this extreme if
+      nothing real were going on. Small p, surprising result.</li>
+    <li><strong>False discovery rate (FDR).</strong> Of the things you flagged, what share are
+      expected to be wrong. More useful than trying to make each individual test perfect.</li>
+  </ul>
+
+  <h3>2 &middot; The event study &mdash; does the signal predict anything?</h3>
+  <p>
+    Almost every anomaly-detection tool sold to retail investors <em>asserts</em> that its signal
+    works. QuantDesk ships a button that measures it. The event study takes every anomaly the Flow
+    lens ever detected on a ticker, measures the <strong>cumulative abnormal return</strong>
+    afterwards, and reports a t-statistic.
+  </p>
+  <ul>
+    <li><strong>Abnormal return.</strong> The return that <em>isn't</em> explained by the market
+      moving. If the index rose 2% and a high-beta stock rose 2%, its abnormal return is negative &mdash;
+      it underperformed what its market sensitivity predicted.</li>
+    <li><strong>Market model.</strong> The regression used to work out what a stock &ldquo;should
+      have&rdquo; done given the index. Abnormal return is the leftover.</li>
+    <li><strong>t-statistic.</strong> How many standard errors an estimate sits from zero. Roughly:
+      above about 2, the effect is unlikely to be chance alone. Below, you have not shown anything.</li>
+  </ul>
+  <div class="note">
+    <span class="eyebrow">The result that proves the tool is honest</span>
+    <p>
+      Run on JPMorgan, the event study returned <strong>no significant effect at any horizon</strong>
+      &mdash; and the app reports that plainly. A tool that only ever confirms itself is worth nothing.
+      When you build your own signals, the moment you start explaining away null results is the
+      moment you stop doing research.
+    </p>
+  </div>
+
+  <h3>3 &middot; In-sample versus out-of-sample</h3>
+  <p>
+    If you tune a rule on a stretch of history and then test it on that same stretch, you have
+    measured how well you tuned, not how well the rule works. That is <strong>in-sample</strong>
+    testing, and it is the most common way financial research fools its own author.
+  </p>
+  <p>
+    <strong>Out-of-sample</strong> testing evaluates on data the model never saw.
+    <strong>Walk-forward</strong> is the disciplined version for time series: fit on data up to
+    time T, predict T+1, roll forward, repeat &mdash; so no future information ever leaks backwards.
+    QuantDesk's anomaly detector has a walk-forward mode, and the app is candid that it is off by
+    default because it costs minutes per ticker.
+  </p>
+  <p>
+    <strong>Look-ahead bias</strong> is the general name for the sin: using information that would
+    not have been available at the time. It is astonishingly easy to commit by accident &mdash; a moving
+    average computed over the whole series, a universe of &ldquo;today's index members&rdquo;
+    applied to ten years ago (that second one is <strong>survivorship bias</strong>, and it flatters
+    every backtest that commits it).
+  </p>
+
+  <h3>4 &middot; Estimator resolution &mdash; knowing what your instrument can see</h3>
+  <p>
+    Covered in the Flow section, but it generalises. Two numbers in this app are reported as
+    <em>bounds</em> rather than measurements, because that is what the data supports: the bid&ndash;ask
+    spread cannot be resolved below roughly 0.15&times; a stock's daily volatility from daily bars, and
+    the Hurst exponent's random-walk band has to be sized from the sample. Both floors were
+    <strong>measured by simulation</strong>, not assumed.
+  </p>
+  <p>
+    The habit to steal: when you build an estimator, feed it data where you already know the true
+    answer &mdash; including the case where the true answer is zero &mdash; and find out what it reports. That
+    tells you your resolution. Anything finer than it is noise wearing a number's clothes.
+  </p>
+
+  <h3>5 &middot; Correlated signals aren't independent evidence</h3>
+  <p>
+    Four panels reading two datasets are not four opinions. Seven ranking columns carrying 3.4
+    signals' worth of information are not seven tests. Averaging correlated things and presenting
+    the result as a consensus overstates your evidence &mdash; and it is the single easiest way to build a
+    model that looks robust and isn't.
+  </p>
+  <p>
+    Note the distinction the app draws between its treatments of this. The ranking panel
+    <em>measures</em> its overlap, because a scan across many names gives it a cross-section to
+    measure from. The confluence rail <em>declares</em> its grouping as a stated assumption, because
+    a single ticker gives it nothing to measure. Knowing which of those two situations you are in is
+    the skill.
+  </p>
+  <p>
+    And the synthesis (section 03) takes the third option: rather than combine the four readings at
+    all, it prints them, says which of them rest on the same data, and names the places they
+    conflict. Refusing to aggregate is a legitimate answer, and it is usually the honest one when
+    you cannot measure how much your inputs overlap.
+  </p>
+
+  <h3>6 &middot; Reported figures are a chain of choices</h3>
+  <p>
+    Every number you see is the end of a chain: which data source, which date range, which
+    estimator, which threshold. Change any link and the number changes. This is why QuantDesk
+    exposes the price's own provenance (&ldquo;close of 2026-08-21&rdquo;), why it names which
+    engine produced a valuation, and why every assumption in the DCF is an editable field.
+  </p>
+  <p>
+    When someone shows you a financial number without its chain, the missing chain <em>is</em> the
+    finding.
+  </p>
+
+  <h4>Known limits, stated by the app itself</h4>
+  <ul>
+    <li><strong>The data source.</strong> Prices and filings come from a free, unofficial scraper of
+      an undocumented endpoint, with no service guarantee. Fundamentals for smaller Indonesian
+      listings are patchy. This is the single biggest fragility in the project, and the app says so.</li>
+    <li><strong>Results are in-sample</strong>, on one ticker at a time, with overlapping windows.
+      The event study is indicative, not a backtest.</li>
+    <li><strong>Deliberately not implemented:</strong> order-flow toxicity measures (they need
+      trade-level data a daily approximation cannot stand in for), multi-bar chart patterns, and
+      calendar effects &mdash; where the multiple-testing critique bites hardest of all.</li>
+  </ul>
+</section>
+
+<!-- ===================================================================== -->
+<section id="glossary" class="plain">
+  <div class="sec-head"><span class="eyebrow">10 &mdash; Reference</span>
+  <h2>Every metric in the app, defined</h2></div>
+
+  <p>
+    All 78 metrics QuantDesk can explain, with the plain-English definition the app itself uses and
+    the direction that counts as good. Filter by lens or search by name. The
+    <span class="tag hi">higher</span> / <span class="tag lo">lower</span> tags matter more than
+    they look: roughly a third of these are metrics where a <em>low</em> number is the good
+    outcome, and they sit in the same grids as the rest.
+  </p>
+
+  <div class="glass-controls">
+    <input id="gsearch" type="search" placeholder="Search 78 terms&hellip;" aria-label="Search the glossary">
+    <button class="chip" data-lens="all" aria-pressed="true" style="--chipc:var(--muted)">All</button>
+    <button class="chip" data-lens="flow" aria-pressed="false" style="--chipc:var(--flow)">Flow</button>
+    <button class="chip" data-lens="trend-long" aria-pressed="false" style="--chipc:var(--trend)">Trend &middot; long</button>
+    <button class="chip" data-lens="trend-ind" aria-pressed="false" style="--chipc:var(--trend)">Indicators</button>
+    <button class="chip" data-lens="trend-swing" aria-pressed="false" style="--chipc:var(--trend)">Trend &middot; short</button>
+    <button class="chip" data-lens="value" aria-pressed="false" style="--chipc:var(--value)">Value</button>
+    <button class="chip" data-lens="quality" aria-pressed="false" style="--chipc:var(--quality)">Quality</button>
+    <button class="chip" data-lens="rank" aria-pressed="false" style="--chipc:var(--rank)">Rank</button>
+  </div>
+  <div class="gcount" id="gcount" role="status" aria-live="polite"></div>
+  <div class="glist" id="glist"></div>
+</section>
+
+<!-- ===================================================================== -->
+<section id="become" class="plain">
+  <div class="sec-head"><span class="eyebrow">11 &mdash; The honest path</span>
+  <h2>How you actually become a quant</h2></div>
+
+  <p>
+    Reading this manual will let you use QuantDesk properly and hold your own in a conversation
+    about market data. It will not make you a quant, and it would be a disservice to imply
+    otherwise. Here is what the gap actually consists of.
+  </p>
+
+  <h3>The four things the job is made of</h3>
+  <ol class="body">
+    <li><strong>Statistics, deeply.</strong> Not formulas &mdash; <em>inference</em>. Sampling
+      distributions, standard errors, hypothesis testing and its abuses, regression and what
+      violating its assumptions does to you, multiple comparisons, Bayesian reasoning about base
+      rates. Section 09 is a tour of this; the real thing is a couple of years.</li>
+    <li><strong>Programming, fluently.</strong> Python with numpy and pandas is the working
+      language of this field, and QuantDesk is written in exactly that stack. Being able to read
+      <code>api/_lib/</code> and reproduce one of its estimators from the paper is a genuinely
+      good milestone.</li>
+    <li><strong>Mathematics.</strong> Linear algebra and probability first; calculus and
+      optimisation after. Stochastic calculus only if you go toward derivatives pricing &mdash; most
+      quant work does not need it, whatever the reading lists say.</li>
+    <li><strong>Market structure.</strong> How orders actually match, what a market maker does, how
+      fees and spreads and borrowing costs eat returns. This is the part self-taught quants skip
+      and professionals consider table stakes, because it is where paper strategies go to die.</li>
+  </ol>
+
+  <h3>A sequence that works</h3>
+  <ol class="body">
+    <li><strong>Use this app on ten companies you know</strong>, reading every explanation. You are
+      building vocabulary and, more importantly, calibration.</li>
+    <li><strong>Reproduce one number by hand.</strong> Pick something small &mdash; maximum drawdown, or
+      RSI. Pull the price history, compute it yourself in Python, and match the app. You will learn
+      more from the mismatch than the match.</li>
+    <li><strong>Read the code for an estimator you now understand.</strong> The docstrings in this
+      project explain <em>why</em> each choice was made and what failed before it. That is rare and
+      it is the best free teaching material you have to hand.</li>
+    <li><strong>Break something on purpose.</strong> Feed a model garbage &mdash; a flat price series, two
+      data points, a stock that halved overnight &mdash; and see whether it refuses or invents. Learning
+      where models fail is the actual skill.</li>
+    <li><strong>Form a hypothesis and test it out-of-sample.</strong> Something narrow and
+      falsifiable. Then accept the answer, including when it's no. Especially when it's no.</li>
+    <li><strong>Learn where the data is wrong.</strong> Survivorship bias, corporate actions,
+      restated filings, delisted tickers. Every serious practitioner spends more time on data
+      quality than on models, and nobody warns you.</li>
+  </ol>
+
+  <div class="note">
+    <span class="eyebrow">The disposition that matters more than the curriculum</span>
+    <p>
+      Markets are close to random over short horizons, competitive over long ones, and generous to
+      nobody. The people who last are not the ones with the cleverest model &mdash; they are the ones who
+      know exactly how much their model does not know, and size their conviction accordingly. Every
+      design decision in this app points the same direction: <em>report the uncertainty, refuse
+      when the model doesn't apply, and publish the null result.</em>
+    </p>
+    <p>
+      That is the whole job, and you can start practising it today with no mathematics at all.
+    </p>
+  </div>
+</section>
+
+<footer>
+  <p>
+    <strong>Not investment advice.</strong> QuantDesk is educational and research tooling. Prices
+    and filings come from Yahoo Finance &mdash; unaudited, occasionally incomplete, and never a substitute
+    for reading the filings yourself. Every model described here is an estimate built on assumptions
+    you can and should change.
+  </p>
+  <p>
+    Definitions in the glossary are generated directly from the app's own explanation layer, so this
+    manual and the tool cannot drift apart.
+  </p>
+</footer>
+
+</main>
+</div>
+
+<script>
+const GLOSSARY = [{"k":"sma100","t":"100-day average","d":"The average closing price of the last 100 trading days \u2014 a medium-term trend line.","g":"none","l":"trend-ind"},{"k":"momentum12_1","t":"12-1 month momentum","d":"How much the price rose over the twelve months ending ONE month ago. The recent month is deliberately skipped, because very short-term moves tend to snap back and would pollute the reading.","g":"high","l":"trend-long"},{"k":"sma200","t":"200-day average","d":"The average closing price of the last 200 trading days \u2014 the most widely watched single line in markets, and a rough divide between 'in an uptrend' and not.","g":"none","l":"trend-ind"},{"k":"sma50","t":"50-day average","d":"The average closing price of the last 50 trading days \u2014 a short-to-medium trend line.","g":"none","l":"trend-ind"},{"k":"adx","t":"ADX (trend strength)","d":"How strongly the price is trending \u2014 in EITHER direction. A high ADX in a collapse looks the same as a high ADX in a rally: it measures conviction, not which way.","g":"none","l":"trend-ind"},{"k":"altman","t":"Altman Z''-score","d":"A bankruptcy-distance score built from the balance sheet. It was fitted on companies that later went bust versus ones that did not, and it asks how much this one resembles the survivors.","g":"high","l":"quality"},{"k":"cagr","t":"Annual return (CAGR)","d":"The single yearly growth rate that would have taken the price from where it started to where it is now \u2014 the smoothed speed of the whole journey.","g":"high","l":"trend-long"},{"k":"aroon","t":"Aroon","d":"How recently the price set a new high versus a new low, each scored 0-100. 100 on the up side means it made its highest price today.","g":"none","l":"trend-ind"},{"k":"var95","t":"Bad-day loss (VaR 95%)","d":"How much the price falls on a genuinely bad day \u2014 the worst 1 day in 20.","g":"low","l":"trend-long"},{"k":"currentDrawdown","t":"Below its high right now","d":"How far the price currently sits under its own best-ever level.","g":"low","l":"trend-long"},{"k":"beneish","t":"Beneish M-Score","d":"A screen for earnings that may have been massaged. It compares this year's receivables, margins, asset quality and accruals against last year's, and asks whether the pattern resembles companies later found to have manipulated their numbers.","g":"low","l":"quality"},{"k":"bestDay","t":"Best single day","d":"The largest one-day rise in this history.","g":"none","l":"trend-long"},{"k":"spread","t":"Bid-ask spread","d":"The invisible toll on every trade: the gap between what a buyer pays and what a seller receives at the same instant. Buy and sell immediately and you lose this much without the price moving at all.","g":"low","l":"flow"},{"k":"bbPercentB","t":"Bollinger %B","d":"Where the price sits inside its volatility bands. 0 is the lower band, 1 is the upper band, 0.5 is the middle. Above 1 or below 0 means it has broken out of them.","g":"none","l":"trend-ind"},{"k":"bbBandwidth","t":"Bollinger bandwidth","d":"How wide the volatility bands are right now, as a share of the price. Narrow bands mean the price has gone quiet; wide bands mean it is swinging hard.","g":"none","l":"trend-ind"},{"k":"calmar","t":"Calmar ratio","d":"Yearly return divided by the worst fall the holding ever had. It asks: was the pain worth the reward?","g":"high","l":"trend-long"},{"k":"cci","t":"CCI","d":"How far the price has strayed from its own recent average, scaled so that most readings fall between -100 and +100.","g":"none","l":"trend-ind"},{"k":"cmf","t":"Chaikin money flow","d":"Whether recent days have tended to close near their high (buyers in control) or near their low (sellers), weighted by volume. Runs from -1 to +1.","g":"high","l":"trend-ind"},{"k":"altmanComponent","t":"Component","d":"One input to the distress score.","g":"high","l":"quality"},{"k":"coppock","t":"Coppock curve","d":"A slow, monthly indicator built in the 1960s specifically to spot the end of long bear markets. It turning up from below zero is its one classic signal.","g":"none","l":"trend-ind"},{"k":"benchmarkCorrelation","t":"Correlation with the index","d":"How closely this moves in step with the whole market. 1.0 would be perfect lockstep, 0 would be completely independent.","g":"none","l":"trend-long"},{"k":"atrPct","t":"Daily range (ATR)","d":"How much this typically moves in a single day, including overnight gaps, as a percentage of the price. It is the natural unit for setting a stop-loss.","g":"low","l":"trend-ind"},{"k":"amihud","t":"Depth (what it takes to move it)","d":"How much money has to trade before the price actually moves. It is the cost of SIZE, as opposed to the spread, which is the cost of being in a hurry.","g":"low","l":"flow"},{"k":"discountRate","t":"Discount rate","d":"The yearly return an investor should demand for taking this much risk. Future cash is worth less than cash today, and this is the rate used to shrink it.","g":"none","l":"value"},{"k":"fromHigh52w","t":"Distance from the 52-week high","d":"How far below (or above) its best price of the past year it is trading.","g":"high","l":"trend-long"},{"k":"fromAllTimeHigh","t":"Distance from the all-time high","d":"How far below its best price ever it is trading, over the window loaded here.","g":"high","l":"trend-long"},{"k":"distanceToLevel","t":"Distance to the nearest floor","d":"How far the price is from the closest level where it has previously turned around. A floor is where buyers showed up before.","g":"none","l":"trend-swing"},{"k":"stopDistance","t":"Distance to the stop","d":"How far the price would have to fall before the reason for the trade is wrong and you would get out.","g":"none","l":"trend-swing"},{"k":"downsideDeviation","t":"Downside volatility","d":"The same bounce measure, but counting only the days the price fell. Rising fast is not risk to someone who owns it.","g":"low","l":"trend-long"},{"k":"faberDistance","t":"Faber 10-month rule","d":"A very simple published rule: stay invested while the month-end price is above its average of the last ten month-ends, step aside when it drops below. It trades once or twice a year at most.","g":"high","l":"trend-long"},{"k":"kurtosis","t":"Fat tails (excess kurtosis)","d":"How often this stock does something extreme. Zero would mean it behaves like a textbook bell curve; higher means shock days happen far more often than that.","g":"none","l":"trend-long"},{"k":"regressionSlope","t":"Fitted long-run trend","d":"A straight line drawn through the price history, reported as the yearly slope of that line. It is the plainest possible summary of direction.","g":"high","l":"trend-long"},{"k":"flowBias","t":"Flow bias","d":"Whether the unusual days recently found looked more like buying or more like selling, decided by a four-way vote of volume-based measures.","g":"high","l":"flow"},{"k":"upside","t":"Gap to fair value","d":"How far today's share price sits from what the model thinks the business is worth. Positive means the model says it is cheap.","g":"high","l":"value"},{"k":"squeezePercentile","t":"How much it is moving","d":"How much the price has been moving lately compared with the rest of the past year. Low means unusually calm.","g":"none","l":"trend-swing"},{"k":"anomalyRate","t":"How often this flags","d":"The share of all days in the history that the detector marked as unusual. It is the baseline any fresh flag has to beat.","g":"none","l":"flow"},{"k":"valuationSpread","t":"How wide the answer is","d":"The gap between the pessimistic and optimistic halves of the simulation, as a share of the middle estimate. Wide means the model is not confident.","g":"low","l":"value"},{"k":"beneishIndex","t":"Index","d":"One of the eight Beneish inputs.","g":"low","l":"quality"},{"k":"timeUnderWaterDays","t":"Longest time under water","d":"The longest unbroken stretch spent below a previous high \u2014 how long a holder went without seeing a new best price.","g":"low","l":"trend-long"},{"k":"skew","t":"Lopsidedness (skew)","d":"Whether the surprises come as sharp falls or sharp jumps. Negative means the violent days tend to be down days.","g":"none","l":"trend-long"},{"k":"macd","t":"MACD","d":"The gap between a fast and a slow average of the price. Above its own signal line means the recent trend is accelerating; below means it is fading.","g":"none","l":"trend-ind"},{"k":"mfi","t":"Money flow index","d":"Like RSI, but it weights each day by how much money changed hands. It asks whether the buying or the selling had volume behind it.","g":"none","l":"trend-ind"},{"k":"moveVsSpread","t":"Move versus trading cost","d":"How big the latest day's move was compared with what it costs to trade in and out. Below about 2, the move is smaller than the toll.","g":"high","l":"flow"},{"k":"roc252","t":"One-year price change","d":"How much the price has moved over the last twelve months, as a percentage.","g":"high","l":"trend-long"},{"k":"compositeRank","t":"Overall rank","d":"The weighted average of where this name sits on every signal, compared with the others in the same scan. 100 would be best on everything.","g":"high","l":"rank"},{"k":"piotroski","t":"Piotroski F-Score","d":"A nine-point health checklist run on the company's own filings. It asks nine yes/no questions \u2014 is it profitable, is cash coming in, is debt falling, are margins improving \u2014 and counts the yeses.","g":"high","l":"quality"},{"k":"rangePosition","t":"Position in the 52-week range","d":"Where today's price sits between the lowest and highest price of the past year. 0% is the year's low, 100% is the year's high.","g":"high","l":"trend-long"},{"k":"positionShare","t":"Position size","d":"How much of your account this position would be, if a stop-out is not allowed to cost you more than your chosen risk budget.","g":"none","l":"trend-swing"},{"k":"divergenceState","t":"Price versus momentum","d":"Whether the price is making new highs (or lows) that the momentum reading is not matching. When the two disagree, the move is said to be losing steam.","g":"none","l":"trend-swing"},{"k":"qValue","t":"q-value","d":"The chance this particular hit is a false alarm, AFTER accounting for the fact that scanning many names produces hits by luck alone.","g":"low","l":"flow"},{"k":"riskReward","t":"Reward for the risk","d":"How much you stand to make if the target is reached, for every unit you lose if the stop is hit. 2.0 means twice as much up as down.","g":"high","l":"trend-swing"},{"k":"rsi","t":"RSI (14)","d":"A 0-100 speedometer of recent buying versus selling pressure. Above 70 is the traditional 'overbought' line, below 30 'oversold'.","g":"none","l":"trend-ind"},{"k":"probUndervalued","t":"Share of runs that came out cheap","d":"The model was run thousands of times with slightly different assumptions each time. This is the fraction of those runs where the business came out worth more than its market price.","g":"high","l":"value"},{"k":"terminalShare","t":"Share of value that is guesswork","d":"A discounted-cash-flow model forecasts five years explicitly and then assumes the business carries on forever at a fixed growth rate. This is how much of the answer comes from that forever assumption rather than the forecast.","g":"low","l":"value"},{"k":"sharpe","t":"Sharpe ratio","d":"Return earned per unit of price swing. It answers 'was the bumpy ride paid for?' with one number.","g":"high","l":"trend-long"},{"k":"signalRank","t":"Signal","d":"One ranking signal.","g":"high","l":"rank"},{"k":"signalOverlap","t":"Signal overlap","d":"How much two of the ranking signals are measuring the same thing. 1.0 would mean they are interchangeable.","g":"low","l":"rank"},{"k":"sortino","t":"Sortino ratio","d":"Return earned per unit of DOWNSIDE risk \u2014 the same idea as Sharpe, but it stops penalising the stock for going up quickly.","g":"high","l":"trend-long"},{"k":"stochastic","t":"Stochastic","d":"Where today's close sits inside the high-low range of the last two weeks. 100 means it closed at the very top of that range.","g":"none","l":"trend-ind"},{"k":"cusumEpisode","t":"Sustained flow regime (CUSUM)","d":"A detector for slow, patient buying or selling. A fund building a position spreads it over weeks precisely so no single day looks unusual \u2014 this adds up the small daily deviations until the total is too big to be chance.","g":"none","l":"flow"},{"k":"roc63","t":"Three-month price change","d":"How much the price has moved over the last quarter, as a percentage.","g":"high","l":"trend-long"},{"k":"maxDrawdownRecoveryDays","t":"Time to recover","d":"How long it took to climb back to the old high after that worst fall.","g":"low","l":"trend-long"},{"k":"regressionR2","t":"Trend fit (R\u00b2)","d":"How closely the price has actually hugged that straight trend line. 100% would be a perfect ruler-straight rise; 0% means the line explains nothing.","g":"high","l":"trend-long"},{"k":"hurst","t":"Trend or noise? (Hurst exponent)","d":"A test of whether this price series has real memory or is essentially a coin flip. 0.5 means a random walk \u2014 moves tell you nothing about the next move.","g":"none","l":"trend-long"},{"k":"ulcerIndex","t":"Ulcer index","d":"A single score for how uncomfortable holding this has been \u2014 it combines how far the price fell below its highs with how LONG it stayed there. A long shallow grind scores worse than a sharp fall that recovers, because that is how it feels.","g":"low","l":"trend-long"},{"k":"gapState","t":"Unfilled gap","d":"A price band the stock jumped straight over between one day's close and the next day's open. Almost nobody traded inside it, so there is no established support or resistance in there.","g":"none","l":"trend-swing"},{"k":"positiveDays","t":"Up days","d":"The share of trading days that finished higher than the day before.","g":"none","l":"trend-long"},{"k":"vwapDistance","t":"Versus the average price paid","d":"The volume-weighted average price everyone who bought since a chosen date has paid. Above it, the average buyer since then is in profit; below it, under water.","g":"high","l":"trend-swing"},{"k":"relativeExcess","t":"Versus the index","d":"How much better or worse this did than simply buying the market index over the same stretch. The index fund is the real alternative \u2014 not cash.","g":"high","l":"trend-long"},{"k":"volatility","t":"Volatility","d":"How much the price bounces around in a typical year. Bigger means a wilder ride, in both directions.","g":"low","l":"trend-long"},{"k":"yangZhangVol","t":"Volatility (gap-aware)","d":"How much this moves in a typical year, measured using each day's open, high, low AND close rather than closes alone \u2014 so overnight gaps are not invisible to it.","g":"low","l":"flow"},{"k":"volumeRatio","t":"Volume on the day","d":"How much trading happened today compared with a normal day over the past month.","g":"none","l":"trend-swing"},{"k":"volumeTrend","t":"Volume versus its year","d":"How busy trading has been lately compared with a normal day over the past year.","g":"none","l":"trend-ind"},{"k":"williamsR","t":"Williams %R","d":"The same idea as the Stochastic, flipped onto a -100 to 0 scale. Near 0 means closing at the top of the recent range, near -100 the bottom.","g":"none","l":"trend-ind"},{"k":"maxDrawdown","t":"Worst fall (max drawdown)","d":"The deepest peak-to-bottom fall in this history \u2014 how much someone who bought at the worst possible moment was down before it turned.","g":"low","l":"trend-long"},{"k":"rollingWorst","t":"Worst multi-year outcome","d":"Out of every possible multi-year holding period in this history, the one that turned out worst. It answers 'what if I had bought at the worst moment?'","g":"high","l":"trend-long"},{"k":"worstDay","t":"Worst single day","d":"The largest one-day fall in this history.","g":"low","l":"trend-long"},{"k":"cvar95","t":"Worst-days average (CVaR)","d":"When it does have one of those genuinely bad days, this is the average size of the fall. It measures how bad 'bad' gets.","g":"low","l":"trend-long"}];
+
+const LENS_CLASS = {
+  "flow": "flow", "trend-long": "trend", "trend-ind": "trend", "trend-swing": "trend",
+  "value": "value", "quality": "quality", "rank": "rank",
+};
+const DIR_TAG = {
+  high: '<span class="tag hi">higher is better</span>',
+  low:  '<span class="tag lo">lower is better</span>',
+  none: '<span class="tag no">context, not a verdict</span>',
+};
+
+const list = document.getElementById("glist");
+const count = document.getElementById("gcount");
+const search = document.getElementById("gsearch");
+const chips = [...document.querySelectorAll(".chip")];
+let lens = "all";
+
+const esc = (s) => s.replace(/[&<>"]/g, (c) => (
+  { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function render() {
+  const q = search.value.trim().toLowerCase();
+  const rows = GLOSSARY.filter((r) =>
+    (lens === "all" || r.l === lens) &&
+    (!q || r.t.toLowerCase().includes(q) || r.d.toLowerCase().includes(q) ||
+     r.k.toLowerCase().includes(q)));
+
+  count.textContent = rows.length === GLOSSARY.length
+    ? `${GLOSSARY.length} terms`
+    : `${rows.length} of ${GLOSSARY.length} terms`;
+
+  list.innerHTML = rows.length
+    ? rows.map((r) => `
+        <div class="gitem ${LENS_CLASS[r.l]}">
+          <div>
+            <div class="gterm">${esc(r.t)}</div>
+            <div class="gmeta">${DIR_TAG[r.g] || ""}</div>
+          </div>
+          <div class="gdef">${esc(r.d)}</div>
+        </div>`).join("")
+    : `<p class="gempty">Nothing matches &ldquo;${esc(search.value)}&rdquo;. Try a shorter word \u2014 the search looks at both the name and the definition.</p>`;
+}
+
+search.addEventListener("input", render);
+chips.forEach((chip) => chip.addEventListener("click", () => {
+  lens = chip.dataset.lens;
+  chips.forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
+  render();
+}));
+render();
+
+/* Scroll-spy: mark the section currently in view in the contents rail. */
+const links = [...document.querySelectorAll("#toc a")];
+const byId = new Map(links.map((a) => [a.getAttribute("href").slice(1), a]));
+const spy = new IntersectionObserver((entries) => {
+  entries.forEach((e) => {
+    const a = byId.get(e.target.id);
+    if (!a) return;
+    if (e.isIntersecting) {
+      links.forEach((l) => l.classList.remove("on"));
+      a.classList.add("on");
+    }
+  });
+}, { rootMargin: "-10% 0px -80% 0px" });
+document.querySelectorAll("section[id]").forEach((s) => spy.observe(s));
+</script>
