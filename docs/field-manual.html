@@ -575,6 +575,12 @@ html { scroll-behavior: smooth; }
       exactly this reason: a position within a stated group is a claim the data supports, and a
       score out of 100 usually isn't.
     </p>
+    <p>
+      This matters more than it sounds, and it is the fix for the hardest problem a beginner has
+      with this app: every other figure on screen is <em>absolute</em>, and an absolute number is
+      meaningless without priors you do not yet have. <a href="#trend">Section 05</a> covers the
+      panel that turns them into positions.
+    </p>
   </div>
 </section>
 
@@ -607,6 +613,10 @@ html { scroll-behavior: smooth; }
     <li><strong>Now open the tabs, in this order:</strong> Value and Quality first, then Trend,
       then Flow. That is roughly the order of how much the evidence supports them &mdash; which is the
       opposite of the order most beginners read in.</li>
+    <li><strong>On the Trend tab, press Compare with peers.</strong> It takes a few seconds and it
+      is the fastest way to learn whether the numbers you are reading are ordinary. Do this on the
+      first few companies you look at, even if you never do it again &mdash; it is how you acquire
+      the priors the rest of the app assumes you have.</li>
     <li><strong>When something is missing, believe the gap.</strong> If Quality says
       &ldquo;not applicable&rdquo; for a bank, that is a designed refusal, not a bug. If Value
       offers you a manual-input form, the data source genuinely had a hole in it.</li>
@@ -974,6 +984,76 @@ html { scroll-behavior: smooth; }
       next open. Almost nobody traded inside it, so there is no established support in there.</li>
   </ul>
 
+
+  <h3>Compare with peers &mdash; the antidote to a number with no frame</h3>
+  <p>
+    Everything above this line is <strong>absolute</strong>. The worst fall was 33%. Volatility is
+    28%. The return was 16% a year. If you have been reading markets for a decade those numbers
+    place themselves; if you have not, they are unreadable &mdash; not because they are complicated,
+    but because nothing tells you whether they are ordinary or alarming. This is the single biggest
+    obstacle between a beginner and this app, and no amount of extra explanation fixes it. What
+    fixes it is a <em>denominator</em>.
+  </p>
+  <p>
+    The <strong>Compare with peers</strong> button on this tab places the company against the other
+    members of its own index and says the result in sentences. On Apple it reports:
+  </p>
+
+  <div class="triad">
+    <h5>The same numbers, with a frame around them</h5>
+    <dl>
+      <div><dt>Worst fall</dt><dd>33% &mdash; and <strong>milder than 95% of the
+        Nasdaq-100</strong>. The figure that looked frightening on its own turns out to be one of
+        the gentlest in its index.</dd></div>
+      <div><dt>Day-to-day swing</dt><dd>25% &mdash; <strong>calmer than 90% of the
+        Nasdaq-100</strong>.</dd></div>
+      <div><dt>Momentum</dt><dd>+43% over the year &mdash; but that is only the
+        <strong>72nd percentile</strong>. A number that sounds spectacular in isolation is
+        unremarkable among its peers, which is exactly the correction that only a comparison can
+        make.</dd></div>
+    </dl>
+  </div>
+
+  <p>
+    Notice that the correction runs in <em>both</em> directions. A scary number can turn out to be
+    ordinary, and an impressive one can turn out to be middling. Neither is available from an
+    absolute figure, and both change what you think.
+  </p>
+
+  <h4>Four things to hold on to when you read it</h4>
+  <ul>
+    <li><strong>A percentile is a position, not a rating.</strong> The 95th percentile does not mean
+      &ldquo;95 out of 100&rdquo;. It means that in this group, on this date, 95% of the members
+      scored worse on this measure. The bar on the panel has a mark at the midpoint for exactly this
+      reason: it is a distribution, not a scoreboard.</li>
+    <li><strong>Change the group and the company moves.</strong> Apple sits differently against the
+      Nasdaq-100 than against the Dow's thirty. Neither is the truth; they are two different
+      questions. Where a company belongs to more than one index the panel offers the switch, and it
+      defaults to the larger &mdash; a percentile against twenty-nine peers can only place a stock
+      in thirds, which is barely a comparison.</li>
+    <li><strong>A high position on a weak signal is not good news.</strong> Two of the seven
+      measures are graded weak, and the panel refuses to colour them green however well the company
+      places. Being in the top decile on something that does not predict anything is still not
+      predicting anything. That restraint is deliberate and it is worth internalising: <em>rank on
+      a bad measure is still a bad measure.</em></li>
+    <li><strong>Only price is compared.</strong> All seven measures come from price and volume.
+      There is no peer comparison for the valuation or the accounts, because company filings cannot
+      be downloaded in a single batch the way price history can. The panel states this rather than
+      letting you assume the whole company was ranked.</li>
+  </ul>
+
+  <div class="note warnbox">
+    <span class="eyebrow">The trap this panel is most likely to set</span>
+    <p>
+      A row of high percentiles looks like a verdict, and it is not one. It says this company has
+      recently behaved better than most of its index on measures computed from its price. That is a
+      description of the past, in a group you chose, on a day you happened to look. The panel also
+      reports how much the seven measures overlap &mdash; typically about three signals' worth of
+      independent information rather than seven &mdash; so a strong combined placing is a weaker
+      claim than the seven bars suggest.
+    </p>
+  </div>
+
   <div class="note">
     <span class="eyebrow">Two design decisions worth copying</span>
     <p>
@@ -1277,6 +1357,15 @@ html { scroll-behavior: smooth; }
       an error.
     </p>
   </div>
+
+  <h3>The same machinery, pointed at one company</h3>
+  <p>
+    Everything above ranks a universe so you can pick a few names from it. The identical scan also
+    answers a question for a company you have <em>already</em> chosen: where does it sit among its
+    own peers? That is the <strong>Compare with peers</strong> panel on the Trend tab, covered in
+    <a href="#trend">section 05</a> &mdash; same percentiles, same measured overlap, one row
+    instead of a table.
+  </p>
 
   <h3>The anomaly screener, which answers a different question</h3>
   <p>
