@@ -1,7 +1,8 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Search, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useDetail } from "@/components/ui/explain";
 import { Input, Select } from "@/components/ui/input";
 import type { RunOptions } from "@/lib/api";
 
@@ -12,6 +13,18 @@ const PRESETS = ["AAPL", "NVDA", "JPM", "BBCA.JK", "TLKM.JK", "BTC-USD"];
  * else able to start a run — the screener's ticker buttons, a future deep
  * link — is reflected here instead of leaving the bar showing a stale symbol
  * beside results for a different one.
+ *
+ * THE TUNING CONTROLS COLLAPSE IN GUIDED MODE, AND ARE NAMED WHILE THEY DO IT.
+ * Four expert controls used to sit above the fold — a detection algorithm, a
+ * cutoff annotated "more negative = stricter", and two window pickers — and
+ * they were the first thing a newcomer met, before a single number. Guided mode
+ * puts them behind one disclosure that says how many there are.
+ *
+ * Naming the count is the load-bearing part. Silently removing controls reads
+ * as "this app cannot do that", which is exactly the impression that loses the
+ * expert audience; a labelled disclosure tells them at a glance that nothing
+ * was taken away and it is one click back. In Full mode the row renders exactly
+ * as it always has.
  */
 export function TickerBar({
   opts, onChange, onRun, busy,
@@ -21,6 +34,8 @@ export function TickerBar({
   onRun: (o: RunOptions) => void;
   busy: boolean;
 }) {
+  const guided = useDetail() === "simple";
+
   const set = <K extends keyof RunOptions>(key: K, value: RunOptions[K]) =>
     onChange({ ...opts, [key]: value });
 
@@ -28,6 +43,68 @@ export function TickerBar({
     e.preventDefault();
     onRun(opts);
   };
+
+  const controls = (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.68rem]">
+      <label className="flex items-center gap-2 text-ash">
+        <span className="eyebrow">Detection</span>
+        <Select value={opts.mode} onChange={(e) => set("mode", e.target.value)} className="h-8">
+          <option value="threshold">Threshold</option>
+          <option value="mad">Robust (MAD)</option>
+          <option value="quota">Fixed quota</option>
+          <option value="walkforward">Walk-forward</option>
+        </Select>
+      </label>
+
+      {/* Each mode's own parameter, shown only when it does something. */}
+      {opts.mode === "threshold" && (
+        <label className="flex items-center gap-2 text-ash">
+          <span className="eyebrow">Cutoff</span>
+          <input type="number" step={0.01} min={-0.5} max={0.5}
+                 value={opts.scoreThreshold}
+                 onChange={(e) => set("scoreThreshold", Number(e.target.value))}
+                 aria-label="Decision score cutoff"
+                 className="h-8 w-20 rounded border border-rule bg-panel px-2 font-mono text-xs text-chalk" />
+          <span className="text-[0.65rem]">more negative = stricter</span>
+        </label>
+      )}
+      {opts.mode === "quota" && (
+        <label className="flex items-center gap-2 text-ash">
+          <span className="eyebrow">Quota</span>
+          <input type="number" step={0.5} min={0.5} max={10}
+                 value={+(opts.contamination * 100).toFixed(2)}
+                 onChange={(e) => set("contamination", Number(e.target.value) / 100)}
+                 aria-label="Anomaly quota percent"
+                 className="h-8 w-20 rounded border border-rule bg-panel px-2 font-mono text-xs text-chalk" />
+          <span className="text-[0.65rem]">% of days, forced</span>
+        </label>
+      )}
+      {opts.mode === "mad" && (
+        <label className="flex items-center gap-2 text-ash">
+          <span className="eyebrow">Tolerance</span>
+          <input type="number" step={0.5} min={1} max={6}
+                 value={opts.madK}
+                 onChange={(e) => set("madK", Number(e.target.value))}
+                 aria-label="MAD tolerance"
+                 className="h-8 w-20 rounded border border-rule bg-panel px-2 font-mono text-xs text-chalk" />
+          <span className="text-[0.65rem]">MADs below rolling median</span>
+        </label>
+      )}
+
+      <label className="flex items-center gap-2 text-ash">
+        <span className="eyebrow">Anomaly window</span>
+        <Select value={opts.period} onChange={(e) => set("period", e.target.value)} className="h-8">
+          {["6mo", "1y", "2y", "5y", "max"].map((p) => <option key={p} value={p}>{p}</option>)}
+        </Select>
+      </label>
+      <label className="flex items-center gap-2 text-ash">
+        <span className="eyebrow">Chart range</span>
+        <Select value={opts.range} onChange={(e) => set("range", e.target.value)} className="h-8">
+          {["3mo", "6mo", "1y", "2y", "5y", "10y", "max"].map((p) => <option key={p} value={p}>{p}</option>)}
+        </Select>
+      </label>
+    </div>
+  );
 
   return (
     <form onSubmit={submit} className="space-y-3">
@@ -64,75 +141,30 @@ export function TickerBar({
         </p>
       )}
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.68rem]">
-        <label className="flex items-center gap-2 text-ash">
-          <span className="eyebrow">Detection</span>
-          <Select value={opts.mode} onChange={(e) => set("mode", e.target.value)} className="h-8">
-            <option value="threshold">Threshold</option>
-            <option value="mad">Robust (MAD)</option>
-            <option value="quota">Fixed quota</option>
-            <option value="walkforward">Walk-forward</option>
-          </Select>
-        </label>
+      {guided ? (
+        <details>
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-ash
+                              transition-colors hover:text-chalk focus-visible:outline-none
+                              focus-visible:ring-1 focus-visible:ring-tech">
+            <SlidersHorizontal aria-hidden className="h-3 w-3" />
+            <span className="eyebrow">Advanced settings (4)</span>
+          </summary>
+          <div className="mt-3">{controls}</div>
+        </details>
+      ) : controls}
 
-        {/* Each mode's own parameter, shown only when it does something. */}
-        {opts.mode === "threshold" && (
-          <label className="flex items-center gap-2 text-ash">
-            <span className="eyebrow">Cutoff</span>
-            <input type="number" step={0.01} min={-0.5} max={0.5}
-                   value={opts.scoreThreshold}
-                   onChange={(e) => set("scoreThreshold", Number(e.target.value))}
-                   aria-label="Decision score cutoff"
-                   className="h-8 w-20 rounded border border-rule bg-panel px-2 font-mono text-xs text-chalk" />
-            <span className="text-[0.65rem]">more negative = stricter</span>
-          </label>
-        )}
-        {opts.mode === "quota" && (
-          <label className="flex items-center gap-2 text-ash">
-            <span className="eyebrow">Quota</span>
-            <input type="number" step={0.5} min={0.5} max={10}
-                   value={+(opts.contamination * 100).toFixed(2)}
-                   onChange={(e) => set("contamination", Number(e.target.value) / 100)}
-                   aria-label="Anomaly quota percent"
-                   className="h-8 w-20 rounded border border-rule bg-panel px-2 font-mono text-xs text-chalk" />
-            <span className="text-[0.65rem]">% of days, forced</span>
-          </label>
-        )}
-        {opts.mode === "mad" && (
-          <label className="flex items-center gap-2 text-ash">
-            <span className="eyebrow">Tolerance</span>
-            <input type="number" step={0.5} min={1} max={6}
-                   value={opts.madK}
-                   onChange={(e) => set("madK", Number(e.target.value))}
-                   aria-label="MAD tolerance"
-                   className="h-8 w-20 rounded border border-rule bg-panel px-2 font-mono text-xs text-chalk" />
-            <span className="text-[0.65rem]">MADs below rolling median</span>
-          </label>
-        )}
-
-        <label className="flex items-center gap-2 text-ash">
-          <span className="eyebrow">Anomaly window</span>
-          <Select value={opts.period} onChange={(e) => set("period", e.target.value)} className="h-8">
-            {["6mo", "1y", "2y", "5y", "max"].map((p) => <option key={p} value={p}>{p}</option>)}
-          </Select>
-        </label>
-        <label className="flex items-center gap-2 text-ash">
-          <span className="eyebrow">Chart range</span>
-          <Select value={opts.range} onChange={(e) => set("range", e.target.value)} className="h-8">
-            {["3mo", "6mo", "1y", "2y", "5y", "10y", "max"].map((p) => <option key={p} value={p}>{p}</option>)}
-          </Select>
-        </label>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {PRESETS.map((preset) => (
-            <button key={preset} type="button"
-                    onClick={() => { const next = { ...opts, ticker: preset,
-                                       market: preset.endsWith(".JK") ? "ID" as const : "US" as const };
-                                     onChange(next); onRun(next); }}
-                    className="rounded border border-rule px-2 py-1 font-mono text-[0.65rem] text-ash transition-colors hover:border-tech/60 hover:text-chalk">
-              {preset}
-            </button>
-          ))}
-        </div>
+      {/* Presets stay OUT of the disclosure in both modes. They are how a
+          newcomer gets a first result without already knowing a ticker. */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        {PRESETS.map((preset) => (
+          <button key={preset} type="button"
+                  onClick={() => { const next = { ...opts, ticker: preset,
+                                     market: preset.endsWith(".JK") ? "ID" as const : "US" as const };
+                                   onChange(next); onRun(next); }}
+                  className="rounded border border-rule px-2 py-1 font-mono text-[0.65rem] text-ash transition-colors hover:border-tech/60 hover:text-chalk">
+            {preset}
+          </button>
+        ))}
       </div>
     </form>
   );

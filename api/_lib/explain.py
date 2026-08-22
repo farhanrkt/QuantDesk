@@ -2844,3 +2844,456 @@ def for_ranking_row(row: dict) -> dict:
             out[f"signal.{key}"] = explanation
         _ = definition
     return {k: v for k, v in out.items() if v is not None}
+
+
+# ============================================================================ #
+# The synthesis — what all four lenses add up to
+#
+# WHY THIS IS PROSE AND NOT A SCORE, WHICH IS THE WHOLE POINT
+# -----------------------------------------------------------
+# The obvious feature request is a single BUY / HOLD / SELL, or a 0-100
+# conviction number. It is refused deliberately and permanently.
+#
+# The app spends real effort establishing that its four lenses are not four
+# independent opinions (two read price, two read filings), that a seven-column
+# ranking carries about 3.4 signals' worth of information, that a DCF is
+# typically 60-80% perpetuity guess, and that several readings are graded weak.
+# A single composite number discards every one of those findings, and it does it
+# in the one field everybody would read. The moment it exists, nobody opens the
+# four lenses again.
+#
+# So this returns SENTENCES. It says what the lenses agree on, it names the
+# places they disagree, it states what this app cannot tell you about THIS
+# ticker, and it lists what would change the picture. Every clause is defensible
+# because every clause is a restatement of a number computed elsewhere in the
+# payload — not a new claim, and never a recommendation.
+#
+# THE DISAGREEMENTS ARE THE PRODUCT. A reader who learns only that "value says
+# cheap and quality says the accruals are flagged" has been told the single most
+# useful thing available about that company, and it is precisely the sentence a
+# composite score would average away.
+# ============================================================================ #
+
+# Which body of data each lens reads. Mirrors the same rule in
+# `components/ConfluenceRail.tsx` (`agreementOf`), which keeps its own copy
+# because it must render while legs are still loading and cannot wait for a
+# server round trip. This one exists for the PROSE — it never recomputes the
+# rail's vote arithmetic, so the two cannot disagree about a tally.
+SYNTHESIS_FAMILY = {"flow": "price", "trend": "price",
+                    "value": "filings", "quality": "filings"}
+FAMILY_LABEL = {"price": "price and volume", "filings": "the filings"}
+
+# Verbatim from the app's own framing. A DCF whose terminal value is more than
+# this share of the answer is mostly a statement about the perpetuity.
+TERMINAL_SHARE_WARN = 0.60
+
+
+def _plain(text: Optional[str]) -> str:
+    """Strip the `**bold**` markers the technical headline carries for the UI."""
+    return (text or "").replace("**", "").strip()
+
+
+def _leg(payload: dict, name: str) -> Optional[dict]:
+    """One confluence leg's data, or None if it failed or is absent.
+
+    Every read below goes through this. A synthesis that raises because one
+    engine returned an unexpected shape would take down the one panel whose job
+    is to explain the others.
+    """
+    leg = (payload or {}).get(name)
+    if not isinstance(leg, dict) or not leg.get("ok"):
+        return None
+    data = leg.get("data")
+    return data if isinstance(data, dict) else None
+
+
+def _reading(lens: str, key: str, verdict: str, sentence: str, tone: str,
+             vote: int) -> dict:
+    return {"lens": lens, "key": key, "family": SYNTHESIS_FAMILY[key],
+            "familyLabel": FAMILY_LABEL[SYNTHESIS_FAMILY[key]],
+            "verdict": verdict, "sentence": sentence, "tone": tone, "vote": vote}
+
+
+def _read_flow(data: dict) -> Optional[dict]:
+    stats = data.get("stats") or {}
+    recent = stats.get("recentCount")
+    days = stats.get("recentDays")
+    if recent is None or days is None:
+        return None
+    bias = (stats.get("recentFlowBias") or "Neutral").lower()
+
+    episode = ((data.get("accumulation") or {}).get("current")) or None
+    tail = ""
+    if isinstance(episode, dict) and episode.get("direction"):
+        tail = (f" A sustained {str(episode['direction']).lower()} regime is running "
+                f"underneath the day-to-day noise, which is the pattern a patient "
+                f"buyer leaves and a single-day detector cannot see.")
+
+    if not recent:
+        total = stats.get("anomalyCount")
+        extra = f" ({total} unusual days across the whole window.)" if total else ""
+        return _reading(
+            "Flow", "flow", "Quiet",
+            f"Nothing unusual has traded in the last {days} days.{extra}{tail}",
+            "neutral", 0)
+
+    plural = "" if recent == 1 else "s"
+    vote = 1 if bias == "accumulation" else -1 if bias == "distribution" else 0
+    word = {"accumulation": "buying", "distribution": "selling"}.get(bias, "mixed")
+    return _reading(
+        "Flow", "flow", word.capitalize(),
+        f"{recent} unusual day{plural} in the last {days}, leaning {word}. "
+        f"Unusual means statistically unlike this stock's other days — it does not "
+        f"mean an institution was behind it.{tail}",
+        "good" if vote > 0 else "bad" if vote < 0 else "neutral", vote)
+
+
+def _read_trend(data: dict) -> Optional[dict]:
+    long_term = data.get("longTerm") or {}
+    view = long_term.get("view") or {}
+    # Prefer the LONG-HORIZON verdict when there is enough history for one. The
+    # 50/200-day trend label describes the last few months wearing the same word,
+    # and a reader asking "what does this add up to" is asking the longer question.
+    if data.get("hasLongTerm") and view.get("verdict"):
+        tone = {"bull": "good", "bear": "bad"}.get(view.get("tone"), "neutral")
+        passed, scored = view.get("passed"), view.get("scored")
+        count = f" ({passed} of {scored} checks point that way.)" if scored else ""
+        return _reading(
+            "Trend", "trend", str(view["verdict"]).capitalize(),
+            f"{_plain(view.get('headline'))}{count}",
+            tone, 1 if tone == "good" else -1 if tone == "bad" else 0)
+
+    summary = data.get("summary") or {}
+    if not summary.get("trend"):
+        return None
+    tone = {"bull": "good", "bear": "bad"}.get(summary.get("trend_tone"), "neutral")
+    return _reading(
+        "Trend", "trend", str(summary["trend"]).capitalize(),
+        _plain(summary.get("headline")).split(". ")[0] + ".",
+        tone, 1 if tone == "good" else -1 if tone == "bad" else 0)
+
+
+ENGINE_WORDS = {"DCF": "cash-flow model", "DDM": "dividend model",
+                "RI": "book-value model"}
+
+
+def _read_value(data: dict) -> Optional[dict]:
+    verdict = data.get("verdict")
+    monte = data.get("monteCarlo") or {}
+    if not verdict or monte.get("p50Label") is None:
+        return None
+    upside = monte.get("upside")
+    engine = ENGINE_WORDS.get(data.get("engine"), "model")
+
+    where = ""
+    if _known(upside):
+        side = "below" if upside >= 0 else "above"
+        where = f", putting the market price {_pct(abs(upside), 0)} {side} that"
+    prob = monte.get("probUndervalued")
+    runs = (f" {_pct(prob, 0)} of the simulated runs came out cheap."
+            if _known(prob) else "")
+
+    vote = 1 if verdict == "UNDERVALUED" else -1 if verdict == "OVERVALUED" else 0
+    return _reading(
+        "Value", "value", str(verdict).capitalize(),
+        f"The {engine} puts fair value near {monte['p50Label']}{where}.{runs}",
+        "good" if vote > 0 else "bad" if vote < 0 else "neutral", vote)
+
+
+def _read_quality(data: dict) -> Optional[dict]:
+    if not data.get("applicable"):
+        return _reading(
+            "Quality", "quality", "Not applicable",
+            "Piotroski, Altman and Beneish were all built on non-financial firms and "
+            "none of them transfers to a bank or insurer, so no score is reported here. "
+            "That is a refusal, not a gap in the data.",
+            "none", 0)
+
+    parts = []
+    piotroski = data.get("piotroski") or {}
+    if piotroski.get("score") is not None:
+        parts.append(f"{piotroski['score']} of {piotroski.get('maxScore', 9)} "
+                     f"health checks passed")
+    words = {"safe": "the balance sheet is clear of the distress zone",
+             "grey": "the balance sheet sits in the grey zone",
+             "distress": "the balance sheet is inside the distress zone"}
+    band = (data.get("altman") or {}).get("band")
+    if band in words:
+        parts.append(words[band])
+    flags = {"clean": "no sign of massaged earnings",
+             "borderline": "accruals close to the manipulation threshold",
+             "flagged": "the accrual pattern is flagged for a closer look"}
+    beneish = (data.get("beneish") or {}).get("band")
+    if beneish in flags:
+        parts.append(flags[beneish])
+    if not parts:
+        return None
+
+    verdict = data.get("verdict") or "NEUTRAL"
+    tone = {"SOUND": "good", "CONCERNS": "bad"}.get(verdict, "neutral")
+    return _reading(
+        "Quality", "quality", verdict.capitalize(),
+        (", ".join(parts) + ".").capitalize(),
+        tone, 1 if tone == "good" else -1 if tone == "bad" else 0)
+
+
+def _family_votes(readings: Sequence[dict]) -> dict:
+    """One vote per BODY OF DATA, not one per panel.
+
+    Four lenses over two datasets are not four opinions. A family whose members
+    disagree votes zero and is recorded as split, because two readings of one
+    dataset pointing opposite ways is itself a finding worth a sentence.
+    """
+    out: dict = {}
+    for family in ("price", "filings"):
+        members = [r for r in readings if r["family"] == family and r["tone"] != "none"]
+        if not members:
+            continue
+        up = sum(1 for r in members if r["vote"] > 0)
+        down = sum(1 for r in members if r["vote"] < 0)
+        out[family] = {"vote": 1 if up > down else -1 if down > up else 0,
+                       "split": bool(up and down), "members": [r["lens"] for r in members]}
+    return out
+
+
+def _agreement(readings: Sequence[dict], families: dict) -> dict:
+    """The cross-check sentence — the one claim this whole app is built on."""
+    reading_count = len([r for r in readings if r["tone"] != "none"])
+    if not families:
+        return {"text": "No lens returned a usable reading, so there is nothing to "
+                        "cross-check.", "tone": "none",
+                "independentSources": 0, "lensesReading": reading_count}
+
+    if len(families) == 1:
+        only = next(iter(families))
+        return {"text": (
+            f"Only {FAMILY_LABEL[only]} could be read here, so there is no cross-check. "
+            f"Everything below rests on one body of data, which is exactly the situation "
+            f"this app exists to avoid."),
+            "tone": "warn", "independentSources": 1, "lensesReading": reading_count}
+
+    price, filings = families["price"]["vote"], families["filings"]["vote"]
+    base = {"independentSources": len(families), "lensesReading": reading_count}
+
+    if price and price == filings:
+        direction = "the same constructive direction" if price > 0 else "the same negative direction"
+        return {**base, "tone": "good" if price > 0 else "bad", "text": (
+            f"Both bodies of data point in {direction}. That is the strongest thing this "
+            f"app can say, because the price record and the filings share no inputs — so "
+            f"agreement between them is not one fact counted twice.")}
+
+    if price and filings and price != filings:
+        up = "price and volume" if price > 0 else "the filings"
+        down = "the filings" if price > 0 else "price and volume"
+        return {**base, "tone": "warn", "text": (
+            f"They disagree: {up} read constructively while {down} do not. The "
+            f"disagreement is the finding. It usually means the market is pricing "
+            f"something the accounts have not shown yet, or that the accounts are "
+            f"showing something the price has not reacted to — and which of those it is "
+            f"cannot be settled from this page.")}
+
+    active = "price and volume" if price else "the filings"
+    quiet = "the filings" if price else "price and volume"
+    return {**base, "tone": "neutral", "text": (
+        f"Only {active} has a directional view; {quiet} come out neutral. A single "
+        f"leaning reading is a weaker claim than agreement between two.")}
+
+
+def _tensions(readings: dict, payload: dict, families: dict) -> list[dict]:
+    """The named conflicts. Each one is a specific, recognised failure shape."""
+    out = []
+    value, quality = readings.get("value"), readings.get("quality")
+    trend, flow = readings.get("trend"), readings.get("flow")
+
+    if value and quality and value["vote"] > 0 and quality["vote"] < 0:
+        out.append({"title": "Cheap, with the accounts flagged", "text": (
+            "The valuation says the price is below what the cash flows support, and the "
+            "accounting screens raise a flag on the same filings. This is the shape of a "
+            "value trap: cheap because it deserves to be. Resolve the accounting question "
+            "before trusting the valuation, because both are computed from the same "
+            "statements and only one of them assumes they are honest.")})
+
+    if value and trend and value["vote"] < 0 and trend["vote"] > 0:
+        out.append({"title": "Rising past what the business supports", "text": (
+            "The price trend is constructive and the model says the price has run beyond "
+            "what the cash flows justify. Both can be true, and both can persist for "
+            "years — momentum and valuation operate on completely different clocks. "
+            "Nothing here tells you which one turns first.")})
+
+    if value and quality and value["vote"] < 0 and quality["vote"] > 0:
+        out.append({"title": "A sound business at a demanding price", "text": (
+            "Quality is good and the valuation says expensive. That is a different "
+            "problem from a weak business — the risk is the price paid, not the company. "
+            "The growth assumption is the lever worth testing here.")})
+
+    for family, info in families.items():
+        if info.get("split"):
+            out.append({"title": f"Split within {FAMILY_LABEL[family]}", "text": (
+                f"{' and '.join(info['members'])} read the same data and point opposite "
+                f"ways. That is not two independent opinions cancelling out — it is one "
+                f"dataset supporting two readings, which usually means the signal is weak "
+                f"rather than balanced.")})
+
+    if flow and trend and flow["vote"] and not trend["vote"]:
+        out.append({"title": "Flow moved before the trend did", "text": (
+            "Unusual trading has shown up while the price trend itself is unresolved. "
+            "This is the case the Flow lens exists for, and also the case where it is "
+            "most often wrong — index rebalances, expiries and earnings all leave the "
+            "same footprint. The event study on the Flow tab is how you check whether "
+            "these flags have ever predicted anything on this ticker.")})
+
+    return out
+
+
+def _blind_spots(payload: dict, readings: dict) -> list[dict]:
+    """What this app cannot tell you about THIS ticker, specifically.
+
+    Not a generic disclaimer. Every entry is switched on by a number in the
+    payload, so it names the actual limit in force right now — which is the
+    difference between a caveat a reader skips and one they use.
+    """
+    out = []
+
+    technical = _leg(payload, "technical")
+    if technical:
+        hurst = ((technical.get("longTerm") or {}).get("hurstReading")) or {}
+        if hurst.get("verdict") == "indistinguishable":
+            out.append({"title": "The trend tools may be describing noise", "text": (
+                "The Hurst exponent cannot separate this price series from a random walk "
+                "at the amount of history loaded. That is the app's own honesty check, and "
+                "when it fires the right response is to downgrade every price-based "
+                "reading on the page rather than act on it. The filings-based lenses are "
+                "unaffected.")})
+        if not technical.get("hasLongTerm"):
+            out.append({"title": "No long-horizon reading", "text": (
+                "There is not enough loaded history for the multi-year section, which is "
+                "the part with the strongest evidence behind it. Widen the chart range to "
+                "5y or more and run it again.")})
+
+    valuation = _leg(payload, "valuation")
+    if valuation:
+        share = (valuation.get("baseCase") or {}).get("terminalShare")
+        if _known(share) and share >= TERMINAL_SHARE_WARN:
+            out.append({"title": "Most of the valuation is a perpetuity guess", "text": (
+                f"{_pct(share, 0)} of the fair value comes from the terminal assumption — "
+                f"what the business is worth forever after year five — rather than from "
+                f"the forecast years. The valuation is mostly a statement about that one "
+                f"input, and it is editable on the Value tab.")})
+
+    anomaly = _leg(payload, "anomaly")
+    if anomaly:
+        liquidity = anomaly.get("liquidity") or {}
+        if liquidity.get("spreadResolved") is False:
+            out.append({"title": "Trading cost is a ceiling, not a measurement", "text": (
+                "The bid-ask spread on this name sits below what daily bars can resolve, "
+                "so the panel reports an upper bound instead of a figure. Quoting the "
+                "estimator's own noise as a cost would overstate what this stock actually "
+                "charges to trade.")})
+
+    for name, label in (("anomaly", "Flow"), ("technical", "Trend"),
+                        ("valuation", "Value"), ("quality", "Quality")):
+        leg = (payload or {}).get(name)
+        if isinstance(leg, dict) and not leg.get("ok"):
+            detail = leg.get("error")
+            if isinstance(detail, dict):
+                detail = detail.get("message") or "the engine could not run"
+            out.append({"title": f"{label} did not run", "text": (
+                f"{str(detail)[:220]} Everything below is missing that lens, so the "
+                f"cross-check is weaker than it looks.")})
+
+    if readings.get("quality") and readings["quality"]["tone"] == "none":
+        out.append({"title": "No accounting screen for this company", "text": (
+            "The three quality models do not apply to banks and insurers, so half of the "
+            "filings-side evidence is unavailable here and the valuation carries it alone.")})
+
+    return out
+
+
+def _next_checks(payload: dict, readings: dict) -> list[str]:
+    """What to do next. Concrete, tied to this ticker, and never 'buy'."""
+    out = []
+    valuation = _leg(payload, "valuation")
+    technical = _leg(payload, "technical")
+    quality = _leg(payload, "quality")
+
+    if valuation:
+        share = (valuation.get("baseCase") or {}).get("terminalShare")
+        if _known(share) and share >= TERMINAL_SHARE_WARN:
+            out.append("On the Value tab, move terminal growth by half a point and watch "
+                       "the fair value move further than the gap you are looking at. If it "
+                       "does, the gap is an artefact of that assumption.")
+        else:
+            out.append("On the Value tab, change the growth assumption to whatever you "
+                       "actually believe. The default is a default, not a forecast.")
+
+    if quality and quality.get("applicable") and \
+            (quality.get("beneish") or {}).get("band") == "flagged":
+        out.append("Read the cash-flow statement against the income statement. A Beneish "
+                   "flag means the profit and the cash have diverged, and it is a screen "
+                   "rather than a finding — most flags are false alarms.")
+
+    if technical:
+        drawdown = ((technical.get("longTerm") or {}).get("drawdown")) or {}
+        worst = drawdown.get("maxDrawdown")
+        if _known(worst):
+            out.append(f"Size any position so that a repeat of the {_pct(abs(worst), 0)} "
+                       f"fall in this history would not force you out. That is the single "
+                       f"decision the drawdown number exists for.")
+
+    out.append("Run the event study on the Flow tab. It measures whether this ticker's "
+               "anomaly flags have predicted anything at all, and a null result there is "
+               "the most useful thing it can return.")
+    return out
+
+
+def for_synthesis(payload: dict) -> dict:
+    """Everything the four lenses add up to, in sentences.
+
+    `payload` is the `/api/confluence` response — each leg carrying its own
+    `ok` flag — so this reads exactly the figures the panels render rather than
+    recomputing them, and a failed leg becomes a stated blind spot instead of an
+    exception.
+    """
+    readers = {"flow": ("anomaly", _read_flow), "trend": ("technical", _read_trend),
+               "value": ("valuation", _read_value), "quality": ("quality", _read_quality)}
+
+    readings: dict = {}
+    for key, (leg_name, fn) in readers.items():
+        data = _leg(payload, leg_name)
+        if data is None:
+            continue
+        try:
+            result = fn(data)
+        except (TypeError, ValueError, KeyError, ZeroDivisionError, AttributeError):
+            result = None
+        if result:
+            readings[key] = result
+
+    ordered = [readings[k] for k in ("flow", "trend", "value", "quality") if k in readings]
+    families = _family_votes(ordered)
+    agreement = _agreement(ordered, families)
+
+    lenses = agreement["lensesReading"]
+    sources = agreement["independentSources"]
+    if not lenses:
+        headline = "No lens returned a usable reading for this ticker."
+    else:
+        plural = "" if lenses == 1 else "es"
+        headline = (f"{lenses} lens{plural} reporting, resting on "
+                    f"{sources} independent "
+                    f"{'source' if sources == 1 else 'sources'} of data.")
+
+    return {
+        "headline": headline,
+        "tone": agreement["tone"],
+        "readings": ordered,
+        "agreement": agreement,
+        "tensions": _tensions(readings, payload, families),
+        "blindSpots": _blind_spots(payload, readings),
+        "nextChecks": _next_checks(payload, readings),
+        "caveat": (
+            "This is a description of what the four lenses reported, not a recommendation. "
+            "Every sentence restates a number computed elsewhere on this page — nothing "
+            "here is a forecast, and no combination of these readings is a reason to buy "
+            "or sell on its own."),
+    }

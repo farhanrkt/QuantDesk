@@ -564,6 +564,44 @@ export type Leg<T> =
   | { ok: true; data: T }
   | { ok: false; error: string | EngineFailure };
 
+/**
+ * What the four lenses add up to, in sentences.
+ *
+ * Deliberately has NO score field and never will. See `explain.for_synthesis`
+ * for the reasoning: a single composite number discards every finding the app
+ * works to establish (that four panels rest on two datasets, that a DCF is
+ * mostly a perpetuity guess, that several readings are graded weak) and it does
+ * it in the one field everybody reads.
+ */
+export interface SynthesisReading {
+  lens: string;
+  key: "flow" | "trend" | "value" | "quality";
+  family: "price" | "filings";
+  familyLabel: string;
+  verdict: string;
+  sentence: string;
+  tone: string;
+  vote: number;
+}
+
+export interface SynthesisNote { title: string; text: string }
+
+export interface Synthesis {
+  headline: string;
+  tone: string;
+  readings: SynthesisReading[];
+  agreement: {
+    text: string; tone: string;
+    independentSources: number; lensesReading: number;
+  };
+  /** Named conflicts. The most useful sentences on the page. */
+  tensions: SynthesisNote[];
+  /** Limits in force for THIS ticker, switched on by real numbers. */
+  blindSpots: SynthesisNote[];
+  nextChecks: string[];
+  caveat: string;
+}
+
 export interface ConfluenceResponse {
   ticker: string;
   anomaly: Leg<AnomalyResponse>;
@@ -571,4 +609,5 @@ export interface ConfluenceResponse {
   valuation: Leg<ValuationResponse>;
   quality: Leg<QualityResponse>;
   news: Leg<NewsResponse>;
+  synthesis: Synthesis;
 }

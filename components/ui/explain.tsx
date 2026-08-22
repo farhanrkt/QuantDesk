@@ -18,10 +18,12 @@ import { cn } from "@/lib/utils";
  * reaches this file the judgement has already been made and cannot be
  * re-litigated by accident.
  *
- * Explanations expand INLINE rather than in a floating popover. A popover is
- * prettier and worse: it needs positioning logic, it fights the scroll on a
- * phone, it vanishes when you try to select the text, and it cannot be printed.
- * These are paragraphs meant to be read, not tooltips meant to be glanced at.
+ * TWO AFFORDANCES, NOT ONE. `ExplainedStat` and `ExplainedRow` expand INLINE,
+ * because they own their own block and a paragraph that pushes the layout down
+ * can be read, selected and printed. `Explain` — the bare icon that sits inside
+ * table cells and running prose, where there is no block to expand into — uses a
+ * floating panel and pays for it with positioning logic (see its own comment).
+ * Neither is a tooltip: these are paragraphs meant to be read.
  */
 
 export const TONE_TEXT: Record<string, string> = {
@@ -55,7 +57,7 @@ const EVIDENCE_TONE: Record<string, string> = {
 };
 
 // --------------------------------------------------------------------------- //
-// Simple / Detailed
+// Guided / Full
 // --------------------------------------------------------------------------- //
 export type DetailLevel = "simple" | "detailed";
 
@@ -65,10 +67,20 @@ export const useDetail = () => useContext(DetailContext);
 const STORAGE_KEY = "quantdesk.detail";
 
 /**
- * Simple is the default, and it is not a lesser mode — it is the five or six
- * numbers that decide a holding, written as sentences. Detailed adds everything
- * else. The choice persists because a reader who wants one of them wants it
- * every time, and re-picking it on each load is its own small insult.
+ * GUIDED is the default. The stored value is still "simple" / "detailed" —
+ * renaming the label is a UI change, and rewriting what is already in people's
+ * localStorage would silently reset every existing reader to the default.
+ *
+ * The two modes are not more-and-less of one thing. GUIDED walks a reader
+ * through: the handful of numbers that decide a holding, their readings shown
+ * rather than hidden behind an icon, and every expert control collapsed out of
+ * the first screen. FULL is the app as it has always been — nothing moved,
+ * nothing renamed, nothing added. That second promise is the load-bearing one:
+ * a mode that "simplifies" by taking capability away from the people who came
+ * for the capability is a mode they turn off once and never trust again.
+ *
+ * The choice persists because a reader who wants one of them wants it every
+ * time, and re-picking it on each load is its own small insult.
  */
 export function DetailProvider({
   level, children,
@@ -98,7 +110,7 @@ export function DetailToggle({
   level, onChange,
 }: { level: DetailLevel; onChange: (v: DetailLevel) => void }) {
   return (
-    <div role="radiogroup" aria-label="Level of detail"
+    <div role="radiogroup" aria-label="Reading mode"
          className="inline-flex rounded border border-rule bg-raised p-0.5">
       {(["simple", "detailed"] as const).map((option) => (
         <button
@@ -113,7 +125,7 @@ export function DetailToggle({
             level === option ? "bg-tech/20 text-chalk" : "text-ash hover:text-chalk",
           )}
         >
-          {option === "simple" ? "Simple" : "Detailed"}
+          {option === "simple" ? "Guided" : "Full"}
         </button>
       ))}
     </div>
@@ -281,6 +293,7 @@ export function ExplainedStat({
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
+  const guided = useDetail() === "simple";
   if (!explain && value === undefined) return null;
   const shown = value ?? explain?.valueText ?? "—";
   const colour = tone ?? (explain ? TONE_TEXT[explain.tone] : undefined) ?? "text-chalk";
@@ -295,6 +308,17 @@ export function ExplainedStat({
       </div>
       <div className={cn("num text-lg font-semibold leading-tight", colour)}>{shown}</div>
       {sub && <div className="mt-0.5 text-[0.7rem] leading-snug text-ash">{sub}</div>}
+      {/* GUIDED: show the interpretation of THIS value without a click. It is
+          the `reading` line only — the full three-part explanation stays behind
+          the icon, so the affordance still has a job and the card does not
+          become a wall. A reader who never discovers the icon has still been
+          told whether the number in front of them is good or bad. */}
+      {!open && guided && explain && explain.tone !== "none" && (
+        <div className={cn("mt-1.5 text-[0.72rem] leading-relaxed",
+                           TONE_TEXT[explain.tone] ?? "text-chalk", "opacity-90")}>
+          {explain.reading}
+        </div>
+      )}
       {open && explain && (
         <div id={id} className="mt-3 border-t border-rule pt-3">
           <ExplanationBody explain={explain} />

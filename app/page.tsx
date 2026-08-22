@@ -9,6 +9,7 @@ import { NewsPanel } from "@/components/NewsPanel";
 import { QualityPanel } from "@/components/QualityPanel";
 import { RankingPanel } from "@/components/RankingPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
+import { SynthesisPanel } from "@/components/SynthesisPanel";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { TickerBar } from "@/components/TickerBar";
 import { ManualRescue } from "@/components/ValuationControls";
@@ -79,7 +80,7 @@ function Panel<T>({
 
 export default function Home() {
   const {
-    anomaly, technical, valuation, quality, news,
+    anomaly, technical, valuation, quality, news, synthesis,
     run, refineValuation, refineTechnical, csvUrl,
   } = useEngines();
   const { state: eventStudy, validate, reset: resetEventStudy } = useEventStudy();
@@ -142,7 +143,10 @@ export default function Home() {
               Four models read the same ticker from different data. Where they agree is more
               interesting than what any one of them says alone — with the caveat that they are
               not equally independent. Every number has an{" "}
-              <span className="text-chalk/80">i</span> beside it explaining what it means.
+              <span className="text-chalk/80">i</span> beside it explaining what it means.{" "}
+              <span className="text-chalk/80">Guided</span> adds those readings to the page and
+              folds the expert controls away; <span className="text-chalk/80">Full</span> is
+              every control and every indicator.
             </p>
           </div>
         </div>
@@ -169,6 +173,12 @@ export default function Home() {
           <ConfluenceRail ticker={resolvedTicker} anomaly={anomaly}
                           technical={technical} valuation={valuation}
                           quality={quality} />
+
+          {/* Reads the assembled payload, so it can only appear once every leg
+              has settled. That is the right coupling: a summary of four lenses
+              that renders before three of them have answered would be
+              describing a picture that does not exist yet. */}
+          {synthesis && <SynthesisPanel data={synthesis} />}
 
           <div>
             <Tabs tabs={TABS} active={tab} onChange={setTab} />

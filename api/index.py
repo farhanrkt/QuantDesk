@@ -967,6 +967,10 @@ async def confluence(
     Each leg reports its own success or failure, so a ticker with no dividend
     history still returns its anomaly and technical panels, and a valuation
     data gap still arrives as the structured `manualRequired` payload.
+
+    Carries a `synthesis` block: what the four lenses add up to, in sentences.
+    It is a DESCRIPTION and never a recommendation — see `explain.for_synthesis`
+    for why a single buy/hold/sell score is refused permanently.
     """
     symbol = resolved(ticker, market)
 
@@ -993,4 +997,10 @@ async def confluence(
         leg("news", lambda: {"ticker": symbol,
                              "items": news.fetch_news(symbol, limit=news_limit)}),
     )
-    return ok({"ticker": symbol, **dict(results)})
+    legs = dict(results)
+    # The synthesis reads the ASSEMBLED payload rather than running its own
+    # analysis, for the same reason every `explain` layer in this app does: it
+    # must quote the figures the panels actually render, and a parallel
+    # computation would eventually drift from them. A failed leg becomes a
+    # stated blind spot inside it rather than an exception.
+    return ok({"ticker": symbol, **legs, "synthesis": explain.for_synthesis(legs)})

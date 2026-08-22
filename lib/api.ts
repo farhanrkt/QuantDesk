@@ -4,7 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import type {
   AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
   Leg, ManualInputs, EventStudyResponse, Market, NewsResponse, QualityResponse,
-  RankResponse, ScreenerResponse, TechnicalResponse, UniversesResponse,
+  RankResponse, ScreenerResponse, Synthesis, TechnicalResponse, UniversesResponse,
   ValuationResponse,
 } from "./types";
 
@@ -185,6 +185,11 @@ export function useEngines() {
   const [valuation, setValuation] = useState<Engine<ValuationResponse>>({ status: "idle" });
   const [quality, setQuality] = useState<Engine<QualityResponse>>({ status: "idle" });
   const [news, setNews] = useState<Engine<NewsResponse>>({ status: "idle" });
+  // The synthesis arrives with the confluence payload and is the only piece of
+  // state here that is not per-lens: it is a statement ABOUT the four together,
+  // so a partial re-run of one lens deliberately clears it rather than leaving
+  // a summary standing that describes figures no longer on screen.
+  const [synthesis, setSynthesis] = useState<Synthesis | null>(null);
 
   // The last options each engine ran with, so a partial re-run can reuse them.
   const lastRun = useRef<RunOptions | null>(null);
@@ -209,6 +214,10 @@ export function useEngines() {
     lastTechnical.current = t;
     const { signal, current } = claim(["technical"]);
     setTechnical({ status: "loading" });
+    // The synthesis quotes figures from the run it was built for. Re-running one
+    // lens supersedes some of them, so it is dropped rather than left standing
+    // beside numbers it no longer describes.
+    setSynthesis(null);
     return settle(
       get<TechnicalResponse>("/api/technical-analysis", {
         ticker: o.ticker, market: o.market, range: o.range,
@@ -223,6 +232,7 @@ export function useEngines() {
     lastValuation.current = v;
     const { signal, current } = claim(["valuation"]);
     setValuation({ status: "loading" });
+    setSynthesis(null);          // see runTechnical
     return settle(
       get<ValuationResponse>("/api/intrinsic-value", valuationParams(o, v), signal),
       setValuation,
@@ -246,6 +256,7 @@ export function useEngines() {
     setValuation({ status: "loading" });
     setQuality({ status: "loading" });
     setNews({ status: "loading" });
+    setSynthesis(null);
 
     let payload: ConfluenceResponse;
     try {
@@ -268,6 +279,7 @@ export function useEngines() {
     if (current("valuation")) setValuation(fromLeg(payload.valuation));
     if (current("quality")) setQuality(fromLeg(payload.quality));
     if (current("news")) setNews(fromLeg(payload.news));
+    if (current("anomaly")) setSynthesis(payload.synthesis ?? null);
   }, [claim]);
 
   /** Re-run one engine against the ticker already loaded. */
@@ -285,7 +297,7 @@ export function useEngines() {
   );
 
   return {
-    anomaly, technical, valuation, quality, news,
+    anomaly, technical, valuation, quality, news, synthesis,
     run, refineValuation, refineTechnical, csvUrl,
     valuationOptions: lastValuation, technicalOptions: lastTechnical,
   };

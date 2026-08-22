@@ -11,6 +11,7 @@ import { IndicatorGrid } from "@/components/IndicatorGrid";
 import { HorizonPanel } from "@/components/HorizonPanel";
 import { LongTermPanel } from "@/components/LongTermPanel";
 import { Tabs } from "@/components/ui/tabs";
+import { useDetail } from "@/components/ui/explain";
 import { ApplyButton, DownloadButton, Field, NumberField } from "@/components/ui/controls";
 import type { TechnicalOptions } from "@/lib/api";
 import type { TechPoint, TechnicalResponse } from "@/lib/types";
@@ -67,6 +68,7 @@ export function TechnicalPanel({
   // not a more detailed version of the same one, and nesting them would imply
   // otherwise.
   const [section, setSection] = useState(data.hasLongTerm ? "long" : "chart");
+  const guided = useDetail() === "simple";
 
   const downloadSeries = () =>
     downloadCsv(
@@ -106,35 +108,55 @@ export function TechnicalPanel({
   // Ordered longest-first, deliberately. Reading left to right walks from the
   // question with the strongest evidence behind it to the one with the weakest,
   // which is the order a reader should weigh them in.
+  // GUIDED DROPS "ALL INDICATORS" AND NOTHING ELSE. That grid is forty-odd raw
+  // readings — Aroon, CCI, Williams %R, Coppock — and it is the densest wall of
+  // jargon in the app. Every other section here leads with a sentence, so they
+  // survive. This is the one place where hiding beats collapsing: a beginner who
+  // opens that tab does not get a gentler version of the lens, they get the
+  // reason they stop using it. The line below the tabs says it is one click
+  // away in Full, so nothing disappears silently.
   const SECTIONS = [
     ...(data.hasLongTerm ? [{ id: "long", label: "Long term · years", accent: "#35C4A8" }] : []),
     { id: "mid", label: "Mid term · weeks–months", accent: "#5B8DEF" },
     { id: "short", label: "Short term · days–weeks", accent: "#F2C14E" },
     { id: "chart", label: "Chart & signals", accent: "#A78BFA" },
-    { id: "indicators", label: "All indicators", accent: "#A78BFA" },
+    ...(guided ? [] : [{ id: "indicators", label: "All indicators", accent: "#A78BFA" }]),
   ];
+
+  // A section that is open when the mode changes underneath it would otherwise
+  // leave the panel blank — the tab is gone but `section` still names it. Derived
+  // rather than corrected in an effect, so there is no frame where the panel has
+  // rendered empty and no second render to fix it.
+  const active = SECTIONS.some((s) => s.id === section) ? section : SECTIONS[0].id;
 
   return (
     <div className="space-y-4 animate-rise">
-      <Tabs tabs={SECTIONS} active={section} onChange={setSection} />
+      <Tabs tabs={SECTIONS} active={active} onChange={setSection} />
+      {guided && (
+        <p className="text-[0.68rem] text-ash">
+          Switch to <span className="text-chalk/80">Full</span> for the complete indicator
+          grid — ADX, Aroon, Stochastic, Williams %R, CCI, Coppock and the rest, grouped by
+          the horizon each one speaks to.
+        </p>
+      )}
 
-      {section === "long" && data.hasLongTerm && (
+      {active === "long" && data.hasLongTerm && (
         <LongTermPanel data={data.longTerm} currency={data.currency} />
       )}
 
-      {section === "mid" && (
+      {active === "mid" && (
         <HorizonPanel data={data.midTerm} currency={data.currency} />
       )}
 
-      {section === "short" && (
+      {active === "short" && (
         <HorizonPanel data={data.shortTerm} currency={data.currency} />
       )}
 
-      {section === "indicators" && (
+      {active === "indicators" && (
         <IndicatorGrid explanations={data.indicatorsExplain} />
       )}
 
-      {!data.hasLongTerm && section === "chart" && (
+      {!data.hasLongTerm && active === "chart" && (
         <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-xs leading-relaxed text-warn">
           The long-horizon section needs at least a year of history. Set the chart range to
           5y, 10y or max to get drawdown depth, rolling multi-year returns and relative
@@ -143,7 +165,7 @@ export function TechnicalPanel({
         </div>
       )}
 
-      <div className={section === "chart" ? "space-y-4" : "hidden"}>
+      <div className={active === "chart" ? "space-y-4" : "hidden"}>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Latest close" value={num(latest.close)} sub={latest.date} />
         <Stat label="Change on the day" value={`${latest.change >= 0 ? "+" : ""}${num(latest.change)}`}
@@ -190,7 +212,7 @@ export function TechnicalPanel({
           <DownloadButton onClick={downloadSeries}>Indicators CSV</DownloadButton>
         </CardHeader>
         <CardBody>
-          <div className="flex flex-wrap items-end gap-3">
+          <div className={guided ? "hidden" : "flex flex-wrap items-end gap-3"}>
             <Field label="Turning points apart (days)"
                    hint="Larger keeps only the major turns.">
               <NumberField value={srWindow} onChange={(v) => setSrWindow(v ?? 10)}

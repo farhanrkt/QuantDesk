@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { useDetail } from "@/components/ui/explain";
 import {
   ApplyButton, Disclosure, Field, NumberField, PercentField, SelectField, Toggle,
 } from "@/components/ui/controls";
@@ -179,16 +180,16 @@ export function ValuationControls({
   const streamLabel = engine === "DCF" ? "free cash flow"
     : engine === "RI" ? "book value per share" : "dividend per share";
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Assumptions</CardTitle>
-        <button type="button" onClick={reset}
-                className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-ash hover:text-chalk">
-          Reset to defaults
-        </button>
-      </CardHeader>
-      <CardBody className="space-y-4">
+  // COLLAPSED IN GUIDED, NEVER REMOVED. This form is seventeen inputs deep and
+  // it is the most powerful thing on the Value tab — the whole point of a DCF is
+  // that you change the assumptions and watch the answer move. A beginner should
+  // not meet it before they have read the verdict; they should absolutely meet
+  // it afterwards, which is why the summary invites them in rather than hiding
+  // the fact that it exists.
+  const guided = useDetail() === "simple";
+
+  const body = (
+    <CardBody className="space-y-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <Field label="Engine" hint="Auto routes financials to the DDM.">
             <SelectField value={engineChoice} onChange={setEngineChoice}
@@ -296,7 +297,37 @@ export function ValuationControls({
             Only the valuation engine re-runs; the other two panels keep their results.
           </span>
         </div>
-      </CardBody>
+    </CardBody>
+  );
+
+  if (!guided) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Assumptions</CardTitle>
+          <button type="button" onClick={reset}
+                  className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-ash hover:text-chalk">
+            Reset to defaults
+          </button>
+        </CardHeader>
+        {body}
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <details>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3
+                            px-5 py-3 text-ash transition-colors hover:text-chalk
+                            focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-tech">
+          <span className="eyebrow">Change the assumptions</span>
+          <span className="text-[0.7rem]">
+            Growth, discount rate, terminal growth — every input is editable
+          </span>
+        </summary>
+        <div className="border-t border-rule">{body}</div>
+      </details>
     </Card>
   );
 }
