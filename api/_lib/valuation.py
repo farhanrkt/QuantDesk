@@ -361,28 +361,97 @@ def compute_wacc(beta, risk_free, erp, equity_value, total_debt,
     }
 
 
-def normalize_yield(raw, price) -> float:
+# The two dividend-yield fields Yahoo publishes use DIFFERENT conventions, and
+# that is not a guess — it is visible in any pair of tickers:
+#
+#             dividendYield   trailingAnnualDividendYield   actual
+#   AAPL             0.3500                        0.0034    0.34%
+#   KO               2.3300                        0.0230    2.30%
+#
+# `dividendYield` is a PERCENTAGE; `trailingAnnualDividendYield` is a FRACTION.
+# One heuristic cannot serve both. The old rule — divide by 100 above 1.0 —
+# happened to be right for any yield of 1% or more and was catastrophically
+# wrong below it: AAPL's 0.35 stayed 0.35, so a company paying 0.34% was read as
+# paying 35%, and the dividend model valued it about a hundred times too high.
+# No error, a plausible-looking figure. The same shape as the currency bug.
+YIELD_IS_PERCENT = {"dividend_yield_raw": True,
+                    "trailing_dividend_yield_raw": False}
+
+# Above this, a "yield" is not a yield. Even after applying the right
+# convention, a garbled field should not reach a valuation — the highest
+# sustained yields among listed companies sit far below this.
+MAX_PLAUSIBLE_YIELD = 0.60
+
+
+def normalize_yield(raw, price, is_percent: bool = False) -> float:
+    """One yield field, in its own units, as a fraction.
+
+    `is_percent` is passed explicitly by the caller rather than sniffed from the
+    magnitude, because the magnitude is exactly what cannot distinguish 0.35%
+    from 35%.
+    """
     v = _safe_float(raw)
     if not np.isfinite(v) or v <= 0:
         return np.nan
-    return v / 100.0 if v > 1.0 else v
+    out = v / 100.0 if is_percent else v
+    return out if 0 < out <= MAX_PLAUSIBLE_YIELD else np.nan
+
+
+# A dividend per share implying a yield outside this band is not a dividend, it
+# is a units problem. The floor is what catches a figure denominated in the
+# wrong currency; the ceiling catches a garbled field.
+PLAUSIBLE_YIELD_BAND = (0.0001, 0.60)
+
+
+def _dividend_candidate(value, price: float, label: str, fx: Optional[float]):
+    """Accept a dividend-per-share figure only if it implies a credible yield.
+
+    WHY EVERY CANDIDATE IS SANITY-CHECKED AGAINST THE PRICE. Yahoo is not
+    internally consistent about the currency of its dividend fields. For an
+    Indonesian company that reports in dollars, `trailingAnnualDividendRate`
+    comes back in USD while `dividendRate` comes back in IDR:
+
+        ADRO.JK   paid Rp 430.09   trailingAnnualDividendRate 0.0160 (USD)
+                                   dividendRate             236.52  (IDR)
+
+    Taking the first at face value gives a dividend roughly seventeen thousand
+    times too small and a dividend-model valuation to match — no error, just a
+    tiny number. Rather than hard-code which field uses which currency, which is
+    a fact about a scraper that has already changed once, each candidate is
+    checked against the share price it will be compared with.
+
+    Where a rate is available and the figure becomes credible once converted,
+    that is strong evidence it was quoted in the reporting currency, so it is
+    converted and the label says so. Otherwise it is skipped and the next
+    candidate gets its turn.
+    """
+    dps = _safe_float(value)
+    if not np.isfinite(dps) or dps <= 0 or not np.isfinite(price) or price <= 0:
+        return None
+    low, high = PLAUSIBLE_YIELD_BAND
+    if low <= dps / price <= high:
+        return dps, label
+    if fx and low <= (dps * fx) / price <= high:
+        return dps * fx, f"{label}, converted at the reporting-currency rate"
+    return None
 
 
 def resolve_dividend(data: dict, price: float):
-    ttm = _safe_float(data.get("ttm_dividend"))
-    if np.isfinite(ttm) and ttm > 0:
-        return ttm, "trailing 12m payments (actual)"
+    fx = _safe_float(data.get("fx_rate"))
+    fx = float(fx) if np.isfinite(fx) and fx > 0 else None
 
-    trailing = _safe_float(data.get("trailing_dividend_rate"))
-    if np.isfinite(trailing) and trailing > 0:
-        return trailing, "trailing annual rate (yfinance)"
-
-    forward = _safe_float(data.get("dividend_rate"))
-    if np.isfinite(forward) and forward > 0:
-        return forward, "forward annual rate (yfinance)"
+    # Ordered by how far each is from what the company actually paid.
+    for value, label in (
+        (data.get("ttm_dividend"), "trailing 12m payments (actual)"),
+        (data.get("trailing_dividend_rate"), "trailing annual rate (yfinance)"),
+        (data.get("dividend_rate"), "forward annual rate (yfinance)"),
+    ):
+        candidate = _dividend_candidate(value, price, label, fx)
+        if candidate:
+            return candidate
 
     for key in ("trailing_dividend_yield_raw", "dividend_yield_raw"):
-        y = normalize_yield(data.get(key), price)
+        y = normalize_yield(data.get(key), price, is_percent=YIELD_IS_PERCENT[key])
         if np.isfinite(y) and y > 0 and np.isfinite(price):
             return y * price, "derived from dividend yield"
 

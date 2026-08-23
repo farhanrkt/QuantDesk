@@ -228,3 +228,119 @@ def test_the_reading_names_the_gap_against_the_assumption():
     assert E.explain("impliedGrowth", 0.45)["tone"] in ("warn", "bad")
     assert E.explain("impliedGrowth", 0.02)["tone"] == "good"
     assert E.explain("impliedGrowth", None)["tone"] == "none"
+
+
+# --------------------------------------------------------------------------- #
+# Dividend yield: two fields, two conventions
+# --------------------------------------------------------------------------- #
+def test_the_two_yield_fields_use_their_own_conventions():
+    """Yahoo publishes `dividendYield` as a PERCENTAGE and
+    `trailingAnnualDividendYield` as a FRACTION. Observed, not assumed:
+
+                dividendYield   trailingAnnualDividendYield   actual
+        AAPL           0.3500                        0.0034    0.34%
+        KO             2.3300                        0.0230    2.30%
+
+    The old rule divided by 100 above 1.0, which is right for any yield of 1% or
+    more and catastrophically wrong below it — AAPL's 0.35 stayed 0.35, so a
+    company paying 0.34% was read as paying 35% and the dividend model valued it
+    roughly a hundred times too high. No exception, a plausible number.
+    """
+    pct, frac = "dividend_yield_raw", "trailing_dividend_yield_raw"
+    assert V.YIELD_IS_PERCENT[pct] is True
+    assert V.YIELD_IS_PERCENT[frac] is False
+
+    # The case the old heuristic got wrong, and the one it got right.
+    assert V.normalize_yield(0.35, 100.0, is_percent=True) == pytest.approx(0.0035)
+    assert V.normalize_yield(2.33, 100.0, is_percent=True) == pytest.approx(0.0233)
+    # The fraction field is never divided, whatever its magnitude.
+    assert V.normalize_yield(0.0034, 100.0, is_percent=False) == pytest.approx(0.0034)
+
+
+@pytest.mark.parametrize("garbled", [85.0, 1_200.0, -3.0, 0.0, None, float("nan")])
+def test_an_implausible_yield_is_refused_rather_than_valued(garbled):
+    """Even with the right convention a garbled field must not reach a
+    valuation. No listed company sustains a 60%+ dividend yield.
+
+    Note 0.61 is NOT in this list: under the percent convention it is 0.61%,
+    which is an ordinary yield. The cap applies to the converted value, which is
+    the only place it means anything.
+    """
+    assert not np.isfinite(V.normalize_yield(garbled, 100.0, is_percent=True))
+    assert V.normalize_yield(0.61, 100.0, is_percent=True) == pytest.approx(0.0061)
+    # The same magnitude read as a FRACTION is 61%, and that is refused.
+    assert not np.isfinite(V.normalize_yield(0.61, 100.0, is_percent=False))
+
+
+def test_the_dividend_falls_back_through_the_chain_in_the_right_order():
+    """Actual payments beat a quoted rate, and a quoted rate beats a yield —
+    each step is one inference further from what the company really paid."""
+    price = 100.0
+    base = {"ttm_dividend": np.nan, "trailing_dividend_rate": np.nan,
+            "dividend_rate": np.nan, "trailing_dividend_yield_raw": np.nan,
+            "dividend_yield_raw": np.nan}
+
+    dps, how = V.resolve_dividend({**base, "ttm_dividend": 1.32}, price)
+    assert (dps, "actual" in how) == (1.32, True)
+
+    dps, how = V.resolve_dividend({**base, "trailing_dividend_rate": 1.05}, price)
+    assert dps == 1.05 and "trailing annual rate" in how
+
+    dps, how = V.resolve_dividend({**base, "dividend_rate": 1.08}, price)
+    assert dps == 1.08 and "forward annual rate" in how
+
+    # Only now the yield — and it must use the PERCENT convention for this field.
+    dps, how = V.resolve_dividend({**base, "dividend_yield_raw": 0.35}, price)
+    assert dps == pytest.approx(0.35) and "yield" in how, "0.35% of 100 is 0.35"
+
+    assert not np.isfinite(V.resolve_dividend(base, price)[0])
+
+
+def test_a_dividend_in_the_wrong_currency_is_caught_by_the_price():
+    """Yahoo is not internally consistent about its dividend fields' currency.
+
+    For an Indonesian company reporting in dollars, `trailingAnnualDividendRate`
+    comes back in USD while `dividendRate` comes back in IDR. Observed on ADRO.JK:
+    it paid Rp 430.09, and the trailing rate reads 0.0160.
+
+    Taken at face value that is a dividend roughly seventeen thousand times too
+    small, and a dividend-model valuation to match — no exception, just a tiny
+    number. Every candidate is therefore checked against the share price it will
+    be compared with, rather than trusting a field convention that has already
+    changed once.
+    """
+    price, fx = 2_550.0, 17_690.0
+    data = {"ttm_dividend": np.nan, "trailing_dividend_rate": 0.0160,
+            "dividend_rate": 236.52, "fx_rate": fx,
+            "trailing_dividend_yield_raw": np.nan, "dividend_yield_raw": np.nan}
+
+    dps, how = V.resolve_dividend(data, price)
+    assert dps == pytest.approx(0.0160 * fx), "the USD figure should be converted, not used raw"
+    assert "converted" in how, how
+    assert 0.05 < dps / price < 0.20, "and the result must imply a credible yield"
+
+    # With no rate to convert by, the implausible candidate is SKIPPED and the
+    # next one — already in the trading currency — is used instead.
+    dps, how = V.resolve_dividend({**data, "fx_rate": np.nan}, price)
+    assert dps == pytest.approx(236.52) and "forward annual rate" in how
+
+
+def test_a_credible_dividend_is_never_touched():
+    """The guard must not disturb the overwhelming majority of companies."""
+    for price, dps in ((309.35, 1.32), (91.10, 2.08), (2_610.0, 223.17)):
+        data = {"ttm_dividend": dps, "trailing_dividend_rate": np.nan,
+                "dividend_rate": np.nan, "fx_rate": 17_690.0,
+                "trailing_dividend_yield_raw": np.nan, "dividend_yield_raw": np.nan}
+        got, how = V.resolve_dividend(data, price)
+        assert got == pytest.approx(dps)
+        assert "converted" not in how
+
+
+@pytest.mark.parametrize("dps", [1e-9, 1e12])
+def test_an_uncorrectable_dividend_is_refused(dps):
+    """Implausible with and without conversion means unusable, and the DDM's own
+    missing-dividend path takes over rather than a nonsense figure."""
+    data = {"ttm_dividend": dps, "trailing_dividend_rate": np.nan,
+            "dividend_rate": np.nan, "fx_rate": np.nan,
+            "trailing_dividend_yield_raw": np.nan, "dividend_yield_raw": np.nan}
+    assert not np.isfinite(V.resolve_dividend(data, 100.0)[0])

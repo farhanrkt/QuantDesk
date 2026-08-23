@@ -369,6 +369,18 @@ are exercised against deterministic synthetic data with a *planted* ground truth
 estimator has to recover a number it was never given. A suite that needs the network is a
 suite that gets skipped, and an upstream outage can never redden CI.
 
+After touching anything that reads a field from the data source, run the invariant hunt. It
+asserts relationships that must hold for every real company — price × shares against market
+cap, the resolved dividend against what was actually paid, statement magnitudes against market
+cap — and reports the ones that break. It needs the network, so it is deliberately **not** in
+CI; an upstream outage must never redden the build.
+
+```bash
+.venv/bin/python scripts/check_data_invariants.py
+```
+
+Both currency bugs found so far were invisible to the offline suite and turned up here.
+
 The field manual's glossary is generated, so regenerate it after touching the explanation
 layer — CI fails if you forget:
 
@@ -409,13 +421,16 @@ The code alone does not start collection.
 
 ## Known limits
 
-**Currency.** A company can keep its accounts in one currency and trade in another, and on
+**Currency, and the fields that follow it.** A company can keep its accounts in one currency
+and trade in another, and on
 the IDX that is not an edge case: **13 of the 46 names in IDX30 and LQ45** report in US dollars
 because they sell coal, nickel or gas priced in dollars, while their shares trade in rupiah.
 The statements are converted to the trading currency at spot before anything is valued, the
 panel says so, and where no rate can be fetched the valuation refuses rather than comparing
 dollars to rupiah. A five-year projection converted at today's rate carries the currency's risk
-as well as the company's.
+as well as the company's. The data source is not internally consistent about which of its
+dividend fields follows which currency, so every dividend figure is checked against the share
+price it will be compared with before it is used.
 
 **Data.** yfinance is an unofficial scraper against an undocumented endpoint, with no SLA.
 Fundamentals for smaller IDX listings are patchy — where a figure is missing, the app offers
