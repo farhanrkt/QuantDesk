@@ -341,6 +341,39 @@ def _safe_float(value, default=np.nan) -> float:
     return out if np.isfinite(out) else default
 
 
+# Rows on a financial statement that are COUNTS rather than money. Scaling a
+# share count by an exchange rate would be meaningless; every consumer uses them
+# only in ratios, where uniform scaling is harmless, but excluding them keeps the
+# converted statement honest line by line rather than merely arithmetically safe.
+_COUNT_ROW_HINTS = ("shares", "share issued", "share number", "number")
+
+
+def _convert_statements(data: dict, rate: float) -> None:
+    """Scale money on the three statements into the trading currency, in place.
+
+    ONLY THE STATEMENTS AND THE INFO FIGURE DERIVED FROM THEM. Verified against
+    ITMG.JK, which reports in USD and trades in IDR: the income, balance and cash
+    flow statements and `netIncomeToCommon` are all on the USD scale, while
+    `price`, `market_cap`, `shares` and the dividend-per-share figures come from
+    the quote feed already denominated in rupiah. Scaling the second group would
+    replace one currency error with another.
+    """
+    for key in ("income", "balance", "cashflow"):
+        frame = data.get(key)
+        if not isinstance(frame, pd.DataFrame) or frame.empty:
+            continue
+        scaled = frame.copy()
+        for label in scaled.index:
+            name = str(label).lower()
+            if any(hint in name for hint in _COUNT_ROW_HINTS):
+                continue
+            scaled.loc[label] = pd.to_numeric(scaled.loc[label], errors="coerce") * rate
+        data[key] = scaled
+
+    if np.isfinite(data.get("net_income_info", np.nan)):
+        data["net_income_info"] = data["net_income_info"] * rate
+
+
 def company(ticker: str) -> dict:
     """Statements, price and dividends for one symbol, cached for the day.
 
@@ -481,7 +514,10 @@ def _company_uncached(ticker: str) -> dict:
         for df in (statement("income_stmt"), statement("balance_sheet"),
                    statement("cashflow"))
     )
-    return {
+    trading_ccy = (ccy or info.get("currency") or "").upper() or None
+    financial_ccy = (info.get("financialCurrency") or "").upper() or None
+
+    out = {
         "ok": bool(np.isfinite(price) or usable_statements),
         "name": info.get("longName") or info.get("shortName") or ticker,
         "sector": info.get("sector") or "",
@@ -489,7 +525,13 @@ def _company_uncached(ticker: str) -> dict:
         "price": price,
         "shares": shares,
         "beta": _safe_float(info.get("beta")),
-        "currency": ccy or info.get("currency") or "",
+        "currency": trading_ccy or "",
+        # THE CURRENCY THE STATEMENTS ARE WRITTEN IN, which is not always the
+        # one the shares trade in. Yahoo reports both and the app used to read
+        # only the first, so a company reporting in USD and trading in IDR was
+        # valued in dollars and labelled in rupiah — out by the exchange rate,
+        # which for that pair is a factor of about seventeen thousand.
+        "financial_currency": financial_ccy,
         "market_cap": _safe_float(info.get("marketCap")),
         "dividend_rate": _safe_float(info.get("dividendRate")),
         "trailing_dividend_rate": _safe_float(info.get("trailingAnnualDividendRate")),
@@ -505,7 +547,25 @@ def _company_uncached(ticker: str) -> dict:
         "income": statement("income_stmt"),
         "balance": statement("balance_sheet"),
         "cashflow": statement("cashflow"),
+        # The rate applied, or None when none was needed or none was available.
+        # A consumer that cannot tolerate mixed currencies checks this rather
+        # than re-deriving the question.
+        "fx_rate": None,
     }
+
+    # CONVERT AT THE BOUNDARY, so everything downstream sees ONE currency. This
+    # is thirteen of the forty-six names in the IDX30 and LQ45 — coal, nickel and
+    # gas producers that sell in dollars and report in dollars while their shares
+    # trade in rupiah. When no rate can be fetched the statements are left alone
+    # and `fx_rate` stays None, which is the signal for the valuation engine to
+    # refuse rather than quietly mix the two.
+    if financial_ccy and trading_ccy and financial_ccy != trading_ccy:
+        rate = fx_rate(financial_ccy, trading_ccy)
+        if rate:
+            _convert_statements(out, rate)
+            out["fx_rate"] = rate
+
+    return out
 
 
 def last_close(symbol: str, period: str = "5d") -> Optional[float]:
@@ -526,6 +586,50 @@ def last_close(symbol: str, period: str = "5d") -> Optional[float]:
         return None
     value = _safe_float(close.iloc[-1])
     return float(value) if np.isfinite(value) else None
+
+
+# --------------------------------------------------------------------------- #
+# Foreign exchange
+# --------------------------------------------------------------------------- #
+_FX_CACHE: dict[tuple[str, str, str], float] = {}
+
+
+def fx_rate(base: str, quote: str) -> Optional[float]:
+    """Spot rate to convert one unit of `base` into `quote`. None if unavailable.
+
+    WHY A VALUATION APP NEEDS THIS AT ALL. A company can report its accounts in
+    one currency and trade in another, and on the Indonesian exchange that is not
+    an edge case: thirteen of the forty-six names in the IDX30 and LQ45 report in
+    US dollars because they sell coal, nickel or gas priced in dollars, while
+    their shares trade in rupiah. Valuing dollar cash flows and comparing the
+    result against a rupiah share price is out by the exchange rate — a factor of
+    roughly seventeen thousand, which is not a rounding error but does produce a
+    confident, plausible-looking number.
+
+    Yahoo spells USD pairs both ways, `IDR=X` and `USDIDR=X`, and only the second
+    form generalises to crosses, so the explicit pair is tried first.
+    """
+    base, quote = (base or "").strip().upper(), (quote or "").strip().upper()
+    if not base or not quote:
+        return None
+    if base == quote:
+        return 1.0
+
+    key = (base, quote, dt.date.today().isoformat())
+    cached = _FX_CACHE.get(key)
+    if cached is not None:
+        return cached
+
+    for symbol in (f"{base}{quote}=X", f"{quote}=X" if base == "USD" else None):
+        if not symbol:
+            continue
+        value = last_close(symbol)
+        if value is not None and value > 0:
+            if len(_FX_CACHE) > 64:
+                _FX_CACHE.clear()          # only ever hold the current day
+            _FX_CACHE[key] = float(value)
+            return float(value)
+    return None
 
 
 # --------------------------------------------------------------------------- #

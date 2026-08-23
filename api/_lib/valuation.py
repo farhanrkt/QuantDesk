@@ -763,6 +763,28 @@ def analyze(
         # day's cached price for this symbol for every other request.
         data["price"] = manual_price_f
 
+    # A COMPANY WHOSE ACCOUNTS AND SHARES USE DIFFERENT CURRENCIES IS VALUED IN
+    # ONE OF THEM OR IN NEITHER. `market_data.company` converts the statements
+    # into the trading currency when it can get a rate; when it cannot, the two
+    # are still in different units and every figure this engine produces would be
+    # out by the exchange rate. That is a factor of about seventeen thousand for
+    # USD/IDR, so it does not look like a rounding error — it looks like a
+    # confident answer, which is worse. Refuse instead.
+    reporting = data.get("financial_currency")
+    trading = (data.get("currency") or "").upper()
+    if reporting and trading and reporting != trading and not data.get("fx_rate"):
+        raise ValuationError(
+            f"{symbol} reports its accounts in {reporting} but its shares trade in "
+            f"{trading}, and no {reporting}/{trading} rate could be fetched to reconcile "
+            f"them. Valuing the cash flows without it would be out by the exchange rate. "
+            f"Enter the figures yourself in {trading} to value it anyway.",
+            manual_required=True,
+            missing=[f"{reporting}/{trading} exchange rate"],
+            engine=engine,
+            suggested={"price": _nullable(data.get("price")),
+                       "shares": _nullable(data.get("shares"))},
+        )
+
     if not data["ok"] or not np.isfinite(data["price"]):
         raise ValuationError(
             f"No usable market data returned for '{symbol}'. {symbols.hint(symbol)} "
@@ -812,6 +834,15 @@ def analyze(
                         f"sanity bound, so {beta_final:.2f} was used for the cost of equity. "
                         f"A beta this far from the market usually means a single-factor model "
                         f"describes this security poorly, not that its risk is really that low."})
+
+    if data.get("fx_rate"):
+        notices.append({"tone": "warn", "text": (
+            f"{symbol} reports its accounts in {reporting} but trades in {trading}. The "
+            f"statements were converted at the current spot rate of "
+            f"{data['fx_rate']:,.0f} {trading} per {reporting} so that the model and the "
+            f"share price are in the same units. A five-year projection converted at "
+            f"today's rate carries the currency's risk as well as the company's, and a "
+            f"move in the exchange rate moves this valuation with it.")})
 
     cash_used = debt_used = 0.0
     diagnostics_rows = []
@@ -1401,6 +1432,9 @@ def analyze(
         # Where this price came from and which bar it belongs to. On the panel
         # so a reader can tell a Friday close from a live quote rather than
         # assuming the number is current.
+        # Currency provenance. Null unless the accounts and the shares disagree.
+        "reportingCurrency": reporting if reporting and reporting != trading else None,
+        "fxRate": _nullable(data.get("fx_rate")),
         "priceSource": ("manual entry" if np.isfinite(manual_price_f) and manual_price_f > 0
                         else data.get("price_source")),
         "priceAsOf": (None if np.isfinite(manual_price_f) and manual_price_f > 0

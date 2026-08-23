@@ -487,6 +487,9 @@ export interface ValuationResponse {
    *  The valuation used to read the quote endpoint while every other lens
    *  read the chart endpoint; they do not always agree. */
   priceSource: string | null; priceAsOf: string | null;
+  /** Set only when the accounts and the shares use different currencies:
+   *  the statements' own currency, and the spot rate used to reconcile them. */
+  reportingCurrency: string | null; fxRate: number | null;
   discountRate: number; riskFree: number; riskFreeSource: string;
   erp: number; beta: number;
   /** Vasicek-shrunk beta with the error bars that justify the shrinkage. */

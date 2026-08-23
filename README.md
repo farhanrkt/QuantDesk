@@ -409,6 +409,14 @@ The code alone does not start collection.
 
 ## Known limits
 
+**Currency.** A company can keep its accounts in one currency and trade in another, and on
+the IDX that is not an edge case: **13 of the 46 names in IDX30 and LQ45** report in US dollars
+because they sell coal, nickel or gas priced in dollars, while their shares trade in rupiah.
+The statements are converted to the trading currency at spot before anything is valued, the
+panel says so, and where no rate can be fetched the valuation refuses rather than comparing
+dollars to rupiah. A five-year projection converted at today's rate carries the currency's risk
+as well as the company's.
+
 **Data.** yfinance is an unofficial scraper against an undocumented endpoint, with no SLA.
 Fundamentals for smaller IDX listings are patchy — where a figure is missing, the app offers
 a manual-input form rather than guessing. This is the single biggest fragility in the

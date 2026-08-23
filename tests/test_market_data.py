@@ -524,3 +524,101 @@ def mock_module(ticker_cls):
         @staticmethod
         def download(*a, **k): return pd.DataFrame()
     return Module
+
+
+# ============================================================================ #
+# Currency: the accounts and the shares do not always agree
+# ============================================================================ #
+def _statement(values, index):
+    return pd.DataFrame({"2025-12-31": values, "2024-12-31": values}, index=index)
+
+
+def test_convert_scales_money_but_never_share_counts():
+    """A share count multiplied by an exchange rate is meaningless.
+
+    Every consumer happens to use counts only in ratios, where uniform scaling
+    would cancel — but a statement whose share count has been multiplied by
+    17,690 is wrong line by line even when the arithmetic downstream survives.
+    """
+    data = {
+        "income": _statement([100.0, 50.0], ["Net Income", "Ordinary Shares Number"]),
+        "balance": _statement([800.0, 12.0], ["Total Debt", "Share Issued"]),
+        "cashflow": _statement([250.0], ["Free Cash Flow"]),
+        "net_income_info": 100.0,
+    }
+    MD._convert_statements(data, 1_000.0)
+
+    assert data["income"].loc["Net Income"].iloc[0] == 100_000.0
+    assert data["income"].loc["Ordinary Shares Number"].iloc[0] == 50.0, "a count is not money"
+    assert data["balance"].loc["Total Debt"].iloc[0] == 800_000.0
+    assert data["balance"].loc["Share Issued"].iloc[0] == 12.0
+    assert data["cashflow"].loc["Free Cash Flow"].iloc[0] == 250_000.0
+    assert data["net_income_info"] == 100_000.0
+
+
+def test_quality_scores_are_unchanged_by_the_conversion():
+    """Piotroski, Altman and Beneish are built from ratios, so a uniform scaling
+    must not move them. Asserted because the conversion runs at the boundary and
+    the quality lens reads the same statements the valuation does."""
+    from _lib import quality as Q
+
+    index = ["Net Income", "Total Assets", "Total Debt", "Stockholders Equity",
+             "Total Revenue", "Gross Profit", "Current Assets", "Current Liabilities",
+             "Retained Earnings", "Operating Income"]
+    raw = {"sector": "Energy", "industry": "Thermal Coal",
+           "income": _statement([100.0, 900.0, 300.0, 500.0, 800.0, 300.0,
+                                 400.0, 200.0, 250.0, 150.0], index),
+           "balance": _statement([100.0, 900.0, 300.0, 500.0, 800.0, 300.0,
+                                  400.0, 200.0, 250.0, 150.0], index),
+           "cashflow": _statement([120.0] * 10, index),
+           "net_income_info": 100.0}
+    converted = {k: (v.copy() if isinstance(v, pd.DataFrame) else v) for k, v in raw.items()}
+    MD._convert_statements(converted, 17_690.0)
+
+    before, after = Q.analyze(raw), Q.analyze(converted)
+    assert before["applicable"] == after["applicable"]
+    assert (before.get("piotroski") or {}).get("score") == (after.get("piotroski") or {}).get("score")
+    assert (before.get("altman") or {}).get("band") == (after.get("altman") or {}).get("band")
+    assert (before.get("beneish") or {}).get("band") == (after.get("beneish") or {}).get("band")
+
+
+@pytest.mark.parametrize(("base", "quote", "expected"), [
+    ("USD", "USD", 1.0), ("idr", "IDR", 1.0), ("", "IDR", None), ("USD", "", None),
+])
+def test_fx_rate_handles_the_trivial_cases_without_a_fetch(base, quote, expected):
+    assert MD.fx_rate(base, quote) == expected
+
+
+def test_a_valuation_refuses_rather_than_mixing_currencies(monkeypatch):
+    """Out by the exchange rate does not look like a rounding error — it looks
+    like a confident answer, which is worse. Thirteen of the forty-six names in
+    the IDX30 and LQ45 report in USD while trading in IDR."""
+    from _lib import valuation as V
+
+    company = {
+        "ok": True, "price": 25_200.0, "shares": 1.1e9, "name": "Test",
+        "sector": "Energy", "industry": "Thermal Coal",
+        "currency": "IDR", "financial_currency": "USD", "fx_rate": None,
+        "income": pd.DataFrame(), "balance": pd.DataFrame(),
+        "cashflow": pd.DataFrame(), "dividend_history": pd.DataFrame(),
+        "beta": 1.0, "market_cap": 2.8e13, "ttm_dividend": 1730.0,
+        "dividend_rate": float("nan"), "trailing_dividend_rate": float("nan"),
+        "dividend_yield_raw": float("nan"), "trailing_dividend_yield_raw": float("nan"),
+        "payout_ratio": float("nan"), "roe_info": float("nan"),
+        "net_income_info": float("nan"), "price_source": "x", "price_as_of": None,
+    }
+    monkeypatch.setattr(V, "fetch_company", lambda t: dict(company))
+
+    with pytest.raises(V.ValuationError) as caught:
+        V.analyze("TEST.JK", market_code="ID")
+    detail = caught.value.as_detail()
+    assert "USD" in detail["message"] and "IDR" in detail["message"]
+    assert detail["manualRequired"] is True, "the rescue form is the way out"
+
+    # With a rate present it must NOT refuse for this reason.
+    with_rate = dict(company, fx_rate=17_690.0)
+    monkeypatch.setattr(V, "fetch_company", lambda t: dict(with_rate))
+    try:
+        V.analyze("TEST.JK", market_code="ID")
+    except V.ValuationError as exc:
+        assert "exchange rate" not in exc.as_detail()["message"], exc.as_detail()["message"]
