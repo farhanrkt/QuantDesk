@@ -235,6 +235,8 @@ export interface RankResponse {
   missing: string[];
   minBars: number;
   explain: ExplainMap;
+  /** Does this ranking predict anything? Measured offline; see backtest.py. */
+  validation: RankValidation;
 }
 
 export interface DeepenValuation {
@@ -659,4 +661,28 @@ export interface PeersResponse {
     overlap: string | null;
     caveat: string;
   };
+}
+
+/**
+ * Whether the composite ranking predicts anything, measured offline.
+ *
+ * `universe` is absent for a custom list — a pasted set of tickers was never
+ * tested and must not borrow a predefined universe's result.
+ */
+export interface RankValidation {
+  available: boolean;
+  measuredOn?: string;
+  years?: number;
+  tests?: number;
+  rawHits?: number;
+  expectedByChance?: number;
+  significant?: number;
+  headline?: string;
+  caveats?: string[];
+  universe?: {
+    horizonDays: number; periods: number;
+    ic: number; icT: number; icQ: number;
+    spread: number; spreadQ: number;
+    minimumDetectableIc: number;
+  }[];
 }

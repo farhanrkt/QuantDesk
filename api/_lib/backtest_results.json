@@ -1,0 +1,494 @@
+{
+  "measuredOn": "2026-08-23",
+  "years": 6,
+  "tests": 24,
+  "rawHits": 1,
+  "rawHitNames": [
+    "idx30:63:informationCoefficient"
+  ],
+  "significant": 0,
+  "expectedByChance": 1.2,
+  "headline": "Across 12 backtests \u2014 four universes at three holding periods, two statistics each \u2014 none showed a relationship between a name's rank and its subsequent return that survives correcting for having run them all. 1 of the 24 individual tests cleared the conventional 5% cutoff before correction, against 1.2 expected from chance alone at that many tests \u2014 which is why the correction is applied rather than the best result quoted. The most sensitive of them could only have detected a mean information coefficient of about 0.08, and a useful one in this field is nearer 0.03 \u2014 so this is 'no edge large enough to see here', not 'no edge'.",
+  "results": {
+    "dow30:21": {
+      "universe": "Dow Jones Industrial Average",
+      "universeId": "dow30",
+      "market": "US",
+      "usable": true,
+      "symbols": 30,
+      "horizonDays": 21,
+      "rebalanceDays": 21,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2026-07-02",
+      "benchmark": "^GSPC",
+      "informationCoefficient": {
+        "mean": -0.03617275640119658,
+        "stdev": 0.2658752495242051,
+        "tStat": -1.146391263160273,
+        "pValue": 0.25553699269067187,
+        "periods": 71,
+        "positiveShare": 0.4507042253521127,
+        "minimumDetectable": 0.08835004346085137,
+        "qValue": 0.3833054890360078
+      },
+      "quintileSpread": {
+        "mean": -0.009842336191991007,
+        "stdev": 0.05578484524693336,
+        "tStat": -1.4866582224000977,
+        "pValue": 0.14159562776369783,
+        "periods": 71,
+        "positiveShare": 0.4507042253521127,
+        "minimumDetectable": 0.018537240720388058,
+        "qValue": 0.6184688796681936
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by -0.98% per period on average, which is not distinguishable from zero (t = -1.49, p = 0.142); the mean information coefficient is -0.036. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.088 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "71 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    },
+    "dow30:63": {
+      "universe": "Dow Jones Industrial Average",
+      "universeId": "dow30",
+      "market": "US",
+      "usable": true,
+      "symbols": 30,
+      "horizonDays": 63,
+      "rebalanceDays": 63,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2026-03-03",
+      "benchmark": "^GSPC",
+      "informationCoefficient": {
+        "mean": -0.08724642267166435,
+        "stdev": 0.2953434444455501,
+        "tStat": -1.416720607869032,
+        "pValue": 0.1705700767446252,
+        "periods": 23,
+        "positiveShare": 0.43478260869565216,
+        "minimumDetectable": 0.17243342273965387,
+        "qValue": 0.37962635623824603
+      },
+      "quintileSpread": {
+        "mean": -0.024846175735885028,
+        "stdev": 0.11011623974043125,
+        "tStat": -1.082111713120675,
+        "pValue": 0.2909217710237426,
+        "periods": 23,
+        "positiveShare": 0.391304347826087,
+        "minimumDetectable": 0.0642903049814043,
+        "qValue": 0.6982122504569823
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by -2.48% per period on average, which is not distinguishable from zero (t = -1.08, p = 0.291); the mean information coefficient is -0.087. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.172 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "23 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    },
+    "dow30:126": {
+      "universe": "Dow Jones Industrial Average",
+      "universeId": "dow30",
+      "market": "US",
+      "usable": true,
+      "symbols": 30,
+      "horizonDays": 126,
+      "rebalanceDays": 126,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2025-08-29",
+      "benchmark": "^GSPC",
+      "informationCoefficient": {
+        "mean": 0.0016032047061483009,
+        "stdev": 0.23000957459210955,
+        "tStat": 0.023117422315376543,
+        "pValue": 0.982011396765414,
+        "periods": 11,
+        "positiveShare": 0.6363636363636364,
+        "minimumDetectable": 0.19418138908287383,
+        "qValue": 0.9820113967654139
+      },
+      "quintileSpread": {
+        "mean": -0.0056313719966504085,
+        "stdev": 0.10495620244276191,
+        "tStat": -0.17795182688692984,
+        "pValue": 0.862313955346421,
+        "periods": 11,
+        "positiveShare": 0.45454545454545453,
+        "minimumDetectable": 0.08860736001682068,
+        "qValue": 0.9066061799113193
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by -0.56% per period on average, which is not distinguishable from zero (t = -0.18, p = 0.862); the mean information coefficient is 0.002. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.194 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "11 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    },
+    "nasdaq100:21": {
+      "universe": "Nasdaq-100",
+      "universeId": "nasdaq100",
+      "market": "US",
+      "usable": true,
+      "symbols": 97,
+      "horizonDays": 21,
+      "rebalanceDays": 21,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2026-07-02",
+      "benchmark": "^GSPC",
+      "informationCoefficient": {
+        "mean": -0.0022512046714337508,
+        "stdev": 0.23239473321759577,
+        "tStat": -0.0816240001179976,
+        "pValue": 0.9351786553727923,
+        "periods": 71,
+        "positiveShare": 0.5492957746478874,
+        "minimumDetectable": 0.07722450591617899,
+        "qValue": 0.9820113967654139
+      },
+      "quintileSpread": {
+        "mean": -0.0011180696889564236,
+        "stdev": 0.07087356086606159,
+        "tStat": -0.13292718103722187,
+        "pValue": 0.8946323576949784,
+        "periods": 71,
+        "positiveShare": 0.5211267605633803,
+        "minimumDetectable": 0.023551203784283714,
+        "qValue": 0.9066061799113193
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by -0.11% per period on average, which is not distinguishable from zero (t = -0.13, p = 0.895); the mean information coefficient is -0.002. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.077 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "71 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    },
+    "nasdaq100:63": {
+      "universe": "Nasdaq-100",
+      "universeId": "nasdaq100",
+      "market": "US",
+      "usable": true,
+      "symbols": 97,
+      "horizonDays": 63,
+      "rebalanceDays": 63,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2026-03-03",
+      "benchmark": "^GSPC",
+      "informationCoefficient": {
+        "mean": -0.03331744352886272,
+        "stdev": 0.25984670284989986,
+        "tStat": -0.6149196591661612,
+        "pValue": 0.5449162445700217,
+        "periods": 23,
+        "positiveShare": 0.4782608695652174,
+        "minimumDetectable": 0.15170899237034713,
+        "qValue": 0.6538994934840261
+      },
+      "quintileSpread": {
+        "mean": -0.019149736378564316,
+        "stdev": 0.11297504496860213,
+        "tStat": -0.8129132359537528,
+        "pValue": 0.4249781023216972,
+        "periods": 23,
+        "positiveShare": 0.5217391304347826,
+        "minimumDetectable": 0.06595939085315929,
+        "qValue": 0.7692281693392553
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by -1.91% per period on average, which is not distinguishable from zero (t = -0.81, p = 0.425); the mean information coefficient is -0.033. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.152 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "23 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    },
+    "nasdaq100:126": {
+      "universe": "Nasdaq-100",
+      "universeId": "nasdaq100",
+      "market": "US",
+      "usable": true,
+      "symbols": 97,
+      "horizonDays": 126,
+      "rebalanceDays": 126,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2025-08-29",
+      "benchmark": "^GSPC",
+      "informationCoefficient": {
+        "mean": -0.04842851806776918,
+        "stdev": 0.2295817385230693,
+        "tStat": -0.6996167230765962,
+        "pValue": 0.5001168728651466,
+        "periods": 11,
+        "positiveShare": 0.45454545454545453,
+        "minimumDetectable": 0.19382019628325525,
+        "qValue": 0.6538994934840261
+      },
+      "quintileSpread": {
+        "mean": -0.045668746703485086,
+        "stdev": 0.19210418459705134,
+        "tStat": -0.788458084757228,
+        "pValue": 0.4487164321145656,
+        "periods": 11,
+        "positiveShare": 0.36363636363636365,
+        "minimumDetectable": 0.1621804547912412,
+        "qValue": 0.7692281693392553
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by -4.57% per period on average, which is not distinguishable from zero (t = -0.79, p = 0.449); the mean information coefficient is -0.048. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.194 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "11 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    },
+    "idx30:21": {
+      "universe": "IDX30",
+      "universeId": "idx30",
+      "market": "ID",
+      "usable": true,
+      "symbols": 30,
+      "horizonDays": 21,
+      "rebalanceDays": 21,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2026-06-30",
+      "benchmark": "^JKSE",
+      "informationCoefficient": {
+        "mean": 0.05240519134505654,
+        "stdev": 0.3157728716687179,
+        "tStat": 1.3685288296269926,
+        "pValue": 0.17571810440447266,
+        "periods": 68,
+        "positiveShare": 0.6323529411764706,
+        "minimumDetectable": 0.10722063911956636,
+        "qValue": 0.37962635623824603
+      },
+      "quintileSpread": {
+        "mean": 0.007529301488336228,
+        "stdev": 0.1064679334527707,
+        "tStat": 0.5831634806230502,
+        "pValue": 0.561741103563794,
+        "periods": 68,
+        "positiveShare": 0.5882352941176471,
+        "minimumDetectable": 0.03615117350081222,
+        "qValue": 0.842611655345691
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by 0.75% per period on average, which is not distinguishable from zero (t = 0.58, p = 0.562); the mean information coefficient is 0.052. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.107 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "68 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    },
+    "idx30:63": {
+      "universe": "IDX30",
+      "universeId": "idx30",
+      "market": "ID",
+      "usable": true,
+      "symbols": 30,
+      "horizonDays": 63,
+      "rebalanceDays": 63,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2026-02-19",
+      "benchmark": "^JKSE",
+      "informationCoefficient": {
+        "mean": 0.09700542018484493,
+        "stdev": 0.2043448445706031,
+        "tStat": 2.226607441843658,
+        "pValue": 0.03704998970226381,
+        "periods": 22,
+        "positiveShare": 0.7272727272727273,
+        "minimumDetectable": 0.12198610828887965,
+        "qValue": 0.37962635623824603
+      },
+      "quintileSpread": {
+        "mean": 0.07689029929266789,
+        "stdev": 0.19582314689895428,
+        "tStat": 1.8416999077538347,
+        "pValue": 0.07968831085428407,
+        "periods": 22,
+        "positiveShare": 0.6818181818181818,
+        "minimumDetectable": 0.11689897855402756,
+        "qValue": 0.6184688796681936
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by 7.69% per period on average, which is not distinguishable from zero (t = 1.84, p = 0.080); the mean information coefficient is 0.097. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.122 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "22 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    },
+    "idx30:126": {
+      "universe": "IDX30",
+      "universeId": "idx30",
+      "market": "ID",
+      "usable": true,
+      "symbols": 30,
+      "horizonDays": 126,
+      "rebalanceDays": 126,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2025-11-13",
+      "benchmark": "^JKSE",
+      "informationCoefficient": {
+        "mean": 0.10390660253258653,
+        "stdev": 0.18660896812179023,
+        "tStat": 1.8467451875960545,
+        "pValue": 0.09454817062805776,
+        "periods": 11,
+        "positiveShare": 0.7272727272727273,
+        "minimumDetectable": 0.15754121848827599,
+        "qValue": 0.37962635623824603
+      },
+      "quintileSpread": {
+        "mean": 0.011230578182238988,
+        "stdev": 0.30954928181986024,
+        "tStat": 0.12032854280991116,
+        "pValue": 0.9066061799113194,
+        "periods": 11,
+        "positiveShare": 0.7272727272727273,
+        "minimumDetectable": 0.261331336488844,
+        "qValue": 0.9066061799113193
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by 1.12% per period on average, which is not distinguishable from zero (t = 0.12, p = 0.907); the mean information coefficient is 0.104. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.158 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "11 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    },
+    "lq45:21": {
+      "universe": "IDX LQ45",
+      "universeId": "lq45",
+      "market": "ID",
+      "usable": true,
+      "symbols": 45,
+      "horizonDays": 21,
+      "rebalanceDays": 21,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2026-06-30",
+      "benchmark": "^JKSE",
+      "informationCoefficient": {
+        "mean": 0.04029901061874314,
+        "stdev": 0.2870814997682034,
+        "tStat": 1.157560327106588,
+        "pValue": 0.25115354715190064,
+        "periods": 68,
+        "positiveShare": 0.6029411764705882,
+        "minimumDetectable": 0.09747848737570873,
+        "qValue": 0.3833054890360078
+      },
+      "quintileSpread": {
+        "mean": -0.004774714234872669,
+        "stdev": 0.0822768531414058,
+        "tStat": -0.47854652604871994,
+        "pValue": 0.6338192349383904,
+        "periods": 68,
+        "positiveShare": 0.4852941176470588,
+        "minimumDetectable": 0.027937095203742802,
+        "qValue": 0.8450923132511873
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by -0.48% per period on average, which is not distinguishable from zero (t = -0.48, p = 0.634); the mean information coefficient is 0.040. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.097 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "68 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    },
+    "lq45:63": {
+      "universe": "IDX LQ45",
+      "universeId": "lq45",
+      "market": "ID",
+      "usable": true,
+      "symbols": 45,
+      "horizonDays": 63,
+      "rebalanceDays": 63,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2026-02-19",
+      "benchmark": "^JKSE",
+      "informationCoefficient": {
+        "mean": 0.0608716383012847,
+        "stdev": 0.210709767176193,
+        "tStat": 1.3550073897422819,
+        "pValue": 0.18981317811912302,
+        "periods": 22,
+        "positiveShare": 0.5909090909090909,
+        "minimumDetectable": 0.12578572525424703,
+        "qValue": 0.37962635623824603
+      },
+      "quintileSpread": {
+        "mean": 0.03775986477073848,
+        "stdev": 0.13211834594165564,
+        "tStat": 1.3405364981460335,
+        "pValue": 0.1943940239599662,
+        "periods": 22,
+        "positiveShare": 0.6363636363636364,
+        "minimumDetectable": 0.07886963279574215,
+        "qValue": 0.6184688796681936
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by 3.78% per period on average, which is not distinguishable from zero (t = 1.34, p = 0.194); the mean information coefficient is 0.061. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.126 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "22 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    },
+    "lq45:126": {
+      "universe": "IDX LQ45",
+      "universeId": "lq45",
+      "market": "ID",
+      "usable": true,
+      "symbols": 45,
+      "horizonDays": 126,
+      "rebalanceDays": 126,
+      "overlapping": false,
+      "from": "2020-08-24",
+      "to": "2025-11-13",
+      "benchmark": "^JKSE",
+      "informationCoefficient": {
+        "mean": 0.0995896388306302,
+        "stdev": 0.1870361273707664,
+        "tStat": 1.765976817694926,
+        "pValue": 0.10785388208631175,
+        "periods": 11,
+        "positiveShare": 0.7272727272727273,
+        "minimumDetectable": 0.15790183989489737,
+        "qValue": 0.37962635623824603
+      },
+      "quintileSpread": {
+        "mean": 0.04917930465382689,
+        "stdev": 0.12064186869357583,
+        "tStat": 1.3520123880177306,
+        "pValue": 0.2061562932227312,
+        "periods": 11,
+        "positiveShare": 0.6363636363636364,
+        "minimumDetectable": 0.10184969771808736,
+        "qValue": 0.6184688796681936
+      },
+      "verdict": "No significant relationship between rank and subsequent return in this sample. The top fifth beat the bottom by 4.92% per period on average, which is not distinguishable from zero (t = 1.35, p = 0.206); the mean information coefficient is 0.100. On this evidence the composite orders the universe without demonstrably predicting it. This test could only have detected a mean information coefficient of about 0.158 or larger, so a real but modest edge would be invisible in a sample this size \u2014 'not found' is not 'not there'.",
+      "caveats": [
+        "Survivorship: the universe is today's constituents, so every name tested is one that survived and is still a member. This biases the result upward and cannot be corrected without point-in-time membership data.",
+        "No trading costs, spread, market impact or tax are deducted.",
+        "11 non-overlapping periods is a small sample; a t-statistic on it is a weak instrument.",
+        "One history, one market regime. Not a distribution of outcomes."
+      ]
+    }
+  }
+}

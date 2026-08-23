@@ -222,6 +222,21 @@ just happened here?* Scans up to 20 tickers and reports **how many hits you'd ex
 noise** — each ticker tested against its *own* long-run flag rate, then a false-discovery-rate
 correction across the whole scan.
 
+**Does the ranking work?** The panel that presents an order now carries the finding about
+whether that order predicts anything. Twelve backtests — four universes at three holding
+periods — rank each universe using only data available on the date, then measure the
+correlation between rank and what happened next.
+
+**The answer is no, and the app says so.** One of the twenty-four tests cleared the
+conventional 5% cutoff, against 1.2 expected by chance from running that many, and none
+survives a Benjamini-Hochberg correction. The panel also reports the smallest effect the
+sample could have detected — around 0.08 at best, where a genuinely useful information
+coefficient is nearer 0.03 — so the honest reading is *no edge large enough to see here*,
+not *no edge*. Survivorship, costs and sample size are stated alongside.
+
+Measured offline by `scripts/backtest_ranking.py` and stamped with its date. Re-run it after
+changing anything in `ranking.py`.
+
 **Event study.** The one that decides whether the Flow lens is worth your attention. It
 measures the cumulative abnormal return after *every* anomaly ever detected on a ticker,
 against a market model, and reports the t-statistic. On JPM the answer was **no significant
@@ -270,6 +285,7 @@ api/
   _lib/       The engines:
               market_data.py    THE ONLY MODULE THAT IMPORTS YFINANCE —
                                 one fetch, one normalisation, one cache
+              backtest.py       Does the composite ranking predict anything?
               whale.py          Isolation Forest anomaly detection
               technical.py      Indicators and narrative readout
               valuation.py      DCF / DDM / residual income

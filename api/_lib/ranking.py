@@ -68,6 +68,8 @@ Baker, M., Bradley, B., & Wurgler, J. (2011). "Benchmarks as Limits to
 from __future__ import annotations
 
 import datetime as dt
+import json
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -521,3 +523,71 @@ def scan(symbols: list[str], market_code: str = "US", period_days: int = 500,
         "window": RANK_WINDOW,
     })
     return result
+
+
+# ============================================================================ #
+# Does this ranking predict anything?
+# ============================================================================ #
+_VALIDATION_PATH = Path(__file__).with_name("backtest_results.json")
+_VALIDATION_CACHE: Optional[dict] = None
+
+
+def validation(universe_id: Optional[str] = None) -> dict:
+    """The recorded answer to the question this panel invites but cannot answer.
+
+    A composite that orders a universe implies, without ever saying so, that the
+    order means something. `eventstudy.py` has held the flow lens to that
+    standard since it shipped — it measures whether an anomaly flag predicts
+    abnormal returns and reports the null result when there is one. This is the
+    same standard applied to the breadth tier.
+
+    The measurement is made offline by `scripts/backtest_ranking.py` and read
+    from disk, because it costs a full universe download per test and returns
+    the same numbers until the market moves. It is stamped with the date it was
+    taken for the same reason the constituent lists are: a slowly decaying fact
+    should be dated, not silently refreshed.
+
+    Returns `{"available": False}` when the file is absent, so a checkout that
+    has never run the script degrades to saying nothing rather than to a crash.
+    """
+    global _VALIDATION_CACHE
+    if _VALIDATION_CACHE is None:
+        try:
+            _VALIDATION_CACHE = json.loads(_VALIDATION_PATH.read_text())
+        except (OSError, ValueError):
+            _VALIDATION_CACHE = {"available": False}
+    if not _VALIDATION_CACHE.get("results"):
+        return {"available": False}
+
+    out = {
+        "available": True,
+        "measuredOn": _VALIDATION_CACHE.get("measuredOn"),
+        "years": _VALIDATION_CACHE.get("years"),
+        "tests": _VALIDATION_CACHE.get("tests"),
+        "rawHits": _VALIDATION_CACHE.get("rawHits"),
+        "expectedByChance": _VALIDATION_CACHE.get("expectedByChance"),
+        "significant": _VALIDATION_CACHE.get("significant"),
+        "headline": _VALIDATION_CACHE.get("headline"),
+    }
+    # The rows for THIS universe, if it is one that was measured. A custom list
+    # was never tested and must not borrow another universe's result.
+    if universe_id:
+        rows = []
+        for entry in _VALIDATION_CACHE["results"].values():
+            if entry.get("universeId") != universe_id:
+                continue
+            rows.append({
+                "horizonDays": entry["horizonDays"],
+                "periods": entry["informationCoefficient"]["periods"],
+                "ic": entry["informationCoefficient"]["mean"],
+                "icT": entry["informationCoefficient"]["tStat"],
+                "icQ": entry["informationCoefficient"].get("qValue"),
+                "spread": entry["quintileSpread"]["mean"],
+                "spreadQ": entry["quintileSpread"].get("qValue"),
+                "minimumDetectableIc": entry["informationCoefficient"].get("minimumDetectable"),
+            })
+        out["universe"] = sorted(rows, key=lambda r: r["horizonDays"])
+        out["caveats"] = next(
+            (e["caveats"] for e in _VALIDATION_CACHE["results"].values()
+             if e.get("universeId") == universe_id), [])
+    return out

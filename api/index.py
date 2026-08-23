@@ -589,6 +589,12 @@ def rank(
                    f"{len(symbols_list)}. Split it, or narrow the list.")
 
     result = ranking.scan(symbols_list, market_code=market_code)
+    # THE PANEL THAT PRESENTS A RANKING CARRIES THE FINDING ABOUT WHETHER THAT
+    # RANKING PREDICTS ANYTHING. The flow lens has had this since the event
+    # study shipped; the breadth tier asserted its usefulness by omission until
+    # now. Measured offline and stamped with its date, the same treatment the
+    # constituent lists get — see scripts/backtest_ranking.py.
+    result["validation"] = ranking.validation(universe)
     result["explain"] = explain.for_ranking(result)
     for row in result["rows"]:
         row["explain"] = explain.for_ranking_row(row)

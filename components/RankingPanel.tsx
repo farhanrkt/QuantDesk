@@ -16,6 +16,7 @@ import { DownloadButton } from "@/components/ui/controls";
 import type {
   DeepenRow, Market, RankRow, RankSignalDefinition,
 } from "@/lib/types";
+import { RankValidation } from "@/components/RankValidation";
 import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
 
 const CUSTOM = "__custom__";
@@ -542,6 +543,12 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               </div>
             </CardBody>
           </Card>
+
+          {/* BELOW the table on purpose. Above, it reads as a disclaimer to
+              scroll past; below, it is the thing carried away — which is the
+              right weighting, because whether the order predicts anything
+              matters more than any single row in it. */}
+          <RankValidation data={data.validation} />
 
           {/* ---------------- the deepen step ---------------- */}
           <Card accent={picked.length > 0 ? "#5B8DEF" : undefined}>
