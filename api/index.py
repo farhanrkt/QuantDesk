@@ -901,8 +901,24 @@ def intrinsic_value_simulation(
 # Engine 4 — accounting quality and solvency
 # --------------------------------------------------------------------------- #
 def quality_payload(symbol: str) -> dict:
-    """Piotroski / Altman / Beneish from the statements already fetched."""
-    payload = quality.analyze(valuation.fetch_company(symbol))
+    """Piotroski / Altman / Beneish from the statements already fetched.
+
+    A SYMBOL THAT DOES NOT EXIST IS A 404, NOT A REFUSAL. This lens has two very
+    different "no score" outcomes and they must not look alike: `applicable:
+    false` is a DESIGNED refusal — the three models were built on non-financial
+    firms and do not transfer to a bank — while a symbol nothing came back for
+    is a failed lookup. Reporting the second as the first told a reader that a
+    company files no statements when in fact no such company was found, and it
+    devalued the refusal, which is one of the more useful things here. The other
+    three lenses already 404 on this input; now so does this one.
+    """
+    company = valuation.fetch_company(symbol)
+    if not company.get("ok"):
+        raise HTTPException(
+            status_code=404,
+            detail=f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+        )
+    payload = quality.analyze(company)
     payload["explain"] = explain.for_quality(payload)
     return payload
 

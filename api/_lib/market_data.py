@@ -466,8 +466,23 @@ def _company_uncached(ticker: str) -> dict:
         except Exception:
             pass
 
+    # `ok` MEANS "THIS SYMBOL RESOLVED TO SOMETHING REAL", and it used to be
+    # `bool(info) or isfinite(price)`. yfinance returns a non-empty `info` dict
+    # even for a symbol that does not exist, so that test was true whenever the
+    # scrape returned anything at all — a delisted ticker came back ok=True with
+    # a NaN price and three empty statements. The valuation engine caught it
+    # anyway by checking the price itself, but the quality lens trusted the flag
+    # and reported "no financial statements came back for this listing", which
+    # reads as "this company files nothing" rather than "this company does not
+    # exist". Conflating a designed refusal with a failed lookup devalues the
+    # refusal, which is one of the more useful things this app does.
+    usable_statements = any(
+        isinstance(df, pd.DataFrame) and not df.empty
+        for df in (statement("income_stmt"), statement("balance_sheet"),
+                   statement("cashflow"))
+    )
     return {
-        "ok": bool(info) or np.isfinite(price),
+        "ok": bool(np.isfinite(price) or usable_statements),
         "name": info.get("longName") or info.get("shortName") or ticker,
         "sector": info.get("sector") or "",
         "industry": info.get("industry") or "",

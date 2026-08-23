@@ -482,3 +482,45 @@ def test_last_close_does_not_demand_a_full_bar():
     with mock.patch.object(MD, "yf") as fake:
         fake.Ticker = FakeTicker
         assert MD.last_close("^TNX") == pytest.approx(4.73)
+
+
+def test_ok_means_the_symbol_resolved_to_something_real(monkeypatch):
+    """`ok` used to be `bool(info) or isfinite(price)`.
+
+    yfinance returns a non-empty `info` dict even for a symbol that does not
+    exist, so that test was true whenever the scrape returned anything at all: a
+    delisted ticker came back ok=True with a NaN price and three empty
+    statements. The quality lens trusted the flag and told the reader "no
+    financial statements came back for this listing" — which reads as "this
+    company files nothing" rather than "this company was not found", and
+    conflates a failed lookup with the DESIGNED refusal the lens gives banks.
+    """
+    class Ghost:
+        """What a delisted symbol actually looks like: some info, nothing else."""
+        def __init__(self, symbol):
+            self.info = {"symbol": symbol, "quoteType": "NONE"}
+            self.fast_info = _FakeFastInfo()
+            self.fast_info._CC = {}
+            self.dividends = None
+        def history(self, *a, **k): return pd.DataFrame()
+        def __getattr__(self, name): return pd.DataFrame()
+
+    monkeypatch.setattr(MD, "yf", mock_module(Ghost))
+    assert MD._company_uncached("ZZZZZZ")["ok"] is False
+
+    class Real(Ghost):
+        def __init__(self, symbol):
+            super().__init__(symbol)
+            self.info = {"symbol": symbol, "currentPrice": 100.0}
+
+    monkeypatch.setattr(MD, "yf", mock_module(Real))
+    assert MD._company_uncached("REAL")["ok"] is True, "a live price is enough"
+
+
+def mock_module(ticker_cls):
+    """A stand-in for the `yf` module exposing only what these paths touch."""
+    class Module:
+        Ticker = ticker_cls
+        @staticmethod
+        def download(*a, **k): return pd.DataFrame()
+    return Module
