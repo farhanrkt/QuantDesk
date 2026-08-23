@@ -160,6 +160,16 @@ def run(symbols: Sequence[str], market_code: str = "US", horizon: int = 63,
         forwards = np.array([f for _, f in scored], dtype="float64")
 
         # Information coefficient: does a higher rank go with a better outcome?
+        #
+        # A CONSTANT ARRAY HAS NO CORRELATION, and scipy says so with a warning
+        # and a NaN rather than an exception — which would have made this period
+        # silently contribute nothing while looking like it contributed. If
+        # every name scores identically, or every name returns identically,
+        # there is no cross-section to correlate and the period is skipped
+        # outright. Pathological on real data; reachable the moment someone
+        # points this at a synthetic or a halted universe.
+        if np.ptp(composites) == 0 or np.ptp(forwards) == 0:
+            continue
         ic = stats.spearmanr(composites, forwards).statistic
         order = np.argsort(composites)
         fifth = max(1, len(order) // 5)

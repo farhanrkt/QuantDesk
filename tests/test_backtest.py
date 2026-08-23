@@ -148,3 +148,22 @@ def test_the_reported_power_floor_is_positive_and_sane(horizon):
     result = run_on(planted(30, 1_400, predictive=False, seed=7), horizon=horizon)
     floor = result["informationCoefficient"]["minimumDetectable"]
     assert floor is not None and 0 < floor < 1
+
+
+def test_a_universe_with_no_cross_section_is_skipped_not_averaged():
+    """If every name scores the same, or every name returns the same, there is
+    nothing to correlate.
+
+    scipy answers a constant input with a warning and a NaN rather than an
+    exception, so the period would have contributed nothing while appearing to
+    contribute. Pathological on real prices; reachable the instant this is
+    pointed at synthetic data or a halted market.
+    """
+    import warnings
+
+    flat = frames_from({f"S{i}": np.full(900, 100.0) for i in range(15)})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")          # a warning here is the bug
+        result = run_on(flat, horizon=21)
+    assert result["usable"] is False
+    assert "cross-section" in result["reason"]
