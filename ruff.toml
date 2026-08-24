@@ -1,0 +1,26 @@
+# Ruff is here to catch mistakes, not to relitigate this codebase's style.
+#
+# Deliberately NOT enabled, with reasons:
+#   UP045  Optional[x] -> x | None. A cosmetic rewrite of every engine
+#          signature; the annotations are correct either way.
+#   BLE001 blind except. Every one of them in this tree is intentional and
+#          documented — news.py degrades to an empty list rather than raising,
+#          and each confluence leg must not be able to sink the other three.
+#   S110   try/except/pass. Same handful of sites, same reasoning.
+#   DTZ    naive date.today(). This app reasons in exchange trading days, not
+#          instants; a timezone here would imply a precision it does not have.
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = [
+    "E4", "E7", "E9",  # pycodestyle errors that indicate real problems
+    "F",               # pyflakes: undefined names, unused imports/variables
+    "B",               # bugbear: mutable defaults, loop-variable capture, ...
+    "RUF",             # ruff-specific correctness (mutable class attrs, ...)
+]
+
+[lint.per-file-ignores]
+# Tests reach into private helpers on purpose: the walk-forward cadence and the
+# feature engineering are exactly the internals worth pinning.
+"tests/*" = ["SLF001"]

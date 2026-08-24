@@ -21,9 +21,8 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
 
-from . import symbols
+from . import market_data, riskmodel, symbols
 
 # =============================================================================
 # 1. MARKET CONVENTIONS
@@ -66,12 +65,23 @@ class ValuationError(Exception):
     """
 
     def __init__(self, message: str, manual_required: bool = False,
-                 missing=(), suggested: Optional[dict] = None):
+                 missing=(), suggested: Optional[dict] = None,
+                 engine: Optional[str] = None):
         super().__init__(message)
         self.message = message
         self.manual_required = bool(manual_required)
         self.missing = list(missing)
         self.suggested = suggested or {}
+        # WHICH ENGINE FAILED, stated rather than inferred.
+        #
+        # The client used to work this out from the SHAPE of `suggested` — a
+        # `netDebt` key meant DCF, a `payout` key meant DDM. Residual income
+        # sends `payout` and no `netDebt`, so it was read as a DDM failure: the
+        # rescue form asked for "annual dividend per share", the user typed a
+        # BOOK VALUE, and the DDM discounted it as a dividend. A confident wrong
+        # number, from guessing identity out of a dict's keys — the same mistake
+        # `_lib/symbols.py` exists to prevent.
+        self.engine = engine
 
     def as_detail(self) -> dict:
         return {
@@ -79,6 +89,7 @@ class ValuationError(Exception):
             "manualRequired": self.manual_required,
             "missing": self.missing,
             "suggested": self.suggested,
+            "engine": self.engine,
         }
 
 
@@ -121,6 +132,19 @@ ROW_ALIASES = {
         "Operating Cash Flow",
         "Total Cash From Operating Activities",
         "Cash Flow From Continuing Operating Activities",
+        # IDX filers report cash flow by the DIRECT method, which Yahoo labels
+        # with this (unpunctuated) string. Without it `ocf` never resolved for
+        # an Indonesian listing: the FCF column still populated from the
+        # reported "Free Cash Flow" row, but the operating-cash-flow column
+        # rendered "n/a" for every year, so the user could not check that
+        # FCF = OCF - capex on the one market this product exists to cover.
+        #
+        # It must stay an EXACT alias. `_get_row`'s substring fallback would
+        # otherwise happily match the sibling component rows that live beside
+        # it — "Other Cash Paymentsfrom Operating Activities" and friends are
+        # line items WITHIN the total, and picking one silently would produce a
+        # confident, wrong free cash flow.
+        "Cash Flowsfromusedin Operating Activities Direct",
     ],
     "capex": [
         "Capital Expenditure", "Capital Expenditures",
@@ -148,6 +172,32 @@ ROW_ALIASES = {
     "tax_provision": ["Tax Provision", "Income Tax Expense"],
     "interest_expense": ["Interest Expense", "Interest Expense Non Operating"],
     "eps": ["Diluted EPS", "Basic EPS"],
+    # --- rows used by _lib/quality.py (F-Score, Z''-EM, M-Score) -------------
+    # They live here rather than in that module because this dict is the single
+    # place that knows how Yahoo names a statement line, and that knowledge
+    # should not fork.
+    "total_assets": ["Total Assets"],
+    "current_assets": ["Current Assets", "Total Current Assets"],
+    "current_liabilities": ["Current Liabilities", "Total Current Liabilities"],
+    "retained_earnings": ["Retained Earnings"],
+    "ebit": ["EBIT", "Operating Income", "Earnings Before Interest And Taxes"],
+    "total_liabilities": [
+        "Total Liabilities Net Minority Interest", "Total Liabilities",
+    ],
+    "receivables": ["Accounts Receivable", "Net Receivables", "Receivables"],
+    "cogs": ["Cost Of Revenue", "Cost Of Goods Sold"],
+    "ppe": [
+        "Net PPE", "Net Property Plant And Equipment",
+        "Property Plant And Equipment Net",
+    ],
+    "depreciation": [
+        "Depreciation And Amortization", "Depreciation Amortization Depletion",
+        "Depreciation",
+    ],
+    "sga": [
+        "Selling General And Administration", "Selling General And Administrative",
+    ],
+    "shares_issued": ["Ordinary Shares Number", "Share Issued"],
 }
 
 
@@ -189,96 +239,17 @@ def _nullable(value):
     return float(out) if np.isfinite(out) else None
 
 
-def fetch_risk_free_rate(market_code: str, fallback: float):
-    if market_code != "US":
-        return fallback, "IndoGB 10Y proxy (static assumption)"
-    try:
-        hist = yf.Ticker("^TNX").history(period="5d")
-        if not hist.empty:
-            close = hist["Close"].dropna()
-            if len(close):
-                return float(close.iloc[-1]) / 100.0, "US 10Y Treasury (^TNX, live)"
-    except Exception:
-        pass
-    return fallback, "US 10Y Treasury (fallback default)"
-
-
-def fetch_company(ticker: str) -> dict:
-    try:
-        tk = yf.Ticker(ticker)
-    except Exception:
-        tk = None
-
-    info = {}
-    if tk is not None:
-        try:
-            info = tk.info or {}
-        except Exception:
-            info = {}
-
-    price, shares, currency = np.nan, np.nan, None
-    if tk is not None:
-        try:
-            fi = tk.fast_info
-            price = _safe_float(fi.get("last_price"))
-            shares = _safe_float(fi.get("shares"))
-            currency = fi.get("currency")
-        except Exception:
-            pass
-
-    if not np.isfinite(price):
-        price = _safe_float(info.get("currentPrice"), _safe_float(info.get("regularMarketPrice")))
-    if not np.isfinite(shares):
-        shares = _safe_float(info.get("sharesOutstanding"))
-
-    def _statement(attr):
-        if tk is None:
-            return pd.DataFrame()
-        try:
-            df = getattr(tk, attr)
-            return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
-        except Exception:
-            return pd.DataFrame()
-
-    ttm_dividend, div_history = np.nan, pd.DataFrame()
-    if tk is not None:
-        try:
-            divs = tk.dividends
-            if divs is not None and len(divs):
-                divs = divs.copy()
-                divs.index = pd.to_datetime(divs.index, utc=True).tz_localize(None)
-                cutoff = divs.index.max() - pd.Timedelta(days=365)
-                ttm_dividend = float(divs[divs.index > cutoff].sum())
-                annual = divs.groupby(divs.index.year).sum().sort_index(ascending=False)
-                div_history = pd.DataFrame(
-                    {"Year": annual.index.astype(str), "Dividend / Share": annual.values}
-                ).head(6)
-        except Exception:
-            pass
-
-    return {
-        "ok": bool(info) or np.isfinite(price),
-        "name": info.get("longName") or info.get("shortName") or ticker,
-        "sector": info.get("sector") or "",
-        "industry": info.get("industry") or "",
-        "price": price,
-        "shares": shares,
-        "beta": _safe_float(info.get("beta")),
-        "currency": currency or info.get("currency") or "",
-        "market_cap": _safe_float(info.get("marketCap")),
-        "dividend_rate": _safe_float(info.get("dividendRate")),
-        "trailing_dividend_rate": _safe_float(info.get("trailingAnnualDividendRate")),
-        "dividend_yield_raw": _safe_float(info.get("dividendYield")),
-        "trailing_dividend_yield_raw": _safe_float(info.get("trailingAnnualDividendYield")),
-        "payout_ratio": _safe_float(info.get("payoutRatio")),
-        "roe_info": _safe_float(info.get("returnOnEquity")),
-        "net_income_info": _safe_float(info.get("netIncomeToCommon")),
-        "ttm_dividend": ttm_dividend,
-        "dividend_history": div_history,
-        "income": _statement("income_stmt"),
-        "balance": _statement("balance_sheet"),
-        "cashflow": _statement("cashflow"),
-    }
+# The 10Y yield moves once a day; this used to be refetched on EVERY valuation
+# request, including all three legs of a confluence run. Keyed by date so it
+# expires on its own, and only successful fetches are stored — caching a failure
+# would pin the fallback for the rest of the day with no retry. Module scope
+# survives warm serverless invocations and costs nothing when it does not.
+# Fetching lives in `_lib/market_data.py` — the only module that imports
+# yfinance. It owns the company cache (per-caller copies, per-key locking), the
+# risk-free rate, and the rule that the last daily bar close is the canonical
+# price. See that module's header for the four bugs that arrangement fixed.
+fetch_company = market_data.company
+fetch_risk_free_rate = market_data.risk_free_rate
 
 
 # =============================================================================
@@ -346,6 +317,17 @@ def effective_tax_rate(income, default: float) -> float:
 
 
 def clip_beta(beta) -> float:
+    """A hard sanity bound, NOT the shrinkage mechanism any more.
+
+    This clip used to be the only thing standing between a noisy beta and the
+    cost of equity, and it applied the same hard edge to a mega-cap measured
+    over 500 days and an IDX small cap whose estimate is barely distinguishable
+    from noise. `riskmodel.estimate_beta` now does that job properly, shrinking
+    each estimate toward the market in proportion to its own standard error
+    (Vasicek 1973). What remains here is a floor and ceiling that a shrunk beta
+    should essentially never touch — it binds only when the shrinkage itself is
+    unavailable, which is the fallback path.
+    """
     b = _safe_float(beta, 1.0)
     return float(np.clip(b if np.isfinite(b) else 1.0, 0.4, 2.5))
 
@@ -379,28 +361,97 @@ def compute_wacc(beta, risk_free, erp, equity_value, total_debt,
     }
 
 
-def normalize_yield(raw, price) -> float:
+# The two dividend-yield fields Yahoo publishes use DIFFERENT conventions, and
+# that is not a guess — it is visible in any pair of tickers:
+#
+#             dividendYield   trailingAnnualDividendYield   actual
+#   AAPL             0.3500                        0.0034    0.34%
+#   KO               2.3300                        0.0230    2.30%
+#
+# `dividendYield` is a PERCENTAGE; `trailingAnnualDividendYield` is a FRACTION.
+# One heuristic cannot serve both. The old rule — divide by 100 above 1.0 —
+# happened to be right for any yield of 1% or more and was catastrophically
+# wrong below it: AAPL's 0.35 stayed 0.35, so a company paying 0.34% was read as
+# paying 35%, and the dividend model valued it about a hundred times too high.
+# No error, a plausible-looking figure. The same shape as the currency bug.
+YIELD_IS_PERCENT = {"dividend_yield_raw": True,
+                    "trailing_dividend_yield_raw": False}
+
+# Above this, a "yield" is not a yield. Even after applying the right
+# convention, a garbled field should not reach a valuation — the highest
+# sustained yields among listed companies sit far below this.
+MAX_PLAUSIBLE_YIELD = 0.60
+
+
+def normalize_yield(raw, price, is_percent: bool = False) -> float:
+    """One yield field, in its own units, as a fraction.
+
+    `is_percent` is passed explicitly by the caller rather than sniffed from the
+    magnitude, because the magnitude is exactly what cannot distinguish 0.35%
+    from 35%.
+    """
     v = _safe_float(raw)
     if not np.isfinite(v) or v <= 0:
         return np.nan
-    return v / 100.0 if v > 1.0 else v
+    out = v / 100.0 if is_percent else v
+    return out if 0 < out <= MAX_PLAUSIBLE_YIELD else np.nan
+
+
+# A dividend per share implying a yield outside this band is not a dividend, it
+# is a units problem. The floor is what catches a figure denominated in the
+# wrong currency; the ceiling catches a garbled field.
+PLAUSIBLE_YIELD_BAND = (0.0001, 0.60)
+
+
+def _dividend_candidate(value, price: float, label: str, fx: Optional[float]):
+    """Accept a dividend-per-share figure only if it implies a credible yield.
+
+    WHY EVERY CANDIDATE IS SANITY-CHECKED AGAINST THE PRICE. Yahoo is not
+    internally consistent about the currency of its dividend fields. For an
+    Indonesian company that reports in dollars, `trailingAnnualDividendRate`
+    comes back in USD while `dividendRate` comes back in IDR:
+
+        ADRO.JK   paid Rp 430.09   trailingAnnualDividendRate 0.0160 (USD)
+                                   dividendRate             236.52  (IDR)
+
+    Taking the first at face value gives a dividend roughly seventeen thousand
+    times too small and a dividend-model valuation to match — no error, just a
+    tiny number. Rather than hard-code which field uses which currency, which is
+    a fact about a scraper that has already changed once, each candidate is
+    checked against the share price it will be compared with.
+
+    Where a rate is available and the figure becomes credible once converted,
+    that is strong evidence it was quoted in the reporting currency, so it is
+    converted and the label says so. Otherwise it is skipped and the next
+    candidate gets its turn.
+    """
+    dps = _safe_float(value)
+    if not np.isfinite(dps) or dps <= 0 or not np.isfinite(price) or price <= 0:
+        return None
+    low, high = PLAUSIBLE_YIELD_BAND
+    if low <= dps / price <= high:
+        return dps, label
+    if fx and low <= (dps * fx) / price <= high:
+        return dps * fx, f"{label}, converted at the reporting-currency rate"
+    return None
 
 
 def resolve_dividend(data: dict, price: float):
-    ttm = _safe_float(data.get("ttm_dividend"))
-    if np.isfinite(ttm) and ttm > 0:
-        return ttm, "trailing 12m payments (actual)"
+    fx = _safe_float(data.get("fx_rate"))
+    fx = float(fx) if np.isfinite(fx) and fx > 0 else None
 
-    trailing = _safe_float(data.get("trailing_dividend_rate"))
-    if np.isfinite(trailing) and trailing > 0:
-        return trailing, "trailing annual rate (yfinance)"
-
-    forward = _safe_float(data.get("dividend_rate"))
-    if np.isfinite(forward) and forward > 0:
-        return forward, "forward annual rate (yfinance)"
+    # Ordered by how far each is from what the company actually paid.
+    for value, label in (
+        (data.get("ttm_dividend"), "trailing 12m payments (actual)"),
+        (data.get("trailing_dividend_rate"), "trailing annual rate (yfinance)"),
+        (data.get("dividend_rate"), "forward annual rate (yfinance)"),
+    ):
+        candidate = _dividend_candidate(value, price, label, fx)
+        if candidate:
+            return candidate
 
     for key in ("trailing_dividend_yield_raw", "dividend_yield_raw"):
-        y = normalize_yield(data.get(key), price)
+        y = normalize_yield(data.get(key), price, is_percent=YIELD_IS_PERCENT[key])
         if np.isfinite(y) and y > 0 and np.isfinite(price):
             return y * price, "derived from dividend yield"
 
@@ -471,6 +522,68 @@ def ddm_implied_price(base_dps, growth, cost_eq, terminal_growth):
     return (pv_explicit + pv_terminal).ravel()
 
 
+# The widest growth rate worth solving for. Above roughly 60% sustained for five
+# years the model has stopped describing a business and started describing an
+# arithmetic curiosity, and reporting "the market implies 400% growth" would be
+# false precision about a model that has left its domain.
+IMPLIED_GROWTH_BOUNDS = (-0.60, 0.60)
+
+
+def implied_growth(engine, price, base, rate, terminal_growth,
+                   cash=0.0, debt=0.0, shares=1.0):
+    """The growth rate that makes this model reproduce today's market price.
+
+    THE MOST USEFUL QUESTION A DISCOUNTED CASH FLOW CAN ANSWER, AND THE ONE IT
+    IS USUALLY NOT ASKED. Run forwards, a DCF says "this is worth $111" — an
+    answer whose whole width comes from assumptions the reader has no basis to
+    judge, and which invites being read as a price target. Run BACKWARDS it says
+    "at today's price the market is assuming 14% a year for five years", which
+    is a claim about the world that a reader can actually agree or disagree
+    with. It converts an opinion into a testable proposition, and it is how the
+    model is used by people who use it well.
+
+    Solved rather than approximated. Implied price is continuous and strictly
+    increasing in growth over the bracket — more growth is always worth more —
+    so Brent's method converges on the unique crossing. Returns None when the
+    price lies outside what the bracket can produce, which is itself the finding:
+    a business whose market price needs more than 60% compound growth for five
+    years is not being valued on its cash flows by anyone.
+    """
+    from scipy.optimize import brentq
+
+    price = _safe_float(price)
+    if not np.isfinite(price) or price <= 0:
+        return None
+
+    def implied_at(g: float) -> float:
+        growth = np.array([float(g)])
+        rates = np.array([float(rate)])
+        terminals = np.array([float(terminal_growth)])
+        if engine == "DCF":
+            out = dcf_implied_price(base, growth, rates, terminals, cash, debt, shares)
+        else:
+            out = ddm_implied_price(base, growth, rates, terminals)
+        value = float(np.asarray(out).ravel()[0])
+        return value if np.isfinite(value) else np.nan
+
+    low, high = IMPLIED_GROWTH_BOUNDS
+    try:
+        at_low, at_high = implied_at(low) - price, implied_at(high) - price
+    except (ValueError, ZeroDivisionError, FloatingPointError):
+        return None
+    if not (np.isfinite(at_low) and np.isfinite(at_high)):
+        return None
+    # No sign change means the price is unreachable anywhere in the bracket.
+    if at_low * at_high > 0:
+        return None
+
+    try:
+        return float(brentq(lambda g: implied_at(g) - price, low, high,
+                            xtol=1e-6, maxiter=100))
+    except (ValueError, RuntimeError):
+        return None
+
+
 def base_case_schedule(engine, base, growth, rate, terminal_growth,
                        cash=0.0, debt=0.0, shares=1.0):
     projected, pv_explicit, pv_terminal, terminal_value = pv_of_growing_stream(
@@ -512,11 +625,125 @@ def base_case_schedule(engine, base, growth, rate, terminal_growth,
     return schedule, summary
 
 
+# =============================================================================
+# 5b. RESIDUAL INCOME (Ohlson 1995)
+# =============================================================================
+# Persistence of abnormal earnings. Competition erodes excess returns, so
+# residual income decays rather than growing forever. 0.62 is the empirical
+# persistence Dechow, Hutton & Sloan (1999) estimate for a broad US sample; it
+# is deliberately a fade, not a growth rate, which is why this engine does not
+# suffer the terminal-value dominance the DCF and DDM have to be warned about.
+RI_PERSISTENCE = 0.62
+
+# Return on equity is mean-reverting too. Left unclipped, one exceptional year
+# at a bank compounds book value into fantasy over five years.
+RI_ROE_BOUNDS = (-0.30, 0.45)
+
+
+def residual_income_value(book_value, roe, cost_equity, payout,
+                          years: int = PROJECTION_YEARS,
+                          persistence: float = RI_PERSISTENCE):
+    """Ohlson's residual income model, vectorised over Monte Carlo draws.
+
+        V0 = B0 + sum_t (ROE_t - r) * B_{t-1} / (1+r)^t + continuing value
+
+    WHY THIS ENGINE EARNS ITS PLACE. A DDM values a bank's dividend, which is a
+    policy choice a board can change; a DCF values free cash flow, which is not a
+    meaningful quantity for an institution whose business IS the balance sheet.
+    Residual income anchors on book value and ROE — the two figures a bank
+    reports most reliably, and the two that are actually present in Yahoo's data
+    for IDX banks when the dividend fields are empty.
+
+    Book value rolls forward by clean surplus: whatever is earned and not paid
+    out is retained. The continuing value fades the last explicit year's
+    residual income geometrically at `persistence`, summing to
+    RI_T * w / (1 + r - w).
+    """
+    b = np.asarray(book_value, dtype=float).reshape(-1)
+    roe = np.asarray(roe, dtype=float).reshape(-1)
+    r = np.asarray(cost_equity, dtype=float).reshape(-1)
+    payout = np.clip(np.asarray(payout, dtype=float).reshape(-1), 0.0, 1.0)
+    w = float(np.clip(persistence, 0.0, 0.99))
+
+    book = b.copy()
+    present_value = np.zeros_like(b)
+    residual = np.zeros_like(b)
+    schedule = []
+
+    for year in range(1, years + 1):
+        residual = (roe - r) * book
+        discount = (1.0 + r) ** year
+        present_value = present_value + residual / discount
+        schedule.append({
+            "year": year,
+            "openingBook": book.copy(),
+            "residual": residual.copy(),
+            "discount": discount.copy(),
+        })
+        book = book * (1.0 + roe * (1.0 - payout))
+
+    # RI fades at `w` forever: sum_k w^k * RI_T / (1+r)^k
+    denominator = np.maximum(1.0 + r - w, MIN_SPREAD)
+    continuing = residual * w / denominator
+    pv_continuing = continuing / (1.0 + r) ** years
+
+    value = b + present_value + pv_continuing
+    return value, present_value, pv_continuing, schedule
+
+
+def ri_inputs(data: dict, price: float, shares: float) -> dict:
+    """Book value per share, ROE and payout — everything the RI engine needs.
+
+    Deliberately reuses `bank_diagnostics`, which already computed all three for
+    the DDM's diagnostics panel. The figures were there the whole time.
+    """
+    equity = _first_valid(_get_row(data["balance"], "equity"), np.nan)
+    net_income = _first_valid(_get_row(data["income"], "net_income"),
+                              _safe_float(data.get("net_income_info")))
+
+    roe = _safe_float(data.get("roe_info"))
+    if not np.isfinite(roe) and np.isfinite(net_income) and np.isfinite(equity) and equity > 0:
+        roe = net_income / equity
+
+    payout = _safe_float(data.get("payout_ratio"))
+    if not np.isfinite(payout) or payout < 0:
+        payout = 0.0
+
+    book_per_share = (equity / shares
+                      if np.isfinite(equity) and np.isfinite(shares) and shares > 0
+                      else np.nan)
+
+    return {
+        "equity": equity,
+        "netIncome": net_income,
+        "roe": roe,
+        "payout": float(np.clip(payout, 0.0, 1.0)),
+        "bookPerShare": book_per_share,
+        "usable": bool(np.isfinite(book_per_share) and book_per_share > 0
+                       and np.isfinite(roe)),
+    }
+
+
 def run_monte_carlo(engine, base, growth, rate, terminal_growth,
                     n_sims, sd_growth, sd_rate, sd_terminal, seed,
-                    cash=0.0, debt=0.0, shares=1.0) -> pd.DataFrame:
+                    cash=0.0, debt=0.0, shares=1.0, payout=0.0) -> pd.DataFrame:
     rng = np.random.default_rng(int(seed))
     n = int(n_sims)
+
+    if engine == "RI":
+        # For residual income the drawn "growth" IS the return on equity, and
+        # there is no terminal growth to draw — abnormal earnings fade at a
+        # fixed persistence rather than growing in perpetuity.
+        roe = np.clip(rng.normal(growth, sd_growth, n), *RI_ROE_BOUNDS)
+        r = np.clip(rng.normal(rate, sd_rate, n), 0.03, 0.50)
+        prices, _, _, _ = residual_income_value(
+            np.full(n, float(base)), roe, r, np.full(n, float(payout))
+        )
+        return pd.DataFrame({
+            "Return on Equity": roe,
+            "Cost of Equity": r,
+            "Implied Price": prices,
+        })
 
     if engine == "DCF":
         g = np.clip(rng.normal(growth, sd_growth, n), -0.50, 1.00)
@@ -550,6 +777,10 @@ def run_monte_carlo(engine, base, growth, rate, terminal_growth,
 DEFAULTS = {
     "DCF": {"growth": 0.10, "terminal": 0.025, "sd": (0.020, 0.010, 0.005)},
     "DDM": {"growth": 0.05, "terminal": 0.025, "sd": (0.015, 0.010, 0.005)},
+    # For RI the "growth" slot carries the sustained ROE, which is why its
+    # default is a plausible bank ROE rather than a growth rate. Terminal growth
+    # is unused: abnormal earnings fade at RI_PERSISTENCE instead.
+    "RI": {"growth": 0.12, "terminal": 0.0, "sd": (0.030, 0.010, 0.000)},
 }
 
 
@@ -589,19 +820,47 @@ def analyze(
         engine, route_reason = "DCF", "manual override"
     elif choice == "ddm":
         engine, route_reason = "DDM", "manual override"
+    elif choice == "ri":
+        engine, route_reason = "RI", "manual override"
     else:
         engine = auto_engine
 
     manual_price_f = _safe_float(manual_price)
     if np.isfinite(manual_price_f) and manual_price_f > 0:
+        # Safe to write only because `fetch_company` hands back a per-caller
+        # copy. If that copy is ever removed, this line silently rewrites the
+        # day's cached price for this symbol for every other request.
         data["price"] = manual_price_f
+
+    # A COMPANY WHOSE ACCOUNTS AND SHARES USE DIFFERENT CURRENCIES IS VALUED IN
+    # ONE OF THEM OR IN NEITHER. `market_data.company` converts the statements
+    # into the trading currency when it can get a rate; when it cannot, the two
+    # are still in different units and every figure this engine produces would be
+    # out by the exchange rate. That is a factor of about seventeen thousand for
+    # USD/IDR, so it does not look like a rounding error — it looks like a
+    # confident answer, which is worse. Refuse instead.
+    reporting = data.get("financial_currency")
+    trading = (data.get("currency") or "").upper()
+    if reporting and trading and reporting != trading and not data.get("fx_rate"):
+        raise ValuationError(
+            f"{symbol} reports its accounts in {reporting} but its shares trade in "
+            f"{trading}, and no {reporting}/{trading} rate could be fetched to reconcile "
+            f"them. Valuing the cash flows without it would be out by the exchange rate. "
+            f"Enter the figures yourself in {trading} to value it anyway.",
+            manual_required=True,
+            missing=[f"{reporting}/{trading} exchange rate"],
+            engine=engine,
+            suggested={"price": _nullable(data.get("price")),
+                       "shares": _nullable(data.get("shares"))},
+        )
 
     if not data["ok"] or not np.isfinite(data["price"]):
         raise ValuationError(
-            f"No usable market data returned for '{symbol}'. Check the symbol, or supply "
-            "the base figures yourself in manual input mode.",
+            f"No usable market data returned for '{symbol}'. {symbols.hint(symbol)} "
+            f"Or supply the base figures yourself in manual input mode.",
             manual_required=True,
             missing=["price"],
+            engine=engine,
             suggested={"price": None, "shares": _nullable(data.get("shares"))},
         )
 
@@ -609,20 +868,81 @@ def analyze(
     growth_input = defaults["growth"] if growth is None else float(growth)
     terminal_input = defaults["terminal"] if terminal is None else float(terminal)
     sd_g = defaults["sd"][0] if sd_growth is None else float(sd_growth)
+    sd_growth_calibrated = None      # filled in per engine from that engine's history
+
     sd_r = defaults["sd"][1] if sd_rate is None else float(sd_rate)
     sd_t = defaults["sd"][2] if sd_terminal is None else float(sd_terminal)
 
     price = data["price"]
     shares = data["shares"]
     tax_rate = effective_tax_rate(data["income"], market["tax_rate"])
+    notices: list = []
+    # Beta, measured rather than inherited. `data["beta"]` is Yahoo's number
+    # against an undisclosed index over an undisclosed window; this regresses the
+    # stock on its own market index and shrinks the result toward 1.0 in
+    # proportion to the estimate's standard error (Vasicek 1973). The fallback
+    # keeps Yahoo's figure with Blume shrinkage when the regression is not
+    # possible, and says so in `notes`.
+    beta_estimate = riskmodel.estimate_beta_for_symbol(
+        symbol, market["code"], fallback_beta=data["beta"]
+    )
+    beta_used = beta_estimate.adjusted
+    for note in beta_estimate.notes:
+        notices.append({"tone": "info", "text": note})
+
+    # The [0.4, 2.5] sanity bound is meant to be inert now that shrinkage does
+    # the real work — but when it DOES bind it changes the cost of equity, and
+    # it used to do so invisibly: the diagnostics table showed the shrunk beta
+    # while the discount rate was computed from the clipped one. Two different
+    # numbers on the same screen with nothing saying which was used.
+    beta_final = clip_beta(beta_used)
+    beta_clipped = abs(beta_final - beta_used) > 1e-6
+    if beta_clipped:
+        notices.append({"tone": "warn", "text":
+                        f"Measured beta of {beta_used:.2f} falls outside the [0.40, 2.50] "
+                        f"sanity bound, so {beta_final:.2f} was used for the cost of equity. "
+                        f"A beta this far from the market usually means a single-factor model "
+                        f"describes this security poorly, not that its risk is really that low."})
+
+    if data.get("fx_rate"):
+        notices.append({"tone": "warn", "text": (
+            f"{symbol} reports its accounts in {reporting} but trades in {trading}. The "
+            f"statements were converted at the current spot rate of "
+            f"{data['fx_rate']:,.0f} {trading} per {reporting} so that the model and the "
+            f"share price are in the same units. A five-year projection converted at "
+            f"today's rate carries the currency's risk as well as the company's, and a "
+            f"move in the exchange rate moves this valuation with it.")})
 
     cash_used = debt_used = 0.0
     diagnostics_rows = []
-    notices = []
     history_table = []
     bank = None
 
-    RATE_NAME = "Cost of Equity" if engine == "DDM" else "WACC"
+    RATE_NAME = "WACC" if engine == "DCF" else "Cost of Equity"
+
+    # THE MANUAL-RESCUE FORM EXISTS BECAUSE OF THIS CASE. Yahoo's dividend fields
+    # are frequently empty for IDX banks, and a DDM with no dividend has nothing
+    # to discount — so the engine used to stop and ask the user to type the
+    # figure in. Residual income needs book value and ROE instead, both of which
+    # those same filings DO report, so the honest move is to switch models
+    # rather than to demand data that is not coming.
+    if engine == "DDM" and choice == "auto":
+        probe_dps, _ = resolve_dividend(data, price)
+        if not np.isfinite(probe_dps) or probe_dps <= 0:
+            probe = ri_inputs(data, price, shares)
+            if probe["usable"]:
+                engine = "RI"
+                route_reason = "financial with no usable dividend data"
+                RATE_NAME = "Cost of Equity"
+                defaults = DEFAULTS["RI"]
+                if growth is None:
+                    growth_input = defaults["growth"]
+                if sd_growth is None:
+                    sd_g = defaults["sd"][0]
+                notices.append({"tone": "info", "text":
+                                "No usable dividend data, so this is valued on residual "
+                                "income (book value plus discounted excess returns) rather "
+                                "than on dividends. Ohlson (1995)."})
 
     if auto_engine == "DDM" and engine == "DDM":
         notices.append({"tone": "info", "text":
@@ -631,6 +951,11 @@ def analyze(
         notices.append({"tone": "warn", "text":
                         "This is a financial institution, but DCF has been forced. Free cash flow is "
                         "not a meaningful measure for a bank."})
+    elif engine == "RI" and auto_engine == "DCF":
+        notices.append({"tone": "warn", "text":
+                        "Residual income has been forced on a non-financial company. It "
+                        "anchors on book value, which understates a business whose value "
+                        "is mostly intangible."})
     elif auto_engine == "DCF" and engine == "DDM":
         notices.append({"tone": "info", "text":
                         "DDM has been forced on a non-financial company. This values only distributed "
@@ -681,6 +1006,7 @@ def analyze(
                     "input mode, force the DDM engine, or try another symbol.",
                     manual_required=True,
                     missing=["base"],
+                    engine="DCF",
                     suggested={"base": suggested_base,
                                "netDebt": float(debt_auto - cash_auto),
                                "shares": _nullable(shares), "price": _nullable(price)},
@@ -704,6 +1030,7 @@ def analyze(
                 "cash flow in manual input mode, or value the company on another basis.",
                 manual_required=True,
                 missing=["base"],
+                engine="DCF",
                 suggested={"base": suggested_base,
                            "netDebt": float(debt_auto - cash_auto),
                            "shares": _nullable(shares), "price": _nullable(price)},
@@ -713,13 +1040,14 @@ def analyze(
                 "Shares outstanding unavailable for this ticker. Enter it in manual input mode.",
                 manual_required=True,
                 missing=["shares"],
+                engine="DCF",
                 suggested={"base": suggested_base,
                            "netDebt": float(debt_auto - cash_auto),
                            "shares": None, "price": _nullable(price)},
             )
 
         rate_parts = compute_wacc(
-            beta=data["beta"], risk_free=rf_rate, erp=market["erp"],
+            beta=beta_used, risk_free=rf_rate, erp=market["erp"],
             equity_value=price * shares, total_debt=max(debt_used, 0.0),
             interest_expense=interest_expense, tax_rate=tax_rate,
         )
@@ -744,6 +1072,15 @@ def analyze(
             }
             for _, row in fcf_history.iterrows()
         ]
+        # `sd_growth=0.02` was a constant with no provenance, and it sets the
+        # entire width of the fan chart. Estimate it from this company's own FCF
+        # record instead, shrunk hard toward a prior because four filings give
+        # three growth observations. `vals` is newest-first; growth needs
+        # chronological order.
+        if sd_growth is None:
+            sd_growth_calibrated = riskmodel.shrunk_growth_volatility(list(vals)[::-1])
+            sd_g = sd_growth_calibrated["sd"]
+
         basis_options = ["Latest fiscal year"]
         if len(vals) >= 2:
             basis_options.append("2-year average")
@@ -756,6 +1093,102 @@ def analyze(
             "shares": _nullable(shares),
             "price": _nullable(price),
             "payout": None,
+        }
+
+    # ---------------- ENGINE 4 — RESIDUAL INCOME ----------------
+    elif engine == "RI":
+        inputs = ri_inputs(data, price, shares)
+        manual_base_f = _safe_float(manual_base)
+
+        if np.isfinite(manual_base_f) and manual_base_f > 0:
+            book_per_share = float(manual_base_f)
+            basis_label = "manual input"
+            notices.append({"tone": "info", "text":
+                            "Manual input mode: book value per share is the figure you "
+                            "supplied, not Yahoo's."})
+        elif inputs["usable"]:
+            book_per_share = float(inputs["bookPerShare"])
+            basis_label = "book value per share (latest balance sheet)"
+        else:
+            raise ValuationError(
+                "Residual income needs book value per share and a return on equity, and "
+                "neither could be derived from these filings. Supply book value per share "
+                "in manual input mode, or force the DCF engine.",
+                manual_required=True,
+                missing=["base"],
+                engine="RI",
+                suggested={"base": _nullable(inputs["bookPerShare"]),
+                           "price": _nullable(price), "payout": inputs["payout"]},
+            )
+
+        manual_payout_f = _safe_float(manual_payout)
+        payout_used = (float(np.clip(manual_payout_f, 0.0, 1.0))
+                       if np.isfinite(manual_payout_f) else inputs["payout"])
+
+        roe_used = float(np.clip(inputs["roe"], *RI_ROE_BOUNDS)) \
+            if np.isfinite(inputs["roe"]) else DEFAULTS["RI"]["growth"]
+        if growth is not None:
+            roe_used = float(growth)
+        growth_input = roe_used
+        base_value = book_per_share
+
+        bank = bank_diagnostics(data, np.nan, price, shares)
+        rate_parts = {
+            "beta": clip_beta(beta_used),
+            "cost_equity": cost_of_equity(beta_used, rf_rate, market["erp"]),
+        }
+        discount_rate = float(rate_override) if rate_override is not None else rate_parts["cost_equity"]
+
+        if sd_growth is None:
+            # Dispersion of the SUSTAINED ROE, from the equity and income record.
+            equity_row = _get_row(data["balance"], "equity")
+            income_row = _get_row(data["income"], "net_income")
+            roe_history = []
+            if equity_row is not None and income_row is not None:
+                for column in list(data["balance"].columns)[:5]:
+                    eq = _safe_float(equity_row.get(column))
+                    ni = _safe_float(income_row.get(column)) if column in income_row.index else np.nan
+                    if np.isfinite(eq) and eq > 0 and np.isfinite(ni):
+                        roe_history.append(ni / eq)
+            if len(roe_history) >= 3:
+                sd_growth_calibrated = riskmodel.shrunk_growth_volatility(
+                    [1.0 + r for r in roe_history][::-1]
+                )
+                sd_g = sd_growth_calibrated["sd"]
+            else:
+                sd_g = DEFAULTS["RI"]["sd"][0]
+
+        excess = roe_used - discount_rate
+        if excess <= 0:
+            notices.append({"tone": "warn", "text":
+                            f"Return on equity of {roe_used:.1%} is at or below the "
+                            f"{discount_rate:.1%} cost of equity, so residual income is "
+                            f"negative and the model values the company below its book. "
+                            f"That is a real result, not an error."})
+
+        diagnostics_rows = [
+            ("Book value per share", fmt_price(book_per_share, market)),
+            ("Return on equity (sustained)", f"{roe_used:.1%}"),
+            ("Cost of equity (CAPM)", f"{rate_parts['cost_equity']:.2%}"),
+            ("Excess return (ROE - r)", f"{excess:+.1%}"),
+            ("Retention ratio", f"{1 - payout_used:.0%}"),
+            ("Abnormal earnings persistence", f"{RI_PERSISTENCE:.2f} (Dechow-Hutton-Sloan 1999)"),
+            ("Beta (clipped)", f"{rate_parts['beta']:.2f}"),
+            ("Risk-free source", rf_source),
+        ]
+
+        div_history = data.get("dividend_history", pd.DataFrame())
+        history_table = [
+            {"period": row["Year"], "dividendPerShare": fmt_dps(row["Dividend / Share"], market)}
+            for _, row in div_history.iterrows()
+        ] if isinstance(div_history, pd.DataFrame) and not div_history.empty else []
+        basis_options = [basis_label]
+        manual_defaults = {
+            "base": _nullable(book_per_share),
+            "netDebt": None,
+            "shares": _nullable(shares),
+            "price": _nullable(price),
+            "payout": payout_used,
         }
 
     # ---------------- ENGINE 2 — DDM ----------------
@@ -784,6 +1217,7 @@ def analyze(
                     "genuinely pays no dividend, force the DCF engine instead.",
                     manual_required=True,
                     missing=["base"],
+                    engine="DDM",
                     suggested={"base": suggested_dps, "price": _nullable(price),
                                "payout": 0.40},
                 )
@@ -810,8 +1244,8 @@ def analyze(
                 bank["sustainable_growth"] = bank["roe"] * (1 - bank["payout_clean"])
 
         rate_parts = {
-            "beta": clip_beta(data["beta"]),
-            "cost_equity": cost_of_equity(data["beta"], rf_rate, market["erp"]),
+            "beta": clip_beta(beta_used),
+            "cost_equity": cost_of_equity(beta_used, rf_rate, market["erp"]),
         }
         discount_rate = float(rate_override) if rate_override is not None else rate_parts["cost_equity"]
 
@@ -832,6 +1266,11 @@ def analyze(
             {"period": row["Year"], "dividendPerShare": fmt_dps(row["Dividend / Share"], market)}
             for _, row in div_history.iterrows()
         ] if isinstance(div_history, pd.DataFrame) and not div_history.empty else []
+        if sd_growth is None and isinstance(div_history, pd.DataFrame) and not div_history.empty:
+            declared = list(div_history["Dividend / Share"].astype(float))[::-1]
+            sd_growth_calibrated = riskmodel.shrunk_growth_volatility(declared)
+            sd_g = sd_growth_calibrated["sd"]
+
         basis_options = ["Trailing 12 months"]
         if len(div_history) >= 2:
             basis_options.append("Last full year")
@@ -847,23 +1286,70 @@ def analyze(
         }
 
     # ---------------- Terminal growth guard-rail ----------------
-    terminal_growth = min(terminal_input, discount_rate - MIN_SPREAD)
-    if terminal_growth < terminal_input:
-        notices.append({"tone": "warn", "text":
-                        f"Perpetual growth capped at {terminal_growth:.2%} to hold 150bp below the "
-                        f"{discount_rate:.2%} {RATE_NAME}. At or above it the Gordon Growth terminal "
-                        f"value diverges to infinity."})
+    if engine == "RI":
+        # No Gordon terminal here: abnormal earnings FADE at RI_PERSISTENCE
+        # rather than growing forever, so there is nothing to cap and no
+        # divergence to guard against. This is the structural reason residual
+        # income does not inherit the terminal-value dominance problem.
+        terminal_growth = 0.0
+    else:
+        terminal_growth = min(terminal_input, discount_rate - MIN_SPREAD)
+        if terminal_growth < terminal_input:
+            notices.append({"tone": "warn", "text":
+                            f"Perpetual growth capped at {terminal_growth:.2%} to hold 150bp below the "
+                            f"{discount_rate:.2%} {RATE_NAME}. At or above it the Gordon Growth terminal "
+                            f"value diverges to infinity."})
 
     # ---------------- Run ----------------
-    schedule, summary = base_case_schedule(
-        engine, base_value, growth_input, discount_rate, terminal_growth,
-        cash=cash_used, debt=debt_used, shares=shares if engine == "DCF" else 1.0,
-    )
+    if engine == "RI":
+        value, pv_explicit, pv_continuing, ri_schedule = residual_income_value(
+            np.array([base_value]), np.array([growth_input]),
+            np.array([discount_rate]), np.array([payout_used]),
+        )
+        implied = float(value[0])
+        summary = {
+            "pv_explicit": float(pv_explicit[0]),
+            "pv_terminal": float(pv_continuing[0]),
+            "terminal_value": float(pv_continuing[0]),
+            "terminal_share": (float(pv_continuing[0]) / implied) if implied else np.nan,
+            "gross": implied,
+            "equity_value": implied,
+            "implied_price": implied,
+        }
+        schedule = pd.DataFrame({
+            "Year": [f"Y{step['year']}" for step in ri_schedule],
+            "Opening Book": [float(step["openingBook"][0]) for step in ri_schedule],
+            "Residual Income": [float(step["residual"][0]) for step in ri_schedule],
+            "Discount Factor": [1.0 / float(step["discount"][0]) for step in ri_schedule],
+            "Present Value": [float(step["residual"][0]) / float(step["discount"][0])
+                              for step in ri_schedule],
+        })
+    else:
+        schedule, summary = base_case_schedule(
+            engine, base_value, growth_input, discount_rate, terminal_growth,
+            cash=cash_used, debt=debt_used, shares=shares if engine == "DCF" else 1.0,
+        )
+
+    # WHAT THE MARKET IS ALREADY ASSUMING. The forward model answers "what is it
+    # worth?"; inverting it answers "what would have to be true for today's price
+    # to be right?" — which is the question a reader can actually take a view on.
+    # Residual income is excluded: its value is book value plus excess returns
+    # rather than a discounted growing stream, so a single growth rate is not the
+    # lever that moves it and solving for one would be a number without meaning.
+    implied_g = None
+    if engine in ("DCF", "DDM"):
+        implied_g = implied_growth(
+            engine, price, base_value, discount_rate, terminal_growth,
+            cash=cash_used, debt=debt_used,
+            shares=shares if engine == "DCF" else 1.0,
+        )
+
     sims = run_monte_carlo(
         engine, base_value, growth_input, discount_rate, terminal_growth,
         n_sims=n_sims, sd_growth=sd_g, sd_rate=sd_r, sd_terminal=sd_t,
         seed=seed, cash=cash_used, debt=debt_used,
         shares=shares if engine == "DCF" else 1.0,
+        payout=payout_used if engine == "RI" else 0.0,
     )
 
     prices = sims["Implied Price"].values
@@ -902,27 +1388,74 @@ def analyze(
                             f"Payout ratio is {payout_check:.0%}. There is little retained earnings "
                             f"cushion, so the dividend growth assumption is fragile."})
 
+    if beta_estimate.method == "vasicek":
+        trail = (f"{beta_estimate.raw:.2f} raw (se {beta_estimate.stderr:.2f}, "
+                 f"R2 {beta_estimate.r_squared:.0%}, {beta_estimate.observations}d vs "
+                 f"{beta_estimate.index_symbol}) -> {beta_estimate.adjusted:.2f} shrunk")
+        if beta_clipped:
+            trail += f" -> {beta_final:.2f} clipped (used)"
+        diagnostics_rows.append(("Beta estimate", trail))
+    if sd_growth_calibrated is not None:
+        source = sd_growth_calibrated["source"]
+        diagnostics_rows.append((
+            "Growth dispersion (sigma)",
+            f"{sd_growth_calibrated['sd']:.1%} from {source}"
+            + (f", {sd_growth_calibrated['observations']} observations"
+               if sd_growth_calibrated["observations"] else ""),
+        ))
+
     diagnostics_rows += [
         ("Terminal value as % of total",
          f"{summary['terminal_share']:.0%}" if np.isfinite(summary["terminal_share"]) else "n/a"),
         ("P5 - P95 range", f"{fmt_price(p05, market)} - {fmt_price(p95, market)}"),
     ]
 
-    stream_label = "Projected FCF" if engine == "DCF" else "Projected DPS"
-    fmt_stream = fmt_big if engine == "DCF" else fmt_dps
-    schedule_rows = [
-        {
-            "year": row["Year"],
-            "stream": fmt_stream(row[stream_label], market),
-            "streamRaw": float(row[stream_label]),
-            "discountFactor": f"{row['Discount Factor']:.4f}",
-            "presentValue": fmt_stream(row["Present Value"], market),
-            "presentValueRaw": float(row["Present Value"]),
-        }
-        for _, row in schedule.iterrows()
-    ]
+    if engine == "RI":
+        stream_label = "Residual income / share"
+        schedule_rows = [
+            {
+                "year": row["Year"],
+                "stream": fmt_dps(row["Residual Income"], market),
+                "streamRaw": float(row["Residual Income"]),
+                "openingBook": fmt_price(row["Opening Book"], market),
+                "discountFactor": f"{row['Discount Factor']:.4f}",
+                "presentValue": fmt_dps(row["Present Value"], market),
+                "presentValueRaw": float(row["Present Value"]),
+            }
+            for _, row in schedule.iterrows()
+        ]
+        bridge = [
+            ("Book value per share", fmt_price(base_value, market)),
+            ("+ PV of Year 1-5 residual income", fmt_dps(summary["pv_explicit"], market)),
+            (f"+ PV of fading residual income (w={RI_PERSISTENCE:.2f})",
+             fmt_dps(summary["pv_terminal"], market)),
+            ("Implied price (base case)", fmt_price(summary["implied_price"], market)),
+            ("Implied price / book",
+             f"{summary['implied_price'] / base_value:.2f}x" if base_value else "n/a"),
+            ("Market price", fmt_price(price, market)),
+        ]
+        stream_label_out = stream_label
+    else:
+        stream_label_out = None
 
-    if engine == "DCF":
+    stream_label = stream_label_out or ("Projected FCF" if engine == "DCF" else "Projected DPS")
+    fmt_stream = fmt_big if engine == "DCF" else fmt_dps
+    if engine != "RI":
+            schedule_rows = [
+            {
+                "year": row["Year"],
+                "stream": fmt_stream(row[stream_label], market),
+                "streamRaw": float(row[stream_label]),
+                "discountFactor": f"{row['Discount Factor']:.4f}",
+                "presentValue": fmt_stream(row["Present Value"], market),
+                "presentValueRaw": float(row["Present Value"]),
+            }
+            for _, row in schedule.iterrows()
+        ]
+
+    if engine == "RI":
+        pass                      # bridge already built above
+    elif engine == "DCF":
         bridge = [
             ("PV of Year 1-5 FCF", fmt_big(summary["pv_explicit"], market)),
             ("PV of terminal value", fmt_big(summary["pv_terminal"], market)),
@@ -965,11 +1498,24 @@ def analyze(
         "rateName": RATE_NAME,
         "price": float(price),
         "priceLabel": fmt_price(price, market),
+        # Where this price came from and which bar it belongs to. On the panel
+        # so a reader can tell a Friday close from a live quote rather than
+        # assuming the number is current.
+        # Currency provenance. Null unless the accounts and the shares disagree.
+        "reportingCurrency": reporting if reporting and reporting != trading else None,
+        "fxRate": _nullable(data.get("fx_rate")),
+        "priceSource": ("manual entry" if np.isfinite(manual_price_f) and manual_price_f > 0
+                        else data.get("price_source")),
+        "priceAsOf": (None if np.isfinite(manual_price_f) and manual_price_f > 0
+                      else data.get("price_as_of")),
         "discountRate": float(discount_rate),
         "riskFree": float(rf_rate),
         "riskFreeSource": rf_source,
         "erp": market["erp"],
         "beta": float(rate_parts["beta"]),
+        "betaEstimate": {**beta_estimate.as_dict(),
+                         "used": float(beta_final),
+                         "clipped": bool(beta_clipped)},
         "assumptions": {
             "growth": growth_input,
             "terminalGrowth": terminal_growth,
@@ -982,6 +1528,7 @@ def analyze(
             "basis": basis_label,
             "basisOptions": basis_options,
             "rateOverridden": rate_override is not None,
+            "sdGrowthCalibration": sd_growth_calibrated,
             "manualApplied": {k: bool(v) for k, v in manual_applied.items()},
             "manualDefaults": manual_defaults,
         },
@@ -990,6 +1537,12 @@ def analyze(
             "impliedPriceLabel": fmt_price(summary["implied_price"], market),
             "terminalShare": float(summary["terminal_share"])
             if np.isfinite(summary["terminal_share"]) else None,
+            # The growth rate today's price implies, and the one you assumed, so
+            # the panel can put them side by side. `None` means the price is not
+            # reachable anywhere in the solver's bracket, which is itself worth
+            # saying rather than hiding.
+            "impliedGrowth": _nullable(implied_g),
+            "assumedGrowth": float(growth_input),
         },
         "monteCarlo": {
             "p05": float(p05), "p25": float(p25), "p50": float(p50),

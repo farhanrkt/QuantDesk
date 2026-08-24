@@ -4,20 +4,28 @@ import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { AnomalyPanel } from "@/components/AnomalyPanel";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
+import { EventStudyPanel } from "@/components/EventStudyPanel";
 import { NewsPanel } from "@/components/NewsPanel";
+import { PeersPanel } from "@/components/PeersPanel";
+import { QualityPanel } from "@/components/QualityPanel";
+import { RankingPanel } from "@/components/RankingPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
+import { SynthesisPanel } from "@/components/SynthesisPanel";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { TickerBar } from "@/components/TickerBar";
 import { ManualRescue } from "@/components/ValuationControls";
 import { ValuationPanel } from "@/components/ValuationPanel";
 import { Card } from "@/components/ui/card";
+import { DetailProvider, DetailToggle, useDetailLevel } from "@/components/ui/explain";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
-import { useEngines, type RunOptions } from "@/lib/api";
+import { useEngines, useEventStudy, usePeers, type RunOptions } from "@/lib/api";
 import type { Engine, EngineFailure } from "@/lib/types";
 
 const INITIAL: RunOptions = {
-  ticker: "", market: "US", period: "2y", range: "1y", mode: "threshold",
+  // `range` drives the technical lens. 5y is the shortest window where
+  // drawdown depth and rolling multi-year returns mean anything.
+  ticker: "", market: "US", period: "2y", range: "5y", mode: "threshold",
   contamination: 0.02, madK: 3.0, scoreThreshold: -0.10,
 };
 
@@ -25,7 +33,8 @@ const TABS = [
   { id: "flow", label: "Flow · anomalies", accent: "#35C4A8" },
   { id: "trend", label: "Technicals", accent: "#5B8DEF" },
   { id: "value", label: "Intrinsic value", accent: "#E8B44C" },
-  { id: "screen", label: "Screener", accent: "#A78BFA" },
+  { id: "quality", label: "Quality", accent: "#F2C14E" },
+  { id: "screen", label: "Scan & rank", accent: "#A78BFA" },
 ];
 
 /** One wrapper so all three panels handle loading and failure identically. */
@@ -72,18 +81,57 @@ function Panel<T>({
 
 export default function Home() {
   const {
-    anomaly, technical, valuation, news,
+    anomaly, technical, valuation, quality, news, synthesis,
     run, refineValuation, refineTechnical, csvUrl,
   } = useEngines();
+  const { state: eventStudy, validate, reset: resetEventStudy } = useEventStudy();
+  const { state: peers, compare, reset: resetPeers } = usePeers();
+  // The ticker bar is controlled from here so the screener can drive it too.
+  const [opts, setOpts] = useState<RunOptions>(INITIAL);
+  // The last SUBMITTED symbol, which is not what is currently typed in the box.
   const [ticker, setTicker] = useState("");
-  const [tab, setTab] = useState("flow");
+  // TREND, NOT FLOW. The first drill-down a newcomer takes should land on the
+  // strongest evidence in the app, and Flow is the weakest: it is the densest
+  // lens to read and the one whose own event study frequently returns "no
+  // significant effect". The Trend tab opens on its long-horizon section —
+  // rolling returns, drawdown, relative strength — which is the most useful and
+  // least misreadable surface here.
+  const [tab, setTab] = useState("trend");
+  // Simple/Detailed is app-wide rather than per-panel. Someone who wants the
+  // short version of the technical lens wants the short version of the quality
+  // lens too, and a per-panel switch makes them say so four times.
+  const [detail, setDetail] = useDetailLevel();
 
-  const busy = [anomaly, technical, valuation].some((s) => s.status === "loading");
+  // PROGRESS, NOT JUST BUSY. One shared spinner gated on the SLOWEST lens meant a
+  // ten-to-sixteen-second first run behind a dead button with nothing to say
+  // which engine was holding it up. The count is reported to the ticker bar and
+  // the per-lens state to the rail, so the wait is legible while it happens.
+  const lenses = [anomaly, technical, valuation, quality];
+  const busy = lenses.some((s) => s.status === "loading");
+  const settled = lenses.filter((s) => s.status === "ready" || s.status === "error").length;
+  const progress = busy ? { done: settled, total: lenses.length } : undefined;
   const started = anomaly.status !== "idle";
 
-  const handleRun = (opts: RunOptions) => {
-    setTicker(opts.ticker.trim().toUpperCase());
-    run(opts);
+  const handleRun = (next: RunOptions) => {
+    const cleaned = { ...next, ticker: next.ticker.trim().toUpperCase() };
+    setOpts(cleaned);
+    setTicker(cleaned.ticker);
+    // A study belongs to the ticker it was run for; carrying one across would
+    // put another company's abnormal returns under this company's header.
+    resetEventStudy();
+    resetPeers();
+    run(cleaned);
+  };
+
+  /** A screener hit, loaded into the full three-engine view. Detection settings
+   *  carry over; the market is inferred from the symbol's own suffix. */
+  const handleSelect = (symbol: string) => {
+    handleRun({
+      ...opts,
+      ticker: symbol,
+      market: symbol.toUpperCase().endsWith(".JK") ? "ID" : "US",
+    });
+    setTab("trend");
   };
 
   // What the engines actually resolved to, which may carry a suffix the user
@@ -95,24 +143,34 @@ export default function Home() {
           : ticker;
 
   return (
+    <DetailProvider level={detail}>
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <header className="mb-8 border-b border-rule pb-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-mono text-2xl font-semibold tracking-[0.22em]">QUANTDESK</h1>
             <p className="eyebrow mt-2">
-              Anomaly detection · Technical analysis · Intrinsic value — US &amp; IDX
+              Flow · Trend · Value · Quality — US &amp; IDX
             </p>
           </div>
-          <p className="max-w-sm text-xs leading-relaxed text-ash">
-            Three independent models read the same ticker. Where they agree is more interesting
-            than what any one of them says on its own.
-          </p>
+          <div className="flex flex-col items-end gap-3">
+            <DetailToggle level={detail} onChange={setDetail} />
+            <p className="max-w-sm text-xs leading-relaxed text-ash">
+              Four models read the same ticker from different data. Where they agree is more
+              interesting than what any one of them says alone — with the caveat that they are
+              not equally independent. Every number has an{" "}
+              <span className="text-chalk/80">i</span> beside it explaining what it means.{" "}
+              <span className="text-chalk/80">Guided</span> adds those readings to the page and
+              folds the expert controls away; <span className="text-chalk/80">Full</span> is
+              every control and every indicator.
+            </p>
+          </div>
         </div>
       </header>
 
       <div className="mb-8">
-        <TickerBar onRun={handleRun} busy={busy} initial={INITIAL} />
+        <TickerBar opts={opts} onChange={setOpts} onRun={handleRun} busy={busy}
+                   progress={progress} />
       </div>
 
       {!started ? (
@@ -125,12 +183,19 @@ export default function Home() {
               as <code className="font-mono text-chalk/80">BTC-USD</code>.
             </p>
           </div>
-          <ScreenerPanel />
+          <RankingPanel onSelect={handleSelect} />
         </div>
       ) : (
         <div className="space-y-6">
           <ConfluenceRail ticker={resolvedTicker} anomaly={anomaly}
-                          technical={technical} valuation={valuation} />
+                          technical={technical} valuation={valuation}
+                          quality={quality} />
+
+          {/* Reads the assembled payload, so it can only appear once every leg
+              has settled. That is the right coupling: a summary of four lenses
+              that renders before three of them have answered would be
+              describing a picture that does not exist yet. */}
+          {synthesis && <SynthesisPanel data={synthesis} />}
 
           <div>
             <Tabs tabs={TABS} active={tab} onChange={setTab} />
@@ -138,22 +203,41 @@ export default function Home() {
               {tab === "flow" && (
                 <div className="space-y-4">
                   <Panel state={anomaly}>{(d) => <AnomalyPanel data={d} />}</Panel>
+                  <EventStudyPanel
+                    state={eventStudy}
+                    ticker={resolvedTicker}
+                    onValidate={() => validate({
+                      ticker: opts.ticker, market: opts.market,
+                      mode: opts.mode, scoreThreshold: opts.scoreThreshold,
+                    })}
+                  />
                   <NewsPanel state={news} />
                 </div>
               )}
               {tab === "trend" && (
-                <Panel state={technical}>
-                  {(d) => (
-                    <TechnicalPanel data={d} onApply={refineTechnical}
-                                    busy={technical.status === "loading"} />
-                  )}
-                </Panel>
+                <div className="space-y-4">
+                  <Panel state={technical}>
+                    {(d) => (
+                      <TechnicalPanel data={d} onApply={refineTechnical}
+                                      busy={technical.status === "loading"} />
+                    )}
+                  </Panel>
+                  {/* Sits on the Trend tab because the seven signals it compares
+                      are price and volume — the same data this lens reads. It
+                      would be a category error on the Value tab, where nothing
+                      has a peer comparison. */}
+                  <PeersPanel state={peers} ticker={resolvedTicker}
+                              onCompare={(universe) => compare({
+                                ticker: opts.ticker, market: opts.market, universe,
+                              })} />
+                </div>
               )}
               {tab === "value" && (
                 <Panel
                   state={valuation}
                   rescue={(failure) => (
                     <ManualRescue suggested={failure.suggested ?? {}}
+                                  engine={failure.engine}
                                   busy={valuation.status === "loading"}
                                   onApply={refineValuation} />
                   )}
@@ -165,7 +249,24 @@ export default function Home() {
                   )}
                 </Panel>
               )}
-              {tab === "screen" && <ScreenerPanel />}
+              {tab === "quality" && (
+                <Panel state={quality}>{(d) => <QualityPanel data={d} />}</Panel>
+              )}
+              {tab === "screen" && (
+                <div className="space-y-8">
+                  <RankingPanel onSelect={handleSelect} />
+                  {/* The anomaly screener still answers a question the ranking
+                      cannot: "has anything UNUSUAL just happened here?" — a
+                      one-off event rather than a standing characteristic. It
+                      keeps its own multiple-testing correction, so it stays. */}
+                  <div>
+                    <h2 className="eyebrow mb-3">
+                      Or scan for fresh unusual activity instead
+                    </h2>
+                    <ScreenerPanel onSelect={handleSelect} />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -176,5 +277,6 @@ export default function Home() {
         listings. Educational and research use only — not investment advice.
       </footer>
     </main>
+    </DetailProvider>
   );
 }

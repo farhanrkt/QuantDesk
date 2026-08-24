@@ -4,14 +4,16 @@ import {
   Bar, BarChart, CartesianGrid, ReferenceArea, ReferenceLine,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
+import { CornerUpLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
+import { ExplainedStat, TONE_TEXT, useDetail } from "@/components/ui/explain";
 import { DownloadButton } from "@/components/ui/controls";
 import { ValuationControls } from "@/components/ValuationControls";
 import type { ValuationOptions } from "@/lib/api";
-import type { ValuationResponse } from "@/lib/types";
+import type { ExplainMap, ValuationResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
-import { num, pct, signedPct } from "@/lib/utils";
+import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
 
 const DCF = "#E8B44C";
 const DDM = "#A78BFA";
@@ -27,6 +29,9 @@ export function ValuationPanel({
   busy: boolean;
   csvUrl: string;
 }) {
+  const detail = useDetail();
+  const simple = detail === "simple";
+  const ex: ExplainMap = data.explain ?? {};
   const accent = data.engine === "DDM" ? DDM : DCF;
   const mc = data.monteCarlo;
   const verdictColor =
@@ -51,7 +56,13 @@ export function ValuationPanel({
 
   return (
     <div className="space-y-4 animate-rise">
+      {/* Remount on a new company or a new routed engine. Every control below
+          holds its value in useState, whose initialiser runs once — without
+          this key, manual figures entered for one listing stay loaded and get
+          applied to the next one on the first "Re-run valuation", and a DCF's
+          10% growth default survives a route into the DDM's 5%. */}
       <ValuationControls
+        key={`${data.ticker}:${data.engine}`}
         engine={data.engine}
         rateName={data.rateName}
         currencySymbol={data.market.symbol}
@@ -76,22 +87,98 @@ export function ValuationPanel({
         </div>
       ))}
 
+      {/* WHAT THIS PANEL IS AND IS NOT, said before the first number rather
+          than in a footnote. A discounted cash flow is an opinion with
+          arithmetic attached; leading with a single "fair value" invites it to
+          be read as a price target, which is the one thing it cannot be. */}
+      <Card accent={accent}>
+        <CardHeader>
+          <CardTitle>What this is worth, and how sure the model is</CardTitle>
+          <span className="num text-xs font-semibold" style={{ color: verdictColor }}>
+            {verdictLabel(data.verdict)}
+          </span>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <p className="text-[0.95rem] leading-relaxed text-chalk/90">
+            Today the market prices {data.ticker} at {data.priceLabel}. Projecting the
+            {data.engine === "DCF" ? " cash the business generates" :
+             data.engine === "DDM" ? " dividends the business pays" :
+             " profits earned above the cost of its capital"} forward and discounting them back
+            at {pct(data.discountRate, 1)} a year puts it nearer {mc.p50Label} — a range of
+            {" "}{mc.p25Label} to {mc.p75Label} once the assumptions are allowed to vary.
+          </p>
+          <p className="text-[0.78rem] leading-relaxed text-ash">
+            This is not a forecast of the share price. It is what the business is worth IF the
+            growth and discount rates below are right, and they are estimates. That is why the
+            output is a range and why every input is editable.
+          </p>
+        </CardBody>
+      </Card>
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label="Market price" value={data.priceLabel} />
-        <Stat label="Median intrinsic value" value={mc.p50Label}
-              tone={(mc.upside ?? 0) >= 0 ? "text-acc" : "text-dist"}
-              sub={`${signedPct(mc.upside)} vs market`} />
-        <Stat label="Bear · P25" value={mc.p25Label} />
-        <Stat label="Bull · P75" value={mc.p75Label} />
-        <Stat label="P(undervalued)" value={pct(mc.probUndervalued, 0)} />
+        <Stat label="Market price" value={data.priceLabel}
+              sub={data.priceAsOf ? `close of ${data.priceAsOf}`
+                                  : data.priceSource ?? undefined} />
+        <ExplainedStat label="Model's middle estimate" value={mc.p50Label}
+                       explain={ex.upside}
+                       tone={(mc.upside ?? 0) >= 0 ? "text-acc" : "text-dist"}
+                       sub={`${signedPct(mc.upside)} vs market`} />
+        <ExplainedStat explain={ex.valuationSpread}
+                       label="Pessimistic to optimistic"
+                       value={`${mc.p25Label} – ${mc.p75Label}`} />
+        <ExplainedStat explain={ex.probUndervalued} />
+        <ExplainedStat explain={ex.terminalShare} />
       </div>
+
+      {/* THE REVERSE DCF, AND IT SITS ABOVE THE FORWARD ONE ON PURPOSE.
+          Run forwards the model says "this is worth X" — an answer whose whole
+          width comes from assumptions the reader has no basis to judge, and
+          which invites being read as a price target. Run backwards it says
+          "the market is assuming Y% a year", which is a claim about the world
+          a reader can agree or disagree with using things they know about the
+          business and the model does not. That is the question worth putting
+          first. */}
+      {ex.impliedGrowth && (
+        <Card accent={accent}>
+          <CardBody className="py-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="eyebrow mb-1.5 flex items-center gap-1.5">
+                  <CornerUpLeft aria-hidden className="h-3 w-3" />
+                  Working the model backwards
+                </div>
+                <p className="text-[0.95rem] leading-relaxed text-chalk/90">
+                  {ex.impliedGrowth.reading}
+                </p>
+                <p className="mt-1.5 text-[0.78rem] leading-relaxed text-ash">
+                  {ex.impliedGrowth.action}
+                </p>
+              </div>
+              <div className="shrink-0 text-right">
+                <div className="eyebrow mb-1">Implied growth</div>
+                <div className={cn("num text-2xl font-semibold leading-none",
+                                   TONE_TEXT[ex.impliedGrowth.tone])}>
+                  {ex.impliedGrowth.valueText}
+                </div>
+                <div className="mt-1 text-[0.65rem] text-ash">
+                  a year, for five years
+                </div>
+                <div className="mt-2 border-t border-rule pt-2 text-[0.65rem] text-ash">
+                  you assumed{" "}
+                  <span className="num text-chalk/80">{pct(data.baseCase.assumedGrowth)}</span>
+                </div>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       <Card accent={accent}>
         <CardHeader>
           <CardTitle>Distribution of simulated fair value</CardTitle>
           <div className="flex items-center gap-2">
             <Badge color={accent}>{data.engine}</Badge>
-            <Badge color={verdictColor}>{data.verdict}</Badge>
+            <Badge color={verdictColor}>{verdictLabel(data.verdict)}</Badge>
             {/* The full draw set never crosses the wire, so this one is a
                 server round trip rather than a client-side export. */}
             <DownloadButton href={csvUrl}>Simulation CSV</DownloadButton>
@@ -129,7 +216,13 @@ export function ValuationPanel({
         </CardBody>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+      {!simple && ex.discountRate && (
+        <div className="grid grid-cols-1 gap-3">
+          <ExplainedStat explain={ex.discountRate} />
+        </div>
+      )}
+
+      <div className={simple ? "hidden" : "grid gap-4 lg:grid-cols-[1.4fr_1fr]"}>
         <Card>
           <CardHeader>
             <CardTitle>

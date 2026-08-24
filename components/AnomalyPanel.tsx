@@ -4,9 +4,11 @@ import {
   Area, AreaChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer,
   Scatter, Tooltip, XAxis, YAxis,
 } from "recharts";
+import type { TooltipProps } from "recharts";
 import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
+import { ExplainedStat, ExplanationBody, useDetail } from "@/components/ui/explain";
 import { DownloadButton } from "@/components/ui/controls";
-import type { AnomalyResponse } from "@/lib/types";
+import type { AnomalyPoint, AnomalyResponse, ExplainMap } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn, num, pct } from "@/lib/utils";
 
@@ -17,9 +19,18 @@ const NEU = "#7A8CA0";
 const flowColor = (flow?: string | null) =>
   flow === "Accumulation" ? ACC : flow === "Distribution" ? DIST : NEU;
 
-function AnomalyTooltip({ active, payload }: any) {
-  if (!active || !payload?.length) return null;
-  const p = payload[0].payload;
+/** A series row plus the per-flow columns the Scatter layers read. */
+type ChartPoint = AnomalyPoint & {
+  acc: number | null;
+  dist: number | null;
+  neu: number | null;
+};
+
+function AnomalyTooltip({ active, payload }: TooltipProps<number, string>) {
+  // Recharts types `payload[n].payload` as the untyped source row; this is the
+  // one place the cast belongs, and ChartPoint is exactly what we put in.
+  const p = payload?.[0]?.payload as ChartPoint | undefined;
+  if (!active || !p) return null;
   return (
     <div className="rounded border border-rule bg-ink/95 px-3 py-2 text-xs shadow-xl">
       <div className="num mb-1 text-ash">{p.date}</div>
@@ -36,7 +47,10 @@ function AnomalyTooltip({ active, payload }: any) {
 }
 
 export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
-  const { stats, series, anomalies, config } = data;
+  const { stats, series, anomalies, config, liquidity, accumulation } = data;
+  const detail = useDetail();
+  const simple = detail === "simple";
+  const ex: ExplainMap = data.explain ?? {};
 
   // Recharts renders a Scatter by reading one key off every row, so each flow
   // class gets its own column that is null everywhere it does not apply.
@@ -69,18 +83,27 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
     <div className="space-y-4 animate-rise">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Stat label="Latest close" value={num(stats.latestClose)} />
-        <Stat label="Anomalies found" value={stats.anomalyCount}
-              sub={`${pct(stats.anomalyRate)} of ${stats.totalDays} days`} />
+        <ExplainedStat label="Unusual days found" value={stats.anomalyCount}
+                       explain={ex.anomalyRate}
+                       sub={`${pct(stats.anomalyRate)} of ${stats.totalDays} days`} />
         {/* Two horizons, kept apart on purpose. The all-time figure summarises
             the whole look-back; only the recent one describes where flow is
             now, and that is what the confluence view votes with. */}
-        <Stat label={`Flow bias · last ${stats.recentDays}d`} value={stats.recentFlowBias}
-              tone={toneOf(stats.recentFlowBias)}
-              sub={`${stats.recentCount} fresh event${stats.recentCount === 1 ? "" : "s"}`} />
-        <Stat label={`Flow bias · full ${config.period}`} value={stats.netFlowBias}
-              tone={toneOf(stats.netFlowBias)}
-              sub="whole look-back" />
+        <ExplainedStat explain={ex.recentFlowBias} value={stats.recentFlowBias}
+                       tone={toneOf(stats.recentFlowBias)}
+                       sub={`${stats.recentCount} fresh event${stats.recentCount === 1 ? "" : "s"}`} />
+        <ExplainedStat explain={ex.netFlowBias} value={stats.netFlowBias}
+                       label={`Flow bias · full ${config.period}`}
+                       tone={toneOf(stats.netFlowBias)}
+                       sub="whole look-back" />
         <Stat label="Peak strength" value={`${stats.maxStrength}/100`} />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <ExplainedStat explain={ex.spread} />
+        <ExplainedStat explain={ex.moveVsSpread} sub="latest day, in and out" />
+        <ExplainedStat explain={ex.yangZhangVol} />
+        <ExplainedStat explain={ex.amihud} sub="cost of putting size through it" />
       </div>
 
       <Card accent={biasColor}>
@@ -131,6 +154,79 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
         </CardBody>
       </Card>
 
+      {/* The two questions a point-anomaly detector cannot answer on its own:
+          is the move bigger than the spread, and is anyone accumulating
+          patiently rather than in one visible print? */}
+      {liquidity?.insideSpreadNoise && (
+        <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-xs leading-relaxed text-warn">
+          The latest move is only {num(liquidity.moveVsSpread ?? 0, 1)}x the estimated
+          round-trip spread of {pct(liquidity.warningSpread ?? 0, 2)}. On this listing a move
+          that size does not survive the cost of trading it, however unusual the volume looks.
+        </div>
+      )}
+
+      {accumulation && accumulation.episodes.length > 0 && (
+        <Card accent={accumulation.current
+          ? flowColor(accumulation.current.direction) : undefined}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Slow, patient buying or selling
+            </CardTitle>
+            <span className="font-mono text-[0.65rem] text-ash">
+              CUSUM · h={accumulation.config.threshold} · k={accumulation.config.slack}
+            </span>
+          </CardHeader>
+          <CardBody className="px-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
+                    <th>Direction</th><th>Began</th><th>Confirmed</th><th>Ended</th>
+                    <th className="text-right">Days</th>
+                    <th className="text-right">Price</th>
+                    <th className="text-right">Avg RVOL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {accumulation.episodes.map((e) => (
+                    <tr key={`${e.direction}-${e.start}`}
+                        className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
+                      <td className="px-5 py-2" style={{ color: flowColor(e.direction) }}>
+                        {e.direction}{e.ongoing && " · ongoing"}
+                      </td>
+                      <td className="num px-5 py-2 text-ash">{e.start}</td>
+                      <td className="num px-5 py-2 text-ash">{e.detected}</td>
+                      <td className="num px-5 py-2 text-ash">{e.end}</td>
+                      <td className="num px-5 py-2 text-right">{e.days}</td>
+                      <td className={cn("num px-5 py-2 text-right",
+                                        (e.priceChangePct ?? 0) >= 0 ? "text-acc" : "text-dist")}>
+                        {e.priceChangePct == null ? "—"
+                          : `${e.priceChangePct >= 0 ? "+" : ""}${num(e.priceChangePct, 1)}%`}
+                      </td>
+                      <td className="num px-5 py-2 text-right">
+                        {e.avgRvol == null ? "—" : `${num(e.avgRvol)}x`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {ex.cusumEpisode && (
+              <div className="mx-5 mt-3 rounded border border-rule bg-ink/40 px-3 py-2">
+                <ExplanationBody explain={ex.cusumEpisode} />
+              </div>
+            )}
+            <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+              An institution building a position splits the order over weeks so no single day
+              stands out — which makes it invisible to the day-by-day detector above. This test
+              adds up small deviations instead, so a run of unremarkable days trips a threshold
+              none of them would alone. &quot;Began&quot; is the estimated start;
+              &quot;confirmed&quot; is when there was enough evidence to say so.
+            </p>
+          </CardBody>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Event log · ranked by strength</CardTitle>
@@ -165,7 +261,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {anomalies.map((a) => (
+                  {(simple ? anomalies.slice(0, 8) : anomalies).map((a) => (
                     <tr key={a.date} className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
                       <td className="num px-5 py-2 text-ash">{a.date}</td>
                       <td className="px-5 py-2" style={{ color: flowColor(a.flow) }}>{a.flow}</td>
@@ -194,7 +290,14 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
         </CardBody>
       </Card>
 
-      <p className="text-xs leading-relaxed text-ash">
+      {simple && anomalies.length > 8 && (
+        <p className="text-[0.7rem] text-ash">
+          Showing the 8 strongest of {anomalies.length} flagged days. Switch to Detailed for the
+          full log and the model settings behind it.
+        </p>
+      )}
+
+      <p className={cn("text-xs leading-relaxed text-ash", simple && "hidden")}>
         Isolation Forest over six behavioural features (return, RVOL, |return|, MFI, OBV z-score,
         intraday range), 200 estimators, seed 42, fit with{" "}
         <span className="font-mono text-chalk/80">contamination=&quot;auto&quot;</span> so the

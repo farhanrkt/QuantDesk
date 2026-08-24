@@ -1,0 +1,185 @@
+"use client";
+
+import { Check, Minus, X } from "lucide-react";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Explain, ExplainedStat, TONE_HEX, useDetail,
+} from "@/components/ui/explain";
+import type { ExplainMap, QualityResponse } from "@/lib/types";
+import { num } from "@/lib/utils";
+
+const ASH = "#7A8CA0";
+
+/**
+ * Engine 4 — the lens that opens the filings.
+ *
+ * The other three read the company from the outside: price, volume, cash flow
+ * projections. None of them asks whether the business is solvent or whether the
+ * earnings are real. A DCF on a company sliding toward insolvency is arithmetic,
+ * and this is the panel that says so before the reader acts on it.
+ *
+ * THE COLOUR TRAP THIS PANEL SITS ON. Piotroski and Altman reward a HIGH number;
+ * Beneish punishes one. All three are "accounting quality scores" and they sit
+ * in the same row of tiles, so colouring them the same way would tell a reader
+ * that an earnings-manipulation flag is good news. The direction now comes from
+ * `explain[key].tone`, decided in Python with a test named after exactly that
+ * mistake (`test_beneish_and_altman_point_opposite_ways`).
+ */
+export function QualityPanel({ data }: { data: QualityResponse }) {
+  const detail = useDetail();
+  const simple = detail === "simple";
+  const ex: ExplainMap = data.explain ?? {};
+
+  if (!data.applicable) {
+    return (
+      <Card className="animate-rise">
+        <CardHeader><CardTitle>Accounting quality</CardTitle></CardHeader>
+        <CardBody>
+          <p className="text-sm leading-relaxed text-ash">{data.reason}</p>
+          {data.sector && (
+            <p className="mt-3 font-mono text-[0.65rem] uppercase tracking-[0.1em] text-ash">
+              {data.sector}{data.industry ? ` · ${data.industry}` : ""}
+            </p>
+          )}
+        </CardBody>
+      </Card>
+    );
+  }
+
+  const { piotroski, altman, beneish } = data;
+  const verdictColor = TONE_HEX[
+    data.verdict === "SOUND" ? "good" : data.verdict === "CONCERNS" ? "bad" : "neutral"
+  ] ?? ASH;
+
+  return (
+    <div className="space-y-4 animate-rise">
+      {/* ---------------- the summary in plain English ---------------- */}
+      <Card accent={verdictColor}>
+        <CardHeader>
+          <CardTitle>What the filings say</CardTitle>
+          <span className="num text-xs font-semibold" style={{ color: verdictColor }}>
+            {data.verdict ?? "—"}
+          </span>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <p className="text-[0.95rem] leading-relaxed text-chalk/90">{data.headline}</p>
+          <p className="text-[0.78rem] leading-relaxed text-ash">
+            Three published tests, each asking something different: is the business improving
+            (Piotroski), is it far from running out of money (Altman), and do the numbers look
+            like they have been massaged (Beneish). They read the accounts, not the share price,
+            which is what makes them worth putting beside the other three lenses.
+          </p>
+        </CardBody>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        {piotroski && <ExplainedStat explain={ex.piotroski} sub={piotroski.reading} />}
+        {altman && <ExplainedStat explain={ex.altman} sub={altman.reading} />}
+        {beneish && <ExplainedStat explain={ex.beneish} sub={beneish.reading} />}
+      </div>
+
+      {piotroski && piotroski.signals.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>The nine health checks</CardTitle>
+            <span className="font-mono text-[0.65rem] text-ash">
+              {piotroski.signalsAvailable} of {piotroski.signalsTotal} computable
+            </span>
+          </CardHeader>
+          <CardBody className="px-0">
+            <ul>
+              {(simple ? piotroski.signals.filter((s) => s.passed !== null)
+                       : piotroski.signals).map((signal) => (
+                <li key={signal.name}
+                    className="flex items-baseline gap-3 border-b border-rule/60 px-5 py-2 last:border-0">
+                  <span className="mt-0.5 shrink-0">
+                    {signal.passed === null
+                      ? <Minus aria-label="not computable" className="h-3.5 w-3.5 text-ash" />
+                      : signal.passed
+                        ? <Check aria-label="pass" className="h-3.5 w-3.5 text-acc" />
+                        : <X aria-label="fail" className="h-3.5 w-3.5 text-dist" />}
+                  </span>
+                  <span className="flex-1 text-xs text-chalk/90">{signal.name}</span>
+                  <span className="num shrink-0 text-[0.7rem] text-ash">{signal.detail}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+              A tick means that measure improved on last year, or was already healthy. A check
+              that could not be computed scores nothing — it is never counted as a pass, which
+              is why the total moves with how complete the filings are.
+            </p>
+          </CardBody>
+        </Card>
+      )}
+
+      {!simple && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {altman && (
+            <Card accent={TONE_HEX[ex.altman?.tone ?? "neutral"]}>
+              <CardHeader><CardTitle>How far from running out of money</CardTitle></CardHeader>
+              <CardBody className="space-y-3">
+                <p className="text-sm leading-relaxed text-chalk/80">{altman.reading}</p>
+                <dl className="space-y-1 text-[0.72rem]">
+                  {Object.entries(altman.components).map(([key, value]) => {
+                    const explain = ex[`altmanComponent.${key}`];
+                    return (
+                      <div key={key} className="flex items-baseline justify-between gap-2">
+                        <dt className="flex items-center gap-1.5 text-ash">
+                          {explain?.label ?? key}
+                          <Explain explain={explain} />
+                        </dt>
+                        <dd className="num text-chalk/80">{value === null ? "—" : num(value)}</dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+                <p className="text-[0.68rem] leading-relaxed text-ash">
+                  This is the emerging-market version of Altman&apos;s score, so an Indonesian
+                  listing and a US one are measured on the same scale. Safe above 5.85, distress
+                  below 4.35, and the gap between them is a zone the model declines to call.
+                </p>
+              </CardBody>
+            </Card>
+          )}
+
+          {beneish && (
+            <Card accent={TONE_HEX[ex.beneish?.tone ?? "neutral"]}>
+              <CardHeader><CardTitle>Do the earnings look massaged?</CardTitle></CardHeader>
+              <CardBody className="space-y-3">
+                <p className="text-sm leading-relaxed text-chalk/80">{beneish.reading}</p>
+                <dl className="space-y-1 text-[0.72rem]">
+                  {Object.entries(beneish.indices).map(([key, value]) => {
+                    const explain = ex[`beneishIndex.${key}`];
+                    return (
+                      <div key={key} className="flex items-baseline justify-between gap-2">
+                        <dt className="flex items-center gap-1.5 text-ash">
+                          {explain?.label ?? key}
+                          <Explain explain={explain} />
+                        </dt>
+                        <dd className="num text-chalk/80">{value === null ? "—" : num(value)}</dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+                <p className="text-[0.68rem] leading-relaxed text-ash">
+                  A screen, not a finding. Beneish classified roughly three-quarters of known
+                  manipulators correctly — which on a population where manipulation is rare also
+                  means most flags are false positives. Every index is a this-year-over-last-year
+                  ratio, so 1.00 means &quot;unchanged&quot; for all of them.
+                </p>
+              </CardBody>
+            </Card>
+          )}
+        </div>
+      )}
+
+      <p className="text-xs leading-relaxed text-ash">
+        Piotroski (2000) scores nine fundamental trends; Altman&apos;s Z&apos;&apos;-score (2005
+        emerging-market variant) estimates distance from distress; Beneish (1999) screens accrual
+        patterns. All three were built on non-financial firms and are not reported for banks or
+        insurers. Educational and research use only.
+      </p>
+    </div>
+  );
+}

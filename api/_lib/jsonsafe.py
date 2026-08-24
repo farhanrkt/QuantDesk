@@ -28,6 +28,14 @@ def clean(obj):
         return value if math.isfinite(value) else None
     if isinstance(obj, (str, bytes)):
         return obj.decode() if isinstance(obj, bytes) else obj
+    # NaT MUST be tested before the date branch. NaTType subclasses
+    # datetime.datetime, so `isinstance(pd.NaT, dt.datetime)` is True and the
+    # strftime call below reaches it first — raising "NaTType does not support
+    # strftime" and turning one missing date into a 500 for the whole payload.
+    # This check used to sit at the bottom of the function, where it was
+    # unreachable. A missing date is exactly what `clean` exists to survive.
+    if obj is pd.NaT:
+        return None
     if isinstance(obj, (pd.Timestamp, dt.datetime, dt.date)):
         return obj.strftime("%Y-%m-%d")
     if isinstance(obj, np.ndarray):
@@ -36,6 +44,4 @@ def clean(obj):
         return {str(k): clean(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple, set)):
         return [clean(v) for v in obj]
-    if obj is pd.NaT:
-        return None
     return obj

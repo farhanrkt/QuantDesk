@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { useDetail } from "@/components/ui/explain";
 import {
   ApplyButton, Disclosure, Field, NumberField, PercentField, SelectField, Toggle,
 } from "@/components/ui/controls";
@@ -22,6 +23,9 @@ import type { ManualInputs } from "@/lib/types";
 const ENGINE_DEFAULTS = {
   DCF: { growth: 0.10, terminal: 0.025, sdGrowth: 0.020, sdRate: 0.010, sdTerminal: 0.005 },
   DDM: { growth: 0.05, terminal: 0.025, sdGrowth: 0.015, sdRate: 0.010, sdTerminal: 0.005 },
+  // Residual income: the "growth" slot carries the sustained ROE, and there is
+  // no terminal growth — abnormal earnings fade at a fixed persistence instead.
+  RI: { growth: 0.12, terminal: 0.0, sdGrowth: 0.030, sdRate: 0.010, sdTerminal: 0.0 },
 } as const;
 
 /**
@@ -37,9 +41,21 @@ const ENGINE_DEFAULTS = {
  * sends a `netDebt` key, the DDM path sends `payout`.
  */
 export function ManualRescue({
-  suggested, busy, onApply,
-}: { suggested: ManualInputs; busy: boolean; onApply: (o: ValuationOptions) => void }) {
-  const isDdm = suggested.payout !== undefined && suggested.netDebt == null;
+  suggested, engine, busy, onApply,
+}: {
+  suggested: ManualInputs;
+  /** Stated by the server. Never inferred from the shape of `suggested`. */
+  engine?: "DCF" | "DDM" | "RI";
+  busy: boolean;
+  onApply: (o: ValuationOptions) => void;
+}) {
+  // Fall back to the old shape inference only for a failure that predates the
+  // server sending `engine` — and never let it produce "RI", which it cannot
+  // distinguish from DDM.
+  const resolved: "DCF" | "DDM" | "RI" =
+    engine ?? (suggested.payout !== undefined && suggested.netDebt == null ? "DDM" : "DCF");
+  const isDcf = resolved === "DCF";
+  const isRi = resolved === "RI";
   const [manual, setManual] = useState<ManualInputs>({
     // A negative base is what triggered the failure; do not prefill it back in.
     base: suggested.base != null && suggested.base > 0 ? suggested.base : null,
@@ -55,10 +71,11 @@ export function ManualRescue({
     <div className="mt-4 space-y-3 border-t border-rule/60 pt-4">
       <div className="eyebrow">Supply the missing figures</div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Field label={isDdm ? "Annual dividend / share" : "Base free cash flow"}>
-          <NumberField value={manual.base} onChange={set("base")} step={isDdm ? 0.01 : 1e8} />
+        <Field label={isRi ? "Book value per share"
+                      : isDcf ? "Base free cash flow" : "Annual dividend / share"}>
+          <NumberField value={manual.base} onChange={set("base")} step={isDcf ? 1e8 : 0.01} />
         </Field>
-        {!isDdm && (
+        {isDcf && (
           <>
             <Field label="Net debt" hint="Debt − cash.">
               <NumberField value={manual.netDebt} onChange={set("netDebt")} step={1e8} />
@@ -71,14 +88,15 @@ export function ManualRescue({
         <Field label="Share price">
           <NumberField value={manual.price} onChange={set("price")} step={0.01} min={0} />
         </Field>
-        {isDdm && (
-          <Field label="Payout ratio" hint="Diagnostic only.">
+        {!isDcf && (
+          <Field label="Payout ratio"
+                 hint={isRi ? "Sets how fast book value compounds." : "Diagnostic only."}>
             <PercentField value={manual.payout} onChange={set("payout")} step={1} min={0} max={1} />
           </Field>
         )}
       </div>
       <ApplyButton
-        onClick={() => onApply({ engine: isDdm ? "ddm" : "dcf", manual })}
+        onClick={() => onApply({ engine: resolved.toLowerCase(), manual })}
         busy={busy}
       >
         Value with these figures
@@ -88,7 +106,7 @@ export function ManualRescue({
 }
 
 export interface ValuationControlsProps {
-  engine: "DCF" | "DDM";
+  engine: "DCF" | "DDM" | "RI";
   rateName: string;
   currencySymbol: string;
   computedRate: number;
@@ -159,18 +177,19 @@ export function ValuationControls({
       manual: useManual ? manual : undefined,
     });
 
-  const streamLabel = engine === "DCF" ? "free cash flow" : "dividend per share";
+  const streamLabel = engine === "DCF" ? "free cash flow"
+    : engine === "RI" ? "book value per share" : "dividend per share";
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Assumptions</CardTitle>
-        <button type="button" onClick={reset}
-                className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-ash hover:text-chalk">
-          Reset to defaults
-        </button>
-      </CardHeader>
-      <CardBody className="space-y-4">
+  // COLLAPSED IN GUIDED, NEVER REMOVED. This form is seventeen inputs deep and
+  // it is the most powerful thing on the Value tab — the whole point of a DCF is
+  // that you change the assumptions and watch the answer move. A beginner should
+  // not meet it before they have read the verdict; they should absolutely meet
+  // it afterwards, which is why the summary invites them in rather than hiding
+  // the fact that it exists.
+  const guided = useDetail() === "simple";
+
+  const body = (
+    <CardBody className="space-y-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           <Field label="Engine" hint="Auto routes financials to the DDM.">
             <SelectField value={engineChoice} onChange={setEngineChoice}
@@ -178,14 +197,19 @@ export function ValuationControls({
                            { value: "auto", label: "Auto (sector routing)" },
                            { value: "dcf", label: "Force DCF" },
                            { value: "ddm", label: "Force DDM" },
+                           { value: "ri", label: "Force residual income" },
                          ]} />
           </Field>
-          <Field label={engine === "DCF" ? "FCF growth Y1–Y5" : "Dividend growth Y1–Y5"}>
+          <Field label={engine === "DCF" ? "FCF growth Y1–Y5"
+                        : engine === "RI" ? "Sustained return on equity"
+                        : "Dividend growth Y1–Y5"}>
             <PercentField value={growth} onChange={setGrowth} step={0.5} min={-0.5} max={1} />
           </Field>
-          <Field label="Perpetual growth" hint="At or below long-run nominal GDP.">
-            <PercentField value={terminal} onChange={setTerminal} step={0.1} min={0} max={0.05} />
-          </Field>
+          {engine !== "RI" && (
+            <Field label="Perpetual growth" hint="At or below long-run nominal GDP.">
+              <PercentField value={terminal} onChange={setTerminal} step={0.1} min={0} max={0.05} />
+            </Field>
+          )}
           <Field label={`Base ${engine === "DCF" ? "FCF" : "DPS"} anchor`}>
             <SelectField value={basisChoice} onChange={setBasisChoice}
                          options={basisOptions.length ? basisOptions : [basis]} />
@@ -255,8 +279,10 @@ export function ValuationControls({
                 <NumberField value={manual.price} onChange={setManualField("price")}
                              disabled={!useManual} step={0.01} min={0} />
               </Field>
-              {engine === "DDM" && (
-                <Field label="Payout ratio" hint="Diagnostic only — not the valuation.">
+              {engine !== "DCF" && (
+                <Field label="Payout ratio"
+                       hint={engine === "RI" ? "Sets how fast book value compounds."
+                                             : "Diagnostic only — not the valuation."}>
                   <PercentField value={manual.payout} onChange={setManualField("payout")}
                                 disabled={!useManual} step={1} min={0} max={1} />
                 </Field>
@@ -271,7 +297,37 @@ export function ValuationControls({
             Only the valuation engine re-runs; the other two panels keep their results.
           </span>
         </div>
-      </CardBody>
+    </CardBody>
+  );
+
+  if (!guided) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Assumptions</CardTitle>
+          <button type="button" onClick={reset}
+                  className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-ash hover:text-chalk">
+            Reset to defaults
+          </button>
+        </CardHeader>
+        {body}
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <details>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3
+                            px-5 py-3 text-ash transition-colors hover:text-chalk
+                            focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-tech">
+          <span className="eyebrow">Change the assumptions</span>
+          <span className="text-[0.7rem]">
+            Growth, discount rate, terminal growth — every input is editable
+          </span>
+        </summary>
+        <div className="border-t border-rule">{body}</div>
+      </details>
     </Card>
   );
 }

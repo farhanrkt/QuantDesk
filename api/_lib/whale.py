@@ -61,6 +61,7 @@ benign causes (index rebalances, dividends, options expiry, news). DYOR.
 from __future__ import annotations
 
 import logging
+import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Optional
@@ -68,12 +69,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-try:
-    import yfinance as yf
-except ImportError as exc:  # pragma: no cover
-    raise ImportError(
-        "yfinance is required. Install with `pip install -r requirements.txt`."
-    ) from exc
+from . import market_data, symbols
 
 try:
     from sklearn.ensemble import IsolationForest
@@ -150,6 +146,18 @@ class AnalysisConfig:
     walkforward_refit_every:
         Refit the model every N steps in walk-forward mode (>1 speeds it up by
         reusing a recent fit; 1 = refit every day, most rigorous).
+    walkforward_max_fits:
+        Hard ceiling on how many model fits a single walk-forward run may cost.
+        Without it the run is O(rows): a 2y window is ~88 fits (~8s), but
+        `period="max"` on a long-listed name is ~3,200 fits (~5 MINUTES), which
+        is a denial-of-service primitive reachable from one request. When the
+        cadence implied by `walkforward_refit_every` would exceed this budget,
+        the cadence is widened so the cost stays bounded.
+
+        This does NOT weaken the leakage guarantee. Refitting less often means
+        day t is scored by a model trained on [0, t') for some t' <= t — still
+        strictly past data, never future. A staler model is more conservative,
+        not more informed. Set to 0 to disable the ceiling (offline use only).
     """
 
     period: str = "2y"
@@ -161,6 +169,7 @@ class AnalysisConfig:
     mfi_window: int = 14                 # Money Flow Index look-back
     walkforward_warmup: int = 60         # min rows before walk-forward scores
     walkforward_refit_every: int = 5     # refit cadence in walk-forward mode
+    walkforward_max_fits: int = 150      # hard ceiling on walk-forward cost
     random_state: int = 42
     min_rows: int = 40
     min_avg_turnover: float = 0.0        # min avg daily $ turnover to keep a ticker
@@ -183,6 +192,8 @@ class AnalysisConfig:
             raise ValueError("walkforward_warmup should be >= rolling_window and mfi_window.")
         if self.walkforward_refit_every < 1:
             raise ValueError("walkforward_refit_every must be >= 1.")
+        if self.walkforward_max_fits < 0:
+            raise ValueError("walkforward_max_fits must be >= 0 (0 disables the ceiling).")
         if self.min_rows < max(self.rolling_window, self.mfi_window):
             raise ValueError("min_rows should be >= rolling_window and mfi_window.")
 
@@ -257,20 +268,14 @@ class WhaleTracker:
         period = period or self.config.period
 
         logger.info("Fetching %s (period=%s)", ticker, period)
-        try:
-            history = yf.Ticker(ticker).history(period=period, auto_adjust=True)
-        except Exception as exc:
-            raise DataFetchError(f"Failed to download data for '{ticker}': {exc}") from exc
-
-        if history is None or history.empty:
-            raise DataFetchError(
-                f"No data found for '{ticker}'. Check the symbol "
-                "(Indonesian stocks need a '.JK' suffix, e.g. BBCA.JK)."
-            )
-
-        required = {"High", "Low", "Close", "Volume"}
-        if not required.issubset(history.columns):
-            raise DataFetchError(f"Data for '{ticker}' is missing required columns {required}.")
+        # NORMALISED AT THE BOUNDARY, not here. This method used to pass
+        # yfinance's frame through untouched — tz-aware index and all — which is
+        # why `index.py` had to strip the timezone from three frames by hand
+        # before the event study could align them. Every frame now arrives on
+        # the same contract.
+        history = market_data.ohlcv(ticker, period=period)
+        if history is None:
+            raise DataFetchError(f"No data found for '{ticker}'. {symbols.hint(ticker)}")
 
         df = self._engineer_features(history)
 
@@ -292,7 +297,7 @@ class WhaleTracker:
             df["Open"] = df["Close"].shift(1)
 
         # --- basic returns / relative volume ---
-        df["Price_Change_%"] = df["Close"].pct_change() * 100
+        df["Price_Change_%"] = df["Close"].pct_change(fill_method=None) * 100
         df["Abs_Price_Change_%"] = df["Price_Change_%"].abs()
         rolling_vol = df["Volume"].rolling(w, min_periods=1).mean()
         df["Volume_vs_Avg"] = df["Volume"] / rolling_vol.replace(0, np.nan)   # RVOL
@@ -424,7 +429,7 @@ class WhaleTracker:
         X = df[FEATURE_COLUMNS].to_numpy()
         n = len(X)
         warmup = self.config.walkforward_warmup
-        refit_every = self.config.walkforward_refit_every
+        refit_every = self._walkforward_cadence(n)
         scores = np.full(n, np.nan)
 
         scaler = None
@@ -439,10 +444,33 @@ class WhaleTracker:
             scores[t] = model.decision_function(scaler.transform(X[t : t + 1]))[0]
         return pd.Series(scores, index=df.index)
 
+    def _walkforward_cadence(self, n: int) -> int:
+        """Refit cadence, widened when the row count would blow the fit budget.
+
+        The configured cadence is a floor, never a ceiling: this only ever makes
+        the run cheaper, and only when it would otherwise exceed
+        `walkforward_max_fits`. See that field's docstring for why widening the
+        cadence cannot leak future information.
+        """
+        configured = self.config.walkforward_refit_every
+        budget = self.config.walkforward_max_fits
+        steps = max(0, n - self.config.walkforward_warmup)
+        if budget <= 0 or steps <= 0:
+            return configured
+
+        needed = math.ceil(steps / budget)
+        if needed <= configured:
+            return configured
+        logger.info(
+            "walk-forward: %d rows would cost %d fits; widening refit cadence "
+            "%d -> %d to stay within the %d-fit budget",
+            n, math.ceil(steps / configured), configured, needed, budget,
+        )
+        return needed
+
     def _classify_flow(self, df: pd.DataFrame) -> pd.DataFrame:
         """Label each row as Accumulation / Distribution / Neutral via a vote of
         OBV direction, A/D line direction, MFI level and price direction."""
-        w = self.config.rolling_window
         obv_up = df["OBV"].diff().fillna(0) > 0
         ad_up = df["AD_Line"].diff().fillna(0) > 0
         mfi_bull = df["MFI"] > 55
@@ -566,6 +594,10 @@ class WhaleTracker:
             return {
                 "Ticker": tk,
                 "Recent Anomalies": len(recent),
+                # The ticker's OWN long-run flag rate, which is the null the
+                # screener's significance test measures each hit against.
+                "Anomaly Rate": res.anomaly_rate,
+                "Total Days": res.total_days,
                 "Dominant Flow": dominant,
                 "Top Strength": int(top["Strength"]),
                 "Latest Signal": recent.index.max().strftime("%Y-%m-%d"),
@@ -585,8 +617,9 @@ class WhaleTracker:
         if not rows:
             return pd.DataFrame(
                 columns=[
-                    "Ticker", "Recent Anomalies", "Dominant Flow", "Top Strength",
-                    "Latest Signal", "Latest Tag", "Latest Close", "RVOL (top)",
+                    "Ticker", "Recent Anomalies", "Anomaly Rate", "Total Days",
+                    "Dominant Flow", "Top Strength", "Latest Signal", "Latest Tag",
+                    "Latest Close", "RVOL (top)",
                 ]
             )
         return (
