@@ -814,6 +814,143 @@ no journal: the reader would have believed they had a record.
 
 ---
 
+## 13. A full correctness audit, and the five things it found
+
+**28 August 2026.** Every formula in the app was checked against its published
+definition by REIMPLEMENTING it independently — plain loops and closed forms, written
+from the source rather than from the code — and comparing. Where a formula estimates
+something, it was pointed at a planted quantity and asked to recover a number it was
+never given. What follows is what that turned up.
+
+### Verified correct, to the precision stated
+
+| Checked against | Result |
+|---|---|
+| DCF present value, terminal value, Gordon growth | exact (0.00e+00) |
+| Residual income, hand-summed; and the ROE = r identity | exact |
+| Implied growth inverting the forward model | 1e-9 |
+| Vasicek shrinkage vs the published precision weighting | exact |
+| OLS beta, standard error, R² vs `scipy.linregress` | exact |
+| Yang-Zhang volatility on a simulated intraday diffusion | 0.97x true, **3x** more variance-efficient than close-to-close |
+| Corwin-Schultz and Abdi-Ranaldo against a planted spread | recovered across 0-5% |
+| Amihud scaling in volume | exactly halves on doubled volume |
+| Benjamini-Hochberg vs a hand-built step-up | exact, monotone, dominates Bonferroni |
+| CUSUM finding a planted mean shift | right direction, right count |
+| Euler risk decomposition, shares summing to one | 1e-16 |
+| Participation ratio vs the equicorrelation closed form | exact |
+| Floor-trader and Fibonacci pivots | exact |
+| Position sizing: share x stop distance = the risk budget | exact 1.0000% |
+| RSI, ADX, +DI/-DI, CCI, Aroon, Stochastic, Williams %R, MACD, EMA, ROC, true range | exact vs independent implementations |
+| Piotroski's nine signals vs the 2000 paper | all nine match |
+| Event study: market model on a planted alpha/beta; the estimation gap | recovered; poisoning the gap leaves the fit **identical** |
+| Backtest look-ahead: a signal planted only after the rebalance | correlation with rank **+0.004** — it cannot see it |
+
+### 1. Downside deviation was not the published quantity
+
+`risk_metrics` computed `returns[returns < 0].std()` — the dispersion of losses about
+their own mean. Sortino & Price (1994) define the root-mean-square shortfall below the
+target, over **every** observation. These are different statistics, and the error does
+not even have a consistent sign:
+
+| Return shape | old / published |
+|---|---|
+| ordinary noisy returns | 0.85x — Sortino overstated by ~18% |
+| small losses, rare crashes | 1.44x — Sortino understated |
+| every down day the same size | **0.00x** |
+
+That last row is the one that matters. Losses of identical size have zero dispersion
+among themselves, so the old formula returned zero and **Sortino came back as 4.7e14** —
+which the panel would have rendered as a superb risk-adjusted return for a holding that
+loses money every third day. The published formula gives 0.0917 and a Sortino of 7.4.
+
+Sortino is not a minor figure here: it is one of the six numbers Guided mode shows
+without a click, and the long-horizon checklist's "Paid for its downside risk" line
+tests it against 0.5.
+
+### 2. Five metrics carried an arrow that contradicted their own colour
+
+`explain.py` exists to make direction impossible to get wrong, and its docstring says
+`goodDirection` is "carried for the UI to draw an arrow... Keeping it advisory means a
+mismatch between the two shows up as a failing test". No test compared the two.
+
+Maximum drawdown, current drawdown, VaR, CVaR and worst single day all reach the panel
+as **negative** percentages and improve toward zero — so the honest arrow reads "higher
+is better". All five declared `low`, rendering a down arrow labelled *lower is better*
+underneath "-33%", which tells a reader that -60% is the better outcome. The colour
+ladders were right throughout.
+
+The old test could not catch it because it asserted the label against a hand-kept list
+rather than against the ladder. The replacement derives the expected direction from
+which end of each metric's own range the tone improves toward, so a new metric is
+covered the day it is added — and it fails if any of the five is flipped back.
+
+### 3. Two oscillators had three saturated cases and handled two
+
+RSI divides by an average loss that can be zero, and sent every such window to 100.
+That is right when there were gains and wrong when there were none: **a price that had
+not moved for fourteen days came back as 100**, the most overbought reading on the
+scale. Reachable on exactly the halted and thinly traded listings this app covers.
+
+Money Flow Index had the mirror bug from a blanket `fillna(50)`: **fourteen consecutive
+up days produced no negative flow and read as 50**, the exact middle, when they mean the
+top. The same fill also disguised the warm-up window as a neutral reading.
+
+Both now distinguish all three cases: saturated up, saturated down, and nothing
+happened.
+
+### 4. There were two Money Flow Index implementations
+
+`whale.py` carried its own copy, differing from `indicators.py` by up to **50 points** —
+half the scale — because the two chose different `min_periods`. The divergence was
+confined to the warm-up window, which the anomaly engine drops, so no panel ever
+disagreed with another; but two copies of one formula is how a disagreement that matters
+eventually arrives. The anomaly engine now calls the shared one.
+
+### 5. A window that reported before it was full, under a name that implied otherwise
+
+`volume_trend` divided by a long average with `min_periods = long // 4`, so on a short
+chart range it compared against a 63-day mean while the explanation layer called the
+result "volume versus its year". Both windows are now required in full: the reading goes
+missing on a three-month range rather than being computed over a quarter and labelled as
+a year, which is the treatment the 200-day average already gets.
+
+Donchian's channels keep their quarter-window minimum, and the reason is now written
+down: nothing labels that output with its length. The user-facing "52-week high" is
+`longterm.price_position`, which measures its own window and reports `windowDays` beside
+the figure, and the breakout setups in `swing.py` use their 20- and 55-bar windows in
+full.
+
+### Deviations from a cited source that were left alone, deliberately
+
+**Bollinger bands default to the sample standard deviation** (`ddof=1`) where Bollinger
+uses the population one. Bands are 2.6% wider and %B moves by at most 0.02. The squeeze
+percentile is unaffected, being a rank against the metric's own history. Documented
+rather than changed, because the parameter is exposed and the difference is smaller than
+the choice of 20 periods.
+
+**Piotroski's ROA uses same-year assets** rather than the paper's beginning-of-year
+figure — the common simplification, and it preserves the sign of every signal.
+
+**Sharpe divides a geometric annual return** by an annualised standard deviation of
+daily returns, where the textbook uses the arithmetic mean excess return. A widely used
+variant; the panel states which risk-free rate was used so the number can be compared
+with one from elsewhere.
+
+**Wilder's smoothing seeds on the first observation**, not the published SMA of the first
+`n`. The difference decays geometrically and measured below 1e-9 by the tail of a
+500-bar series.
+
+### Data boundary
+
+`scripts/check_data_invariants.py` over 40 live companies: price x shares against market
+capitalisation has a median ratio of exactly 1.000, and one name tripped the dividend
+invariant — the pre-existing IDX coverage gap the script exists to surface. The
+statement currency conversion was re-checked and is sound: the effective tax rate is a
+ratio of two rows that are both scaled, so the exchange rate cancels, and every row the
+app reads is monetary rather than a ratio.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |

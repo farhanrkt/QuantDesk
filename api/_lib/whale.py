@@ -69,6 +69,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from . import indicators as ind
 from . import market_data, symbols
 
 try:
@@ -319,23 +320,11 @@ class WhaleTracker:
         df["AD_Line"] = (mfm * df["Volume"]).cumsum()
 
         # --- Money Flow Index (MFI) ---
-        df["MFI"] = self._money_flow_index(df, self.config.mfi_window)
+        df["MFI"] = ind.money_flow_index(df["High"], df["Low"], df["Close"],
+                                         df["Volume"], self.config.mfi_window)
 
         df = df.replace([np.inf, -np.inf], np.nan).dropna()
         return df
-
-    @staticmethod
-    def _money_flow_index(df: pd.DataFrame, window: int) -> pd.Series:
-        typical = (df["High"] + df["Low"] + df["Close"]) / 3
-        raw_flow = typical * df["Volume"]
-        delta = typical.diff()
-        pos_flow = raw_flow.where(delta > 0, 0.0)
-        neg_flow = raw_flow.where(delta < 0, 0.0)
-        pos_sum = pos_flow.rolling(window, min_periods=1).sum()
-        neg_sum = neg_flow.rolling(window, min_periods=1).sum().replace(0, np.nan)
-        mfr = pos_sum / neg_sum
-        mfi = 100 - (100 / (1 + mfr))
-        return mfi.fillna(50.0)  # 50 = neutral when undefined
 
     # ------------------------------------------------------------------ #
     # Anomaly detection + enrichment

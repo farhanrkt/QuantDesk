@@ -519,3 +519,81 @@ def test_signal_correlation_survives_an_empty_scan():
     result = R.signal_correlation([])
     assert result["available"] is False
     assert "reason" in result
+
+
+# ============================================================================ #
+# Saturation: the three cases, not two
+#
+# Both oscillators divide by a quantity that can be zero, and both used to send
+# every such window to one answer. That is right for one of the three cases and
+# wrong for the others, and the wrong ones are reachable on exactly the thin and
+# halted listings this app exists to cover.
+# ============================================================================ #
+def _flat(n=40, value=100.0):
+    return pd.Series(np.full(n, value), index=pd.bdate_range("2024-01-01", periods=n))
+
+
+def _ramp(n=40, start=100.0, end=140.0):
+    return pd.Series(np.linspace(start, end, n),
+                     index=pd.bdate_range("2024-01-01", periods=n))
+
+
+def test_rsi_on_an_unmoved_price_is_neutral_not_maximally_overbought():
+    """A price that has not moved for fourteen days used to come back as 100 —
+    the most overbought reading on the scale — because "no average loss" was
+    treated as "only gains"."""
+    assert I.rsi(_flat()).iloc[-1] == pytest.approx(50.0)
+
+
+def test_rsi_still_saturates_where_it_should():
+    assert I.rsi(_ramp()).iloc[-1] == pytest.approx(100.0)
+    assert I.rsi(_ramp(start=140.0, end=100.0)).iloc[-1] == pytest.approx(0.0)
+
+
+def test_money_flow_index_saturates_on_an_unbroken_run_of_up_days():
+    """The mirror-image bug: a blanket fillna(50) sent "no negative flow" to the
+    exact middle of the scale when it means the top of it."""
+    up = _ramp()
+    volume = pd.Series(np.full(len(up), 1e6), index=up.index)
+    mfi = I.money_flow_index(up * 1.01, up * 0.99, up, volume)
+    assert mfi.iloc[-1] == pytest.approx(100.0)
+
+    down = _ramp(start=140.0, end=100.0)
+    assert I.money_flow_index(down * 1.01, down * 0.99, down, volume).iloc[-1] \
+        == pytest.approx(0.0)
+
+
+def test_money_flow_index_is_neutral_only_when_nothing_moved():
+    flat = _flat()
+    volume = pd.Series(np.full(len(flat), 1e6), index=flat.index)
+    assert I.money_flow_index(flat * 1.01, flat * 0.99, flat, volume).iloc[-1] \
+        == pytest.approx(50.0)
+
+
+def test_the_money_flow_warm_up_is_absent_rather_than_filled_with_neutral():
+    """A partial window is not a neutral reading. Filling it with 50 handed
+    every caller a number that looked computed and was not."""
+    up = _ramp()
+    volume = pd.Series(np.full(len(up), 1e6), index=up.index)
+    mfi = I.money_flow_index(up * 1.01, up * 0.99, up, volume, length=14)
+    assert mfi.iloc[:13].isna().all()
+    assert mfi.iloc[13:].notna().all()
+
+
+def test_there_is_one_money_flow_implementation_not_two():
+    """`whale.py` carried its own copy, which disagreed with this one by up to
+    50 points during warm-up — half the scale — because the two chose different
+    `min_periods`. The anomaly engine now calls this."""
+    from _lib.whale import WhaleTracker
+    assert not hasattr(WhaleTracker, "_money_flow_index")
+
+
+def test_volume_trend_requires_both_windows_in_full():
+    """It divides by a long average the explanation layer calls "its year". A
+    quarter's worth of days is not a year, so the reading goes missing instead
+    of being computed over the wrong span."""
+    volume = pd.Series(np.r_[np.full(150, 1e6), np.full(150, 3e6)],
+                       index=pd.bdate_range("2023-01-02", periods=300))
+    trend = I.volume_trend(volume, short=21, long=252)
+    assert trend.iloc[:251].isna().all(), "no value before a full year of history"
+    assert trend.iloc[251:].notna().all()

@@ -152,6 +152,47 @@ def cagr(close: pd.Series) -> Optional[float]:
     return float((prices.iloc[-1] / prices.iloc[0]) ** (1.0 / years) - 1.0)
 
 
+def downside_deviation_of(returns: pd.Series, target: float = 0.0) -> float:
+    """Sortino & Price's downside deviation: RMS shortfall below `target`.
+
+        DD = sqrt( mean( min(r - target, 0)^2 ) ) * sqrt(252)
+
+    TWO THINGS THAT LOOK LIKE DETAILS AND ARE NOT. The mean is taken over EVERY
+    observation, not over the losing ones; and the quantity averaged is the
+    squared shortfall from the TARGET, not the variance of the losses about
+    their own mean.
+
+    This module previously computed `returns[returns < 0].std()`, which is a
+    different statistic — the dispersion of losses around their average loss —
+    and it is wrong in a way that does not even have a consistent sign. Measured
+    against the published definition on planted return series:
+
+        ordinary noisy returns        0.85x  (Sortino overstated by ~18%)
+        small losses, rare crashes    1.44x  (Sortino understated)
+        every down day the same size  0.00x  (Sortino -> infinity)
+
+    That last row is the one that matters. A series whose losses are all the
+    same size has zero dispersion among them, so the old formula returned zero
+    and Sortino came back as 4.7e14 — which the panel would have rendered as an
+    excellent risk-adjusted return for a holding that loses money regularly. The
+    published formula returns 0.0917 for that series and a Sortino of 7.4.
+
+    A series with no losses at all still has no downside, so the ratio is
+    undefined rather than infinite, and NaN is the honest answer.
+
+    > Sortino, F. A., & Price, L. N. (1994). "Performance Measurement in a
+    > Downside Risk Framework." Journal of Investing 3(3), 59-64.
+    """
+    values = returns.to_numpy(dtype="float64")
+    values = values[np.isfinite(values)]
+    if len(values) < 2:
+        return float("nan")
+    shortfall = np.minimum(values - target, 0.0)
+    if not np.any(shortfall < 0):
+        return float("nan")
+    return float(np.sqrt(np.mean(shortfall ** 2)) * np.sqrt(TRADING_DAYS))
+
+
 def risk_metrics(close: pd.Series, risk_free: float = 0.0) -> dict:
     """Risk-adjusted performance, with the downside measures that matter more.
 
@@ -168,9 +209,7 @@ def risk_metrics(close: pd.Series, risk_free: float = 0.0) -> dict:
     annual_return = cagr(prices)
     volatility = float(returns.std(ddof=1) * np.sqrt(TRADING_DAYS))
 
-    downside = returns[returns < 0]
-    downside_deviation = (float(downside.std(ddof=1) * np.sqrt(TRADING_DAYS))
-                          if len(downside) > 1 else np.nan)
+    downside_deviation = downside_deviation_of(returns)
 
     excess = (annual_return - risk_free) if annual_return is not None else np.nan
     sharpe = excess / volatility if volatility > 0 and np.isfinite(excess) else np.nan

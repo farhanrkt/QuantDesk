@@ -226,14 +226,11 @@ LOWER_IS_BETTER = {
     # identical, which is the point: direction lives in the ladder, not here.
     "volatility": [0.60, 0.42, 0.30, 0.20, 0.10],
     "downsideDeviation": [0.50, 0.33, 0.24, 0.16, 0.08],
-    "maxDrawdown": [-0.75, -0.55, -0.40, -0.25, -0.08],
+
     "ulcerIndex": [45.0, 25.0, 15.0, 7.0, 2.0],
     "timeUnderWaterDays": [900, 600, 300, 120, 20],
     "atrPct": [0.10, 0.055, 0.032, 0.02, 0.008],
     "spread": [0.035, 0.015, 0.006, 0.002, 0.0004],
-    "var95": [-0.09, -0.05, -0.03, -0.015],
-    "cvar95": [-0.12, -0.07, -0.04, -0.02],
-    "worstDay": [-0.30, -0.15, -0.09, -0.04],
     "beneish": [-1.0, -2.0, -3.0],
     "qValue": [0.5, 0.15, 0.01],
     "maxDrawdownRecoveryDays": [1500, 800, 300, 60],
@@ -253,6 +250,65 @@ def test_low_is_good_metrics_are_not_coloured_backwards(key):
     assert E.explain(key, LOWER_IS_BETTER[key][-1])["goodDirection"] == "low", (
         f"{key} is a low-is-good metric but declares goodDirection 'high'"
     )
+
+
+# The five metrics whose DISPLAYED value is negative. They belong in neither
+# list above: the ladder improves as the number rises toward zero, so a reader
+# is looking at -33% and the arrow has to say "higher is better".
+NEGATIVE_SCALE = {
+    "maxDrawdown": [-0.75, -0.55, -0.40, -0.25, -0.08],
+    "currentDrawdown": [-0.60, -0.35, -0.18, -0.05],
+    "var95": [-0.09, -0.05, -0.03, -0.015],
+    "cvar95": [-0.12, -0.07, -0.04, -0.02],
+    "worstDay": [-0.30, -0.15, -0.09, -0.04],
+}
+
+
+@pytest.mark.parametrize("key", sorted(NEGATIVE_SCALE))
+def test_metrics_shown_as_negative_numbers_point_their_arrow_upward(key):
+    """The arrow has to agree with the ladder, and for these five it did not.
+
+    A maximum drawdown reaches the panel as "-33%" and improves toward zero, so
+    the honest arrow reads "higher is better". All five declared "low", which
+    renders a down arrow labelled "lower is better" underneath a negative
+    number — telling a reader that -60% is the better outcome. The colour was
+    right the whole time; only the arrow disagreed, and the old test could not
+    see it because it asserted the label against a hand-kept list rather than
+    against the ladder.
+    """
+    _monotone(key, NEGATIVE_SCALE[key])
+    assert E.explain(key, NEGATIVE_SCALE[key][-1])["goodDirection"] == "high"
+
+
+def test_no_metric_declares_a_direction_its_own_ladder_contradicts():
+    """The check that would have caught the above, derived rather than listed.
+
+    For every metric with a stated direction, sweep its own sample values and
+    require the tone to move the way the direction claims. Nothing here is
+    maintained by hand, so a new metric is covered the day it is added.
+    """
+    order = {"bad": 0, "warn": 1, "neutral": 2, "good": 3}
+    problems = []
+    for key, values in {**HIGHER_IS_BETTER, **LOWER_IS_BETTER, **NEGATIVE_SCALE}.items():
+        _value, ctx = SAMPLES[key]
+        readings = [E.explain(key, v, **ctx) for v in values]
+        direction = readings[-1]["goodDirection"]
+        if direction == "none":
+            continue
+        tones = [order[r["tone"]] for r in readings if r["band"] != "unavailable"]
+        improving = all(a <= b for a, b in pairwise(tones))
+        if not improving:
+            problems.append(f"{key}: tone does not improve across its own list")
+            continue
+        # The list runs worst-to-best, so the direction must match which end of
+        # the numeric range "best" sits at.
+        rises = values[-1] > values[0]
+        expected = "high" if rises else "low"
+        if direction != expected:
+            problems.append(
+                f"{key}: improves toward {values[-1]} (so {expected!r}) but "
+                f"declares {direction!r} — the arrow contradicts the colour")
+    assert not problems, "\n".join(problems)
 
 
 def test_a_finished_flow_regime_is_still_explained():

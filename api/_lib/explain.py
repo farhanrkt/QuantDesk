@@ -394,7 +394,14 @@ def _var95(value, **_):
                 f"trading day in twenty was at least this bad.",
                 "Use it as a nerve test. If a one-day fall of this size in your position size "
                 "would make you sell, the position is too big.",
-                band, "low", evidence="strong", value_text=_pct(value))
+                # HIGH, and the SIGN is the whole reason. This is shown as a
+                # NEGATIVE percentage, so the better outcome is the LARGER
+                # number: -8% beats -60%. Declaring "low" printed an arrow
+                # reading "lower is better" beneath a negative value, which
+                # tells a reader that a deeper fall is the good one. The
+                # colour ladder was right throughout; only the arrow
+                # contradicted it, and no test compared the two.
+                band, "high", evidence="strong", value_text=_pct(value))
 
 
 @metric("cvar95")
@@ -413,7 +420,14 @@ def _cvar95(value, var95=None, **_):
                     f"past 1.0 this gets, the more the really bad days cluster far out.")
     return make(label, what, reading,
                 CONTEXT_NOT_TRIGGER + " It tells you the shape of the tail, not when it arrives.",
-                band, "low", evidence="strong", value_text=_pct(value))
+                # HIGH, and the SIGN is the whole reason. This is shown as a
+                # NEGATIVE percentage, so the better outcome is the LARGER
+                # number: -8% beats -60%. Declaring "low" printed an arrow
+                # reading "lower is better" beneath a negative value, which
+                # tells a reader that a deeper fall is the good one. The
+                # colour ladder was right throughout; only the arrow
+                # contradicted it, and no test compared the two.
+                band, "high", evidence="strong", value_text=_pct(value))
 
 
 @metric("skew")
@@ -486,7 +500,14 @@ def _worst_day(value, **_):
     return make(label, what,
                 f"The worst day here fell {_pct(magnitude)}. It has happened once, so it can "
                 f"happen again.",
-                CONTEXT_NOT_TRIGGER, band, "low", evidence="strong", value_text=_pct(value))
+                # HIGH, and the SIGN is the whole reason. This is shown as a
+                # NEGATIVE percentage, so the better outcome is the LARGER
+                # number: -8% beats -60%. Declaring "low" printed an arrow
+                # reading "lower is better" beneath a negative value, which
+                # tells a reader that a deeper fall is the good one. The
+                # colour ladder was right throughout; only the arrow
+                # contradicted it, and no test compared the two.
+                CONTEXT_NOT_TRIGGER, band, "high", evidence="strong", value_text=_pct(value))
 
 
 @metric("bestDay")
@@ -530,7 +551,14 @@ def _max_drawdown(value, **_):
     return make(label, what, reading,
                 "Size the position so a repeat of this fall does not force you out. That is "
                 "the decision this number is for.",
-                band, "low", evidence="strong", value_text=_pct(value, 0))
+                # HIGH, and the SIGN is the whole reason. This is shown as a
+                # NEGATIVE percentage, so the better outcome is the LARGER
+                # number: -8% beats -60%. Declaring "low" printed an arrow
+                # reading "lower is better" beneath a negative value, which
+                # tells a reader that a deeper fall is the good one. The
+                # colour ladder was right throughout; only the arrow
+                # contradicted it, and no test compared the two.
+                band, "high", evidence="strong", value_text=_pct(value, 0))
 
 
 @metric("currentDrawdown")
@@ -544,7 +572,7 @@ def _current_drawdown(value, **_):
         return make(label, what,
                     f"{_pct(depth)} below its peak, which is effectively at the high — "
                     f"everyone who has ever owned it is in profit.",
-                    CONTEXT_NOT_TRIGGER, "good", "low", evidence="strong",
+                    CONTEXT_NOT_TRIGGER, "good", "high", evidence="strong",
                     value_text=_pct(value, 1))
     band = _ladder(depth, ((0.10, "good"), (0.25, "fair"), (0.45, "poor"), (None, "bad")))
     return make(label, what,
@@ -552,7 +580,16 @@ def _current_drawdown(value, **_):
                 f"still down by that much.",
                 CONTEXT_NOT_TRIGGER + " Being far below a high is neither cheap nor broken on "
                 "its own — the Value and Quality lenses are what settle that.",
-                band, "low", evidence="strong", value_text=_pct(value, 1))
+                # HIGH, and the SIGN is the whole reason. This is shown as a
+                # NEGATIVE percentage, so the better outcome is the LARGER
+                # number: -8% beats -60%. Declaring "low" printed an arrow
+                # reading "lower is better" beneath a negative value, which
+                # tells a reader that a deeper fall is the good one. The colour
+                # ladder was right throughout; only the arrow contradicted it,
+                # and no test compared the two. Note `band` is picked from
+                # `depth`, the absolute value — which is why the ladder reads
+                # low-is-good while the DISPLAYED number does not.
+                band, "high", evidence="strong", value_text=_pct(value, 1))
 
 
 @metric("timeUnderWaterDays")
