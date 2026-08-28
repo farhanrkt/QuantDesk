@@ -210,12 +210,21 @@ def _beneish_flagged(payload: dict) -> dict:
                       or "too few of the eight Beneish indices could be computed")
     if beneish.get("band") != "flagged":
         return quiet()
+    # THE POSTERIOR, NOT THE FLAG. "Most flags are false alarms" was the prose
+    # this check shipped with; the Quality lens now computes the number, and a
+    # pre-trade panel that quoted the vaguer version while the figure sat one
+    # tab away would be the weaker statement in the more prominent place.
+    worth = _sub(quality, "manipulationPosterior")
+    odds = ""
+    if _known(worth.get("posterior")) and worth.get("priorText"):
+        odds = (f" At a {worth['priorText']} base rate for manipulation, a flag like this "
+                f"one is about {worth['posterior'] * 100:.0f}% likely to be real — so most "
+                f"of them are false alarms.")
     return fires(
         f"The M-Score is {beneish['score']:.2f}, above the -1.78 threshold, so the "
         f"accrual and growth pattern resembles companies later found to have massaged "
-        f"earnings. This is a screen and not a finding — manipulation is rare, so most "
-        f"flags are false alarms. It is a reason to read the cash-flow statement against "
-        f"the income statement before trusting either.",
+        f"earnings.{odds} It is a reason to read the cash-flow statement against the "
+        f"income statement, not a finding.",
         band="caution", value_text=f"{beneish['score']:.2f}")
 
 

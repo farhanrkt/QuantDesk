@@ -2506,6 +2506,13 @@ def for_quality(payload: dict) -> dict:
         out["beneish"] = explain("beneish", beneish.get("score"),
                                  indicesAvailable=beneish.get("indicesAvailable"),
                                  indicesTotal=beneish.get("indicesTotal"))
+    posterior = payload.get("manipulationPosterior")
+    if posterior:
+        out["manipulationPosterior"] = explain(
+            "manipulationPosterior", posterior.get("posterior"),
+            flagged=posterior.get("flagged"), prior_text=posterior.get("priorText"),
+            robust=(posterior.get("robustRange") or {}).get("sentence"),
+            partial=posterior.get("partialScore"))
         for part, value in (beneish.get("indices") or {}).items():
             result = explain("beneishIndex", value, part=part)
             if result:
@@ -3568,6 +3575,63 @@ def _check_firing_rate(value, check_label=None, universe_label=None, **_):
         band=band, good_direction="none", evidence="strong",
         value_text=_pct(value, 0),
     )
+
+
+# ============================================================================ #
+# What a flag is worth — the posterior, not the flag
+#
+# WHY THIS IS `context` AND NOT A WARNING COLOUR
+# ----------------------------------------------
+# The M-Score itself already carries the alarm: a flagged reading comes back
+# `bad`. This number is the QUALIFIER on that alarm, and at every prior anyone
+# has published it qualifies downward — an 11% chance of being real is a reason
+# to look, not a finding. Colouring it amber as well would count the same fact
+# twice and, worse, would make the number that DEFLATES the flag look like a
+# second flag.
+#
+# The clean branch is the mirror hazard and is why the reading always names the
+# shift rather than the level. "0.84%" beside a clean score reads as a clean
+# bill of health; "2.8% before the test, 0.8% after" reads as what the test
+# actually did, which is move a number that was already small.
+# ============================================================================ #
+@metric("manipulationPosterior")
+def _manipulation_posterior(value, flagged=None, prior_text=None, robust=None,
+                            partial=False, **_):
+    label = "What the flag is worth"
+    what = ("How likely it is that a company this screen flags really has manipulated its "
+            "earnings. It combines how often the screen catches a manipulator, how often "
+            "it cries wolf, and how rare manipulation is to begin with — the third being "
+            "the input that decides the answer and the one nobody can measure exactly.")
+    if not _known(value):
+        return unavailable(label, what,
+                           "no M-Score was computed, so there is nothing to condition on")
+
+    base = f" Starting from {prior_text} before the test." if prior_text else ""
+    tail = (" Built from fewer than the eight indices the published error rates were "
+            "measured on, so read it as indicative." if partial else "")
+    if flagged:
+        reading = (f"About {_pct(value, 0)} likely to be a real manipulator — so roughly "
+                   f"{_pct(1 - value, 0)} of flags like this one are false alarms.{base}"
+                   f"{tail}")
+        action = ("Treat a flag as a reading assignment, not a finding: go to the cash-flow "
+                  "statement and the income statement and see whether profit and cash have "
+                  "diverged. If you would not do that work, the flag should not change what "
+                  "you do.")
+    else:
+        reading = (f"No flag, which leaves about {_pct(value, 2)} — down from {prior_text} "
+                   f"before the test.{tail} The screen moved a number that was already small, "
+                   f"and it tests one specific accrual pattern rather than honesty.")
+        action = ("Nothing. A clean M-Score is the absence of one signature, not a clean "
+                  "bill of health — a business can be a poor holding for reasons this "
+                  "screen has no view on at all.")
+    # The robust range is a sentence about what a FLAG is worth. Appended to a
+    # clean reading it is a non-sequitur — it answers a question the company in
+    # front of the reader did not raise. The panel still prints it in its own
+    # paragraph, where it describes the screen rather than this company.
+    if robust and flagged:
+        reading += f" {robust}"
+    return make(label, what, reading, action, "context", "none", evidence="moderate",
+                value_text=_pct(value, 0 if flagged else 2))
 
 
 # ============================================================================ #

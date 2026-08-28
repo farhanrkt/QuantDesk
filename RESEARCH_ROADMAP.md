@@ -464,11 +464,102 @@ firing-rate lookup now use it.
 
 ---
 
+## 9. What a Beneish flag is worth — the posterior, not the flag
+
+**Added 28 August 2026.** The quality lens has said since it shipped that Beneish catches
+roughly three-quarters of manipulators, and that on a population where manipulation is rare
+that also means most flags are false alarms. That sentence was prose. It can be a number, and
+the number is more useful than the sentence because it can be argued with.
+
+    P(manipulator | flag) = sens . p / (sens . p + fpr . (1 - p))
+
+Two of the three inputs are published. The third — how common manipulation is — is not a
+property of the model at all but a claim about the population the reader is drawing from,
+which is exactly why it is explicit and movable rather than baked into one headline figure.
+
+### Which probit, and why the answer changes the arithmetic
+
+Beneish reports two estimations, and picking the wrong one would have quietly halved the
+answer.
+
+The **WESML (weighted) probit** assumes a population manipulation rate of **0.69%**. The
+**unweighted probit** assumes **2.844%**, the rate in its own sample. The coefficients every
+implementation uses — the `-4.84` constant and the eight weights in `quality.beneish_m_score`,
+including this one — are the **unweighted** ones. So the classifier this app ships carries an
+implicit prior of 2.844%, and that is the default: it is the only prior at which the published
+error rates and the shipped coefficients describe the same model rather than two different
+ones.
+
+At the -1.78 cutoff Beneish reports the model classifying about **76%** of manipulators
+correctly and misclassifying about **17.5%** of non-manipulators — a trade-off he chose for a
+30-to-1 relative cost of missing a manipulator against raising a false alarm.
+
+### The result, and why it does not depend on the prior
+
+| Prior | Where it comes from | P(real manipulator \| flag) |
+|---|---|---|
+| 0.69% | Beneish's own WESML prior | **3%** |
+| 2.0% | Detected financial fraud, low end (Dyck, Morse & Zingales) | **8%** |
+| 2.844% | The sample these coefficients were fitted on | **11%** |
+| 3.0% | Detected financial fraud, high end | **12%** |
+| 10% | All securities fraud including the undetected | **33%** |
+| 14% | Top of their 95% interval | **41%** |
+
+**At every prevalence anybody has published, a Beneish flag is more likely a false alarm than
+a real finding.** That is a considerably stronger claim than "most flags are false alarms",
+because it survives disagreement about the one input a reader could reasonably dispute. The
+panel says so, and the control goes past the literature at both ends so a reader can see how
+far the prior has to be pushed — about 27% — before a flag becomes more likely true than not.
+
+The wider priors are marked as extrapolations rather than quietly averaged in. Beneish's
+sensitivity was measured against manipulators identified by SEC enforcement action; "all
+securities fraud including the undetected" is a broader event, and the error rates were never
+measured against it. Those anchors bracket the range; they do not answer the same question.
+
+### The clean branch, and why it is framed as a move
+
+The mirror number is P(manipulator | no flag) = **0.84%** at the default prior. Printed on its
+own beside a clean score that reads as a clean bill of health, which is the misreading this
+codebase works hardest against.
+
+So both branches report a **shift** rather than a level: the test takes 2.8% to 11% when it
+fires, and to 0.8% when it does not. That framing is what makes the clean case honest — it
+says the probability was already small and the test made it somewhat smaller, rather than
+announcing that nothing is wrong. The reading also states what the screen does not test.
+
+### It is never coloured, for a specific reason
+
+The M-Score already comes back `bad` when it flags. This number is the qualifier on that
+alarm and at every published prior it qualifies **downward**. A second warning colour would
+count one fact twice and, worse, would make the figure that deflates the flag look like a
+second flag. It sits in `context` like the validation-domain block, and for a related reason:
+neither is a verdict.
+
+### The control selects; it never calculates
+
+The whole prior/posterior curve is served already computed and already worded, and the slider
+picks a point on it. Recomputing in the browser would be smoother by one round trip that never
+happens anyway — and it would put the arithmetic, and the judgement about what the number
+means, in TypeScript, which is the one place this codebase keeps neither. Every stop is a
+round number somebody could defend rather than a point on a dense grid, so the control cannot
+land on 4.17% and render it with two decimal places of authority it has not earned.
+
+### What it does not claim
+
+Nothing here is fitted, measured or predicted by this app: it is Bayes' theorem on two
+published constants, and it inherits every limit of the study they came from. §8 states that
+study's sample and how far this use sits from it — which is the other half of reading the
+number, and why the two blocks sit on the same panel.
+
+The pre-trade panel's Beneish check now quotes the posterior too. It was carrying the vaguer
+prose version in the more prominent place while the figure sat one tab away.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
 |---|---|
-| Posterior probability for a Beneish flag | The operating characteristics are published — roughly three-quarters of manipulators caught, against a stated false-positive rate — and §8 now states the enriched base rate the model was fitted on, which is the other half of the arithmetic. What remains is sourcing both figures from the paper itself and making the prevalence prior editable with its sensitivity shown |
 | Placing a company in a book-to-market quintile | §8 declines this rather than inventing a breakpoint. It needs a universe-wide scan of book values, and fundamentals do not batch |
 | Portfolio context — correlation, effective independent positions, marginal risk | The largest gap. Holdings must stay client-side to respect the no-state stance, and correlation-aware sizing is a predictive claim that needs its own measurement (does this period's correlation describe the next one?) before it can ship |
 | A stated holding horizon | `rollingReturns` is fixed at 1/3/5 years, so "the worst outcome at YOUR horizon" cannot be answered, and neither can "does an earnings date land inside it" |

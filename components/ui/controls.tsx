@@ -106,6 +106,35 @@ export function SelectField({
   );
 }
 
+/**
+ * A slider over a fixed list of stops.
+ *
+ * INDEX-BASED, NOT VALUE-BASED, and that is the point of it. The caller supplies
+ * positions somebody could defend — published prevalence estimates, in the one
+ * place this is used — and the control moves between them. A continuous range
+ * would let a reader land on 4.17%, which is a made-up number rendered with two
+ * decimal places of authority it has not earned.
+ */
+export function RangeField({
+  index, count, onChange, label,
+}: {
+  index: number; count: number; onChange: (i: number) => void; label: string;
+}) {
+  return (
+    <input
+      type="range"
+      min={0}
+      max={Math.max(0, count - 1)}
+      step={1}
+      value={index}
+      aria-label={label}
+      onChange={(e) => onChange(Number(e.target.value))}
+      className="h-1 w-full cursor-pointer appearance-none rounded bg-rule accent-tech
+                 focus:outline-none focus-visible:ring-1 focus-visible:ring-tech"
+    />
+  );
+}
+
 export function Toggle({
   checked, onChange, label,
 }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {

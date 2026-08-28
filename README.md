@@ -189,6 +189,19 @@ means the answer rests on a perpetuity guess rather than the forecast.
 - **Beneish M-Score** — do the accruals resemble those of companies later found to have
   manipulated earnings?
 
+**And what a flag is actually worth.** Beneish catches roughly three-quarters of manipulators
+and misclassifies about one non-manipulator in six. Put those against how rare manipulation is
+and a flag comes out **about 11% likely to be real** — so roughly nine flags in ten are false
+alarms. The prevalence is the input that decides the answer and the one nobody can measure
+exactly, so it is a control rather than a constant: drag it across every estimate the
+literature supports, from 0.69% to 14%, and the posterior runs from 3% to 41%. **It never
+reaches even odds**, which is a much stronger statement than "most flags are false alarms"
+because it does not depend on winning the argument about the prior.
+
+A clean reading gets the same treatment, reported as a *shift* rather than a level — 2.8%
+before the test, 0.8% after. On its own that second number would read as a clean bill of
+health; the pair reads as what the test actually did, which was move a small number slightly.
+
 **Where each number came from, beside the number.** Applicability is one question and the app
 has always enforced it; *whether this use resembles the sample the screen was fitted on* is a
 different one, and it went unanswered. Each score now carries its provenance on the axes that
@@ -207,9 +220,9 @@ not, while the 1960s coefficients underneath are outside for both.
 **What it can't tell you.** Anything about a bank or insurer — and it says so rather than
 printing a number. None of the three was built on financial firms: there's no operating
 cycle for "working capital" to describe, and revenue isn't a receivables-and-inventory
-process. Financials get an explicit refusal. Beneish is also a *screen*, not a finding:
-it catches roughly three-quarters of manipulators, which on a population where manipulation
-is rare also means most flags are false alarms.
+process. Financials get an explicit refusal. And Beneish is a *screen*, not a
+finding — quantified above rather than hedged: at the prevalence its own coefficients were
+fitted under, a flag is about 11% likely to be real.
 
 ---
 
@@ -321,6 +334,7 @@ where a constant was invented, it got replaced by an estimator.
 | Quoting an estimated bid-ask spread as a cost | **The estimator's own resolution floor** | Both spread estimators have a noise floor proportional to volatility — 0.148× and 0.361× the daily standard deviation, measured with the true spread set to zero. On a mega-cap that floor is an order of magnitude above the real spread, so the app reported a cost the stock does not charge. Below the floor it now reports a ceiling |
 | Assuming the signal works | **Event study** (Brown & Warner 1985) | Measures it, and reports null results |
 | Reporting raw screener hits | **Benjamini-Hochberg (1995)** | Scanning many names produces hits by construction |
+| A bare screen flag | **Bayes on the screen's published error rates** | A screen that catches most manipulators on a population where manipulation is rare still produces mostly false alarms. The prevalence decides the answer and nobody can measure it, so it is a control — and the conclusion holds across every value the literature supports |
 | An accounting score with no provenance | **The published sample, on the axes that can be checked** | Piotroski was fitted on US value stocks in 1976-1996, Altman on 1960s manufacturers, Beneish on 1980s SEC cases. Every use today is outside all three, which is provenance rather than a defect — so it is stated, never coloured, and never counted into a fit score |
 | A pre-trade flag on its own | **The flag plus its measured firing rate** | "Altman says distress" is unreadable without knowing how often Altman says distress. Measured across four index universes: the conditions that turned out to fire on most of the market are demoted to base conditions rather than presented as findings, and an uncalibrated check is withheld |
 | A composite score across signals | **Percentile ranks + a measured overlap** | Momentum, 52-week-high and relative strength are three phrasings of "it went up"; the panel reports how many *independent* signals the composite really averages |
@@ -358,6 +372,8 @@ api/
                                 each gated on a measured firing rate
               screendomain.py   Whether a use of an accounting screen sits inside
                                 the sample it was validated on
+              posterior.py      What a flag is worth once you account for how
+                                rare the thing it screens for is
               explain.py        Plain-English interpretation for every metric,
                                 and the cross-lens synthesis
               symbols.py        Ticker → Yahoo symbol, resolved once
@@ -368,7 +384,7 @@ docs/
 scripts/
   build_glossary.py   Regenerates that glossary, and CI's drift check
   calibrate_checks.py How often each pre-trade check fires, measured offline
-tests/        996 offline tests
+tests/        1,034 offline tests
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -565,7 +581,7 @@ sentiment would need full article text and a lexicon that covers Indonesian.
 - **[docs/field-manual.html](docs/field-manual.html)** — a beginner's guide to the whole app
   ([published copy](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009)). All four
   lenses, the synthesis that reads them together, the statistics that decide whether to believe any
-  of it, and every one of the 81 metrics in a searchable glossary. Assumes no prior finance.
+  of it, and every one of the 82 metrics in a searchable glossary. Assumes no prior finance.
 
   Its glossary is **generated**, not transcribed: `scripts/build_glossary.py` injects the same
   strings `_lib/explain.py` puts on screen, and CI fails if a metric is added without regenerating.

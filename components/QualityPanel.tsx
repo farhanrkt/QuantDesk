@@ -1,11 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { Check, Minus, X } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Explain, ExplainedStat, TONE_HEX, useDetail,
 } from "@/components/ui/explain";
-import type { DomainDimension, ExplainMap, QualityResponse } from "@/lib/types";
+import { RangeField } from "@/components/ui/controls";
+import type {
+  DomainDimension, ExplainMap, ManipulationPosterior, QualityResponse,
+} from "@/lib/types";
 import { cn, num } from "@/lib/utils";
 
 const ASH = "#7A8CA0";
@@ -32,6 +36,107 @@ const ASH = "#7A8CA0";
 const VERDICT_WORD: Record<string, string> = {
   inside: "inside", outside: "outside", unknown: "cannot tell",
 };
+
+/**
+ * What a Beneish flag is actually worth.
+ *
+ * THE PRIOR IS THE FEATURE, WHICH IS WHY IT MOVES. The posterior is Bayes on
+ * two published constants and one number nobody can measure exactly — how
+ * common manipulation is — so presenting a single figure would hide the input
+ * the answer is most sensitive to. Drag it and the point is made: across every
+ * prevalence the literature supports, a flag never becomes more likely true
+ * than false.
+ *
+ * THE CONTROL SELECTS, IT DOES NOT CALCULATE. Every stop arrives from the
+ * server already computed and already worded. Recomputing here would put the
+ * arithmetic — and the judgement about what the number means — in TypeScript,
+ * which is the one place this codebase refuses to keep either.
+ *
+ * NOTHING HERE IS COLOURED. The M-Score above already carries the alarm; this
+ * number qualifies it downward. A second warning colour would count one fact
+ * twice and make the deflating figure look like a second flag.
+ */
+function FlagWorth({ data, explain }: {
+  data: ManipulationPosterior; explain?: ExplainMap[string];
+}) {
+  const defaultIndex = Math.max(0, data.curve.findIndex((p) => p.isDefault));
+  const [index, setIndex] = useState(defaultIndex);
+  const point = data.curve[Math.min(index, data.curve.length - 1)] ?? data.curve[0];
+  const shown = data.flagged ? point.givenFlagText : point.givenCleanText;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>
+          {data.flagged ? "What this flag is worth" : "What a clean reading is worth"}
+        </CardTitle>
+        <span className="flex items-center gap-1.5 font-mono text-[0.65rem] text-ash">
+          Beneish, cutoff {num(data.characteristics.cutoff)}
+          <Explain explain={explain} />
+        </span>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        {/* The shift, not the level. A bare "0.84%" beside a clean score reads
+            as a clean bill of health; the pair reads as what the test did. */}
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="num text-sm text-ash">{point.priorText}</span>
+          <span className="text-ash">&rarr;</span>
+          <span className="num text-2xl font-semibold text-chalk">{shown}</span>
+          <span className="text-[0.78rem] leading-relaxed text-ash">
+            {data.flagged
+              ? `likely to be a real manipulator, so about ${point.falseAlarmText} of flags
+                 like this are false alarms`
+              : "chance of manipulation anyway — the screen moved a number that was already small"}
+          </span>
+        </div>
+
+        <div className="rounded border border-rule bg-raised px-4 py-3">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <span className="eyebrow">
+              How common is manipulation? {point.priorText} of companies
+            </span>
+            {index !== defaultIndex && (
+              <button type="button" onClick={() => setIndex(defaultIndex)}
+                      className="eyebrow text-ash hover:text-chalk focus:outline-none
+                                 focus-visible:ring-1 focus-visible:ring-tech">
+                reset
+              </button>
+            )}
+          </div>
+          <RangeField index={index} count={data.curve.length} onChange={setIndex}
+                      label="Assumed rate of earnings manipulation" />
+          <p className="mt-2 text-[0.72rem] leading-relaxed text-ash">
+            {point.label
+              ? <>
+                  <span className="text-chalk/80">{point.label}</span> — {point.source}
+                  {point.event ? `, counting ${point.event}` : ""}.
+                  {point.extrapolated && (
+                    <span className="text-warn/90">
+                      {" "}Beneish&apos;s error rates were never measured against that
+                      broader definition, so this stop brackets the range rather than
+                      answering the same question.
+                    </span>
+                  )}
+                </>
+              : "Between the published estimates. Move it to a labelled stop to see whose."}
+          </p>
+        </div>
+
+        <p className="text-[0.78rem] leading-relaxed text-chalk/80">
+          {data.robustRange.sentence}
+        </p>
+
+        {data.partialNote && (
+          <p className="text-[0.72rem] leading-relaxed text-warn/90">{data.partialNote}</p>
+        )}
+
+        <p className="text-[0.7rem] leading-relaxed text-ash">
+          {data.characteristics.note} {data.caveat} Source: {data.characteristics.citation}.
+        </p>
+      </CardBody>
+    </Card>
+  );
+}
 
 function Dimension({
   dimension, explain, guided,
@@ -123,6 +228,11 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
         {altman && <ExplainedStat explain={ex.altman} sub={altman.reading} />}
         {beneish && <ExplainedStat explain={ex.beneish} sub={beneish.reading} />}
       </div>
+
+      {/* ---------------- what a flag is worth ---------------- */}
+      {data.manipulationPosterior && (
+        <FlagWorth data={data.manipulationPosterior} explain={ex.manipulationPosterior} />
+      )}
 
       {/* ---------------- where the three numbers came from ---------------- */}
       {data.domains && (

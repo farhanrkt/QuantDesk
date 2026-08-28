@@ -48,6 +48,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from . import posterior as posterior_lib
 from . import screendomain
 from .valuation import _get_row, _safe_float
 
@@ -371,7 +372,8 @@ def beneish_m_score(income, balance, cashflow) -> dict:
 # Orchestration
 # --------------------------------------------------------------------------- #
 def analyze(company: dict, symbol: Optional[str] = None,
-            market_code: Optional[str] = None) -> dict:
+            market_code: Optional[str] = None,
+            manipulation_prior: Optional[float] = None) -> dict:
     """The whole quality lens for one company.
 
     `company` is the dict `valuation.fetch_company` already returns, so this
@@ -382,6 +384,9 @@ def analyze(company: dict, symbol: Optional[str] = None,
     on. Both are optional: without them the affected dimensions report "unknown"
     rather than guessing, which is the same contract every other missing input
     gets here.
+
+    `manipulation_prior` selects which prevalence the Beneish posterior is
+    computed at. It changes no score — only what a flag is reported to be worth.
     """
     sector = company.get("sector") or ""
     industry = company.get("industry") or ""
@@ -456,6 +461,14 @@ def analyze(company: dict, symbol: Optional[str] = None,
         "piotroski": piotroski,
         "altman": altman,
         "beneish": beneish,
+        # WHAT A BENEISH FLAG IS ACTUALLY WORTH. The band decides the branch,
+        # so this can never disagree with the score printed beside it. See
+        # `_lib/posterior.py` for why the prior is the feature and why both the
+        # flagged and clean branches are framed as a shift rather than a level.
+        "manipulationPosterior": posterior_lib.for_beneish(
+            beneish.get("band"), prior=manipulation_prior,
+            indices_available=beneish.get("indicesAvailable"),
+            indices_total=beneish.get("indicesTotal", 8)),
         # WHERE THESE NUMBERS CAME FROM, beside the numbers themselves.
         # Applicability is already enforced above and is a different question:
         # this one is whether a screen that DOES apply is being asked about a

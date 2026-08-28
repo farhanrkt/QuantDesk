@@ -119,6 +119,7 @@ SAMPLES: dict[str, tuple] = {
     "signalRank": (93.0, {"signal": "lowVolatility", "raw": 0.14, "raw_text": "14.0%"}),
     "signalOverlap": (0.98, {"a": "Momentum", "b": "Trend"}),
     "checkFiringRate": (0.08, {"universe_label": "4 index universes"}),
+    "manipulationPosterior": (0.113, {"flagged": True, "prior_text": "2.8%"}),
     "validationDomain": ("outside", {"name": "Period", "sample": "US filings, 1976-1996",
                                      "this_use": "2025 filings",
                                      "note": "29 years after the sample ends."}),

@@ -164,6 +164,60 @@ export interface DomainDimension {
   note: string;
 }
 
+/**
+ * One point on the prior/posterior curve, served ALREADY COMPUTED and already
+ * worded. The control selects a point; it never calculates one, because
+ * arithmetic in TypeScript is arithmetic no pytest can reach.
+ */
+export interface PosteriorPoint {
+  prior: number;
+  priorText: string;
+  /** Present only where this stop is a published estimate worth naming. */
+  label: string | null;
+  source: string | null;
+  event: string | null;
+  /** True where the prior counts a broader event than the sensitivity was measured on. */
+  extrapolated: boolean;
+  isDefault: boolean;
+  givenFlag: number;
+  givenFlagText: string;
+  falseAlarmText: string;
+  givenClean: number;
+  givenCleanText: string;
+}
+
+/**
+ * What a Beneish flag is worth, given how rare manipulation is.
+ *
+ * There is no tone here and there must not be: the M-Score already carries the
+ * alarm, and this number qualifies it downward at every published prior. Colour
+ * comes from `explain.manipulationPosterior`, which is always neutral.
+ */
+export interface ManipulationPosterior {
+  screen: string;
+  flagged: boolean;
+  band: string;
+  prior: number;
+  priorText: string;
+  posterior: number;
+  posteriorText: string;
+  givenFlag: number;
+  givenClean: number;
+  /** How far the test moved the estimate — the honest framing for both branches. */
+  shift: { from: number; fromText: string; to: number; toText: string };
+  characteristics: {
+    cutoff: number; sensitivity: number; falsePositiveRate: number;
+    specificity: number; citation: string; note: string;
+  };
+  curve: PosteriorPoint[];
+  anchors: { prior: number; label: string; source: string; event: string;
+             extrapolated: boolean }[];
+  robustRange: { lowText: string; highText: string; sentence: string };
+  partialScore: boolean;
+  partialNote: string | null;
+  caveat: string;
+}
+
 export interface ScreenDomain {
   label: string;
   citation: string;
@@ -203,6 +257,8 @@ export interface QualityResponse {
     indices: Record<string, number | null>;
     indicesAvailable: number; indicesTotal: number;
   } | null;
+  /** What a flag is worth. Null when no M-Score could be computed. */
+  manipulationPosterior?: ManipulationPosterior | null;
   /** Where the three numbers came from. Absent when the lens refused to score. */
   domains?: ValidationDomains;
   /** Machine-readable reason the lens declined, when it did. */
