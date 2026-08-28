@@ -312,30 +312,32 @@ export function TechnicalPanel({
               The 50-day and 200-day averages never crossed inside this range. Try a longer one.
             </p>
           ) : (
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                  <th>Date</th><th>What happened</th>
-                  <th className="text-right">Price that day</th>
-                  <th className="text-right">Change since</th>
-                </tr>
-              </thead>
-              <tbody>
-                {signals.map((s) => (
-                  <tr key={s.date} className="border-b border-rule/60 last:border-0">
-                    <td className="num px-5 py-2 text-ash">{s.date}</td>
-                    <td className="px-5 py-2" style={{ color: s.type === "Buy" ? UP : DOWN }}>
-                      {s.description}
-                    </td>
-                    <td className="num px-5 py-2 text-right">{num(s.price)}</td>
-                    <td className={cn("num px-5 py-2 text-right",
-                                      s.changeSince >= 0 ? "text-acc" : "text-dist")}>
-                      {s.changeSince >= 0 ? "+" : ""}{num(s.changeSince, 1)}%
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
+                    <th>Date</th><th>What happened</th>
+                    <th className="text-right">Price that day</th>
+                    <th className="text-right">Change since</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {signals.map((s) => (
+                    <tr key={s.date} className="border-b border-rule/60 last:border-0">
+                      <td className="num px-5 py-2 text-ash">{s.date}</td>
+                      <td className="px-5 py-2" style={{ color: s.type === "Buy" ? UP : DOWN }}>
+                        {s.description}
+                      </td>
+                      <td className="num px-5 py-2 text-right">{num(s.price)}</td>
+                      <td className={cn("num px-5 py-2 text-right",
+                                        s.changeSince >= 0 ? "text-acc" : "text-dist")}>
+                        {s.changeSince >= 0 ? "+" : ""}{num(s.changeSince, 1)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </CardBody>
       </Card>

@@ -438,25 +438,27 @@ function PivotTable({
   return (
     <div>
       <div className="eyebrow mb-1.5">{title}</div>
-      <table className="w-full text-left text-xs">
-        <tbody>
-          {rows.map(([label, value]) => (
-            <tr key={label} className="border-b border-rule/40 last:border-0">
-              <td className={cn("py-1", label === "Pivot" ? "text-chalk" : "text-ash")}>
-                {label}
-              </td>
-              <td className={cn("num py-1 text-right",
-                                label === "Pivot" ? "font-semibold text-chalk"
-                                  : label.startsWith("R") ? "text-dist/80" : "text-acc/80")}>
-                {money(value)}
-              </td>
-              <td className="num py-1 text-right text-ash">
-                {value == null ? "—" : signedPct(value / price - 1)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs">
+          <tbody>
+            {rows.map(([label, value]) => (
+              <tr key={label} className="border-b border-rule/40 last:border-0">
+                <td className={cn("py-1", label === "Pivot" ? "text-chalk" : "text-ash")}>
+                  {label}
+                </td>
+                <td className={cn("num py-1 text-right",
+                                  label === "Pivot" ? "font-semibold text-chalk"
+                                    : label.startsWith("R") ? "text-dist/80" : "text-acc/80")}>
+                  {money(value)}
+                </td>
+                <td className="num py-1 text-right text-ash">
+                  {value == null ? "—" : signedPct(value / price - 1)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

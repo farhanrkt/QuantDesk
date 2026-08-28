@@ -219,43 +219,45 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
             </span>
           </CardHeader>
           <CardBody className="px-0">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                  <th>Position</th>
-                  <th className="text-right">Share of money</th>
-                  <th className="text-right">Share of risk</th>
-                  {!guided && <th className="text-right">Volatility</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {[...rows].sort((a, b) => b.riskShare - a.riskShare).map((row) => {
-                  const explain = ex[`riskShare.${row.ticker}`];
-                  return (
-                    <tr key={row.ticker} className="border-b border-rule/60 last:border-0">
-                      <td className="num px-5 py-2">
-                        <span className="flex items-center gap-1.5">
-                          {row.ticker}
-                          <Explain explain={explain} />
-                        </span>
-                      </td>
-                      <td className="num px-5 py-2 text-right text-ash">
-                        {pct(row.weight, 0)}
-                      </td>
-                      <td className={cn("num px-5 py-2 text-right font-semibold",
-                                        explain ? TONE_TEXT[explain.tone] : "text-chalk")}>
-                        {pct(row.riskShare, 0)}
-                      </td>
-                      {!guided && (
-                        <td className="num px-5 py-2 text-right text-ash">
-                          {pct(row.volatility, 0)}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
+                    <th>Position</th>
+                    <th className="text-right">Share of money</th>
+                    <th className="text-right">Share of risk</th>
+                    {!guided && <th className="text-right">Volatility</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...rows].sort((a, b) => b.riskShare - a.riskShare).map((row) => {
+                    const explain = ex[`riskShare.${row.ticker}`];
+                    return (
+                      <tr key={row.ticker} className="border-b border-rule/60 last:border-0">
+                        <td className="num px-5 py-2">
+                          <span className="flex items-center gap-1.5">
+                            {row.ticker}
+                            <Explain explain={explain} />
+                          </span>
                         </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        <td className="num px-5 py-2 text-right text-ash">
+                          {pct(row.weight, 0)}
+                        </td>
+                        <td className={cn("num px-5 py-2 text-right font-semibold",
+                                          explain ? TONE_TEXT[explain.tone] : "text-chalk")}>
+                          {pct(row.riskShare, 0)}
+                        </td>
+                        {!guided && (
+                          <td className="num px-5 py-2 text-right text-ash">
+                            {pct(row.volatility, 0)}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
               The two columns are the point. A position holding a tenth of the money and a
               quarter of the risk is not diversified by being one of ten — it is the

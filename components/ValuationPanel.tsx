@@ -226,8 +226,14 @@ export function ValuationPanel({
         </div>
       )}
 
-      <div className={simple ? "hidden" : "grid gap-4 lg:grid-cols-[1.4fr_1fr]"}>
-        <Card>
+      {/* `minmax(0, …)` AND `min-w-0`, NOT `1.4fr_1fr`. A grid item's automatic minimum
+          size is its min-content width, so the projection table below refused to shrink and
+          stretched the track past the viewport instead of scrolling inside its own wrapper —
+          the whole page scrolled sideways on a phone. The track cap fixes the two-column
+          case and `min-w-0` on each child fixes the stacked one. */}
+      <div className={simple ? "hidden"
+                             : "grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"}>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>
               Base-case {data.engine === "DCF" ? "cash flow" : "dividend"} projection
@@ -238,51 +244,55 @@ export function ValuationPanel({
             </div>
           </CardHeader>
           <CardBody className="px-0">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                  <th>Year</th>
-                  <th className="text-right">{data.streamLabel}</th>
-                  <th className="text-right">Discount factor</th>
-                  <th className="text-right">Present value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.schedule.map((row) => (
-                  <tr key={row.year} className="border-b border-rule/60 last:border-0">
-                    <td className="num px-5 py-2 text-ash">{row.year}</td>
-                    <td className="num px-5 py-2 text-right">{row.stream}</td>
-                    <td className="num px-5 py-2 text-right text-ash">{row.discountFactor}</td>
-                    <td className="num px-5 py-2 text-right">{row.presentValue}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
+                    <th>Year</th>
+                    <th className="text-right">{data.streamLabel}</th>
+                    <th className="text-right">Discount factor</th>
+                    <th className="text-right">Present value</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.schedule.map((row) => (
+                    <tr key={row.year} className="border-b border-rule/60 last:border-0">
+                      <td className="num px-5 py-2 text-ash">{row.year}</td>
+                      <td className="num px-5 py-2 text-right">{row.stream}</td>
+                      <td className="num px-5 py-2 text-right text-ash">{row.discountFactor}</td>
+                      <td className="num px-5 py-2 text-right">{row.presentValue}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {data.history.length > 0 && (
               <>
                 <div className="eyebrow px-5 pb-2 pt-5">
                   {data.engine === "DCF" ? "Historical free cash flow" : "Declared dividend history"}
                 </div>
-                <table className="w-full text-left text-xs">
-                  <tbody>
-                    {data.history.map((row, i) => (
-                      <tr key={i} className="border-b border-rule/60 last:border-0">
-                        {Object.values(row).map((cell, j) => (
-                          <td key={j} className={`num px-5 py-2 ${j === 0 ? "text-ash" : "text-right"}`}>
-                            {cell}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <tbody>
+                      {data.history.map((row, i) => (
+                        <tr key={i} className="border-b border-rule/60 last:border-0">
+                          {Object.values(row).map((cell, j) => (
+                            <td key={j} className={`num px-5 py-2 ${j === 0 ? "text-ash" : "text-right"}`}>
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
           </CardBody>
         </Card>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card accent={accent}>
             <CardHeader>
               <CardTitle>
@@ -290,32 +300,36 @@ export function ValuationPanel({
               </CardTitle>
             </CardHeader>
             <CardBody className="px-0">
-              <table className="w-full text-left text-xs">
-                <tbody>
-                  {data.bridge.map((row) => (
-                    <tr key={row.component} className="border-b border-rule/60 last:border-0">
-                      <td className="px-5 py-2 text-ash">{row.component}</td>
-                      <td className="num px-5 py-2 text-right">{row.amount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <tbody>
+                    {data.bridge.map((row) => (
+                      <tr key={row.component} className="border-b border-rule/60 last:border-0">
+                        <td className="px-5 py-2 text-ash">{row.component}</td>
+                        <td className="num px-5 py-2 text-right">{row.amount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardBody>
           </Card>
 
           <Card>
             <CardHeader><CardTitle>Model diagnostics</CardTitle></CardHeader>
             <CardBody className="px-0">
-              <table className="w-full text-left text-xs">
-                <tbody>
-                  {data.diagnostics.map((row) => (
-                    <tr key={row.metric} className="border-b border-rule/60 last:border-0">
-                      <td className="px-5 py-2 text-ash">{row.metric}</td>
-                      <td className="num px-5 py-2 text-right">{row.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <tbody>
+                    {data.diagnostics.map((row) => (
+                      <tr key={row.metric} className="border-b border-rule/60 last:border-0">
+                        <td className="px-5 py-2 text-ash">{row.metric}</td>
+                        <td className="num px-5 py-2 text-right">{row.value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardBody>
           </Card>
         </div>

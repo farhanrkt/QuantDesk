@@ -110,7 +110,8 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
           <ul>
             {checks.map((check) => (
               <li key={check.label}
-                  className="flex items-baseline gap-3 border-b border-rule/60 px-5 py-2 last:border-0">
+                  className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b
+                             border-rule/60 px-5 py-2 last:border-0">
                 <span className="mt-0.5 shrink-0">
                   {check.passed === null
                     ? <Minus aria-label="no reading" className="h-3.5 w-3.5 text-ash" />
@@ -118,8 +119,14 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                       ? <Check aria-label="points up" className="h-3.5 w-3.5 text-acc" />
                       : <X aria-label="points down" className="h-3.5 w-3.5 text-dist" />}
                 </span>
-                <span className="w-56 shrink-0 text-xs text-chalk/90">{check.label}</span>
-                <span className="flex-1 text-[0.7rem] leading-relaxed text-ash">
+                <span className="min-w-0 flex-1 text-xs text-chalk/90 sm:w-56 sm:flex-none">
+                  {check.label}
+                </span>
+                {/* THE FIXED 224px LABEL LEAVES 73px FOR THIS ONE AT 375px, which is narrower
+                    than its longest word, so the row — and therefore the page — scrolled
+                    sideways. Below `sm` the detail takes a line of its own and the label takes
+                    the width instead; at `sm` and above the two-column row is unchanged. */}
+                <span className="w-full text-[0.7rem] leading-relaxed text-ash sm:w-auto sm:flex-1">
                   {check.detail}
                 </span>
               </li>

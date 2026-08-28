@@ -292,7 +292,8 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
               {(simple ? piotroski.signals.filter((s) => s.passed !== null)
                        : piotroski.signals).map((signal) => (
                 <li key={signal.name}
-                    className="flex items-baseline gap-3 border-b border-rule/60 px-5 py-2 last:border-0">
+                    className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b
+                               border-rule/60 px-5 py-2 last:border-0">
                   <span className="mt-0.5 shrink-0">
                     {signal.passed === null
                       ? <Minus aria-label="not computable" className="h-3.5 w-3.5 text-ash" />
@@ -300,8 +301,16 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                         ? <Check aria-label="pass" className="h-3.5 w-3.5 text-acc" />
                         : <X aria-label="fail" className="h-3.5 w-3.5 text-dist" />}
                   </span>
-                  <span className="flex-1 text-xs text-chalk/90">{signal.name}</span>
-                  <span className="num shrink-0 text-[0.7rem] text-ash">{signal.detail}</span>
+                  <span className="min-w-0 flex-1 text-xs text-chalk/90">{signal.name}</span>
+                  {/* NOT `shrink-0`. `detail` is a sentence, not a figure — "earnings backed
+                      by cash rather than accruals" is 296px wide, and forbidding it to shrink
+                      pushed the whole Quality tab 59px past a 375px viewport, so the PAGE
+                      scrolled sideways rather than this row. Wrapping instead drops it to its
+                      own line when the name has taken the width, and changes nothing above
+                      the breakpoint where both already fit. */}
+                  <span className="num w-full text-[0.7rem] text-ash sm:w-auto">
+                    {signal.detail}
+                  </span>
                 </li>
               ))}
             </ul>
