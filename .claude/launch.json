@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "quantdesk-api",
+      "runtimeExecutable": ".venv/bin/uvicorn",
+      "runtimeArgs": ["index:app", "--app-dir", "api", "--reload", "--port", "8000"],
+      "port": 8000
     }
   ]
 }
