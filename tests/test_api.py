@@ -227,6 +227,75 @@ def test_confluence_carries_the_pre_trade_block_even_when_legs_fail(client, monk
 
 
 # --------------------------------------------------------------------------- #
+# The one route whose input is personal
+# --------------------------------------------------------------------------- #
+def test_the_portfolio_route_is_never_stored_in_a_shared_cache(client, monkeypatch):
+    """Every other request asks about a company; this one says what somebody
+    owns. The edge cache is keyed by URL, so a cached response is a copy of a
+    portfolio in shared infrastructure keyed by a string containing it."""
+    monkeypatch.setattr(index.portfolio, "analyse",
+                        lambda *a, **k: {"usable": True, "pairs": []})
+    response = client.get("/api/portfolio",
+                          params={"candidate": "NVDA", "holdings": "AAPL,MSFT"})
+    assert response.status_code == 200
+    cache = response.headers["Cache-Control"]
+    assert "no-store" in cache
+    assert "s-maxage" not in cache, "a portfolio must never reach the edge cache"
+
+
+def test_weights_are_matched_by_name_rather_than_by_position(client, monkeypatch):
+    """A positional list would attach the wrong weight to the wrong name the
+    first time a symbol was dropped for thin history — a plausible wrong answer
+    rather than an error."""
+    seen = {}
+    monkeypatch.setattr(index.portfolio, "analyse",
+                        lambda c, h, weights=None, **k: seen.update(
+                            candidate=c, holdings=list(h), weights=weights) or {"usable": False})
+    client.get("/api/portfolio", params={
+        "candidate": "NVDA", "holdings": "AAPL,MSFT", "weights": "MSFT:2,AAPL:0.5"})
+    assert seen["weights"] == {"MSFT": 2.0, "AAPL": 0.5}
+    assert seen["holdings"] == ["AAPL", "MSFT"]
+
+
+@pytest.mark.parametrize("weights", ["AAPL:nonsense", "AAPL:-1", "AA PL:1", "AAPL:0"])
+def test_a_malformed_weight_is_refused_by_name(client, weights):
+    response = client.get("/api/portfolio", params={
+        "candidate": "NVDA", "holdings": "AAPL", "weights": weights})
+    assert response.status_code == 400
+
+
+def test_the_candidate_is_never_correlated_against_itself(client, monkeypatch):
+    seen = {}
+    monkeypatch.setattr(index.portfolio, "analyse",
+                        lambda c, h, **k: seen.update(holdings=list(h)) or {"usable": False})
+    client.get("/api/portfolio", params={"candidate": "AAPL", "holdings": "AAPL,MSFT"})
+    assert seen["holdings"] == ["MSFT"]
+
+    only_itself = client.get("/api/portfolio",
+                             params={"candidate": "AAPL", "holdings": "AAPL"})
+    assert only_itself.status_code == 400
+
+
+def test_the_holdings_list_is_capped(client):
+    too_many = ",".join(f"AA{i:02d}" for i in range(index.PORTFOLIO_MAX_HOLDINGS + 5))
+    response = client.get("/api/portfolio",
+                          params={"candidate": "NVDA", "holdings": too_many})
+    assert response.status_code == 400
+    assert str(index.PORTFOLIO_MAX_HOLDINGS) in response.json()["detail"]
+
+
+def test_an_idx_holding_keeps_its_suffix_under_a_us_market(client, monkeypatch):
+    """The same rule every other route follows: an explicitly typed suffix wins
+    over the dropdown, because the user was more specific than it."""
+    seen = {}
+    monkeypatch.setattr(index.portfolio, "analyse",
+                        lambda c, h, **k: seen.update(holdings=list(h)) or {"usable": False})
+    client.get("/api/portfolio",
+               params={"candidate": "NVDA", "holdings": "BBCA.JK,MSFT", "market": "US"})
+    assert seen["holdings"] == ["BBCA.JK", "MSFT"]
+
+
+# --------------------------------------------------------------------------- #
 # Q5/Q8 — response headers and payload size
 # --------------------------------------------------------------------------- #
 def test_cache_header_serves_the_edge_and_revalidates_the_browser(client):

@@ -5,7 +5,8 @@ import { useCallback, useRef, useState } from "react";
 import type {
   AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
   Leg, ManualInputs, EventStudyResponse, Market, NewsResponse, QualityResponse,
-  PeersResponse, PreTrade, RankResponse, ScreenerResponse, Synthesis, TechnicalResponse,
+  PeersResponse, PortfolioResponse, PreTrade, RankResponse, ScreenerResponse,
+  Synthesis, TechnicalResponse,
   UniversesResponse,
   ValuationResponse,
 } from "./types";
@@ -517,6 +518,54 @@ export function useDeepen() {
  * this firm's header — the same class of mistake `_lib/symbols.py` exists to
  * prevent, arriving through the UI instead of the API.
  */
+/**
+ * Where the loaded ticker sits against a book of holdings.
+ *
+ * A SEPARATE, DELIBERATE REQUEST, like the peer comparison and for a sharper
+ * reason. It costs a batch download of the whole book, most readers will not
+ * have entered one, and — unlike every other route here — its input is personal.
+ * Firing it automatically on every ticker run would send somebody's holdings to
+ * the server on the strength of them having typed a symbol.
+ *
+ * The holdings themselves never reach the analytics event. `track` has always
+ * carried a market code and a count of successful lenses and nothing else; a
+ * portfolio is the single most revealing thing this app can be told, and it is
+ * not collected.
+ */
+export function usePortfolio() {
+  const [state, setState] = useState<Engine<PortfolioResponse>>({ status: "idle" });
+  const seq = useRef(0);
+  const inflight = useRef<AbortController | null>(null);
+
+  const compare = useCallback(
+    (o: { candidate: string; market: Market; holdings: string[]; weights?: string }) => {
+      inflight.current?.abort();
+      const controller = new AbortController();
+      inflight.current = controller;
+      const token = (seq.current += 1);
+      const live = () => seq.current === token;
+
+      setState({ status: "loading" });
+      get<PortfolioResponse>("/api/portfolio", {
+        candidate: o.candidate, market: o.market,
+        holdings: o.holdings.join(","), weights: o.weights,
+      }, controller.signal)
+        .then((data) => { if (live()) setState({ status: "ready", data }); })
+        .catch((err) => {
+          if (isAbort(err) || !live()) return;
+          setState({ status: "error", failure: asFailure(err) });
+        });
+    }, []);
+
+  const reset = useCallback(() => {
+    inflight.current?.abort();
+    seq.current += 1;
+    setState({ status: "idle" });
+  }, []);
+
+  return { state, compare, reset };
+}
+
 export function usePeers() {
   const [state, setState] = useState<Engine<PeersResponse>>({ status: "idle" });
   const seq = useRef(0);

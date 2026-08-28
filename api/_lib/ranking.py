@@ -380,16 +380,11 @@ def signal_correlation(rows: list[dict]) -> dict:
     # It equals the column count when the signals are independent and collapses
     # toward 1 as they become redundant. Reporting it turns the caveat from an
     # assertion into a measurement the reader can check.
-    effective = None
-    try:
-        eigenvalues = np.linalg.eigvalsh(matrix.to_numpy(dtype="float64"))
-        eigenvalues = eigenvalues[np.isfinite(eigenvalues)]
-        eigenvalues = np.clip(eigenvalues, 0.0, None)
-        denominator = float(np.sum(eigenvalues ** 2))
-        if denominator > 0:
-            effective = float(np.sum(eigenvalues) ** 2 / denominator)
-    except np.linalg.LinAlgError:
-        effective = None
+    # The estimator itself lives in `riskmodel` because the portfolio panel
+    # asks the identical question of a holdings matrix — how many independent
+    # bets is this really? — and two copies would eventually disagree about
+    # what redundancy means.
+    effective = riskmodel.effective_independent(matrix.to_numpy(dtype="float64"))
 
     return {
         "available": True,

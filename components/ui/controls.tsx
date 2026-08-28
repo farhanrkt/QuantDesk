@@ -152,13 +152,18 @@ export function Toggle({
 }
 
 export function ApplyButton({
-  onClick, busy, children = "Apply",
-}: { onClick: () => void; busy?: boolean; children?: React.ReactNode }) {
+  onClick, busy, disabled, children = "Apply",
+}: {
+  onClick: () => void; busy?: boolean;
+  /** Separate from `busy`: nothing to submit is not the same as still running. */
+  disabled?: boolean;
+  children?: React.ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
-      disabled={busy}
+      disabled={busy || disabled}
       className={cn(
         "h-9 shrink-0 rounded border border-tech/50 bg-tech/10 px-4",
         "font-mono text-[0.65rem] uppercase tracking-[0.14em] text-chalk",

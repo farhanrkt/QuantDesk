@@ -790,6 +790,62 @@ export interface PreTrade {
   } | null;
 }
 
+/**
+ * Where a candidate sits against a book of holdings.
+ *
+ * The one place in this app where a measurement informs position size, and it
+ * is earned: `stability` carries the offline finding that licenses it — pairwise
+ * correlations persist year to year — along with the limit the same measurement
+ * found, that they run higher in bad quarters. Never render the numbers without
+ * it.
+ */
+export interface PortfolioPair {
+  ticker: string;
+  correlation: number;
+  band: "high" | "moderate" | "low";
+  overlapDays: number;
+}
+
+export interface PortfolioRiskRow {
+  ticker: string;
+  weight: number;
+  riskShare: number;
+  volatility: number;
+  /** Risk share minus money share. Positive means bigger than it looks. */
+  excess: number;
+}
+
+export interface PortfolioResponse {
+  candidate: string;
+  market: Market;
+  usable: boolean;
+  reason?: string;
+  missing?: string[];
+  holdings?: string[];
+  windowDays?: number;
+  equalWeighted?: boolean;
+  observations?: number;
+  pairs?: PortfolioPair[];
+  portfolioCorrelation?: number | null;
+  independence?: {
+    before: number | null; after: number | null;
+    holdings: number; withCandidate: number; gain: number | null;
+  };
+  contributions?: {
+    usable: boolean; reason?: string;
+    portfolioVolatility?: number; rows?: PortfolioRiskRow[];
+  };
+  volatility?: Record<string, number>;
+  stability?: {
+    measuredOn: string | null;
+    headline: string | null;
+    yearlyPersistence: { mean: number | null; min: number | null; max: number | null };
+    stressRise: { mean: number | null; min: number | null; max: number | null };
+    caveats: string[];
+  } | null;
+  explain?: ExplainMap;
+}
+
 export interface ConfluenceResponse {
   ticker: string;
   anomaly: Leg<AnomalyResponse>;

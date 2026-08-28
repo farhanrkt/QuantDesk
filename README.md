@@ -256,6 +256,27 @@ worth** of information. That is printed in the header.
 which fetch one company at a time, which is exactly why they are a second step and not
 another column.
 
+**Portfolio fit.** The question no single-ticker page can answer: *is this the fourth copy of a
+bet I already hold?* Paste what you own and it reports the candidate's correlation with each
+holding, how many **independent** positions the book really amounts to before and after adding
+it — nine names that all move together are closer to one position than to nine — and what share
+of the portfolio's risk each name carries against its share of the money. A holding with a
+sixth of the money and half the risk is the portfolio wearing a smaller name.
+
+**This is the only place in the app where a measurement informs position size, and it was
+earned.** Using a correlation to size something is a claim that last year's correlation says
+something about next year's, so that was measured first: across four index universes, one
+year's pairwise correlations rank-correlate **0.50 to 0.65** with the next year's, at
+t-statistics near or above ten. The composite ranking's information coefficient, by contrast,
+was indistinguishable from zero. The same measurement found the limit and the panel carries it:
+correlations run about **0.06 higher in the worst quarters**, so an ordinary year's reading is a
+floor on how correlated these will be when it matters.
+
+Holdings live in your browser, never on a server — this app still has no database. They are
+sent to answer that one question and forgotten; the route sets `no-store` so no shared cache
+keeps a copy, and the list never reaches the analytics event. It does travel in the request URL,
+so it lands in the host's access log like every other address, which the panel says out loud.
+
 **Compare with peers.** The ranking tier's percentiles, pointed at a single name. Every other
 figure in the app is absolute — a 33% worst fall, 28% volatility — and a reader with no priors
 cannot tell an ordinary number from an alarming one. On the Trend tab, one button places the
@@ -342,6 +363,7 @@ where a constant was invented, it got replaced by an estimator.
 | Quoting an estimated bid-ask spread as a cost | **The estimator's own resolution floor** | Both spread estimators have a noise floor proportional to volatility — 0.148× and 0.361× the daily standard deviation, measured with the true spread set to zero. On a mega-cap that floor is an order of magnitude above the real spread, so the app reported a cost the stock does not charge. Below the floor it now reports a ceiling |
 | Assuming the signal works | **Event study** (Brown & Warner 1985) | Measures it, and reports null results |
 | Reporting raw screener hits | **Benjamini-Hochberg (1995)** | Scanning many names produces hits by construction |
+| Sizing on a correlation because it seems reasonable | **Measuring whether correlations persist first** | One year's pairwise correlations rank-correlate 0.50-0.65 with the next year's across four universes, where the ranking's information coefficient was indistinguishable from zero. That gap is the whole licence for the portfolio panel, and a test fails if a re-measurement removes it |
 | A bare screen flag | **Bayes on the screen's published error rates** | A screen that catches most manipulators on a population where manipulation is rare still produces mostly false alarms. The prevalence decides the answer and nobody can measure it, so it is a control — and the conclusion holds across every value the literature supports |
 | An accounting score with no provenance | **The published sample, on the axes that can be checked** | Piotroski was fitted on US value stocks in 1976-1996, Altman on 1960s manufacturers, Beneish on 1980s SEC cases. Every use today is outside all three, which is provenance rather than a defect — so it is stated, never coloured, and never counted into a fit score |
 | A pre-trade flag on its own | **The flag plus its measured firing rate** | "Altman says distress" is unreadable without knowing how often Altman says distress. Measured across four index universes: the conditions that turned out to fire on most of the market are demoted to base conditions rather than presented as findings, and an uncalibrated check is withheld |
@@ -380,6 +402,8 @@ api/
                                 each gated on a measured firing rate
               screendomain.py   Whether a use of an accounting screen sits inside
                                 the sample it was validated on
+              portfolio.py      The candidate against a book of holdings —
+                                correlation, independence, risk against money
               posterior.py      What a flag is worth once you account for how
                                 rare the thing it screens for is
               explain.py        Plain-English interpretation for every metric,
@@ -392,7 +416,10 @@ docs/
 scripts/
   build_glossary.py   Regenerates that glossary, and CI's drift check
   calibrate_checks.py How often each pre-trade check fires, measured offline
-tests/        1,038 offline tests
+  measure_correlation_stability.py
+                      Do correlations persist? The measurement that
+                      licenses the portfolio panel to inform position size
+tests/        1,080 offline tests
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -426,6 +453,7 @@ Everything the UI does is a plain `GET`. Interactive docs at `/api/docs`.
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
 | `GET /api/rank/universes` | The predefined lists, each with its as-of date |
+| `GET /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. `no-store`, never cached |
 | `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
 | `GET /api/rank/deepen` | Quality + valuation for a shortlist of up to 8 |
 | `GET /api/screener` | Multi-ticker anomaly scan with FDR correction |
@@ -583,7 +611,10 @@ thresholds that would fire on noise. Calendar effects
 (January, Halloween) are where the multiple-testing critique bites hardest. Headline
 sentiment would need full article text and a lexicon that covers Indonesian.
 
-**No state.** No accounts, no saved watchlists, no persistence. Every session starts empty.
+**No state.** No accounts, no saved watchlists, no persistence on any server. The reading mode,
+the holding horizon and the holdings list live in your own browser's storage and go no further;
+every session starts empty on a new machine. The portfolio route is the one place personal
+input crosses the wire, and what that does and does not cost is set out on the panel itself.
 
 ---
 
@@ -592,7 +623,7 @@ sentiment would need full article text and a lexicon that covers Indonesian.
 - **[docs/field-manual.html](docs/field-manual.html)** — a beginner's guide to the whole app
   ([published copy](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009)). All four
   lenses, the synthesis that reads them together, the statistics that decide whether to believe any
-  of it, and every one of the 82 metrics in a searchable glossary. Assumes no prior finance.
+  of it, and every one of the 85 metrics in a searchable glossary. Assumes no prior finance.
 
   Its glossary is **generated**, not transcribed: `scripts/build_glossary.py` injects the same
   strings `_lib/explain.py` puts on screen, and CI fails if a metric is added without regenerating.

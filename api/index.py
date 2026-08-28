@@ -57,8 +57,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from _lib import (accumulation, eventstudy, explain, market_data, microstructure,
-                  news, pretrade, quality, ranking, riskmodel, symbols, technical,
-                  universes, valuation)
+                  news, portfolio, pretrade, quality, ranking, riskmodel, symbols,
+                  technical, universes, valuation)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -130,6 +130,9 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # Runs the identical universe scan and keeps one row of it, so it carries
     # the identical cost and the identical cap.
     "/api/peers": (3, 60),
+    # One batch download of the whole book plus the candidate. Same shape of
+    # cost as the ranking scan, same cap.
+    "/api/portfolio": (3, 60),
     # Deepening runs the fundamentals lenses per name and does NOT batch, so
     # this is the amplifying half of the funnel and is capped hardest.
     "/api/rank/deepen": (2, 60),
@@ -226,6 +229,27 @@ def ok(payload: dict) -> JSONResponse:
     # Cache at the edge: quotes move, but not within 60s, and every engine
     # re-runs a network fetch that we do not want to pay for on each keystroke.
     return JSONResponse(content=clean(payload), headers={"Cache-Control": CACHE})
+
+
+def private_ok(payload: dict) -> JSONResponse:
+    """A response that no shared cache may keep a copy of.
+
+    THE ONLY ROUTE IN THIS APP WHOSE INPUT IS PERSONAL. Every other request says
+    "tell me about this company"; the portfolio route says "here is what I own",
+    which is a different kind of fact about the person asking. The edge cache is
+    keyed by URL, so a cached response is a copy of somebody's holdings sitting
+    in shared infrastructure keyed by a string containing those holdings. The
+    saving is a second of compute; the cost is not worth naming.
+
+    What this does NOT fix, and what the README says out loud rather than
+    glossing: the holdings still travel in a query string, so they appear in the
+    hosting platform's access log like every other URL. That is the price of a
+    GET, and the alternative — a POST body — would mean relaxing the CORS method
+    allowlist and breaking the property that everything the UI does is a plain
+    GET. It is disclosed instead of hidden.
+    """
+    return JSONResponse(content=clean(payload),
+                        headers={"Cache-Control": "no-store"})
 
 
 def resolved(ticker: str, market: str) -> str:
@@ -752,6 +776,103 @@ def _deepen_valuation(symbol: str, market: str) -> dict:
         "terminalShare": payload["baseCase"].get("terminalShare"),
         "explain": payload.get("explain", {}),
     }
+
+
+# --------------------------------------------------------------------------- #
+# Portfolio context — where a candidate sits against what is already owned
+#
+# NO STATE, WHICH IS A CONSTRAINT RATHER THAN A FEATURE HERE. The holdings
+# arrive, are used and are forgotten; nothing is stored, because there is
+# nowhere to store it. The list lives in the reader's own browser and is sent on
+# each request, exactly as the ranking tier's pasted universe already is.
+# --------------------------------------------------------------------------- #
+PORTFOLIO_MAX_HOLDINGS = 40
+
+
+def _parse_weights(raw: Optional[str]) -> dict:
+    """`AAPL:0.3,MSFT:0.2` into a mapping.
+
+    SELF-DESCRIBING RATHER THAN POSITIONAL. A parallel list aligned to
+    `holdings` would silently attach the wrong weight to the wrong name the
+    first time a symbol was dropped for thin history — a plausible wrong answer
+    rather than an error, which is the failure mode this codebase keeps finding.
+    """
+    if not raw:
+        return {}
+    out: dict = {}
+    for chunk in raw.replace("\n", ",").split(","):
+        if not chunk.strip():
+            continue
+        ticker, _, value = chunk.partition(":")
+        ticker = ticker.strip().upper()
+        if not TICKER_RE.match(ticker):
+            raise HTTPException(status_code=400,
+                                detail=f"Not a valid ticker symbol in weights: {ticker!r}.")
+        try:
+            weight = float(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Weight for {ticker} must be a number, as TICKER:WEIGHT.") from exc
+        if not (weight > 0):
+            raise HTTPException(status_code=400,
+                                detail=f"Weight for {ticker} must be above zero.")
+        out[ticker] = weight
+    return out
+
+
+@app.get("/api/portfolio")
+def portfolio_context(
+    candidate: str = Query(..., pattern=TICKER_PATTERN),
+    holdings: str = Query(..., min_length=1, max_length=800,
+                          description="Comma or newline separated symbols already held."),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+    weights: Optional[str] = Query(
+        None, max_length=800,
+        description="Optional TICKER:WEIGHT pairs. Equal weights are assumed without it."),
+):
+    """Where a candidate sits against a book of holdings.
+
+    Answers the question no single-ticker page can: is this the fourth copy of a
+    bet already held? Correlation against each holding, how many INDEPENDENT
+    positions the book really amounts to before and after, and what share of the
+    portfolio's risk each name carries against its share of the money.
+
+    It informs position size, which every other measured thing in this app
+    refuses to do, and it is allowed to because the underlying claim was
+    measured first: pairwise correlations persist year to year at rank
+    correlations of 0.50-0.65 across four universes, where the composite
+    ranking's information coefficient was indistinguishable from zero. See
+    `scripts/measure_correlation_stability.py` and the caveat it also found —
+    correlations run about 0.06 higher in the worst quarters, so an ordinary
+    year's reading is a floor.
+
+    Nothing is stored. See `private_ok` for what that does and does not buy.
+    """
+    raw = [t.strip() for t in holdings.replace("\n", ",").split(",") if t.strip()]
+    bad = [t for t in raw if not TICKER_RE.match(t)]
+    if bad:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                   f"{'...' if len(bad) > 5 else ''}.")
+
+    symbol = resolved(candidate, market)
+    book = [s for s in dict.fromkeys(resolved(t, market) for t in raw) if s != symbol]
+    if not book:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide at least one holding other than the candidate itself.")
+    if len(book) > PORTFOLIO_MAX_HOLDINGS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This compares up to {PORTFOLIO_MAX_HOLDINGS} holdings at a time; "
+                   f"this list has {len(book)}. A correlation matrix that size is also "
+                   f"more than anyone reads.")
+
+    result = portfolio.analyse(symbol, book, weights=_parse_weights(weights))
+    result["explain"] = explain.for_portfolio(result)
+    return private_ok({"candidate": symbol, "market": market.upper(), **result})
 
 
 # --------------------------------------------------------------------------- #

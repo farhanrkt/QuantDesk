@@ -3590,6 +3590,178 @@ def _check_firing_rate(value, check_label=None, universe_label=None, **_):
 
 
 # ============================================================================ #
+# Portfolio context — the candidate against what is already owned
+#
+# THE ONE PLACE THIS APP LETS A MEASUREMENT INFORM POSITION SIZE, and it is
+# earned rather than assumed. Everything else here refuses: the ranking's
+# information coefficient is indistinguishable from zero, the event study
+# returns nulls, and the pre-trade panel deals only in present-tense facts.
+# Correlations are different, and the difference was measured before this
+# shipped — one year's pairwise correlations rank-correlate 0.50 to 0.65 with
+# the next year's across four index universes.
+#
+# THE READINGS ARE COLOURED, WHICH THE LAST TWO FEATURES WERE NOT. A candidate
+# correlating 0.9 with something already held is genuinely unfavourable for the
+# person holding it — not a base rate, not provenance, but a fact about their
+# book with a direction. That is what `caution` and `poor` are for.
+# ============================================================================ #
+@metric("holdingCorrelation")
+def _holding_correlation(value, ticker=None, overlap=None, **_):
+    label = f"Correlation with {ticker}" if ticker else "Correlation with a holding"
+    what = ("How closely these two have moved together day to day over the past year. "
+            "1.0 would be lockstep, 0 would be unrelated, and negative would mean one "
+            "tends to rise when the other falls.")
+    if not _known(value):
+        return unavailable(label, what, "too few overlapping trading days")
+    band = _ladder(value, ((0.3, "good"), (0.6, "fair"), (0.8, "caution"), (None, "poor")))
+    reading = f"{_num(value)} over the past year. "
+    reading += {
+        "good": "These have largely gone their own ways, so owning both is closer to two "
+                "positions than one.",
+        "fair": "They move together more often than not. Some of what looks like two "
+                "positions is one.",
+        "caution": "They move together most of the time. Owning both is closer to holding "
+                   "a double position in one of them than to being diversified.",
+        "poor": "These are effectively the same position with two ticker symbols on it. "
+                "Whatever reason you have for owning one applies to the other, and so "
+                "does whatever goes wrong.",
+    }[band]
+    if _known(overlap):
+        reading += f" Measured across {int(overlap)} shared trading days."
+    return make(label, what, reading,
+                "If you would not double the position you already hold, think about "
+                "whether adding this one amounts to the same thing.",
+                band, "low", evidence="moderate", value_text=_num(value))
+
+
+@metric("effectiveHoldings")
+def _effective_holdings(value, names=None, before=None, gain=None, **_):
+    label = "Independent positions"
+    what = ("How many genuinely separate bets a set of holdings amounts to. Nine names "
+            "that all rise and fall together are closer to one position than to nine, and "
+            "this counts them the way their price history says they behave rather than "
+            "the way the account statement lists them.")
+    if not _known(value):
+        return unavailable(label, what, "needs at least two holdings with shared history")
+    reading = f"About {_num(value, 1)} independent bets"
+    if _known(names):
+        reading += f" across {int(names)} holdings"
+        crowding = value / names if names else None
+        if crowding is not None:
+            reading += (". Close to one bet per position, so these are genuinely different "
+                        "things." if crowding >= 0.7 else
+                        ". Rather fewer than the position count, so some of these are "
+                        "the same bet twice." if crowding >= 0.4 else
+                        ". Far fewer than the position count — most of this book is one "
+                        "bet held several times over.")
+    else:
+        reading += "."
+    # THE SCALE IS ANCHORED ON WHAT AN UNCORRELATED ADDITION WOULD GIVE, which
+    # is 1.0 — one more name that shares nothing is one more bet. Testing for
+    # `gain <= 0` was the obvious rule and it was wrong: the participation ratio
+    # creeps up slightly with ANY extra name, so a fourth clone added to three
+    # clones scored a small positive gain and read as "a little more
+    # independence" when it is the exact case the panel exists to catch.
+    band = "context"
+    if _known(gain):
+        if gain >= 0.5:
+            reading += (f" Adding the candidate takes it from {_num(before, 1)} to "
+                        f"{_num(value, 1)} — most of a whole extra bet, so it brings "
+                        f"something the book did not have.")
+        elif gain >= 0.15:
+            reading += (f" Adding the candidate moves it from {_num(before, 1)} to "
+                        f"{_num(value, 1)}: some new ground, but well short of the whole "
+                        f"extra bet an unrelated name would add.")
+        else:
+            band = "caution"
+            reading += (f" Adding the candidate moves it from {_num(before, 1)} to "
+                        f"{_num(value, 1)} — one more name, and next to no more "
+                        f"independence, where an unrelated one would add a full bet. That "
+                        f"is the shape of buying the fourth copy of a bet you already hold.")
+    return make(label, what, reading,
+                "Compare it with the number of positions. Where the two diverge, the "
+                "account statement is flattering how diversified this is.",
+                band, "high", evidence="moderate", value_text=_num(value, 1))
+
+
+@metric("riskShare")
+def _risk_share(value, ticker=None, weight=None, **_):
+    label = f"{ticker}'s share of risk" if ticker else "Share of portfolio risk"
+    what = ("How much of the portfolio's total price swing this one position accounts for. "
+            "Compare it with how much of the money is in it: a position holding a tenth of "
+            "the money and a quarter of the risk is the portfolio wearing a smaller name.")
+    if not _known(value):
+        return unavailable(label, what, "the risk decomposition could not be computed")
+    if not _known(weight):
+        return make(label, what, f"{_pct(value, 0)} of the portfolio's movement.",
+                    CONTEXT_NOT_TRIGGER, "context", "none", evidence="moderate",
+                    value_text=_pct(value, 0))
+    # A NEGATIVE CONTRIBUTION IS A REAL AND DIFFERENT THING, not a small one.
+    # Marginal risk contribution goes below zero when a position moves against
+    # the rest of the book, which means it SUBTRACTS from total risk — it is
+    # doing the job diversification is supposed to do. The first version put
+    # that through the same ladder as everything else and told a reader holding
+    # a genuine hedge that risk and money were "broadly in line", which is the
+    # least useful thing that could have been said about it. Found by running it
+    # against a real book with a defensive name in it.
+    if value < 0:
+        return make(label, what,
+                    f"This position REDUCES the portfolio's movement rather than adding to "
+                    f"it, offsetting about {_pct(abs(value), 0)} of what the others "
+                    f"contribute, from {_pct(weight, 0)} of the money. It has been moving "
+                    f"against the rest of the book — which is what diversification looks "
+                    f"like when it is actually working.",
+                    "Nothing to fix. Worth knowing before trimming it: a position that "
+                    "offsets the others costs more to remove than its size suggests.",
+                    "context", "none", evidence="moderate", value_text=_pct(value, 0))
+
+    excess = value - weight
+    band = _ladder(excess, ((0.05, "context"), (0.10, "caution"), (None, "poor")))
+    reading = (f"{_pct(value, 0)} of the portfolio's movement, from {_pct(weight, 0)} of "
+               f"its money. ")
+    reading += ("Risk and money are broadly in line here." if band == "context" else
+                "It carries noticeably more of the risk than of the money — usually "
+                "because it swings harder than the rest, or moves with them." if band == "caution"
+                else "It dominates the portfolio's risk out of all proportion to its size. "
+                     "A bad stretch for this one name is a bad stretch for the whole book.")
+    return make(label, what, reading,
+                "Where risk share runs far above money share, the position is bigger than "
+                "it looks. That is a reason to check the size, not a reason to sell.",
+                band, "low", evidence="moderate", value_text=_pct(value, 0))
+
+
+def for_portfolio(result: dict) -> dict:
+    """Explanations for the portfolio panel.
+
+    Reads the assembled result, like every other `for_*` here, so each sentence
+    quotes a figure the panel renders rather than a parallel computation.
+    """
+    out: dict = {}
+    if not result.get("usable"):
+        return out
+
+    for pair in result.get("pairs") or []:
+        entry = explain("holdingCorrelation", pair.get("correlation"),
+                        ticker=pair.get("ticker"), overlap=pair.get("overlapDays"))
+        if entry:
+            out[f"holdingCorrelation.{pair['ticker']}"] = entry
+
+    independence = result.get("independence") or {}
+    entry = explain("effectiveHoldings", independence.get("after"),
+                    names=independence.get("withCandidate"),
+                    before=independence.get("before"), gain=independence.get("gain"))
+    if entry:
+        out["effectiveHoldings"] = entry
+
+    for row in ((result.get("contributions") or {}).get("rows") or []):
+        entry = explain("riskShare", row.get("riskShare"), ticker=row.get("ticker"),
+                        weight=row.get("weight"))
+        if entry:
+            out[f"riskShare.{row['ticker']}"] = entry
+    return out
+
+
+# ============================================================================ #
 # What a flag is worth — the posterior, not the flag
 #
 # WHY THIS IS `context` AND NOT A WARNING COLOUR

@@ -627,12 +627,114 @@ that says "this company will report earnings", which everybody already knows.
 
 ---
 
+## 11. Portfolio context, and the measurement that had to come first
+
+**Added 28 August 2026.** Every other lens here evaluates one ticker in isolation, which hides
+the most common way a retail portfolio goes wrong: **the candidate is the fourth copy of a bet
+already held.** Four names that each look independently reasonable and all move together are
+one position with four ticker symbols on it, and nothing on a single-ticker page can say so.
+
+### Why this feature had to be earned before it was built
+
+Reporting that a candidate correlated 0.82 with a holding is a description of history and needs
+no defence. The moment that number informs how much to buy, it becomes a claim about the
+future — that last year's correlation says something about next year's. This codebase does not
+ship unmeasured predictive claims; the ranking tier carries its own null result for exactly
+this reason.
+
+So `scripts/measure_correlation_stability.py` measured it first, and the answer decided the
+shape of what shipped. Daily returns are cut into consecutive non-overlapping windows; within
+each, every pair gets a correlation, and consecutive windows' pairwise vectors are rank
+correlated. At a one-year window:
+
+| Universe | Rank correlation, year to year | t | Mean pairwise ρ |
+|---|---|---|---|
+| Dow 30 | **+0.54** | +10.2 | 0.36 |
+| Nasdaq-100 | **+0.65** | +15.7 | 0.36 |
+| IDX30 | **+0.59** | +9.5 | 0.21 |
+| IDX LQ45 | **+0.50** | +10.3 | 0.20 |
+
+**This is a different world from the return backtests.** The composite ranking's information
+coefficient was indistinguishable from zero across 24 tests; correlations rank-correlate at
+0.50 to 0.65 from one year to the next at t-statistics near or above ten. Correlations are
+among the few things about equities that are genuinely persistent, and that is what licenses
+them to inform position size where a return forecast may not. A test asserts the shipped
+measurement still supports it, so a future re-measurement that found otherwise would fail the
+build rather than let the panel quietly carry on.
+
+### The same measurement found the limit, and it is on the panel
+
+In the worst quarter of quarters for those markets the mean pairwise correlation runs about
+**+0.06 higher** than in the rest — up to +0.12 on the LQ45. A correlation measured over an
+ordinary year is therefore a **floor** on how correlated these positions will be in the stretch
+a holder actually needs the diversification. The panel says so beside the numbers.
+
+### A measurement mistake worth recording
+
+The first version of the stress test selected the worst **days** and computed a correlation
+within them. It reported correlations *falling* in a crash — which is not a finding about
+markets, it is the selection doing the work. Conditioning on the size of the common factor
+truncates that factor's variance inside the subsample while leaving each name's idiosyncratic
+variance alone, so the measured correlation moves for a reason that has nothing to do with the
+market. Forbes & Rigobon (2002) is the canonical statement of the problem, and it is why so
+many published "contagion" results evaporate.
+
+Selecting whole **windows** removes the worst of it: each window keeps its own full
+distribution of factor realisations. The sign flipped from -0.03 to +0.06 on the correction. A
+milder version of the objection survives — the windows are still classified by their own
+returns — and is stated on the panel rather than argued away.
+
+### What it computes, and what it refuses to
+
+Descriptions of a historical covariance matrix and nothing more: correlation against each
+holding, how many **independent** positions the book really amounts to before and after adding
+the candidate, and what share of the portfolio's risk each name carries against its share of
+the money.
+
+It does **not** output a recommended weight. Risk contribution and money contribution diverging
+is the finding; what to do about it depends on why the positions are held, which this app does
+not know and does not ask.
+
+The independence estimator is the participation ratio `ranking.py` already uses to say seven
+correlated signals carry about 3.4 signals' worth of information. It moved to `riskmodel.py` so
+there is one implementation: two copies would eventually disagree about what redundancy means,
+in an app whose whole argument is that correlated measures are worth less than they look.
+
+### Two bugs the build found
+
+**`eigvalsh` reads one triangle.** Handed a matrix with NaN on the diagonal it returned
+perfectly finite eigenvalues computed from the half it happened to look at — a plausible number
+from an unusable matrix. The estimator now refuses a non-finite matrix outright rather than
+filtering non-finite eigenvalues afterwards.
+
+**A negative risk contribution is a real and different thing.** Marginal risk contribution goes
+below zero when a position moves against the rest of the book: it *subtracts* from total risk,
+which is diversification actually working. The first version put that through the same ladder
+as everything else and told a reader holding a genuine hedge that risk and money were "broadly
+in line" — the least useful thing that could have been said about it. Found by running the
+panel against a real book with a defensive name in it.
+
+### No state, and what that costs
+
+Holdings live in the reader's own browser, alongside the reading mode and the holding horizon.
+They are sent on the one request that needs them, used, and forgotten; there is nowhere on the
+server to keep them. Nothing about them reaches the analytics event, which has always carried a
+market code and a lens count and never a ticker.
+
+Two consequences are stated rather than glossed. `/api/portfolio` sets `no-store`, because the
+edge cache is keyed by URL and a cached response would be a copy of somebody's holdings in
+shared infrastructure keyed by a string containing them. And the list still travels in a query
+string, so it lands in the hosting platform's access log like every other URL — the price of a
+GET, where the alternative would mean relaxing the CORS method allowlist and breaking the
+property that everything the UI does is a plain GET. It is disclosed, on the panel and here.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
 |---|---|
 | Placing a company in a book-to-market quintile | §8 declines this rather than inventing a breakpoint. It needs a universe-wide scan of book values, and fundamentals do not batch |
-| Portfolio context — correlation, effective independent positions, marginal risk | The largest gap. Holdings must stay client-side to respect the no-state stance, and correlation-aware sizing is a predictive claim that needs its own measurement (does this period's correlation describe the next one?) before it can ship |
 | Measure the lens-vote correlation empirically | Needs a cross-sectional run over many tickers; the caveat is stated qualitatively meanwhile |
 | Multi-factor cost of equity (Fama-French) | Factor returns are freely available for the US; constructing IDX factors is a project in itself |
 | Sensitivity grid (growth × discount rate) | Cheap — `pv_of_growing_stream` is already vectorised over both axes |

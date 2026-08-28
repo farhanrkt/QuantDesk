@@ -8,6 +8,7 @@ import { HoldingHorizonBar } from "@/components/HoldingHorizonBar";
 import { EventStudyPanel } from "@/components/EventStudyPanel";
 import { NewsPanel } from "@/components/NewsPanel";
 import { PeersPanel } from "@/components/PeersPanel";
+import { PortfolioPanel } from "@/components/PortfolioPanel";
 import { PreTradePanel } from "@/components/PreTradePanel";
 import { QualityPanel } from "@/components/QualityPanel";
 import { RankingPanel } from "@/components/RankingPanel";
@@ -22,7 +23,9 @@ import { DetailProvider, DetailToggle, useDetailLevel } from "@/components/ui/ex
 import { HorizonProvider, useHoldingHorizon } from "@/components/ui/horizon";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
-import { useEngines, useEventStudy, usePeers, type RunOptions } from "@/lib/api";
+import {
+  useEngines, useEventStudy, usePeers, usePortfolio, type RunOptions,
+} from "@/lib/api";
 import type { Engine, EngineFailure } from "@/lib/types";
 
 const INITIAL: RunOptions = {
@@ -37,6 +40,9 @@ const TABS = [
   { id: "trend", label: "Technicals", accent: "#5B8DEF" },
   { id: "value", label: "Intrinsic value", accent: "#E8B44C" },
   { id: "quality", label: "Quality", accent: "#F2C14E" },
+  // The fourth question this app can answer — how does it sit against what I
+  // already own — and the only one that needs an input other than a ticker.
+  { id: "portfolio", label: "Portfolio fit", accent: "#6FD0C0" },
   { id: "screen", label: "Scan & rank", accent: "#A78BFA" },
 ];
 
@@ -89,6 +95,8 @@ export default function Home() {
   } = useEngines();
   const { state: eventStudy, validate, reset: resetEventStudy } = useEventStudy();
   const { state: peers, compare, reset: resetPeers } = usePeers();
+  const { state: portfolio, compare: comparePortfolio,
+          reset: resetPortfolio } = usePortfolio();
   // The ticker bar is controlled from here so the screener can drive it too.
   const [opts, setOpts] = useState<RunOptions>(INITIAL);
   // The last SUBMITTED symbol, which is not what is currently typed in the box.
@@ -128,6 +136,9 @@ export default function Home() {
     // put another company's abnormal returns under this company's header.
     resetEventStudy();
     resetPeers();
+    // A comparison belongs to the candidate it was run for; carrying one across
+    // would put another company's correlations under this company's header.
+    resetPortfolio();
     run(cleaned);
   };
 
@@ -278,6 +289,15 @@ export default function Home() {
               )}
               {tab === "quality" && (
                 <Panel state={quality}>{(d) => <QualityPanel data={d} />}</Panel>
+              )}
+              {tab === "portfolio" && (
+                <PortfolioPanel
+                  state={portfolio}
+                  ticker={resolvedTicker}
+                  onCompare={(holdings, weights) => comparePortfolio({
+                    candidate: opts.ticker, market: opts.market, holdings, weights,
+                  })}
+                />
               )}
               {tab === "screen" && (
                 <div className="space-y-8">

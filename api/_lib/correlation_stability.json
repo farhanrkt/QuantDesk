@@ -1,0 +1,232 @@
+{
+  "measuredOn": "2026-08-28",
+  "years": 8,
+  "windows": [
+    63,
+    126,
+    252
+  ],
+  "universes": {
+    "dow30": {
+      "universe": "Dow Jones Industrial Average",
+      "market": "US",
+      "names": 30,
+      "days": 2009,
+      "windows": {
+        "63": {
+          "usable": true,
+          "windowDays": 63,
+          "periods": 30,
+          "meanRankCorrelation": 0.4748450076318962,
+          "stdev": 0.11640461080722747,
+          "tStat": 22.343042959820107,
+          "min": 0.2251784055970155,
+          "max": 0.7071365154525854,
+          "meanPairwiseCorrelation": 0.30757674679184205
+        },
+        "126": {
+          "usable": true,
+          "windowDays": 126,
+          "periods": 14,
+          "meanRankCorrelation": 0.5248414629498461,
+          "stdev": 0.09984860057053209,
+          "tStat": 19.667545919627994,
+          "min": 0.2823135360827598,
+          "max": 0.6577271673637666,
+          "meanPairwiseCorrelation": 0.32488519998642845
+        },
+        "252": {
+          "usable": true,
+          "windowDays": 252,
+          "periods": 6,
+          "meanRankCorrelation": 0.5401749237417819,
+          "stdev": 0.12962510070407038,
+          "tStat": 10.207536409440426,
+          "min": 0.36623028062343915,
+          "max": 0.670892370582138,
+          "meanPairwiseCorrelation": 0.36125571343837387
+        }
+      },
+      "stress": {
+        "usable": true,
+        "windowDays": 63,
+        "windows": 31,
+        "allWindows": 0.3075767467918421,
+        "worstQuartile": 0.3623777397520671,
+        "restOfWindows": 0.2915931238451097,
+        "rise": 0.0707846159069574,
+        "worstWindowReturn": -0.060654711599797836
+      }
+    },
+    "nasdaq100": {
+      "universe": "Nasdaq-100",
+      "market": "US",
+      "names": 98,
+      "days": 2009,
+      "windows": {
+        "63": {
+          "usable": true,
+          "windowDays": 63,
+          "periods": 30,
+          "meanRankCorrelation": 0.514508193759948,
+          "stdev": 0.0926280204488055,
+          "tStat": 30.423595622375885,
+          "min": 0.374153491226462,
+          "max": 0.7356242868333569,
+          "meanPairwiseCorrelation": 0.31156390450496785
+        },
+        "126": {
+          "usable": true,
+          "windowDays": 126,
+          "periods": 14,
+          "meanRankCorrelation": 0.6196503601197106,
+          "stdev": 0.07109549565954876,
+          "tStat": 32.611339518070444,
+          "min": 0.5370367409229488,
+          "max": 0.7411829637612305,
+          "meanPairwiseCorrelation": 0.3296892816871485
+        },
+        "252": {
+          "usable": true,
+          "windowDays": 252,
+          "periods": 6,
+          "meanRankCorrelation": 0.6539238702914426,
+          "stdev": 0.10172403707341979,
+          "tStat": 15.746325636721181,
+          "min": 0.4736542877037513,
+          "max": 0.7645441523973066,
+          "meanPairwiseCorrelation": 0.3625132694267191
+        }
+      },
+      "stress": {
+        "usable": true,
+        "windowDays": 63,
+        "windows": 31,
+        "allWindows": 0.31220662541643357,
+        "worstQuartile": 0.31817219136827324,
+        "restOfWindows": 0.3104666686804803,
+        "rise": 0.007705522687792954,
+        "worstWindowReturn": -0.1206262779751507
+      }
+    },
+    "idx30": {
+      "universe": "IDX30",
+      "market": "ID",
+      "names": 30,
+      "days": 1951,
+      "windows": {
+        "63": {
+          "usable": true,
+          "windowDays": 63,
+          "periods": 29,
+          "meanRankCorrelation": 0.35759209851616375,
+          "stdev": 0.138003764423692,
+          "tStat": 13.953911998563013,
+          "min": 0.14722780663530324,
+          "max": 0.6131511307564441,
+          "meanPairwiseCorrelation": 0.1885216507421873
+        },
+        "126": {
+          "usable": true,
+          "windowDays": 126,
+          "periods": 14,
+          "meanRankCorrelation": 0.47210835156516184,
+          "stdev": 0.14923353964337274,
+          "tStat": 11.836934949159755,
+          "min": 0.25985447643150905,
+          "max": 0.7438648049147549,
+          "meanPairwiseCorrelation": 0.19375678137891106
+        },
+        "252": {
+          "usable": true,
+          "windowDays": 252,
+          "periods": 6,
+          "meanRankCorrelation": 0.589356623115499,
+          "stdev": 0.15203503720219533,
+          "tStat": 9.495331008751846,
+          "min": 0.4449490259309528,
+          "max": 0.7899078044651696,
+          "meanPairwiseCorrelation": 0.20578659915650857
+        }
+      },
+      "stress": {
+        "usable": true,
+        "windowDays": 63,
+        "windows": 30,
+        "allWindows": 0.1907081829929981,
+        "worstQuartile": 0.2206863934697676,
+        "restOfWindows": 0.18158437980441614,
+        "rise": 0.03910201366535146,
+        "worstWindowReturn": -0.22963431535388246
+      }
+    },
+    "lq45": {
+      "universe": "IDX LQ45",
+      "market": "ID",
+      "names": 45,
+      "days": 1951,
+      "windows": {
+        "63": {
+          "usable": true,
+          "windowDays": 63,
+          "periods": 29,
+          "meanRankCorrelation": 0.2992091469589281,
+          "stdev": 0.0937611845891401,
+          "tStat": 17.18504917825647,
+          "min": 0.14519987112000776,
+          "max": 0.4698301629052349,
+          "meanPairwiseCorrelation": 0.18848852820967651
+        },
+        "126": {
+          "usable": true,
+          "windowDays": 126,
+          "periods": 14,
+          "meanRankCorrelation": 0.3987647021454581,
+          "stdev": 0.109969889726416,
+          "tStat": 13.567722010808373,
+          "min": 0.25528051325179985,
+          "max": 0.6127411283348421,
+          "meanPairwiseCorrelation": 0.1934426107668682
+        },
+        "252": {
+          "usable": true,
+          "windowDays": 252,
+          "periods": 6,
+          "meanRankCorrelation": 0.5035728012024508,
+          "stdev": 0.11943476646991853,
+          "tStat": 10.327783506828982,
+          "min": 0.3710965438339918,
+          "max": 0.6629671864038044,
+          "meanPairwiseCorrelation": 0.2041514900473876
+        }
+      },
+      "stress": {
+        "usable": true,
+        "windowDays": 63,
+        "windows": 30,
+        "allWindows": 0.18996812685136505,
+        "worstQuartile": 0.2788397505092106,
+        "restOfWindows": 0.16292024139028166,
+        "rise": 0.11591950911892895,
+        "worstWindowReturn": -0.23337695647251577
+      }
+    }
+  },
+  "headline": "Pairwise correlations persist: over a one-year window the pairs that moved together in one year are largely the pairs that move together in the next, with rank correlations of 0.50 to 0.65 across four index universes. That is far more stable than anything this app has measured about returns, which is why a correlation may inform position size where a return forecast may not. In the worst quarter of quarters for these markets the mean pairwise correlation is +0.06 higher than in the rest, so the diversification a correlation implies is smallest exactly when it matters most.",
+  "yearlyPersistence": {
+    "mean": 0.5717570545877936,
+    "min": 0.5035728012024508,
+    "max": 0.6539238702914426
+  },
+  "stressRise": {
+    "mean": 0.05837791534475769,
+    "min": 0.007705522687792954,
+    "max": 0.11591950911892895
+  },
+  "caveats": [
+    "Today's index constituents, so every name measured is one that survived.",
+    "A property of large-cap index members over this sample, not of any particular reader's portfolio, which may be concentrated in ways these universes are not.",
+    "Non-overlapping windows, so the t-statistics do not share days. One history, one regime.",
+    "The stress comparison conditions on each window's own return, which biases any correlation measured inside it (Forbes & Rigobon 2002). Whole windows are compared rather than selected days, which removes the worst of that, but not all of it."
+  ]
+}
