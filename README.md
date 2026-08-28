@@ -21,6 +21,15 @@ particular company, and lists what to check next. It is deliberately prose and n
 see [the field manual](docs/field-manual.html) for why a single buy/hold/sell number would
 discard every finding the rest of the app works to establish.
 
+**And it says what would stop a careful buyer.** Underneath that summary, a pre-trade panel
+collects the conditions that argue against acting — a balance sheet in the distress zone, a
+valuation that is mostly a perpetuity guess, a price series the app cannot tell apart from a
+random walk. Each one arrives with **the measured share of a real universe it fires on**,
+because a condition true of a third of the market describes the market rather than this
+company. There is no count, no score, and nothing on it is ever green: an empty panel is not
+a clean bill of health, and the panel says so in words rather than leaving a row of ticks to
+imply otherwise.
+
 **New to any of this?** Start with the **QuantDesk Field Manual** —
 [read it online](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009) or open
 [`docs/field-manual.html`](docs/field-manual.html) locally. Every lens and every term explained
@@ -159,7 +168,9 @@ simulation to produce a range rather than a single number.
 today's price correct? On AAPL that came out at **37% a year for five years** against a 10%
 assumption — which is a claim about the world you can agree or disagree with, rather than a fair
 value you have no basis to judge. It is stated as conditional on the other inputs, because it is:
-across plausible discount rates the same price implies anywhere from 24% to 42%.
+lower the discount rate and the implied growth falls with it. The panel says so and tells you
+to change the input and watch the number move — there is no sensitivity grid computing that
+range for you, which is a gap rather than a claim (see RESEARCH_ROADMAP).
 
 **What it can't tell you.** Anything with confidence. A DCF is an opinion with arithmetic
 attached — the answer moves enormously with the growth and discount rate you assume, which
@@ -237,6 +248,35 @@ not *no edge*. Survivorship, costs and sample size are stated alongside.
 Measured offline by `scripts/backtest_ranking.py` and stamped with its date. Re-run it after
 changing anything in `ranking.py`.
 
+**Pre-trade checks.** Nine conditions that would give a careful buyer pause, drawn entirely
+from figures the four lenses already computed — so the panel costs no extra fetch and every
+line can be traced to the tab that owns it.
+
+The new part is not the conditions, it is the **firing rate** beside each one, measured
+offline across the four index universes by `scripts/calibrate_checks.py` and stamped with its
+date. Without it, nine conditions read as nine independent alarms; with it, the panel can say
+which are rare enough to mean something here. Three rules follow, and all three are enforced
+rather than intended: a check with no measured rate is **withheld entirely**, a check that
+fires on more than a third of the universe is **demoted from a flag to a stated base
+condition**, and a condition that could not be tested lands under *not checked* — never under
+*clear*.
+
+**The rates are per market, and the run is what forced that.** "Scores built from incomplete
+data" fires on 16% of US large caps and 85% of Indonesian ones — which is Yahoo's coverage of
+smaller IDX filings, not a fact about the companies. A blended rate near 40% would be
+simultaneously alarming for a US listing and reassuring for an IDX one, so each check carries
+a rate for each market and the panel uses the one the ticker actually belongs to.
+
+Of the nine, three survive as flags in both markets, three are ordinary in both, two split
+along the market line, and one — "the move is inside the cost of trading it" — turned out
+never to be evaluable, because on every index constituent the spread sits below what daily
+bars can resolve. It is withheld and the panel says so.
+
+That last distinction is the panel's whole design. A bank's refused accounting screens, a
+failed leg and a spread below the estimator's resolution floor are all reasons a condition
+was never evaluated, and a checklist that rendered them as green ticks would have made the
+app more authoritative than its evidence supports.
+
 **Event study.** The one that decides whether the Flow lens is worth your attention. It
 measures the cumulative abnormal return after *every* anomaly ever detected on a ticker,
 against a market model, and reports the t-statistic. On JPM the answer was **no significant
@@ -266,6 +306,7 @@ where a constant was invented, it got replaced by an estimator.
 | Quoting an estimated bid-ask spread as a cost | **The estimator's own resolution floor** | Both spread estimators have a noise floor proportional to volatility — 0.148× and 0.361× the daily standard deviation, measured with the true spread set to zero. On a mega-cap that floor is an order of magnitude above the real spread, so the app reported a cost the stock does not charge. Below the floor it now reports a ceiling |
 | Assuming the signal works | **Event study** (Brown & Warner 1985) | Measures it, and reports null results |
 | Reporting raw screener hits | **Benjamini-Hochberg (1995)** | Scanning many names produces hits by construction |
+| A pre-trade flag on its own | **The flag plus its measured firing rate** | "Altman says distress" is unreadable without knowing how often Altman says distress. Measured across four index universes: the conditions that turned out to fire on most of the market are demoted to base conditions rather than presented as findings, and an uncalibrated check is withheld |
 | A composite score across signals | **Percentile ranks + a measured overlap** | Momentum, 52-week-high and relative strength are three phrasings of "it went up"; the panel reports how many *independent* signals the composite really averages |
 | Colouring metrics at each call site | **One ladder per metric, in Python** | A third of them are "low is good" and sit in the same grid as the rest; direction is encoded once and asserted by tests |
 
@@ -297,6 +338,8 @@ api/
               swing.py          Short/mid-horizon setups, levels, risk plans
               ranking.py        Batch download + cross-sectional ranking
               universes.py      Predefined ticker lists, each date-stamped
+              pretrade.py       The conditions that would stop a careful buyer,
+                                each gated on a measured firing rate
               explain.py        Plain-English interpretation for every metric,
                                 and the cross-lens synthesis
               symbols.py        Ticker → Yahoo symbol, resolved once
@@ -306,7 +349,8 @@ docs/
   field-manual.html   Beginner's guide; glossary generated from _lib/explain.py
 scripts/
   build_glossary.py   Regenerates that glossary, and CI's drift check
-tests/        826 offline tests
+  calibrate_checks.py How often each pre-trade check fires, measured offline
+tests/        955 offline tests
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -332,7 +376,7 @@ Everything the UI does is a plain `GET`. Interactive docs at `/api/docs`.
 
 | Endpoint | What it returns |
 |---|---|
-| `GET /api/confluence` | **All four lenses in one call, plus the synthesis** — what the UI actually uses |
+| `GET /api/confluence` | **All four lenses in one call, plus the synthesis and the pre-trade checks** — what the UI actually uses |
 | `GET /api/isolation-forest` | Flow: anomalies, accumulation regimes, liquidity profile |
 | `GET /api/technical-analysis` | Trend: indicators, levels, signals, narrative |
 | `GET /api/intrinsic-value` | Value: DCF / DDM / RI with Monte Carlo percentiles |
@@ -397,6 +441,15 @@ CI; an upstream outage must never redden the build.
 
 Both currency bugs found so far were invisible to the offline suite and turned up here.
 
+The pre-trade panel's firing rates are measured the same way — offline, network-dependent,
+outside CI, and stamped with the date. Re-run it after adding a check or moving a threshold,
+because a stale rate attached to a changed check is worse than no rate at all: it is a number
+the panel prints with confidence.
+
+```bash
+.venv/bin/python scripts/calibrate_checks.py
+```
+
 The field manual's glossary is generated, so regenerate it after touching the explanation
 layer — CI fails if you forget:
 
@@ -459,6 +512,12 @@ project.
 The event study is indicative, not a backtest. The Flow lens has no walk-forward validation
 enabled by default because it costs minutes per ticker.
 
+**Firing rates decay with the lists they were measured on.** The pre-trade panel's base rates
+come from the four universes below, so they inherit every one of that section's problems plus
+one of their own: they are today's constituents measured over today's five years, and a
+different half-decade would move them. The panel prints the measurement date beside them. A
+rate is a prevalence, never a probability that this company is in trouble.
+
 **Constituent lists go stale.** Index membership is transcribed by hand and date-stamped in
 `_lib/universes.py`. It decays invisibly — a dropped name still fetches, a newly added one is
 simply absent — which is why the date is shown on the panel. There is deliberately **no S&P
@@ -488,7 +547,7 @@ sentiment would need full article text and a lexicon that covers Indonesian.
 - **[docs/field-manual.html](docs/field-manual.html)** — a beginner's guide to the whole app
   ([published copy](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009)). All four
   lenses, the synthesis that reads them together, the statistics that decide whether to believe any
-  of it, and every one of the 78 metrics in a searchable glossary. Assumes no prior finance.
+  of it, and every one of the 80 metrics in a searchable glossary. Assumes no prior finance.
 
   Its glossary is **generated**, not transcribed: `scripts/build_glossary.py` injects the same
   strings `_lib/explain.py` puts on screen, and CI fails if a metric is added without regenerating.

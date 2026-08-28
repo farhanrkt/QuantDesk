@@ -259,15 +259,159 @@ correlation between lens votes across a universe remains open work — see below
 
 ---
 
+## 7. Pre-trade checks, and why a flag without a base rate is not shippable
+
+**Added 28 August 2026.** The app can describe a company well and correctly refuses to score
+it. What it could not do was answer the narrower question a reader actually arrives with:
+*what would argue against buying this?* Every ingredient was already computed — the distress
+band on the Quality tab, the terminal-value share on Value, the Hurst verdict inside the
+long-horizon section — but each lived in the panel a reader would only open if they already
+suspected the problem, which is the one case where a warning is redundant.
+
+`_lib/pretrade.py` collects nine of them onto one surface. It reads the ASSEMBLED
+`/api/confluence` payload rather than recomputing anything, the same discipline
+`explain.for_synthesis` uses and for the same reason: every line must quote the figure the
+panel renders, and a parallel computation would eventually disagree with it. The panel costs
+no extra fetch and no extra model fit.
+
+### The measurement that had to come first
+
+The conditions are not the contribution. "Altman says distress" is unreadable on its own —
+whether it is a finding about this company or a description of the equity market depends
+entirely on how often it is true of companies in general, and nothing in this repo knew that
+number. Presenting nine conditions as nine alarms without it is the same multiple-testing
+mistake the anomaly screener already corrects, arriving somewhere new: a scan produces hits
+by construction, and the hit count means nothing until you know how many were expected.
+
+So `scripts/calibrate_checks.py` runs each predicate across the four universes in
+`universes.py` and writes `check_calibration.json`. The price half batches through
+`market_data.ohlcv_batch`; the filings half is one `fetch_company` per symbol, which is why
+this is an offline stamped script rather than a request — the same treatment
+`backtest_ranking.py` gets, for the same two reasons.
+
+Symbols are deduplicated across universes before the headline rate is taken. IDX30 is a
+subset of LQ45, so adding four universes' counts would weight every Indonesian large cap
+twice and tilt every rate toward one market.
+
+Could-not-run is counted separately from did-not-fire. A bank whose accounting screens are
+refused has not passed them, and folding the two together would give a check that is
+inapplicable to half the universe an artificially low firing rate — promoting it from base
+condition to flag by its own coverage gap.
+
+### The blend that had to be undone
+
+The first complete run reported one rate per check across all four universes, and one of the
+results made that indefensible. **"Scores built from incomplete data" fires on 10% of the Dow
+and 16% of the Nasdaq-100, and on 80% of IDX30 and 84% of LQ45.** That is not a fact about
+companies — it is Yahoo's fundamentals coverage for smaller Indonesian listings, which this
+README has always named as the project's single biggest fragility, showing up as a number for
+the first time.
+
+The blended rate lands near 40%. It is simultaneously alarming for a US large cap, where the
+condition is genuinely unusual and worth a flag, and reassuring for an IDX one, where it is
+the norm and should be demoted. **Neither reading is true of the company in front of the
+reader**, which is the definition of the wrong number.
+
+So each check now carries a per-market rate as well as a combined one, and `_rate_for` prefers
+the market of the resolved symbol — falling back to the combined rate only for a market nobody
+calibrated, and naming the group either way. The same discipline that made percentiles
+preferable to scores in `ranking.py`: a rate is a claim about a stated population on a stated
+date, and the population has to be one the reader is actually in.
+
+### What the measurement changed
+
+Measured 28 August 2026 over five years of daily data, US against the Dow and the Nasdaq-100,
+IDX against IDX30 and LQ45. The denominator is names where the check could be **evaluated**;
+where it could not — a refused lens, a missing statement — that is counted separately and
+never as a pass.
+
+| Condition | US | IDX | Reads as |
+|---|---|---|---|
+| Balance sheet inside the distress zone | 11% of 112 | 15% of 39 | flag |
+| Accrual pattern flags on the manipulation screen | 3% of 115 | 8% of 39 | flag |
+| Fundamental trend deteriorating | 1% of 115 | 3% of 39 | flag |
+| Most of the valuation is a perpetuity guess | 90% of 115 | 95% of 37 | base condition |
+| The price assumes more growth than the model does | 53% of 95 | 15% of 33 | **base in the US, flag on the IDX** |
+| Scores built from incomplete data | 16% of 121 | 85% of 46 | **flag in the US, base on the IDX** |
+| Price series indistinguishable from a random walk | 78% of 120 | 93% of 46 | base condition |
+| The latest move is inside the cost of trading it | — | — | withheld, never evaluable |
+| Has already fallen more than half | 46% of 120 | 67% of 46 | base condition |
+
+Of the nine, three survive as flags in both markets, three are demoted in both, two split
+along the market line, and one turned out never to be evaluable at all. The demotions are the
+most interesting output here, and none of them was decided by argument.
+
+**Almost every large-cap price series is indistinguishable from a random walk at five years
+of daily data.** The app's own honesty check, which exists to say when the trend tools are
+describing noise, turns out to say it about most of the market. That is a statement about
+equities, not about any company on the panel, and printing it as a flag would have attached
+alarm to the ordinary case.
+
+**A discounted cash flow is terminal-heavy essentially always.** The 60% threshold the
+synthesis already warns at is cleared by nearly every name measured. Worth stating; not worth
+flagging.
+
+**The price implies more growth than the model assumes on half the US universe** — which is
+what happens when the model's growth input is a default and the default is not a forecast.
+This one was predictable in advance and was deliberately left to the data to decide, because a
+rule that only ever confirms a prior judgement is not being tested. On the IDX it fires on 15%
+and stays a flag, which is the market split earning its keep on the first check that met it.
+
+**And one condition can never be evaluated at all.** "The latest move is inside the cost of
+trading it" returned no evaluable names in any universe: on every index constituent the
+bid-ask spread sits below what daily bars can resolve, so `microstructure.py` correctly
+declines to quote one and the check has nothing to compare against. It is withheld rather than
+deleted — the app knows how to evaluate it, has no base rate for it, and says exactly that on
+the panel. That is the rule biting a check that might well have been useful on a thinner
+stock, and paying that cost is the point of having the rule.
+
+Three rules follow from the calibration and all three are enforced in code rather than
+intended: an uncalibrated check is **withheld from the panel entirely**, a check above
+`BASE_RATE_MAX` is **demoted to a stated base condition and rendered uncoloured**, and a rate
+measured on fewer than `MIN_CALIBRATION_SAMPLE` names is treated as no rate at all.
+
+### What it does not claim
+
+**An empty panel is not evidence of quality, and the design is built around refusing to imply
+otherwise.** There is no pass state, no count, no score, no severity ordering and nothing
+green anywhere on the surface. `tests/test_pretrade.py` asserts on the payload's key set
+rather than on wording, because an aggregate field is exactly the thing a later change would
+add without noticing — and once it exists, three flags on one company read as worse than two
+on another, which is a comparison the firing rates exist to say is unavailable.
+
+**No condition here predicts anything.** Every one is a present-tense statement about a figure
+already on the page. None is a claim about subsequent returns, none was fitted, and the
+firing rate is a measurement of prevalence rather than of skill. The panel names where each
+number lives so it can be gone and checked, which is the only authority it asks for.
+
+**Not checked is not clear.** A refused lens, a missing filing, a short chart range and a
+spread below the estimator's resolution floor are each recorded, with the reason, in a list
+the panel renders — and the last of those explicitly says the cost is small rather than
+unknown, because reporting the estimator's own noise floor as a trading cost would be the
+same bug `microstructure.py` already fixed once.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
 |---|---|
+| Posterior probability for a Beneish flag | The screen's operating characteristics are published; turning "most flags are false alarms" into a number needs them sourced from the paper rather than from memory, with the prevalence prior editable and its sensitivity shown |
+| Validation domain beside each accounting score | An IDX large cap in 2026 sits outside all three screens' original samples. That is provenance, not a defect, but a reader cannot weigh a number without it |
+| Portfolio context — correlation, effective independent positions, marginal risk | The largest gap. Holdings must stay client-side to respect the no-state stance, and correlation-aware sizing is a predictive claim that needs its own measurement (does this period's correlation describe the next one?) before it can ship |
+| A stated holding horizon | `rollingReturns` is fixed at 1/3/5 years, so "the worst outcome at YOUR horizon" cannot be answered, and neither can "does an earnings date land inside it" |
 | Measure the lens-vote correlation empirically | Needs a cross-sectional run over many tickers; the caveat is stated qualitatively meanwhile |
 | Multi-factor cost of equity (Fama-French) | Factor returns are freely available for the US; constructing IDX factors is a project in itself |
 | Sensitivity grid (growth × discount rate) | Cheap — `pv_of_growing_stream` is already vectorised over both axes |
 | Peer / sector relative multiples | Needs a peer-set source beyond yfinance |
 | IDX fundamentals curation | The durable moat, and the largest single effort |
+
+**Corrected while writing this:** README quoted the price-implied growth rate moving across
+"24% to 42%" over a range of discount rates, in a sentence that read as something the app
+shows. It does not: varying the discount rate is a query parameter a reader can drive by hand,
+and the sensitivity grid that would present the range is the open item two rows above. The
+sentence now says what the panel actually does, which is to state the conditionality and point
+at the editable input.
 
 **Explicitly rejected:** calendar effects (January, Halloween) — precisely where the
 multiple-testing critique bites hardest; headline sentiment — Loughran-McDonald is the right

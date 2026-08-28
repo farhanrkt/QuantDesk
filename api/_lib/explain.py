@@ -3502,3 +3502,161 @@ def for_peers(row: dict, universe: dict, signals: Sequence[dict],
             f"the filings behind them cannot be fetched in batch."
         ),
     }
+
+
+# ============================================================================ #
+# The pre-trade panel — what would stop a careful buyer
+#
+# WHY A FIRING RATE IS PART OF THE EXPLANATION AND NOT A FOOTNOTE
+# ----------------------------------------------------------------
+# "Altman says distress" is unreadable without knowing how often Altman says
+# distress. On a universe of large listed companies the answer is "rarely", which
+# makes it a finding; on a screen tuned differently it could be "a third of the
+# time", which would make it a description of the market wearing a warning's
+# clothes. The app already applies this discipline to the anomaly screener, where
+# a scan over many names produces hits by construction and Benjamini-Hochberg
+# says how many were expected. This is the same correction arriving at a panel
+# that would otherwise present nine conditions as nine independent alarms.
+#
+# THE PROSE HERE HAS ONE JOB THE CHECKS THEMSELVES CANNOT DO: say what an empty
+# panel means. Every individual check is silent when it does not fire, and
+# silence is exactly what a reader mistakes for a pass. So the framing sentence
+# is written for the empty case FIRST and adjusted for the non-empty one, rather
+# than the other way round.
+# ============================================================================ #
+@metric("checkFiringRate")
+def _check_firing_rate(value, check_label=None, universe_label=None, **_):
+    label = "How often this condition fires"
+    what = ("The share of a large, published universe of companies on which this same "
+            "condition is true. It is measured offline across four index membership "
+            "lists and stamped with the date, not estimated.")
+    if not _known(value):
+        return unavailable(label, what, "this condition has never been calibrated")
+    where = universe_label or "the calibration universe"
+    band = _ladder(value, ((0.05, "context"), (0.15, "context"),
+                           (0.33, "context"), (None, "context")))
+    if value <= 0.05:
+        detail = ("Uncommon enough that its presence here says something specific about "
+                  "this company.")
+    elif value <= 0.15:
+        detail = ("Not rare, but far from typical. Worth reading as a fact about this "
+                  "company rather than about the market.")
+    elif value <= 0.33:
+        detail = ("Common enough that it is partly a description of listed equities in "
+                  "general. Weigh it as one input, not as an alarm.")
+    else:
+        detail = ("So common that it is a base condition of this market rather than a "
+                  "finding about this company, and the panel presents it as one.")
+    return make(
+        label=label, what=what,
+        reading=f"{_pct(value, 0)} of {where}. {detail}",
+        action=("Compare it against the other conditions on the panel before weighting "
+                "any of them. A rare condition and a common one presented in identical "
+                "type is the mistake this number exists to prevent."),
+        band=band, good_direction="none", evidence="strong",
+        value_text=_pct(value, 0),
+    )
+
+
+# The sentence the whole panel is designed around. It is a constant rather than
+# inline text because `tests/test_pretrade.py` asserts its presence in EVERY
+# state, including — especially — the one where nothing fired.
+ABSENCE_IS_NOT_EVIDENCE = (
+    "An empty panel is not a clean bill of health. These are the specific conditions this "
+    "app is able to test, nothing more, and a company can be a poor holding for reasons "
+    "none of them describes."
+)
+
+# Appended only when something actually went untested, because a caveat that
+# points at an absent section teaches a reader to skip the caveats.
+NOTHING_UNTESTED_CLAUSE = (
+    " The conditions listed as not checked were never evaluated at all, which is a "
+    "different thing again from evaluating them and finding nothing."
+)
+
+
+def for_pretrade(flags: Sequence[dict], base_conditions: Sequence[dict],
+                 not_checked: Sequence[dict], uncalibrated: Sequence[dict],
+                 calibration: Optional[dict] = None) -> dict:
+    """The panel's framing, written so silence cannot be misread as a pass.
+
+    DELIBERATELY CONTAINS NO TALLY. Not "two conditions fired", not "seven of
+    nine clear" — a count is a composite in the one field everybody reads, and
+    three flags on one company are not a worse reading than two on another. The
+    per-check firing rates are what make the lines comparable, and they are
+    attached to the lines rather than summed.
+    """
+    # THREE STATES, NOT TWO. The obvious two-branch version ("flags, or nothing")
+    # told a company with three demoted base conditions that none of the
+    # conditions was true of it, which is false: they were true and had been
+    # judged ordinary. Demoting a condition changes how it should be weighed, not
+    # whether it applies, and the framing has to keep that distinction.
+    if flags:
+        framing = (
+            "Each condition below is true of this company right now. Beside each one is how "
+            "often it is true across a published universe of companies — because a condition "
+            "that is common is a description of the market rather than a finding about this "
+            "name, and the two are indistinguishable without that number."
+        )
+    elif base_conditions:
+        framing = (
+            "Nothing unusual fired here. The conditions below are true of this company, and "
+            "also true of most companies in its market — so they describe the market it "
+            "trades in rather than singling this one out."
+        )
+    else:
+        framing = (
+            "None of the conditions this app can test is true of this company right now. "
+            "That is a narrower statement than it looks."
+        )
+
+    # KEYED, NOT A LIST. The panel needs to place each note under the section it
+    # describes, and a list would force the component to identify them by
+    # matching on their wording — so rewording a sentence here would silently
+    # drop it from the page. A key survives an edit; a substring match does not.
+    notes = {}
+    if base_conditions:
+        notes["base"] = (
+            "These are true of this company and also true of more than "
+            f"{int((calibration or {}).get('baseRateMax', 0.33) * 100)}% of the calibration "
+            "universe. They are shown because they are real, and kept out of the flags "
+            "because presenting a base rate as an alarm is how a research tool manufactures "
+            "conviction out of nothing."
+        )
+    if not_checked:
+        notes["notChecked"] = (
+            "These were never tested — a refused lens, a missing filing, an estimate below "
+            "what the data can resolve. Not tested is not the same as clear, and this app "
+            "will not print the second when it means the first."
+        )
+    if uncalibrated:
+        notes["uncalibrated"] = (
+            "This app knows how to evaluate these and is not showing them, because nobody "
+            "has measured how often they fire. A flag without a base rate is not "
+            "interpretable, so it is withheld rather than shown uncalibrated."
+        )
+
+    # The stamp deliberately does NOT name a universe. Each line carries the
+    # group its own percentage is a percentage of, because those differ: a US
+    # listing is scored against the US universes and an IDX one against the
+    # Indonesian ones. A single scope in the footer would contradict the lines
+    # above it on every second ticker.
+    stamp = None
+    if calibration and calibration.get("measuredOn"):
+        stamp = (f"Firing rates measured on {calibration['measuredOn']}, each against the "
+                 f"universe named beside it. Index membership decays, so the date is part "
+                 f"of the reading.")
+
+    return {
+        "headline": "What would give a careful buyer pause",
+        "framing": framing,
+        "notes": notes,
+        "measuredOn": stamp,
+        "caveat": (
+            ABSENCE_IS_NOT_EVIDENCE
+            + (NOTHING_UNTESTED_CLAUSE if not_checked else "")
+            + " Nothing here is a recommendation, and no combination of these conditions "
+              "adds up to one — they are reasons to go and look at something specific, "
+              "each one naming where in the app that number lives."
+        ),
+    }

@@ -614,6 +614,68 @@ export interface Synthesis {
   caveat: string;
 }
 
+/**
+ * One condition that would give a careful buyer pause.
+ *
+ * `firingRate` is the whole point and is never optional: a condition true of a
+ * third of the market is a description of the market, and it is indistinguishable
+ * from a finding about this company without that number. `classification` is
+ * decided in Python against `baseRateMax` — never re-derived here.
+ *
+ * There is deliberately NO severity field and no ordering weight. Three of these
+ * is not a worse reading than two, and any field that implied otherwise would be
+ * a composite arriving by the back door.
+ */
+export interface PreTradeCheck {
+  id: string;
+  classification: "flag" | "base";
+  /** The panel that owns the underlying number, so it can be gone and checked. */
+  where: string;
+  family: "price" | "filings";
+  firingRate: number;
+  firingRateText: string;
+  sampleSize: number;
+  universeLabel: string;
+  rateSentence: string;
+  explain: Explanation;
+}
+
+/** A condition that was never tested. NOT the same as one that came back clear. */
+export interface PreTradeUnchecked {
+  id: string; label: string; reason: string; where: string;
+}
+
+/**
+ * What would give a careful buyer pause.
+ *
+ * Note what is absent: no count, no score, no severity order, no overall verdict.
+ * That is enforced in `api/_lib/pretrade.py` and asserted by
+ * `tests/test_pretrade.py` against the payload's key set, because an aggregate
+ * field is the direction any later change to this panel would drift in.
+ */
+export interface PreTrade {
+  headline: string;
+  framing: string;
+  /** Keyed by the section each note describes — never matched by wording. */
+  notes: { base?: string; notChecked?: string; uncalibrated?: string };
+  measuredOn: string | null;
+  caveat: string;
+  flags: PreTradeCheck[];
+  /** True here AND true of most of the market, so shown apart and uncoloured. */
+  baseConditions: PreTradeCheck[];
+  notChecked: PreTradeUnchecked[];
+  /** Known to the app, withheld because nobody has measured its base rate. */
+  uncalibrated: { id: string; label: string }[];
+  calibration: {
+    measuredOn: string | null;
+    universeLabel: string | null;
+    universes: string[] | null;
+    /** Which population the rates describe — see `_rate_for` in pretrade.py. */
+    market: string | null;
+    baseRateMax: number;
+  } | null;
+}
+
 export interface ConfluenceResponse {
   ticker: string;
   anomaly: Leg<AnomalyResponse>;
@@ -622,6 +684,7 @@ export interface ConfluenceResponse {
   quality: Leg<QualityResponse>;
   news: Leg<NewsResponse>;
   synthesis: Synthesis;
+  preTrade: PreTrade;
 }
 
 /**

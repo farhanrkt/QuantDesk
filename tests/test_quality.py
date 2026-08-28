@@ -81,6 +81,11 @@ def test_analyze_refuses_a_bank_rather_than_scoring_it(healthy):
     assert result["applicable"] is False
     assert result["piotroski"] is None and result["altman"] is None
     assert "bank" in result["reason"].lower()
+    # The CAUSE is a value, not a keyword to be sniffed out of the prose. A
+    # designed refusal and a data gap are different facts and callers act on
+    # the difference — see `_lib/pretrade.py`, which words its "not checked"
+    # reason per model for one and quotes the gap verbatim for the other.
+    assert result["cause"] == "financial"
 
 
 def test_analyze_refuses_when_statements_are_empty():
@@ -88,6 +93,7 @@ def test_analyze_refuses_when_statements_are_empty():
                         "income": pd.DataFrame(), "balance": pd.DataFrame(),
                         "cashflow": pd.DataFrame()})
     assert result["applicable"] is False
+    assert result["cause"] == "no-statements", "a data gap must not read as a refusal"
 
 
 # --------------------------------------------------------------------------- #

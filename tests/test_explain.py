@@ -118,6 +118,7 @@ SAMPLES: dict[str, tuple] = {
     "compositeRank": (78.0, {"coverage": 1.0, "available": 7, "total": 7}),
     "signalRank": (93.0, {"signal": "lowVolatility", "raw": 0.14, "raw_text": "14.0%"}),
     "signalOverlap": (0.98, {"a": "Momentum", "b": "Trend"}),
+    "checkFiringRate": (0.08, {"universe_label": "4 index universes"}),
 }
 
 

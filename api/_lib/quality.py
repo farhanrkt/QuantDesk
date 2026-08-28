@@ -384,6 +384,13 @@ def analyze(company: dict) -> dict:
     if is_financial(sector, industry):
         return {
             "applicable": False,
+            # WHY the refusal, as a value rather than a sentence. There are two
+            # ways this lens declines and they are not the same thing: one is a
+            # designed refusal (the models do not transfer to a bank), the other
+            # is missing data. Callers that need to say something specific about
+            # one of them had to sniff the prose for a keyword, which breaks the
+            # first time the prose is reworded.
+            "cause": "financial",
             "reason": (
                 "Piotroski, Altman and Beneish were all built on non-financial "
                 "firms and none of them transfers to a bank or insurer: there is "
@@ -402,6 +409,7 @@ def analyze(company: dict) -> dict:
     if not have_statements:
         return {
             "applicable": False,
+            "cause": "no-statements",
             "reason": "No financial statements came back for this listing.",
             "sector": sector or None, "industry": industry or None,
             "piotroski": None, "altman": None, "beneish": None,

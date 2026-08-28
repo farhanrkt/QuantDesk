@@ -7,6 +7,7 @@ import { ConfluenceRail } from "@/components/ConfluenceRail";
 import { EventStudyPanel } from "@/components/EventStudyPanel";
 import { NewsPanel } from "@/components/NewsPanel";
 import { PeersPanel } from "@/components/PeersPanel";
+import { PreTradePanel } from "@/components/PreTradePanel";
 import { QualityPanel } from "@/components/QualityPanel";
 import { RankingPanel } from "@/components/RankingPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
@@ -81,7 +82,7 @@ function Panel<T>({
 
 export default function Home() {
   const {
-    anomaly, technical, valuation, quality, news, synthesis,
+    anomaly, technical, valuation, quality, news, synthesis, preTrade,
     run, refineValuation, refineTechnical, csvUrl,
   } = useEngines();
   const { state: eventStudy, validate, reset: resetEventStudy } = useEventStudy();
@@ -196,6 +197,17 @@ export default function Home() {
               that renders before three of them have answered would be
               describing a picture that does not exist yet. */}
           {synthesis && <SynthesisPanel data={synthesis} />}
+
+          {/* AFTER the synthesis, deliberately. The synthesis describes what the
+              four lenses reported; this names what would argue against acting on
+              it. A reader should meet the description before the objections to
+              it, which is the same ordering the synthesis uses internally when
+              it puts its blind spots above its next steps.
+
+              It is above the tabs rather than inside a lens because a condition
+              that only appears once you open the panel that already worried you
+              is not a veto — it is a footnote to a decision already made. */}
+          {preTrade && <PreTradePanel data={preTrade} />}
 
           <div>
             <Tabs tabs={TABS} active={tab} onChange={setTab} />

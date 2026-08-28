@@ -186,6 +186,24 @@ def test_confluence_forwards_every_tuning_parameter(client, monkeypatch):
     assert seen["min_turnover"] == 1000
 
 
+def test_confluence_carries_the_pre_trade_block_even_when_legs_fail(client, monkeypatch):
+    """The panel that names what could not be checked has to survive the case
+    where nothing could be checked. A failed leg is its input, not its enemy."""
+    monkeypatch.setattr(index, "whale_payload",
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    monkeypatch.setattr(index.technical, "analyze", lambda *a, **k: {})
+    monkeypatch.setattr(index.valuation, "analyze", lambda *a, **k: {})
+    monkeypatch.setattr(index.news, "fetch_news", lambda *a, **k: [])
+
+    body = client.get("/api/confluence", params={"ticker": "FAKE"}).json()
+    pre_trade = body["preTrade"]
+    assert pre_trade["caveat"] and pre_trade["framing"]
+    assert isinstance(pre_trade["flags"], list)
+    # The one guarantee worth asserting at the wire boundary: no aggregate ever
+    # reaches the client, whatever the engines did.
+    assert not ({"score", "count", "total", "verdict", "severity"} & set(pre_trade))
+
+
 # --------------------------------------------------------------------------- #
 # Q5/Q8 — response headers and payload size
 # --------------------------------------------------------------------------- #

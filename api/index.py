@@ -57,7 +57,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from _lib import (accumulation, eventstudy, explain, market_data, microstructure,
-                  news, quality, ranking, riskmodel, symbols, technical,
+                  news, pretrade, quality, ranking, riskmodel, symbols, technical,
                   universes, valuation)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
@@ -1056,6 +1056,13 @@ async def confluence(
     Carries a `synthesis` block: what the four lenses add up to, in sentences.
     It is a DESCRIPTION and never a recommendation — see `explain.for_synthesis`
     for why a single buy/hold/sell score is refused permanently.
+
+    Carries a `preTrade` block too: the conditions that would give a careful
+    buyer pause, each with the measured share of a universe it fires on. Like
+    the synthesis it reads the ASSEMBLED payload rather than running anything,
+    so it costs no extra fetch and cannot drift from the figures the panels
+    render. See `_lib/pretrade.py` for why an uncalibrated check is withheld and
+    why a common one is demoted from a flag to a base condition.
     """
     symbol = resolved(ticker, market)
 
@@ -1088,4 +1095,13 @@ async def confluence(
     # must quote the figures the panels actually render, and a parallel
     # computation would eventually drift from them. A failed leg becomes a
     # stated blind spot inside it rather than an exception.
-    return ok({"ticker": symbol, **legs, "synthesis": explain.for_synthesis(legs)})
+    return ok({"ticker": symbol, **legs,
+               "synthesis": explain.for_synthesis(legs),
+               # The market decides which population the firing rates describe.
+               # Taken from the RESOLVED symbol rather than the query parameter,
+               # for the same reason every engine downstream of `symbols.resolve`
+               # takes it from there: the suffix is what actually determines the
+               # listing, and a bare code with the wrong market selected would
+               # otherwise be scored against the wrong universe.
+               "preTrade": pretrade.assess(
+                   legs, market="ID" if symbol.upper().endswith(".JK") else "US")})

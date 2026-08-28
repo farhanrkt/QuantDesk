@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from "react";
 import type {
   AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
   Leg, ManualInputs, EventStudyResponse, Market, NewsResponse, QualityResponse,
-  PeersResponse, RankResponse, ScreenerResponse, Synthesis, TechnicalResponse,
+  PeersResponse, PreTrade, RankResponse, ScreenerResponse, Synthesis, TechnicalResponse,
   UniversesResponse,
   ValuationResponse,
 } from "./types";
@@ -192,6 +192,13 @@ export function useEngines() {
   // so a partial re-run of one lens deliberately clears it rather than leaving
   // a summary standing that describes figures no longer on screen.
   const [synthesis, setSynthesis] = useState<Synthesis | null>(null);
+  // The pre-trade panel is cleared and restored on exactly the same rule, and
+  // for a sharper version of the same reason: it reads the assembled payload,
+  // so leaving it up beside a re-run lens would show conditions evaluated
+  // against figures that are no longer the ones on screen. On this panel that
+  // is worse than a stale summary — a flag nobody can reproduce from the page
+  // is the one thing it must never print.
+  const [preTrade, setPreTrade] = useState<PreTrade | null>(null);
 
   // The last options each engine ran with, so a partial re-run can reuse them.
   const lastRun = useRef<RunOptions | null>(null);
@@ -220,6 +227,7 @@ export function useEngines() {
     // lens supersedes some of them, so it is dropped rather than left standing
     // beside numbers it no longer describes.
     setSynthesis(null);
+    setPreTrade(null);
     return settle(
       get<TechnicalResponse>("/api/technical-analysis", {
         ticker: o.ticker, market: o.market, range: o.range,
@@ -235,6 +243,7 @@ export function useEngines() {
     const { signal, current } = claim(["valuation"]);
     setValuation({ status: "loading" });
     setSynthesis(null);          // see runTechnical
+    setPreTrade(null);
     return settle(
       get<ValuationResponse>("/api/intrinsic-value", valuationParams(o, v), signal),
       setValuation,
@@ -259,6 +268,7 @@ export function useEngines() {
     setQuality({ status: "loading" });
     setNews({ status: "loading" });
     setSynthesis(null);
+    setPreTrade(null);
 
     let payload: ConfluenceResponse;
     try {
@@ -282,6 +292,7 @@ export function useEngines() {
     if (current("quality")) setQuality(fromLeg(payload.quality));
     if (current("news")) setNews(fromLeg(payload.news));
     if (current("anomaly")) setSynthesis(payload.synthesis ?? null);
+    if (current("anomaly")) setPreTrade(payload.preTrade ?? null);
 
     // ONE AGGREGATE EVENT, AND DELIBERATELY NOT THE TICKER.
     //
@@ -316,7 +327,7 @@ export function useEngines() {
   );
 
   return {
-    anomaly, technical, valuation, quality, news, synthesis,
+    anomaly, technical, valuation, quality, news, synthesis, preTrade,
     run, refineValuation, refineTechnical, csvUrl,
     valuationOptions: lastValuation, technicalOptions: lastTechnical,
   };
