@@ -131,6 +131,13 @@ export interface EventStudyResponse {
     byDirection: Record<string, Record<string, CarSummary | null>>;
     config?: { estimationWindow: number; gap: number; horizons: number[] };
     caveat?: string;
+    /**
+     * How the EVENTS were chosen, which is a separate question from how each
+     * CAR was measured. The detector behind them is fitted on the whole loaded
+     * window, so selection is not point-in-time; the market model behind each
+     * CAR is. Rendered beside the main caveat, never in place of it.
+     */
+    selectionCaveat?: string;
   };
   earningsProximity: {
     available: boolean; tagged: number; total: number;

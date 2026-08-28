@@ -119,9 +119,13 @@ export function ValuationPanel({
         <Stat label="Market price" value={data.priceLabel}
               sub={data.priceAsOf ? `close of ${data.priceAsOf}`
                                   : data.priceSource ?? undefined} />
+        {/* NO `tone` OVERRIDE. Colouring by the sign of `upside` painted a 5%
+            gap bright green while `_upside` — which knows that gap is inside
+            the noise of a model whose P25-P75 can span 60% — calls it neutral.
+            `ExplainedStat` falls back to `explain.tone`, which is the whole
+            point of deciding direction once, in Python. */}
         <ExplainedStat label="Model's middle estimate" value={mc.p50Label}
                        explain={ex.upside}
-                       tone={(mc.upside ?? 0) >= 0 ? "text-acc" : "text-dist"}
                        sub={`${signedPct(mc.upside)} vs market`} />
         <ExplainedStat explain={ex.valuationSpread}
                        label="Pessimistic to optimistic"

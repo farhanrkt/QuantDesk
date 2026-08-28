@@ -206,6 +206,29 @@ def run_event_study(price_history: pd.DataFrame, market_history: pd.DataFrame,
             "120 trading days ending 10 days before each event. In-sample, on "
             "one ticker, with overlapping windows — indicative, not a backtest."
         ),
+        # THE EVENTS THEMSELVES ARE NOT CHOSEN POINT IN TIME, and until the
+        # audit that was unstated. The market model's estimation window is
+        # clean — it ends before each event and a test proves poisoning the gap
+        # cannot move the fit. But WHICH DAYS BECOME EVENTS is decided by an
+        # Isolation Forest fitted on the whole loaded window, so a large move
+        # late in the history shifts the scaler and can change whether an
+        # earlier day was flagged at all. Measured on four simulated histories,
+        # the whole-window detector picks about 93% of the same events a
+        # leakage-free walk-forward detector would, and slightly fewer of them.
+        #
+        # Stated rather than fixed: walk-forward refits per step and costs
+        # minutes per ticker, which does not fit inside the function limit this
+        # route runs under. The Flow tab offers that mode for anyone who wants
+        # the stricter selection.
+        "selectionCaveat": (
+            "The days treated as events are chosen by a detector fitted on the whole "
+            "loaded window, so a large move late in the history can change whether an "
+            "earlier day was flagged. On simulated histories that picks about 93% of "
+            "the events a strictly point-in-time detector would. The market model "
+            "behind each CAR is unaffected — its estimation window ends before the "
+            "event. Run the Flow tab in walk-forward mode for selection with no "
+            "look-ahead at all."
+        ),
     }
 
 

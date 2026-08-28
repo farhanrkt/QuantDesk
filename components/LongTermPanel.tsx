@@ -7,7 +7,7 @@ import {
 import { Check, Minus, X } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Explain, ExplainedRow, ExplainedStat, TONE_HEX, useDetail,
+  Explain, ExplainedRow, ExplainedStat, TONE_HEX, TONE_TEXT, useDetail,
 } from "@/components/ui/explain";
 import { useHorizon } from "@/components/ui/horizon";
 import type { ExplainMap, LongTermBlock } from "@/lib/types";
@@ -194,8 +194,13 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                             <Explain explain={ex[`rollingWorst.${row.years}`]} />
                           </span>
                         </td>
+                        {/* From the served tone, not the sign. A worst 3-year
+                            outcome of +0.4% a year is break-even, and
+                            `_rolling_worst` grades it neutral rather than
+                            green — the sign alone would call it a good result. */}
                         <td className={cn("num px-5 py-2 text-right",
-                                          (row.worst ?? 0) >= 0 ? "text-acc" : "text-dist")}>
+                                          TONE_TEXT[ex[`rollingWorst.${row.years}`]?.tone ?? ""]
+                                          ?? "text-chalk")}>
                           {signedPct(row.worst)}
                         </td>
                         {!simple && (
@@ -352,8 +357,11 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                         <td className="num px-5 py-2 text-right text-ash">
                           {row ? signedPct(row.benchmark) : "—"}
                         </td>
+                        {/* Served tone: beating the index by 0.2% is not the
+                            same finding as beating it by 20%, and `_relative_excess`
+                            already draws that line. */}
                         <td className={cn("num px-5 py-2 text-right font-semibold",
-                                          (row?.excess ?? 0) >= 0 ? "text-acc" : "text-dist")}>
+                                          TONE_TEXT[explain?.tone ?? ""] ?? "text-chalk")}>
                           {row ? signedPct(row.excess) : "—"}
                         </td>
                       </tr>

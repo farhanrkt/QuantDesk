@@ -73,6 +73,37 @@ if (FORBIDDEN_IN_REQUESTS.test(requestLayer)) {
   process.exit(1);
 }
 
+// THE CONFLUENCE RAIL KEEPS ITS OWN COPY OF WHICH LENS READS WHICH DATA, and
+// `explain.py` says so in a comment: the rail must render while legs are still
+// loading, so it cannot wait for the server's answer. Two copies of one rule is
+// the arrangement this codebase distrusts most, and the whole claim the app
+// makes — that four lenses are two independent sources — rests on them
+// agreeing. Compared here rather than assumed.
+const railSource = readFileSync(join(ROOT, "components/ConfluenceRail.tsx"), "utf8");
+const pySource = readFileSync(join(ROOT, "api/_lib/explain.py"), "utf8");
+const pyFamilies = Object.fromEntries(
+  [...pySource.matchAll(/"(flow|trend|value|quality)":\s*"(price|filings)"/g)]
+    .map((m) => [m[1], m[2]]));
+const railFamilies = {};
+for (const block of railSource.split(/\n(?=function |const )/)) {
+  const lens = block.match(/lens:\s*"(\w+)"/);
+  const family = block.match(/family:\s*"(price|filings)"/);
+  if (lens && family) railFamilies[lens[1].toLowerCase()] = family[1];
+}
+for (const [lens, family] of Object.entries(pyFamilies)) {
+  if (railFamilies[lens] && railFamilies[lens] !== family) {
+    console.error(`ConfluenceRail puts ${lens} in "${railFamilies[lens]}" while `
+                  + `explain.py puts it in "${family}". The rail's independence `
+                  + `count and the synthesis would disagree about the same ticker.`);
+    process.exit(1);
+  }
+}
+if (Object.keys(railFamilies).length < 4) {
+  console.error("Could not read all four lens families out of ConfluenceRail.tsx; "
+                + "the drift check between it and explain.py is not running.");
+  process.exit(1);
+}
+
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));
 

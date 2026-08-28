@@ -754,7 +754,10 @@ function DeepRow({ row }: { row: DeepenRow }) {
           -0.4% gap to zero decimals rendered it as "-0%", which reads as a bug
           rather than as "the model and the market agree". */}
       <td className={cn("num px-3 py-2 text-right",
-                        (value?.upside ?? 0) >= 0 ? "text-acc" : "text-dist")}>
+                        // The shortlist carries the same explanation map the
+                        // Value tab does; the sign alone would call a 5% gap a
+                        // finding.
+                        TONE_TEXT[value?.explain?.upside?.tone ?? ""] ?? "text-chalk")}>
         {value?.upside == null ? "—" : signedPct(value.upside, 1)}
       </td>
     </tr>

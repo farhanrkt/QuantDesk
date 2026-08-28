@@ -3,7 +3,7 @@
 import type {
   AnomalyResponse, Engine, QualityResponse, TechnicalResponse, ValuationResponse,
 } from "@/lib/types";
-import { cn, pct, verdictLabel } from "@/lib/utils";
+import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
 
 const ACC = "#35C4A8";
 const DIST = "#FF6B6B";
@@ -195,7 +195,11 @@ function readTechnical(state: Engine<TechnicalResponse>): Reading {
   // description of the last few months wearing the same word.
   const context = hasLongTerm
     ? longTerm.view.headline
-    : `Last close ${latest.close.toFixed(2)} (${latest.changePct >= 0 ? "+" : ""}${latest.changePct.toFixed(2)}% on the day)`;
+    // `num` rather than `toFixed`: these are typed non-null, but `jsonsafe`
+    // turns any NaN into a null on the wire, and `.toFixed` on a null throws —
+    // which would take down the rail that sits above every other panel. The
+    // shared formatters render "—" for missing data and are asserted to.
+    : `Last close ${num(latest.close)} (${signedPct(latest.changePct / 100)} on the day)`;
   return {
     lens: "Trend",
     question,

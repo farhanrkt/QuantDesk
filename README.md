@@ -611,7 +611,10 @@ project.
 **Estimator resolution.** Two numbers are reported as bounds rather than measurements, because that is what the data supports. The bid-ask spread cannot be resolved below roughly 0.15× a stock's daily volatility from daily bars, so on liquid names the panel says "at most X" instead of quoting a figure. The Hurst exponent is noisy enough that its "random walk" band is sized from the sample, so a short range says "cannot tell" rather than guessing. Both floors were measured by simulation, not assumed — see `_lib/microstructure.py` and `_lib/indicators.py`.
 
 **Statistical.** Results are in-sample, on one ticker at a time, with overlapping windows.
-The event study is indicative, not a backtest. The Flow lens has no walk-forward validation
+The event study is indicative, not a backtest — and its *events* are chosen by a detector
+fitted on the whole loaded window, so selection is not point-in-time even though each CAR's
+market model is. That picks about 93% of the events a strictly point-in-time detector would;
+the Flow tab's walk-forward mode has no look-ahead at all. The Flow lens has no walk-forward validation
 enabled by default because it costs minutes per ticker.
 
 **Firing rates decay with the lists they were measured on.** The pre-trade panel's base rates

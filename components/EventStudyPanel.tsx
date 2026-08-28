@@ -19,6 +19,24 @@ function significance(p: number | null): { label: string; className: string } {
   return { label: `p = ${p.toFixed(2)}`, className: "text-ash" };
 }
 
+/**
+ * The colour of a cumulative abnormal return, decided by whether it is
+ * DISTINGUISHABLE FROM ZERO rather than by its sign.
+ *
+ * THIS PANEL EXISTS TO REPORT NULLS. On JPM it returns no significant effect at
+ * any horizon, and that is the finding the whole feature is built to deliver.
+ * Painting a +0.73% mean CAR green when its p-value is 0.34 says the opposite of
+ * what the row beside it says — the reader sees a green number and a "p = 0.34"
+ * and takes the colour, because colour is read first and read faster.
+ *
+ * So an insignificant CAR is grey however it is signed, and only a result that
+ * clears the conventional cutoff is allowed to take a direction.
+ */
+function carTone(summary: CarSummary | null): string {
+  if (!summary || summary.pValue === null || summary.pValue >= 0.05) return "text-chalk";
+  return summary.meanCar >= 0 ? "text-acc" : "text-dist";
+}
+
 function CarRow({ horizon, summary }: { horizon: string; summary: CarSummary | null }) {
   if (!summary) {
     return (
@@ -32,8 +50,7 @@ function CarRow({ horizon, summary }: { horizon: string; summary: CarSummary | n
   return (
     <tr className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
       <td className="num px-5 py-2">+{horizon}d</td>
-      <td className={cn("num px-5 py-2 text-right",
-                        summary.meanCar >= 0 ? "text-acc" : "text-dist")}>
+      <td className={cn("num px-5 py-2 text-right", carTone(summary))}>
         {summary.meanCar >= 0 ? "+" : ""}{pct(summary.meanCar, 2)}
       </td>
       <td className="num px-5 py-2 text-right text-ash">
@@ -180,8 +197,7 @@ export function EventStudyPanel({
                           {direction}
                         </td>
                         <td className="num px-5 py-2">+{horizon}d</td>
-                        <td className={cn("num px-5 py-2 text-right",
-                                          (summary?.meanCar ?? 0) >= 0 ? "text-acc" : "text-dist")}>
+                        <td className={cn("num px-5 py-2 text-right", carTone(summary))}>
                           {summary ? `${summary.meanCar >= 0 ? "+" : ""}${pct(summary.meanCar, 2)}` : "—"}
                         </td>
                         <td className="num px-5 py-2 text-right">
@@ -214,6 +230,13 @@ export function EventStudyPanel({
 
       {study.caveat && (
         <p className="text-xs leading-relaxed text-ash">{study.caveat}</p>
+      )}
+      {/* HOW THE EVENTS WERE CHOSEN is a different question from how each CAR
+          was measured, and only the second was ever disclosed here. The market
+          model's estimation window ends before the event; the detector that
+          decides which days ARE events is fitted on the whole window. */}
+      {study.selectionCaveat && (
+        <p className="text-xs leading-relaxed text-ash">{study.selectionCaveat}</p>
       )}
     </div>
   );

@@ -951,6 +951,103 @@ app reads is monetary rather than a ratio.
 
 ---
 
+## 14. The detector and the rendering paths — the two the audit had not swept
+
+**28 August 2026.** §13 covered the calculation layer and said plainly that the anomaly
+engine's internals and the React rendering paths had not been examined to the same depth.
+This is that pass.
+
+### The Isolation Forest is sound, and walk-forward is genuinely leakage-free
+
+| Checked | Result |
+|---|---|
+| NaN reaching the model after the MFI warm-up change | **none** — `dropna` removes 13 of 500 rows first |
+| Strength score bounds and weights | `[0, 100]`, weights sum to 1, logistic maps score 0 to exactly 0.5 |
+| Flagged days score higher than unflagged | 60.1 against 18.4 |
+| MAD mode's 1.4826 constant | recovers sigma = 1.0046 from a standard normal |
+| Modes behaving as documented | threshold and MAD float with the regime; quota pins at 2% |
+| **Walk-forward leakage** | a colossal shock at day 450 changes pre-shock scores by **0.000e+00** |
+
+That last row is the one worth having. Walk-forward refits on `[0, t)` and scores day `t`
+out of sample, and a planted future shock cannot reach a single earlier score.
+
+### The default mode can see the future, and the event study inherits it
+
+The default is `threshold`, which fits the scaler and the forest on the **whole loaded
+window**. That is documented in the module header as caveat A and is defensible for the
+question the Flow tab asks — *which days in this window were unusual?* is a descriptive
+question about a fixed window.
+
+It is less defensible one layer up. Planting the same late shock moved pre-shock scores by
+up to 0.064 and **flipped the flag on seven days that preceded it**. `/api/event-study`
+runs on that default, so the days it treats as events are chosen with information from
+after each event. The route's docstring justified skipping walk-forward on the grounds
+that "the market-model estimation already excludes look-ahead" — which is true, and which
+answers a different question. The estimation window is clean; the **event selection** is
+not.
+
+Measured on four simulated histories, the whole-window detector picks about **93%** of the
+events a point-in-time detector would, and slightly fewer of them. So the contamination is
+real and modest.
+
+Stated rather than fixed: walk-forward refits per step and costs minutes per ticker, which
+does not fit the function limit this route runs under, and the Flow tab already offers that
+mode to anyone who wants the stricter selection. The panel now carries a second caveat
+naming the mechanism and the 93%, beside the one about the market model.
+
+### The rendering paths: colour decided twice, and the second one was cruder
+
+`explain.py` exists so direction is decided once, in Python, with a test. `LongTermPanel`'s
+own docstring records replacing `tone={value >= 0 ? "text-acc" : "text-dist"}` for exactly
+that reason. The fix reached that panel's stat cards and stopped there.
+
+Four places still coloured by the sign of the raw number, and each disagreed with the
+served tone **in the middle of its range**, where the ladder has a deliberate neutral band:
+
+| Site | The disagreement |
+|---|---|
+| `ValuationPanel` gap to fair value | a **5% gap rendered bright green** where `_upside` calls it neutral — inside the noise of a model whose P25-P75 can span 60% |
+| `RankingPanel` shortlist upside | the same, on the deepen table |
+| `LongTermPanel` worst rolling outcome | **+0.4% a year rendered green**, where `_rolling_worst` grades break-even as neutral |
+| `LongTermPanel` excess versus the index | -2% rendered red where the ladder says amber |
+
+All four now read `explain.tone`.
+
+**The event study was the worst of them**, and separately. It coloured the mean CAR by its
+sign regardless of significance — so a +0.73% mean with a p-value of 0.34 rendered green,
+on the one panel in the app whose entire purpose is to report that there is no effect. A
+reader takes the colour, because colour is read first. An insignificant CAR is now neutral
+whatever its sign, and only a result clearing the conventional cutoff takes a direction.
+
+Six sign-based colourings were left alone and are listed in the components: a day's price
+change, the change since a crossover, an anomaly day's move, and the seasonality grid that
+is already labelled *descriptive only*. None of those is a judged metric with a ladder;
+green-for-up is the whole meaning.
+
+### Two copies of one rule, now compared by the build
+
+`ConfluenceRail` keeps its own map of which lens reads which body of data, because it must
+render while legs are still loading and cannot wait for the server. `explain.py` says so in
+a comment. The app's central claim — that four lenses are two independent sources — rests
+on the two agreeing, and nothing checked that they did. They do; `check_frontend.mjs` now
+reads both files and fails if they ever stop, which was verified by breaking it.
+
+### Smaller things
+
+`ConfluenceRail` formatted the last close with `.toFixed(2)` on a value typed non-null.
+`jsonsafe` turns any NaN into a null on the wire, and `.toFixed` on a null throws — which
+would take down the panel that sits above every other one. It uses the shared formatters
+now, which render an em dash for missing data and are asserted to.
+
+Swept and clean: every mapped element carries a key; no unguarded index access; no division
+in a component that can print anything but an em dash. Rendered every tab and every
+technical sub-section for an IDX non-financial and for a bank — the two shapes that
+exercise the currency conversion and the applicability refusal — and scanned the full text
+for leaked `NaN`, `Infinity` and `[object Object]`. **None, on any tab.** Console clean on a
+fresh load.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
