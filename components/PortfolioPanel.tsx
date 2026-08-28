@@ -18,12 +18,12 @@ import { cn, num, pct } from "@/lib/utils";
  * to keep them. Nothing about them reaches the analytics event, which has always
  * carried a market code and a lens count and never a ticker.
  *
- * WHAT THAT DOES NOT FIX, said here as well as in the README: the list travels
- * in a query string, so it lands in the hosting platform's access log like every
- * other URL. The route sets `no-store` so no shared cache keeps a copy, but a
- * GET is a GET. The alternative would mean relaxing the CORS method allowlist
- * and breaking the property that everything the UI does is a plain GET, so it is
- * disclosed rather than hidden.
+ * IT IS THE ONE POST IN THIS APP, and the reason is the input rather than the
+ * size. A company name in a URL is not a fact about anybody; a holdings list is,
+ * and URLs are logged by every hop that handles them — the platform's access
+ * log, any proxy, the browser's own history — none of which a response header
+ * can reach. A body is not. The cost is that "everything the UI does is a plain
+ * GET" is now "everything except this", plus one CORS preflight on this call.
  *
  * IT IS A BUTTON, NOT AN AUTOMATIC LEG. Firing this on every ticker run would
  * send somebody's portfolio to the server on the strength of them having typed
@@ -48,19 +48,26 @@ function useHoldings(): [string, (v: string) => void] {
   return [raw, update];
 }
 
-/** `AAPL, MSFT:2, NVDA` → symbols plus the optional TICKER:WEIGHT pairs. */
-function parse(raw: string): { symbols: string[]; weights: string } {
+/**
+ * `AAPL, MSFT:2, NVDA` → symbols plus the optional weights, as a map.
+ *
+ * A MAP RATHER THAN A STRING because the request is a POST now: the body can
+ * carry structure, so there is no reason to flatten a mapping into text and ask
+ * the server to parse it back. The self-describing `TICKER:WEIGHT` shape stays
+ * in the TEXTAREA, where a human types it.
+ */
+function parse(raw: string): { symbols: string[]; weights: Record<string, number> } {
   const symbols: string[] = [];
-  const weights: string[] = [];
+  const weights: Record<string, number> = {};
   for (const chunk of raw.split(/[\s,]+/)) {
     if (!chunk) continue;
     const [ticker, weight] = chunk.split(":");
     const symbol = ticker.trim().toUpperCase();
     if (!symbol) continue;
     symbols.push(symbol);
-    if (weight && Number(weight) > 0) weights.push(`${symbol}:${Number(weight)}`);
+    if (weight && Number(weight) > 0) weights[symbol] = Number(weight);
   }
-  return { symbols: [...new Set(symbols)], weights: weights.join(",") };
+  return { symbols: [...new Set(symbols)], weights };
 }
 
 export function PortfolioPanel({
@@ -68,7 +75,7 @@ export function PortfolioPanel({
 }: {
   state: Engine<PortfolioResponse>;
   ticker: string;
-  onCompare: (holdings: string[], weights: string) => void;
+  onCompare: (holdings: string[], weights: Record<string, number>) => void;
 }) {
   const [raw, setRaw] = useHoldings();
   const guided = useDetail() === "simple";
@@ -110,9 +117,9 @@ export function PortfolioPanel({
             </ApplyButton>
             <span className="text-[0.68rem] leading-relaxed text-ash">
               Kept in this browser only — this app has no accounts and no database. The list
-              is sent to answer this one question and is not stored or logged by it; it does
-              travel in the request URL, so it reaches the host&apos;s access log like any
-              other address.
+              is sent to answer this one question and forgotten. It travels in the request
+              body rather than the address, which is the one route here that does: a URL is
+              logged by every hop that handles it, and a portfolio has no business in a log.
             </span>
           </div>
         </CardBody>

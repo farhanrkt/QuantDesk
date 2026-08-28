@@ -229,18 +229,41 @@ def test_confluence_carries_the_pre_trade_block_even_when_legs_fail(client, monk
 # --------------------------------------------------------------------------- #
 # The one route whose input is personal
 # --------------------------------------------------------------------------- #
-def test_the_portfolio_route_is_never_stored_in_a_shared_cache(client, monkeypatch):
-    """Every other request asks about a company; this one says what somebody
-    owns. The edge cache is keyed by URL, so a cached response is a copy of a
-    portfolio in shared infrastructure keyed by a string containing it."""
+def portfolio(client, **body):
+    """The one POST in this app. See the route for why it is not a GET."""
+    payload = {"candidate": "NVDA", "holdings": ["AAPL", "MSFT"]}
+    payload.update(body)
+    return client.post("/api/portfolio", json=payload)
+
+
+def test_holdings_travel_in_a_body_and_never_in_a_url(client, monkeypatch):
+    """THE WHOLE REASON THIS ROUTE IS A POST. A company name in a URL is not a
+    fact about anybody; a holdings list is, and URLs are logged by every hop
+    that handles them — the platform's access log, any proxy, the browser's own
+    history. None of that is reachable by a response header, so the input has to
+    leave the address bar rather than be labelled once it is there."""
     monkeypatch.setattr(index.portfolio, "analyse",
                         lambda *a, **k: {"usable": True, "pairs": []})
-    response = client.get("/api/portfolio",
-                          params={"candidate": "NVDA", "holdings": "AAPL,MSFT"})
+    response = portfolio(client)
     assert response.status_code == 200
-    cache = response.headers["Cache-Control"]
+    # The query string is empty, which is the property under test.
+    assert not response.request.url.query, "holdings must not reach the URL"
+    assert "AAPL" not in str(response.request.url)
+
+    # And the old shape is gone rather than quietly still working.
+    assert client.get("/api/portfolio",
+                      params={"candidate": "NVDA", "holdings": "AAPL"}).status_code == 405
+
+
+def test_the_portfolio_response_is_never_stored_in_any_cache(client, monkeypatch):
+    """A POST response is uncacheable by default, so this is belt and braces —
+    kept because "uncacheable by default" is a property of the method that a
+    refactor could quietly change, while an explicit header says what is meant."""
+    monkeypatch.setattr(index.portfolio, "analyse",
+                        lambda *a, **k: {"usable": True, "pairs": []})
+    cache = portfolio(client).headers["Cache-Control"]
     assert "no-store" in cache
-    assert "s-maxage" not in cache, "a portfolio must never reach the edge cache"
+    assert "s-maxage" not in cache
 
 
 def test_weights_are_matched_by_name_rather_than_by_position(client, monkeypatch):
@@ -251,35 +274,43 @@ def test_weights_are_matched_by_name_rather_than_by_position(client, monkeypatch
     monkeypatch.setattr(index.portfolio, "analyse",
                         lambda c, h, weights=None, **k: seen.update(
                             candidate=c, holdings=list(h), weights=weights) or {"usable": False})
-    client.get("/api/portfolio", params={
-        "candidate": "NVDA", "holdings": "AAPL,MSFT", "weights": "MSFT:2,AAPL:0.5"})
+    portfolio(client, weights={"MSFT": 2, "AAPL": 0.5})
     assert seen["weights"] == {"MSFT": 2.0, "AAPL": 0.5}
     assert seen["holdings"] == ["AAPL", "MSFT"]
 
 
-@pytest.mark.parametrize("weights", ["AAPL:nonsense", "AAPL:-1", "AA PL:1", "AAPL:0"])
+@pytest.mark.parametrize("weights", [
+    {"AAPL": "nonsense"}, {"AAPL": -1}, {"AA PL": 1}, {"AAPL": 0},
+])
 def test_a_malformed_weight_is_refused_by_name(client, weights):
-    response = client.get("/api/portfolio", params={
-        "candidate": "NVDA", "holdings": "AAPL", "weights": weights})
-    assert response.status_code == 400
+    """Moving off the query string moved the input out of the logs, not out of
+    reach. A body is still user input and is validated as such."""
+    assert portfolio(client, holdings=["AAPL"], weights=weights).status_code in (400, 422)
+
+
+@pytest.mark.parametrize("body", [
+    {"candidate": "NOT A TICKER", "holdings": ["AAPL"]},
+    {"candidate": "NVDA", "holdings": []},
+    {"candidate": "NVDA"},
+    {"candidate": "NVDA", "holdings": ["AAPL"], "market": "FR"},
+    {"candidate": "NVDA", "holdings": "AAPL"},
+])
+def test_the_body_is_validated_as_strictly_as_the_query_string_was(client, body):
+    assert client.post("/api/portfolio", json=body).status_code in (400, 422)
 
 
 def test_the_candidate_is_never_correlated_against_itself(client, monkeypatch):
     seen = {}
     monkeypatch.setattr(index.portfolio, "analyse",
                         lambda c, h, **k: seen.update(holdings=list(h)) or {"usable": False})
-    client.get("/api/portfolio", params={"candidate": "AAPL", "holdings": "AAPL,MSFT"})
+    portfolio(client, candidate="AAPL", holdings=["AAPL", "MSFT"])
     assert seen["holdings"] == ["MSFT"]
-
-    only_itself = client.get("/api/portfolio",
-                             params={"candidate": "AAPL", "holdings": "AAPL"})
-    assert only_itself.status_code == 400
+    assert portfolio(client, candidate="AAPL", holdings=["AAPL"]).status_code == 400
 
 
 def test_the_holdings_list_is_capped(client):
-    too_many = ",".join(f"AA{i:02d}" for i in range(index.PORTFOLIO_MAX_HOLDINGS + 5))
-    response = client.get("/api/portfolio",
-                          params={"candidate": "NVDA", "holdings": too_many})
+    too_many = [f"AA{i:02d}" for i in range(index.PORTFOLIO_MAX_HOLDINGS + 5)]
+    response = portfolio(client, holdings=too_many)
     assert response.status_code == 400
     assert str(index.PORTFOLIO_MAX_HOLDINGS) in response.json()["detail"]
 
@@ -290,9 +321,15 @@ def test_an_idx_holding_keeps_its_suffix_under_a_us_market(client, monkeypatch):
     seen = {}
     monkeypatch.setattr(index.portfolio, "analyse",
                         lambda c, h, **k: seen.update(holdings=list(h)) or {"usable": False})
-    client.get("/api/portfolio",
-               params={"candidate": "NVDA", "holdings": "BBCA.JK,MSFT", "market": "US"})
+    portfolio(client, holdings=["BBCA.JK", "MSFT"], market="US")
     assert seen["holdings"] == ["BBCA.JK", "MSFT"]
+
+
+def test_post_is_permitted_for_this_route_and_no_other(client):
+    """The CORS allowlist gained POST for one route. Every other endpoint must
+    still refuse it, so the relaxation stays as narrow as it was argued to be."""
+    for path in ("/api/confluence", "/api/rank", "/api/quality", "/api/technical-analysis"):
+        assert client.post(path, json={}).status_code == 405, path
 
 
 # --------------------------------------------------------------------------- #

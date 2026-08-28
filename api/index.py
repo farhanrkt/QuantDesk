@@ -55,6 +55,7 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
 from _lib import (accumulation, eventstudy, explain, market_data, microstructure,
                   news, portfolio, pretrade, quality, ranking, riskmodel, symbols,
@@ -82,10 +83,13 @@ def _allowed_origins() -> list[str]:
     return [] if os.environ.get("VERCEL_ENV") == "production" else ["*"]
 
 
+# POST is permitted for exactly one route. `/api/portfolio` takes a body rather
+# than a query string so that a reader's holdings never enter a URL — see the
+# route itself. Everything else in this app is still a plain GET.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins(),
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -232,21 +236,17 @@ def ok(payload: dict) -> JSONResponse:
 
 
 def private_ok(payload: dict) -> JSONResponse:
-    """A response that no shared cache may keep a copy of.
+    """A response that no cache anywhere may keep a copy of.
 
     THE ONLY ROUTE IN THIS APP WHOSE INPUT IS PERSONAL. Every other request says
     "tell me about this company"; the portfolio route says "here is what I own",
-    which is a different kind of fact about the person asking. The edge cache is
-    keyed by URL, so a cached response is a copy of somebody's holdings sitting
-    in shared infrastructure keyed by a string containing those holdings. The
-    saving is a second of compute; the cost is not worth naming.
+    which is a different kind of fact about the person asking.
 
-    What this does NOT fix, and what the README says out loud rather than
-    glossing: the holdings still travel in a query string, so they appear in the
-    hosting platform's access log like every other URL. That is the price of a
-    GET, and the alternative — a POST body — would mean relaxing the CORS method
-    allowlist and breaking the property that everything the UI does is a plain
-    GET. It is disclosed instead of hidden.
+    A POST response is already uncacheable by default, so this is belt and
+    braces — and it is kept because "uncacheable by default" is a property of
+    the method that a future refactor could quietly change, while an explicit
+    `no-store` says what is intended. It also stops a browser applying heuristic
+    freshness to a body that describes somebody's portfolio.
     """
     return JSONResponse(content=clean(payload),
                         headers={"Cache-Control": "no-store"})
@@ -781,56 +781,68 @@ def _deepen_valuation(symbol: str, market: str) -> dict:
 # --------------------------------------------------------------------------- #
 # Portfolio context — where a candidate sits against what is already owned
 #
-# NO STATE, WHICH IS A CONSTRAINT RATHER THAN A FEATURE HERE. The holdings
-# arrive, are used and are forgotten; nothing is stored, because there is
-# nowhere to store it. The list lives in the reader's own browser and is sent on
-# each request, exactly as the ranking tier's pasted universe already is.
+# THE ONE POST IN THIS APP, AND THE REASON IS THE INPUT RATHER THAN THE SIZE.
+# Everything else here answers "tell me about this company", and a company name
+# in a URL is not a fact about anybody. A holdings list is. URLs are logged by
+# every hop that handles them — the platform's access log, any proxy, the
+# browser's own history — and none of that is reachable by a `Cache-Control`
+# header or by anything else this code can set. A request body is not logged by
+# default anywhere in that chain.
+#
+# The cost is real and worth naming: this app's stated shape was that everything
+# the UI does is a plain GET, and that is now "everything except one route". The
+# CORS allowlist gains POST, and a preflight now happens on this one call. That
+# is a smaller price than putting somebody's portfolio in a log file.
+#
+# NO STATE EITHER. The holdings arrive, are used and are forgotten; nothing is
+# stored, because there is nowhere to store it.
 # --------------------------------------------------------------------------- #
 PORTFOLIO_MAX_HOLDINGS = 40
 
 
-def _parse_weights(raw: Optional[str]) -> dict:
-    """`AAPL:0.3,MSFT:0.2` into a mapping.
+class PortfolioRequest(BaseModel):
+    """The body of the one POST.
 
-    SELF-DESCRIBING RATHER THAN POSITIONAL. A parallel list aligned to
-    `holdings` would silently attach the wrong weight to the wrong name the
-    first time a symbol was dropped for thin history — a plausible wrong answer
-    rather than an error, which is the failure mode this codebase keeps finding.
+    VALIDATED AS STRICTLY AS THE QUERY PARAMETERS IT REPLACED. Moving off the
+    query string moves the input out of the logs, not out of reach — the ticker
+    pattern still has to hold, because `candidate` is interpolated into a
+    yfinance URL path, and the caps still have to hold, because one request here
+    fans out to a batch download.
     """
-    if not raw:
-        return {}
+    candidate: str = Field(..., pattern=TICKER_PATTERN)
+    holdings: list[str] = Field(..., min_length=1, max_length=200)
+    market: str = Field("US", pattern="^(US|ID|us|id)$")
+    # Self-describing rather than positional. A parallel list aligned to
+    # `holdings` would silently attach the wrong weight to the wrong name the
+    # first time a symbol was dropped for thin history — a plausible wrong
+    # answer rather than an error, which is the failure mode this codebase keeps
+    # finding.
+    weights: dict[str, float] = Field(default_factory=dict)
+
+
+def _validated_weights(raw: dict) -> dict:
+    """Ticker → weight, with the same rules the tickers themselves get."""
     out: dict = {}
-    for chunk in raw.replace("\n", ",").split(","):
-        if not chunk.strip():
-            continue
-        ticker, _, value = chunk.partition(":")
-        ticker = ticker.strip().upper()
-        if not TICKER_RE.match(ticker):
+    for ticker, value in (raw or {}).items():
+        symbol = str(ticker).strip().upper()
+        if not TICKER_RE.match(symbol):
             raise HTTPException(status_code=400,
-                                detail=f"Not a valid ticker symbol in weights: {ticker!r}.")
+                                detail=f"Not a valid ticker symbol in weights: {symbol!r}.")
         try:
             weight = float(value)
-        except ValueError as exc:
+        except (TypeError, ValueError) as exc:
             raise HTTPException(
                 status_code=400,
-                detail=f"Weight for {ticker} must be a number, as TICKER:WEIGHT.") from exc
-        if not (weight > 0):
+                detail=f"Weight for {symbol} must be a number.") from exc
+        if not (weight > 0) or not math.isfinite(weight):
             raise HTTPException(status_code=400,
-                                detail=f"Weight for {ticker} must be above zero.")
-        out[ticker] = weight
+                                detail=f"Weight for {symbol} must be above zero.")
+        out[symbol] = weight
     return out
 
 
-@app.get("/api/portfolio")
-def portfolio_context(
-    candidate: str = Query(..., pattern=TICKER_PATTERN),
-    holdings: str = Query(..., min_length=1, max_length=800,
-                          description="Comma or newline separated symbols already held."),
-    market: str = Query("US", pattern="^(US|ID|us|id)$"),
-    weights: Optional[str] = Query(
-        None, max_length=800,
-        description="Optional TICKER:WEIGHT pairs. Equal weights are assumed without it."),
-):
+@app.post("/api/portfolio")
+def portfolio_context(body: PortfolioRequest):
     """Where a candidate sits against a book of holdings.
 
     Answers the question no single-ticker page can: is this the fourth copy of a
@@ -847,17 +859,22 @@ def portfolio_context(
     correlations run about 0.06 higher in the worst quarters, so an ordinary
     year's reading is a floor.
 
-    Nothing is stored. See `private_ok` for what that does and does not buy.
+    A POST, alone in this app, because the input is a fact about the reader
+    rather than about a company and URLs are logged by every hop that handles
+    them. Nothing is stored either — see the note above the route.
     """
-    raw = [t.strip() for t in holdings.replace("\n", ",").split(",") if t.strip()]
+    raw = [t.strip() for t in body.holdings if t and t.strip()]
     bad = [t for t in raw if not TICKER_RE.match(t)]
     if bad:
         raise HTTPException(
             status_code=400,
             detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
                    f"{'...' if len(bad) > 5 else ''}.")
+    if not raw:
+        raise HTTPException(status_code=400, detail="Provide at least one holding.")
 
-    symbol = resolved(candidate, market)
+    market = body.market
+    symbol = resolved(body.candidate, market)
     book = [s for s in dict.fromkeys(resolved(t, market) for t in raw) if s != symbol]
     if not book:
         raise HTTPException(
@@ -870,7 +887,7 @@ def portfolio_context(
                    f"this list has {len(book)}. A correlation matrix that size is also "
                    f"more than anyone reads.")
 
-    result = portfolio.analyse(symbol, book, weights=_parse_weights(weights))
+    result = portfolio.analyse(symbol, book, weights=_validated_weights(body.weights))
     result["explain"] = explain.for_portfolio(result)
     return private_ok({"candidate": symbol, "market": market.upper(), **result})
 

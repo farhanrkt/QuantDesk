@@ -721,12 +721,20 @@ They are sent on the one request that needs them, used, and forgotten; there is 
 server to keep them. Nothing about them reaches the analytics event, which has always carried a
 market code and a lens count and never a ticker.
 
-Two consequences are stated rather than glossed. `/api/portfolio` sets `no-store`, because the
-edge cache is keyed by URL and a cached response would be a copy of somebody's holdings in
-shared infrastructure keyed by a string containing them. And the list still travels in a query
-string, so it lands in the hosting platform's access log like every other URL — the price of a
-GET, where the alternative would mean relaxing the CORS method allowlist and breaking the
-property that everything the UI does is a plain GET. It is disclosed, on the panel and here.
+**This route is the app's only `POST`, and the reason is the input rather than the size.** The
+first version was a GET, disclosing on the panel that the holdings therefore landed in the
+hosting platform's access log. Disclosure was the wrong answer. A company name in a URL is not a
+fact about anybody; a holdings list is, and URLs are logged by every hop that handles them — the
+access log, any proxy in between, the browser's own history. None of that is reachable by a
+response header, and a caveat does not delete a log line. The input had to leave the address bar
+rather than be labelled once it was in it.
+
+The costs are real and small. The stated shape of this app was that everything the UI does is a
+plain GET; it is now "everything except one route". The CORS allowlist gains POST, which a test
+holds to that one route by asserting every other endpoint still refuses it. And there is one
+preflight on the call. `no-store` stays on the response even though a POST is uncacheable by
+default, because "uncacheable by default" is a property of the method that a refactor could
+quietly change while an explicit header says what was meant.
 
 ---
 

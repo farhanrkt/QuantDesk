@@ -34,12 +34,7 @@ export function queryString(params: Record<string, string | number | boolean | n
  * old `no-store` was a REQUEST directive, which shared caches are specified to
  * honour — it was suppressing the very edge cache the API asks for.
  */
-async function get<T>(
-  path: string,
-  params: Record<string, unknown>,
-  signal?: AbortSignal,
-): Promise<T> {
-  const res = await fetch(`${path}?${queryString(params as never)}`, { signal });
+async function unwrap<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let failure: EngineFailure = { message: `Request failed (${res.status})` };
     try {
@@ -52,6 +47,41 @@ async function get<T>(
     throw failure;
   }
   return res.json() as Promise<T>;
+}
+
+async function get<T>(
+  path: string,
+  params: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<T> {
+  return unwrap<T>(await fetch(`${path}?${queryString(params as never)}`, { signal }));
+}
+
+/**
+ * The one POST in this app, and the reason is the INPUT rather than the size.
+ *
+ * Every other request here asks about a company, and a company name in a URL is
+ * not a fact about anybody. A holdings list is — and URLs are logged by every
+ * hop that handles them: the platform's access log, any proxy in between, the
+ * browser's own history. None of that is reachable by a response header. A body
+ * is not logged by default anywhere in that chain.
+ *
+ * The cost is honest and small: this app's stated shape was that everything the
+ * UI does is a plain GET, and it is now "everything except one route", which
+ * also means one CORS preflight on that call. Cheaper than putting somebody's
+ * portfolio in a log file.
+ */
+async function post<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  return unwrap<T>(await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  }));
 }
 
 const asFailure = (err: unknown): EngineFailure =>
@@ -530,7 +560,8 @@ export function useDeepen() {
  * The holdings themselves never reach the analytics event. `track` has always
  * carried a market code and a count of successful lenses and nothing else; a
  * portfolio is the single most revealing thing this app can be told, and it is
- * not collected.
+ * not collected. It travels in a POST body rather than a query string for the
+ * same reason — see `post`.
  */
 export function usePortfolio() {
   const [state, setState] = useState<Engine<PortfolioResponse>>({ status: "idle" });
@@ -538,7 +569,10 @@ export function usePortfolio() {
   const inflight = useRef<AbortController | null>(null);
 
   const compare = useCallback(
-    (o: { candidate: string; market: Market; holdings: string[]; weights?: string }) => {
+    (o: {
+      candidate: string; market: Market; holdings: string[];
+      weights?: Record<string, number>;
+    }) => {
       inflight.current?.abort();
       const controller = new AbortController();
       inflight.current = controller;
@@ -546,9 +580,10 @@ export function usePortfolio() {
       const live = () => seq.current === token;
 
       setState({ status: "loading" });
-      get<PortfolioResponse>("/api/portfolio", {
+      // POST, so the holdings travel in a body rather than a URL. See `post`.
+      post<PortfolioResponse>("/api/portfolio", {
         candidate: o.candidate, market: o.market,
-        holdings: o.holdings.join(","), weights: o.weights,
+        holdings: o.holdings, weights: o.weights ?? {},
       }, controller.signal)
         .then((data) => { if (live()) setState({ status: "ready", data }); })
         .catch((err) => {

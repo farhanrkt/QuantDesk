@@ -291,10 +291,15 @@ was indistinguishable from zero. The same measurement found the limit and the pa
 correlations run about **0.06 higher in the worst quarters**, so an ordinary year's reading is a
 floor on how correlated these will be when it matters.
 
-Holdings live in your browser, never on a server — this app still has no database. They are
-sent to answer that one question and forgotten; the route sets `no-store` so no shared cache
-keeps a copy, and the list never reaches the analytics event. It does travel in the request URL,
-so it lands in the host's access log like every other address, which the panel says out loud.
+Holdings live in your browser, never on a server — this app still has no database. They are sent
+to answer that one question and forgotten, and they never reach the analytics event.
+
+**It is the one `POST` in the app, and the reason is the input rather than the size.** A company
+name in a URL is not a fact about anybody; a holdings list is, and URLs are logged by every hop
+that handles them — the platform's access log, any proxy in between, the browser's own history.
+None of that is reachable by a response header, so the input has to leave the address bar rather
+than be labelled once it is in it. The cost is that "everything the UI does is a plain GET" is
+now "everything except this", plus one CORS preflight on that call.
 
 **Compare with peers.** The ranking tier's percentiles, pointed at a single name. Every other
 figure in the app is absolute — a 33% worst fall, 28% volatility — and a reader with no priors
@@ -441,7 +446,7 @@ scripts/
   measure_correlation_stability.py
                       Do correlations persist? The measurement that
                       licenses the portfolio panel to inform position size
-tests/        1,080 offline tests
+tests/        1,087 offline tests
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -463,7 +468,8 @@ receives the resolved symbol.
 
 ## API
 
-Everything the UI does is a plain `GET`. Interactive docs at `/api/docs`.
+Everything the UI does is a plain `GET`, with one deliberate exception noted below.
+Interactive docs at `/api/docs`.
 
 | Endpoint | What it returns |
 |---|---|
@@ -475,7 +481,7 @@ Everything the UI does is a plain `GET`. Interactive docs at `/api/docs`.
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
 | `GET /api/rank/universes` | The predefined lists, each with its as-of date |
-| `GET /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. `no-store`, never cached |
+| `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. The one POST, and the one `no-store` |
 | `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
 | `GET /api/rank/deepen` | Quality + valuation for a shortlist of up to 8 |
 | `GET /api/screener` | Multi-ticker anomaly scan with FDR correction |
