@@ -5,10 +5,56 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Explain, ExplainedStat, TONE_HEX, useDetail,
 } from "@/components/ui/explain";
-import type { ExplainMap, QualityResponse } from "@/lib/types";
-import { num } from "@/lib/utils";
+import type { DomainDimension, ExplainMap, QualityResponse } from "@/lib/types";
+import { cn, num } from "@/lib/utils";
 
 const ASH = "#7A8CA0";
+
+/**
+ * Where each score came from, beside the score.
+ *
+ * NOTHING IN HERE IS COLOURED, and both directions are the reason.
+ *
+ * "Outside" is not a warning. Every practical use of Piotroski, Altman and
+ * Beneish today is outside their samples — they ended between 1965 and 1996 —
+ * so painting it amber would cry wolf on all three scores for every company
+ * forever, which is how a reader learns to ignore a colour.
+ *
+ * "Inside" is not reassurance, and that is the trap. A green tick against
+ * "period: inside" tells a reader the number can be trusted here, which is a
+ * claim about the model's accuracy on this company that nothing in this app
+ * measures. Same rule as the pre-trade panel: absence of a mismatch is not
+ * evidence of fit.
+ *
+ * So the emphasis is typographic, never chromatic. A mismatch is brighter
+ * because it is the line worth reading first, and that is all it means.
+ */
+const VERDICT_WORD: Record<string, string> = {
+  inside: "inside", outside: "outside", unknown: "cannot tell",
+};
+
+function Dimension({
+  dimension, explain, guided,
+}: { dimension: DomainDimension; explain?: ExplainMap[string]; guided: boolean }) {
+  return (
+    <li className="border-b border-rule/40 px-5 py-2 last:border-0">
+      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
+        <span className="flex items-center gap-1.5 text-xs text-chalk/90">
+          {dimension.name}
+          <Explain explain={explain} />
+        </span>
+        <span className={cn("num text-[0.65rem] uppercase tracking-[0.1em]",
+                            dimension.verdict === "outside" ? "text-chalk/70" : "text-ash")}>
+          {VERDICT_WORD[dimension.verdict] ?? dimension.verdict}
+        </span>
+        <span className="ml-auto num text-[0.68rem] text-ash">{dimension.thisUse}</span>
+      </div>
+      {guided && (
+        <p className="mt-1 text-[0.7rem] leading-relaxed text-ash">{dimension.note}</p>
+      )}
+    </li>
+  );
+}
 
 /**
  * Engine 4 — the lens that opens the filings.
@@ -77,6 +123,51 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
         {altman && <ExplainedStat explain={ex.altman} sub={altman.reading} />}
         {beneish && <ExplainedStat explain={ex.beneish} sub={beneish.reading} />}
       </div>
+
+      {/* ---------------- where the three numbers came from ---------------- */}
+      {data.domains && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Where these numbers come from</CardTitle>
+            <span className="font-mono text-[0.65rem] text-ash">
+              scored on {data.domains.fiscalYear ?? "undated"} filings
+            </span>
+          </CardHeader>
+          <CardBody className="px-0">
+            <p className="px-5 pb-3 text-[0.78rem] leading-relaxed text-ash">
+              Each of these three was fitted on a particular set of companies, in a
+              particular market, in particular years. Every practical use today is outside
+              those samples — they ended between 1965 and 1996 — so this is provenance
+              rather than a warning. It is here because a number carried a long way from
+              where it was tested should say so, and because matching the sample would not
+              make a score right any more than missing it makes one wrong.
+            </p>
+            {Object.entries(data.domains.screens).map(([key, screen]) => (
+              <div key={key} className="border-t border-rule">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pb-1 pt-3">
+                  <span className="eyebrow">{screen.label}</span>
+                  <span className="text-[0.62rem] text-ash">{screen.citation}</span>
+                </div>
+                <p className="px-5 pb-2 text-[0.68rem] leading-relaxed text-ash">
+                  Fitted on {screen.sample}.
+                </p>
+                <ul>
+                  {screen.dimensions.map((dimension) => (
+                    <Dimension key={dimension.key} dimension={dimension} guided={simple}
+                               explain={ex[`domain.${key}.${dimension.key}`]} />
+                  ))}
+                </ul>
+              </div>
+            ))}
+            <p className="border-t border-rule px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+              There is no fit score here on purpose. Counting how many axes match would be a
+              reliability rating, and none of these papers reports how their model behaves
+              on a company like this one — which is the whole reason the axes are listed
+              separately.
+            </p>
+          </CardBody>
+        </Card>
+      )}
 
       {piotroski && piotroski.signals.length > 0 && (
         <Card>

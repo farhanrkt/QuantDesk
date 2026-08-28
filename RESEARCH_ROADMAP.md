@@ -392,12 +392,84 @@ same bug `microstructure.py` already fixed once.
 
 ---
 
+## 8. Validation domain — where each accounting score came from
+
+**Added 28 August 2026.** `quality.py` has always enforced APPLICABILITY: the three screens
+refuse to score a bank, because none of them was built on one. That is a binary gate and it is
+the right one. It is also a different question from the one a reader needs answered next.
+
+Piotroski's nine tests were fitted on US filings from 1976 to 1996, on the highest
+book-to-market fifth of Compustat, and the paper reports the benefit concentrated in small and
+medium firms with low share turnover and no analyst following. Altman's coefficients come from
+sixty-six US manufacturers that did or did not go bankrupt on filings from before 1966.
+Beneish was estimated on fifty manipulators found through SEC enforcement actions between 1982
+and 1988, against 1,708 industry-matched controls. **An IDX large cap in 2026 is outside all
+three, on several axes at once**, and the app printed all three numbers without saying so.
+
+`_lib/screendomain.py` reports where each number came from, on the axes that can actually be
+checked: the period, the market, the kind of business, the size of firm, and — for Beneish —
+how common the event was in the sample the model was tuned on.
+
+### It is provenance, so it is never a colour
+
+Both directions would mislead and the second is the dangerous one.
+
+**Outside is not a warning.** Every practical use of all three models today is outside their
+samples, because the samples ended between 1965 and 1996. A panel that painted that amber
+would be crying wolf on three scores for every company forever, which is how a reader learns
+to ignore a colour.
+
+**Inside is not reassurance**, and that is the trap. A green tick against "period: inside"
+tells a reader the number can be trusted here — a claim about the model's accuracy on this
+company that nothing in this app measures. It is the same rule the pre-trade panel is built
+around: absence of a mismatch is not evidence of fit.
+
+So every reading sits in the `context` band, which the tone map renders neutral, and the
+emphasis is typographic rather than chromatic. There is also **no fit score and no count of
+matching axes**, for the reason a composite is refused everywhere else here: "3 of 4 match"
+would be a reliability rating, and none of these papers reports how its model behaves on a
+company like this one.
+
+### Two things it surfaced that were not obvious
+
+**Altman's market dimension runs the other way.** The zone boundaries the app uses come from
+Altman's 2005 emerging-market recalibration, so an Indonesian listing is on home ground where
+a US one is not — while the coefficients underneath, from 1960s US manufacturers, are outside
+for both. That inversion is now stated on the panel; before it, "emerging-market variant" was
+a phrase in a footnote with no consequence attached.
+
+**Size is answered with index membership rather than a cash threshold.** A market-cap cutoff
+would need a figure in dollars, a rupiah exchange rate, and a view on what "small" meant in
+1976 against what it means now — three invented constants to answer one qualitative question.
+Membership of the Dow, the Nasdaq-100, IDX30 or LQ45 says the same thing with none of them,
+is already in the repo, and carries its own as-of date.
+
+### Where it declines to answer
+
+The book-to-market axis reports **"cannot tell"** for anything that is not obviously expensive.
+Piotroski's sample is the highest book-to-market *quintile*, and a quintile is a position in a
+cross-section: placing a name in one needs a universe-wide scan of book values, which does not
+batch and is not run here. The module makes the one call the data supports — a company priced
+at more than three times book is outside any published breakpoint for that fifth — and refuses
+the other, rather than inventing a threshold. A test asserts it keeps refusing.
+
+### A bug it found
+
+Threading the market through as the request's `market` query parameter reported TLKM.JK as a
+"US listing", because the dropdown said US while the suffix said otherwise. Those two are
+genuinely different questions — `market` selects the valuation conventions, the suffix decides
+what the security is — and this is the class of silent mismatch `symbols.py` was written to
+prevent. `symbols.market_of` already existed; both this block and the pre-trade panel's
+firing-rate lookup now use it.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
 |---|---|
-| Posterior probability for a Beneish flag | The screen's operating characteristics are published; turning "most flags are false alarms" into a number needs them sourced from the paper rather than from memory, with the prevalence prior editable and its sensitivity shown |
-| Validation domain beside each accounting score | An IDX large cap in 2026 sits outside all three screens' original samples. That is provenance, not a defect, but a reader cannot weigh a number without it |
+| Posterior probability for a Beneish flag | The operating characteristics are published — roughly three-quarters of manipulators caught, against a stated false-positive rate — and §8 now states the enriched base rate the model was fitted on, which is the other half of the arithmetic. What remains is sourcing both figures from the paper itself and making the prevalence prior editable with its sensitivity shown |
+| Placing a company in a book-to-market quintile | §8 declines this rather than inventing a breakpoint. It needs a universe-wide scan of book values, and fundamentals do not batch |
 | Portfolio context — correlation, effective independent positions, marginal risk | The largest gap. Holdings must stay client-side to respect the no-state stance, and correlation-aware sizing is a predictive claim that needs its own measurement (does this period's correlation describe the next one?) before it can ship |
 | A stated holding horizon | `rollingReturns` is fixed at 1/3/5 years, so "the worst outcome at YOUR horizon" cannot be answered, and neither can "does an earnings date land inside it" |
 | Measure the lens-vote correlation empirically | Needs a cross-sectional run over many tickers; the caveat is stated qualitatively meanwhile |

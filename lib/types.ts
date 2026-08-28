@@ -141,6 +141,47 @@ export interface EventStudyResponse {
 
 /** Engine 4 — Piotroski / Altman / Beneish. */
 export interface QualitySignal { name: string; passed: boolean | null; detail: string }
+
+/**
+ * One axis on which this use of a screen does or does not match the sample the
+ * screen was fitted on.
+ *
+ * `verdict` is NOT a colour input and there is deliberately no tone here. Both
+ * directions would mislead: "outside" is the normal condition of every use of
+ * these models today, and "inside" as a green tick would claim the score is
+ * therefore reliable — a claim about accuracy that nothing in this app measures.
+ * Colour comes from `explain["domain.<screen>.<key>"].tone`, which is always
+ * neutral, decided in Python like every other tone.
+ */
+export interface DomainDimension {
+  key: string;
+  name: string;
+  /** What the published study's sample actually was, on this axis. */
+  sample: string;
+  /** What this company is, on the same axis. */
+  thisUse: string;
+  verdict: "inside" | "outside" | "unknown";
+  note: string;
+}
+
+export interface ScreenDomain {
+  label: string;
+  citation: string;
+  sample: string;
+  dimensions: DomainDimension[];
+}
+
+/**
+ * Provenance for the three accounting screens. Note what is absent: no fit
+ * score, no count of matching dimensions, no overall verdict. A tally would be
+ * a reliability rating, which is exactly the claim this block refuses to make.
+ */
+export interface ValidationDomains {
+  asOf: string;
+  /** The fiscal year the scores were computed on, not today's year. */
+  fiscalYear: number | null;
+  screens: Record<string, ScreenDomain>;
+}
 export interface QualityResponse {
   applicable: boolean;
   reason?: string;
@@ -162,6 +203,10 @@ export interface QualityResponse {
     indices: Record<string, number | null>;
     indicesAvailable: number; indicesTotal: number;
   } | null;
+  /** Where the three numbers came from. Absent when the lens refused to score. */
+  domains?: ValidationDomains;
+  /** Machine-readable reason the lens declined, when it did. */
+  cause?: "financial" | "no-statements";
   explain?: ExplainMap;
 }
 

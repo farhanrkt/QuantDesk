@@ -48,6 +48,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from . import screendomain
 from .valuation import _get_row, _safe_float
 
 # Sectors and industry keywords the three models were never fitted on.
@@ -369,11 +370,18 @@ def beneish_m_score(income, balance, cashflow) -> dict:
 # --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #
-def analyze(company: dict) -> dict:
+def analyze(company: dict, symbol: Optional[str] = None,
+            market_code: Optional[str] = None) -> dict:
     """The whole quality lens for one company.
 
     `company` is the dict `valuation.fetch_company` already returns, so this
     costs no additional network calls — the statements have been fetched.
+
+    `symbol` and `market_code` are used only by the validation-domain block,
+    which reports whether THIS use sits inside the sample each screen was fitted
+    on. Both are optional: without them the affected dimensions report "unknown"
+    rather than guessing, which is the same contract every other missing input
+    gets here.
     """
     sector = company.get("sector") or ""
     industry = company.get("industry") or ""
@@ -448,4 +456,11 @@ def analyze(company: dict) -> dict:
         "piotroski": piotroski,
         "altman": altman,
         "beneish": beneish,
+        # WHERE THESE NUMBERS CAME FROM, beside the numbers themselves.
+        # Applicability is already enforced above and is a different question:
+        # this one is whether a screen that DOES apply is being asked about a
+        # company like the ones it was fitted on. It is never a colour and never
+        # a verdict — see `_lib/screendomain.py`.
+        "domains": screendomain.assess(company, symbol=symbol,
+                                       market_code=market_code),
     }

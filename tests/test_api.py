@@ -186,6 +186,28 @@ def test_confluence_forwards_every_tuning_parameter(client, monkeypatch):
     assert seen["min_turnover"] == 1000
 
 
+def test_the_market_a_lens_is_told_comes_from_the_symbol_not_the_dropdown(client, monkeypatch):
+    """`market` picks the valuation conventions; the SUFFIX decides what the
+    listing is. Asking "is this an Indonesian listing?" is a question about the
+    security, and reading the dropdown for it reported TLKM.JK as a US listing —
+    the class of silent mismatch `symbols.py` exists to prevent."""
+    seen = {}
+
+    def capture(company, symbol=None, market_code=None):
+        seen["symbol"], seen["market_code"] = symbol, market_code
+        return {"applicable": False, "cause": "no-statements", "reason": "stub"}
+
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda s: {"ok": True})
+    monkeypatch.setattr(index.quality, "analyze", capture)
+
+    # Market says US, the symbol says otherwise. The symbol wins.
+    client.get("/api/quality", params={"ticker": "TLKM.JK", "market": "US"})
+    assert seen == {"symbol": "TLKM.JK", "market_code": "ID"}
+
+    client.get("/api/quality", params={"ticker": "AAPL", "market": "US"})
+    assert seen == {"symbol": "AAPL", "market_code": "US"}
+
+
 def test_confluence_carries_the_pre_trade_block_even_when_legs_fail(client, monkeypatch):
     """The panel that names what could not be checked has to survive the case
     where nothing could be checked. A failed leg is its input, not its enemy."""

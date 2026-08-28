@@ -2476,8 +2476,20 @@ def for_indicators(indicators: dict, price: Optional[float] = None) -> dict:
 
 
 def for_quality(payload: dict) -> dict:
-    """Explanations for Piotroski, Altman, Beneish and each of their inputs."""
+    """Explanations for Piotroski, Altman, Beneish, their inputs and their provenance."""
     out: dict = {}
+    # One explanation per validation-domain dimension, keyed
+    # `domain.<screen>.<dimension>`. The FACTS live in `_lib/screendomain.py`
+    # where the citations are; this only wraps them in the standard three-part
+    # shape so the panel renders them with the same affordance as every other
+    # number, and so the band is decided in the one place bands are decided.
+    for screen, block in ((payload.get("domains") or {}).get("screens") or {}).items():
+        for dimension in block.get("dimensions") or []:
+            result = explain("validationDomain", dimension.get("verdict"),
+                             name=dimension.get("name"), sample=dimension.get("sample"),
+                             this_use=dimension.get("thisUse"), note=dimension.get("note"))
+            if result:
+                out[f"domain.{screen}.{dimension['key']}"] = result
     piotroski = payload.get("piotroski") or {}
     if piotroski:
         out["piotroski"] = explain("piotroski", piotroski.get("score"),
@@ -3556,6 +3568,70 @@ def _check_firing_rate(value, check_label=None, universe_label=None, **_):
         band=band, good_direction="none", evidence="strong",
         value_text=_pct(value, 0),
     )
+
+
+# ============================================================================ #
+# Validation domain — whether a use sits inside the sample a screen was fitted on
+#
+# WHY THIS IS ALWAYS `context` AND NEVER A COLOUR
+# -----------------------------------------------
+# Both directions would mislead, and the second is the dangerous one.
+#
+# OUTSIDE is not a warning. Every practical use of Piotroski, Altman and Beneish
+# today is outside their samples, because the samples ended between 1965 and
+# 1996. A panel that painted that amber would be crying wolf on all three scores
+# for every company, forever, which is how a reader learns to ignore the colour.
+#
+# INSIDE is not reassurance. A green tick against "period: inside" would say the
+# score can be trusted here — a claim about the model's accuracy on this company
+# that nothing in this app measures. Absence of a mismatch is not evidence of
+# fit, which is the same rule the pre-trade panel is built around.
+#
+# So the band is `context` in every case and the words carry the difference.
+# ============================================================================ #
+@metric("validationDomain")
+def _validation_domain(value, name=None, sample=None, this_use=None, note=None, **_):
+    label = name or "Validation domain"
+    what = ("Which companies, in which market and in which years, the published study "
+            "behind this score was actually fitted on. A model used outside that sample "
+            "is not thereby wrong — it is being asked a question nobody has checked it "
+            "against.")
+    if not _known(value):
+        # No verdict at all is a gap, and gaps take the one band that is never a
+        # colour anywhere in this app.
+        return unavailable(label, what, "this dimension was not evaluated")
+    verdict = str(value).lower() if isinstance(value, str) else ""
+    if verdict not in (INSIDE_WORD, OUTSIDE_WORD, UNKNOWN_WORD):
+        # The glossary probes every interpreter with numbers. This one takes a
+        # verdict string, so the numeric probe falls through to the definition
+        # rather than to None — which would fail the manual's build.
+        return make(label, what,
+                    "This line reports whether one aspect of this company matches the "
+                    "study's sample: the years, the market, the kind of business, or the "
+                    "size of firm the effect was found in.",
+                    "Read it as provenance. It tells you how far the number has been "
+                    "carried from where it was tested, not whether the number is right.",
+                    "context", "none", evidence="strong")
+
+    where = f"Study sample: {sample}. This company: {this_use}. " if sample and this_use else ""
+    heading = {
+        INSIDE_WORD: "Inside the study's sample on this axis. ",
+        OUTSIDE_WORD: "Outside the study's sample on this axis. ",
+        UNKNOWN_WORD: "Cannot be placed against the study's sample on this axis. ",
+    }[verdict]
+    return make(
+        label=label, what=what, reading=heading + where + (note or ""),
+        action=("Nothing to act on. This is where the number came from, not a judgement "
+                "about the number — and matching the sample would not make the score "
+                "reliable here any more than missing it makes it wrong."),
+        band="context", good_direction="none", evidence="strong",
+        value_text=verdict,
+    )
+
+
+# The three words `screendomain` speaks. Kept here as well so the interpreter
+# above does not import that module and create a cycle through `valuation`.
+INSIDE_WORD, OUTSIDE_WORD, UNKNOWN_WORD = "inside", "outside", "unknown"
 
 
 # The sentence the whole panel is designed around. It is a constant rather than

@@ -189,6 +189,21 @@ means the answer rests on a perpetuity guess rather than the forecast.
 - **Beneish M-Score** — do the accruals resemble those of companies later found to have
   manipulated earnings?
 
+**Where each number came from, beside the number.** Applicability is one question and the app
+has always enforced it; *whether this use resembles the sample the screen was fitted on* is a
+different one, and it went unanswered. Each score now carries its provenance on the axes that
+can be checked — period, market, kind of business, size of firm, and how common the event was
+in the sample the model was tuned on. An IDX large cap in 2026 is outside all three original
+samples on several axes at once.
+
+It is provenance, so **none of it is coloured**. Outside is not a warning — every practical use
+of all three is outside, because the samples ended between 1965 and 1996 — and inside is not
+reassurance, because matching a sample says nothing about accuracy on this company. There is no
+fit score either: counting matching axes would be a reliability rating none of these papers
+supports. One nice inversion falls out of it: Altman's zone boundaries come from a 2005
+emerging-market recalibration, so an *Indonesian* listing is on home ground where a US one is
+not, while the 1960s coefficients underneath are outside for both.
+
 **What it can't tell you.** Anything about a bank or insurer — and it says so rather than
 printing a number. None of the three was built on financial firms: there's no operating
 cycle for "working capital" to describe, and revenue isn't a receivables-and-inventory
@@ -306,6 +321,7 @@ where a constant was invented, it got replaced by an estimator.
 | Quoting an estimated bid-ask spread as a cost | **The estimator's own resolution floor** | Both spread estimators have a noise floor proportional to volatility — 0.148× and 0.361× the daily standard deviation, measured with the true spread set to zero. On a mega-cap that floor is an order of magnitude above the real spread, so the app reported a cost the stock does not charge. Below the floor it now reports a ceiling |
 | Assuming the signal works | **Event study** (Brown & Warner 1985) | Measures it, and reports null results |
 | Reporting raw screener hits | **Benjamini-Hochberg (1995)** | Scanning many names produces hits by construction |
+| An accounting score with no provenance | **The published sample, on the axes that can be checked** | Piotroski was fitted on US value stocks in 1976-1996, Altman on 1960s manufacturers, Beneish on 1980s SEC cases. Every use today is outside all three, which is provenance rather than a defect — so it is stated, never coloured, and never counted into a fit score |
 | A pre-trade flag on its own | **The flag plus its measured firing rate** | "Altman says distress" is unreadable without knowing how often Altman says distress. Measured across four index universes: the conditions that turned out to fire on most of the market are demoted to base conditions rather than presented as findings, and an uncalibrated check is withheld |
 | A composite score across signals | **Percentile ranks + a measured overlap** | Momentum, 52-week-high and relative strength are three phrasings of "it went up"; the panel reports how many *independent* signals the composite really averages |
 | Colouring metrics at each call site | **One ladder per metric, in Python** | A third of them are "low is good" and sit in the same grid as the rest; direction is encoded once and asserted by tests |
@@ -340,6 +356,8 @@ api/
               universes.py      Predefined ticker lists, each date-stamped
               pretrade.py       The conditions that would stop a careful buyer,
                                 each gated on a measured firing rate
+              screendomain.py   Whether a use of an accounting screen sits inside
+                                the sample it was validated on
               explain.py        Plain-English interpretation for every metric,
                                 and the cross-lens synthesis
               symbols.py        Ticker → Yahoo symbol, resolved once
@@ -350,7 +368,7 @@ docs/
 scripts/
   build_glossary.py   Regenerates that glossary, and CI's drift check
   calibrate_checks.py How often each pre-trade check fires, measured offline
-tests/        955 offline tests
+tests/        996 offline tests
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -547,7 +565,7 @@ sentiment would need full article text and a lexicon that covers Indonesian.
 - **[docs/field-manual.html](docs/field-manual.html)** — a beginner's guide to the whole app
   ([published copy](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009)). All four
   lenses, the synthesis that reads them together, the statistics that decide whether to believe any
-  of it, and every one of the 80 metrics in a searchable glossary. Assumes no prior finance.
+  of it, and every one of the 81 metrics in a searchable glossary. Assumes no prior finance.
 
   Its glossary is **generated**, not transcribed: `scripts/build_glossary.py` injects the same
   strings `_lib/explain.py` puts on screen, and CI fails if a metric is added without regenerating.

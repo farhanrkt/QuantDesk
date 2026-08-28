@@ -81,6 +81,7 @@ _group("flow", "spread moveVsSpread yangZhangVol amihud anomalyRate qValue cusum
 _group("value", "upside probUndervalued terminalShare discountRate valuationSpread impliedGrowth")
 _group("rank", "compositeRank signalRank signalOverlap")
 _group("pretrade", "checkFiringRate")
+_group("provenance", "validationDomain")
 
 # Values chosen to land inside SOME band of every ladder in the registry. An
 # interpreter is asked in turn until one returns a reading; the specific value

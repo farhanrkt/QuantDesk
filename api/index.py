@@ -924,7 +924,18 @@ def quality_payload(symbol: str) -> dict:
             status_code=404,
             detail=f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
         )
-    payload = quality.analyze(company)
+    # The symbol reaches the lens only so the validation-domain block can say
+    # whether THIS use sits inside each screen's published sample. No score
+    # depends on it.
+    #
+    # THE MARKET COMES FROM THE RESOLVED SYMBOL, NOT FROM THE QUERY PARAMETER.
+    # The two can disagree — `market` selects the conventions to value with,
+    # while the suffix decides what the listing actually is — and asking "is this
+    # an Indonesian listing?" is a question about the security. Reading the
+    # dropdown instead told a reader that TLKM.JK was a US listing, which is the
+    # class of silent mismatch `symbols.py` exists to prevent.
+    payload = quality.analyze(company, symbol=symbol,
+                              market_code=symbols.market_of(symbol))
     payload["explain"] = explain.for_quality(payload)
     return payload
 
@@ -1103,5 +1114,4 @@ async def confluence(
                # takes it from there: the suffix is what actually determines the
                # listing, and a bare code with the wrong market selected would
                # otherwise be scored against the wrong universe.
-               "preTrade": pretrade.assess(
-                   legs, market="ID" if symbol.upper().endswith(".JK") else "US")})
+               "preTrade": pretrade.assess(legs, market=symbols.market_of(symbol))})
