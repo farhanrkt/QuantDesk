@@ -14,6 +14,7 @@ import { QualityPanel } from "@/components/QualityPanel";
 import { RankingPanel } from "@/components/RankingPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
 import { SynthesisPanel } from "@/components/SynthesisPanel";
+import { ThesisPanel } from "@/components/ThesisPanel";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { TickerBar } from "@/components/TickerBar";
 import { ManualRescue } from "@/components/ValuationControls";
@@ -43,6 +44,10 @@ const TABS = [
   // The fourth question this app can answer — how does it sit against what I
   // already own — and the only one that needs an input other than a ticker.
   { id: "portfolio", label: "Portfolio fit", accent: "#6FD0C0" },
+  // Last, because it is the only tab that asks the reader for something rather
+  // than telling them something, and it is meant to be reached after the rest
+  // has been read.
+  { id: "thesis", label: "Thesis", accent: "#A78BFA" },
   { id: "screen", label: "Scan & rank", accent: "#A78BFA" },
 ];
 
@@ -289,6 +294,32 @@ export default function Home() {
               )}
               {tab === "quality" && (
                 <Panel state={quality}>{(d) => <QualityPanel data={d} />}</Panel>
+              )}
+              {/* THE SNAPSHOT IS ASSEMBLED HERE, FROM WHAT IS ON SCREEN. A
+                  thesis is frozen against the numbers the reader was actually
+                  looking at, so these are read from the settled legs rather
+                  than re-fetched — a snapshot taken from a second request
+                  would record a page nobody saw. */}
+              {tab === "thesis" && (
+                <ThesisPanel
+                  ticker={resolvedTicker}
+                  snapshot={{
+                    impliedGrowth: valuation.status === "ready"
+                      ? valuation.data.baseCase?.impliedGrowth ?? null : null,
+                    assumedGrowth: valuation.status === "ready"
+                      ? valuation.data.baseCase?.assumedGrowth ?? null : null,
+                    price: valuation.status === "ready" ? valuation.data.price : null,
+                    priceLabel: valuation.status === "ready"
+                      ? valuation.data.priceLabel : null,
+                    maxDrawdown: technical.status === "ready"
+                      ? technical.data.longTerm?.drawdown?.maxDrawdown ?? null : null,
+                    worstAtHorizon: technical.status === "ready"
+                      ? (technical.data.longTerm?.rollingReturns ?? [])
+                          .find((r) => r.years === horizon && r.usable !== false)?.worst ?? null
+                      : null,
+                    firedChecks: (preTrade?.flags ?? []).map((f) => f.explain.label),
+                  }}
+                />
               )}
               {tab === "portfolio" && (
                 <PortfolioPanel

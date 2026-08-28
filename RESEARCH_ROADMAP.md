@@ -730,6 +730,82 @@ property that everything the UI does is a plain GET. It is disclosed, on the pan
 
 ---
 
+## 12. A thesis journal, and the no-state principle it had to respect
+
+**Added 28 August 2026.** The last of the directions in the brief, and the only one that asks
+the reader for something rather than telling them something. Recorded before acting: what has
+to be true, what would falsify it, the horizon, the size, and whether you believe more or less
+growth than the reverse DCF says the price requires.
+
+### Nothing about it reaches a server, and that decided the architecture
+
+Every other panel here sends a ticker away and gets a reading back. A thesis is the opposite
+kind of object: it is what the reader believes, which is nobody else's business and has no
+reason to leave the machine it was typed on. So it does not. It lives in this browser's local
+storage beside the reading mode, the holding horizon and the holdings list, and **no request in
+this codebase carries it**.
+
+That constraint puts the logic in TypeScript, where this project deliberately keeps none of its
+judgement. The resolution is the escape hatch the project already built for exactly this case:
+`scripts/check_frontend.mjs` compiles modules with the `tsc` already in the tree and runs
+assertions on bare node. `agreementOf` went the same way for the same reason, and `lib/journal.ts`
+joins it — seventeen assertions covering the contradiction checks, the drift comparison and the
+storage layer, on top of the eighteen that were there.
+
+The invariant itself is guarded at source level, because it is a property of what the request
+layer does **not** contain and no unit test on a compiled module can see it. `check_frontend.mjs`
+greps `lib/api.ts` for any mention of the journal and fails the build if it finds one. The
+failure it exists to catch is somebody adding a convenient "sync your journal" call years from
+now without noticing what it costs. Verified by breaking it deliberately and watching the build
+go red.
+
+### An entry cannot be edited, and that is the feature
+
+A thesis you can revise once you know how it turned out is a rationalisation with a timestamp
+on it. The only version worth keeping is the one written before the outcome, in the words
+actually used — so `appendEntry` only ever appends, there is no update path, and the snapshot of
+what the app was showing is frozen into the entry rather than re-fetched when it is read back.
+
+Deleting is offered, because keeping something against someone's wishes is a different kind of
+wrong. Nothing rewrites.
+
+### Nothing is ever scored
+
+Entries come back as written. Where the numbers have moved since, the movement is reported as
+movement — *"growth the price requires: 52% → 38%"* — and the block says in words that it is not
+a verdict on the thesis that preceded it.
+
+A journal that graded its own entries would be a backtest of one, on a sample the reader chose,
+with no control for what they did not write down. This app refuses composites elsewhere on far
+better evidence than that, and it would be strange to make the exception here, on the weakest
+sample in the building.
+
+### The one live check, in three parts
+
+The brief called for a check on whether a recorded thesis contradicts what the lenses already
+say. Three are checkable, and each names the gap rather than blocking on it:
+
+* **Growth belief against the reverse DCF.** Both directions, because believing *more* than the
+  price requires is as much a thesis as believing less — and the panel says so: *"that gap is
+  the thesis: you are betting the market is asking too little of this business."* A five-point
+  tolerance, because two people agreeing imprecisely are not disagreeing.
+* **Position size against this stock's own worst fall.** *"A 70% position in something that has
+  already fallen 33% peak to trough is 23% of the account, gone, in a repeat of a fall this
+  stock has actually had. Not a forecast — a thing that happened."*
+* **A losing worst case at the stated horizon**, where the rolling-return distribution has one.
+
+Disagreeing with the model is a respectable thing to do — the reverse DCF exists to be argued
+with, and the Value lens has always said so. Disagreeing without noticing is not, and that is
+the whole of what these name. A test asserts none of them ever instructs.
+
+### What local storage costs, said out loud
+
+One cleared cache, one private window or one new machine away from gone. The panel says that in
+those words and offers a JSON export, because a journal that quietly evaporates is worse than
+no journal: the reader would have believed they had a record.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |

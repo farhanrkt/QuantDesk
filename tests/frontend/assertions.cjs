@@ -136,4 +136,141 @@ t("csv leaves NEGATIVE NUMBERS alone", () => {
   assert.deepEqual(out.split("\r\n").slice(1), ["-12.5","0","3.2"]);
 });
 
+
+// ---- the thesis journal: client-side by design, so tested here ------------
+// A thesis is what the reader believes, which has no reason to leave their
+// machine, so none of this can live in Python with the rest of the app's
+// judgement. That makes this file the only thing standing between it and
+// shipping untested.
+const J = require("./lib/journal.js");
+
+const SNAP = (over = {}) => ({
+  impliedGrowth: 0.37, assumedGrowth: 0.10, maxDrawdown: -0.33,
+  price: 300, priceLabel: "$300.00", worstAtHorizon: 0.004, firedChecks: [], ...over,
+});
+const ENTRY = (over = {}) => ({
+  id: "AAPL-1", ticker: "AAPL", written: "2026-08-28T10:00:00.000Z",
+  thesis: "Services keeps compounding.", falsifier: "Services growth stalls.",
+  growthBelief: 0.10, horizonYears: 3, positionShare: 0.05, snapshot: SNAP(), ...over,
+});
+const keys = (list) => list.map((c) => c.key).sort();
+
+t("believing less growth than the price requires is named as such", () => {
+  const found = J.contradictions(ENTRY({ growthBelief: 0.10 }));
+  assert.ok(keys(found).includes("belowImplied"));
+  const one = found.find((c) => c.key === "belowImplied");
+  assert.match(one.detail, /10% a year/);
+  assert.match(one.detail, /37% a year/);
+  assert.match(one.detail, /should be\s+deliberate/);
+});
+
+t("believing MORE than the price requires is named too, not only the bearish gap", () => {
+  const found = J.contradictions(ENTRY({ growthBelief: 0.50 }));
+  assert.ok(keys(found).includes("aboveImplied"));
+  assert.match(found.find((c) => c.key === "aboveImplied").detail, /know something/);
+});
+
+t("agreeing with the price within the tolerance is not a contradiction", () => {
+  const found = J.contradictions(ENTRY({ growthBelief: 0.34 }));
+  assert.ok(!keys(found).includes("belowImplied"));
+  assert.ok(!keys(found).includes("aboveImplied"));
+});
+
+t("no stated belief means no belief check rather than a default one", () => {
+  const found = J.contradictions(ENTRY({ growthBelief: null }));
+  assert.ok(!keys(found).some((k) => k.endsWith("Implied")));
+});
+
+t("a missing implied growth is silence, never a comparison against zero", () => {
+  const found = J.contradictions(ENTRY({ snapshot: SNAP({ impliedGrowth: null }) }));
+  assert.ok(!keys(found).some((k) => k.endsWith("Implied")));
+});
+
+t("size is checked against the fall this stock has actually had", () => {
+  // 70% of the account in something that fell 33% is 23% of everything.
+  const found = J.contradictions(ENTRY({ positionShare: 0.70 }));
+  const one = found.find((c) => c.key === "sizeVsDrawdown");
+  assert.ok(one, "a position this size must be named");
+  assert.match(one.detail, /23% of the\s+account/);
+  assert.match(one.detail, /a thing that happened/);
+});
+
+t("a modest position against the same drawdown is left alone", () => {
+  assert.ok(!keys(J.contradictions(ENTRY({ positionShare: 0.05 }))).includes("sizeVsDrawdown"));
+});
+
+t("a losing worst case at the stated horizon is surfaced", () => {
+  const found = J.contradictions(ENTRY({ snapshot: SNAP({ worstAtHorizon: -0.08 }) }));
+  const one = found.find((c) => c.key === "negativeAtHorizon");
+  assert.ok(one);
+  assert.match(one.title, /3-year holders/);
+  // ...and a positive worst case is not dressed up as a warning.
+  assert.ok(!keys(J.contradictions(ENTRY())).includes("negativeAtHorizon"));
+});
+
+t("nothing in a contradiction ever instructs", () => {
+  const all = [
+    ...J.contradictions(ENTRY({ growthBelief: 0.02, positionShare: 0.9 })),
+    ...J.contradictions(ENTRY({ growthBelief: 0.9 })),
+  ].map((c) => `${c.title} ${c.detail}`).join(" ").toLowerCase();
+  for (const phrase of ["do not buy", "you should", "we recommend", "sell", "avoid"]) {
+    assert.ok(!all.includes(phrase), `journal said ${phrase}`);
+  }
+});
+
+// ---- drift: movement, never a verdict ------------------------------------
+t("drift reports what moved and does not judge it", () => {
+  const moved = J.drift(ENTRY(), SNAP({ impliedGrowth: 0.24, priceLabel: "$210.00" }));
+  const byKey = Object.fromEntries(moved.map((d) => [d.key, d]));
+  assert.equal(byKey.impliedGrowth.then, "37%");
+  assert.equal(byKey.impliedGrowth.now, "24%");
+  assert.equal(byKey.price.then, "$300.00");
+  assert.equal(byKey.price.now, "$210.00");
+  // No field on a Drift may carry a judgement — only a label and two values.
+  assert.deepEqual(Object.keys(byKey.impliedGrowth).sort(), ["key", "label", "now", "then"]);
+});
+
+t("a number that has not moved is not reported as drift", () => {
+  assert.equal(J.drift(ENTRY(), SNAP()).length, 0);
+  assert.equal(J.drift(ENTRY(), SNAP({ impliedGrowth: 0.372 })).length, 0);
+});
+
+t("drift needs both sides and never invents one", () => {
+  assert.equal(J.drift(ENTRY(), SNAP({ impliedGrowth: null })).length, 0);
+  assert.equal(J.drift(ENTRY({ snapshot: {} }), SNAP()).length, 0);
+});
+
+// ---- storage: append-only, and defensive about what comes back out -------
+t("entries come back newest first", () => {
+  const raw = JSON.stringify([
+    ENTRY({ id: "a", written: "2026-01-01T00:00:00.000Z" }),
+    ENTRY({ id: "b", written: "2026-06-01T00:00:00.000Z" }),
+  ]);
+  assert.deepEqual(J.readJournal(raw).map((e) => e.id), ["b", "a"]);
+});
+
+t("a corrupt store loses the bad rows, never the good ones", () => {
+  const raw = JSON.stringify([ENTRY({ id: "good" }), { nonsense: true }, null, 7]);
+  assert.deepEqual(J.readJournal(raw).map((e) => e.id), ["good"]);
+});
+
+t("unparseable storage is an empty journal, not an exception", () => {
+  assert.deepEqual(J.readJournal("{not json"), []);
+  assert.deepEqual(J.readJournal(null), []);
+  assert.deepEqual(J.readJournal(JSON.stringify({ not: "an array" })), []);
+});
+
+t("saving appends and never rewrites an existing entry", () => {
+  const first = ENTRY({ id: "one", thesis: "as written" });
+  const list = J.appendEntry([first], ENTRY({ id: "two" }));
+  assert.deepEqual(list.map((e) => e.id), ["two", "one"]);
+  assert.equal(list[1].thesis, "as written", "an earlier entry must survive untouched");
+});
+
+t("ids carry the ticker and the instant, so two theses cannot collide", () => {
+  const when = new Date("2026-08-28T10:00:00.000Z");
+  assert.equal(J.newId(when, "aapl"), "AAPL-2026-08-28T10:00:00.000Z");
+  assert.notEqual(J.newId(when, "AAPL"), J.newId(when, "MSFT"));
+});
+
 console.log(`  ${n} frontend assertions passed`);

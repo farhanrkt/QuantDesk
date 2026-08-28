@@ -31,7 +31,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, symlinkSync, writeFileSync, cpSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,10 +44,34 @@ const SOURCES = [
   "components/ConfluenceRail.tsx",
   "lib/utils.ts",
   "lib/csv.ts",
+  // The thesis journal never reaches the API by design, so its logic cannot
+  // live in Python with the rest of this project's judgement. This is the
+  // escape hatch that already exists for exactly that case.
+  "lib/journal.ts",
 ];
 
 // Real packages the compiled output requires at load time.
 const PACKAGES = ["react", "react-dom", "lucide-react", "clsx", "tailwind-merge"];
+
+// --------------------------------------------------------------------------- //
+// A source-level invariant the compiled assertions cannot express
+// --------------------------------------------------------------------------- //
+// THE THESIS JOURNAL MUST NEVER REACH THE API. It is the one thing this app
+// holds that is about the reader rather than about a company, and the whole
+// design rests on it staying in the browser. That is a property of what the
+// request layer does NOT contain, so no unit test on a compiled module can see
+// it — but a grep can, and the failure it guards against is somebody adding a
+// convenient "sync your journal" call years from now without noticing what it
+// costs.
+const FORBIDDEN_IN_REQUESTS = /\b(journal|thesis|falsifier|growthBelief)\b/i;
+const requestLayer = readFileSync(join(ROOT, "lib/api.ts"), "utf8")
+  // "synthesis" contains "thesis". Strip the word before looking.
+  .replace(/synthesis/gi, "");
+if (FORBIDDEN_IN_REQUESTS.test(requestLayer)) {
+  console.error("lib/api.ts mentions the thesis journal. Nothing about a reader's own "
+                + "thesis may cross the wire — see components/ThesisPanel.tsx.");
+  process.exit(1);
+}
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));

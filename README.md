@@ -256,6 +256,25 @@ worth** of information. That is printed in the header.
 which fetch one company at a time, which is exactly why they are a second step and not
 another column.
 
+**Thesis journal.** Write down what has to be true, what would falsify it, your horizon, your
+size and the growth you expect — before you act. The entry is timestamped, snapshotted against
+what the app was showing at the time, and **cannot be edited once saved**: a thesis you can
+revise after the outcome is a rationalisation with a timestamp on it.
+
+Three things get checked as you write, and each names a gap rather than blocking on it: your
+growth expectation against what the price requires (both directions — believing *more* is as
+much a thesis as believing less), your position size against this stock's own worst fall
+(*"a 70% position in something that has already fallen 33% is 23% of the account, gone"*), and
+whether any holder at your stated horizon lost money.
+
+**Nothing is ever scored.** Entries come back as written. Where the numbers have moved since,
+the movement is shown as movement and labelled as not a verdict. A journal that graded itself
+would be a backtest of one, on a sample you chose, with no control for what you left out.
+
+It never reaches a server — not even to draw those checks, which run in the browser. That
+invariant is enforced by the build: `check_frontend.mjs` fails if `lib/api.ts` so much as
+mentions the journal.
+
 **Portfolio fit.** The question no single-ticker page can answer: *is this the fourth copy of a
 bet I already hold?* Paste what you own and it reports the candidate's correlation with each
 holding, how many **independent** positions the book really amounts to before and after adding
@@ -363,6 +382,7 @@ where a constant was invented, it got replaced by an estimator.
 | Quoting an estimated bid-ask spread as a cost | **The estimator's own resolution floor** | Both spread estimators have a noise floor proportional to volatility — 0.148× and 0.361× the daily standard deviation, measured with the true spread set to zero. On a mega-cap that floor is an order of magnitude above the real spread, so the app reported a cost the stock does not charge. Below the floor it now reports a ceiling |
 | Assuming the signal works | **Event study** (Brown & Warner 1985) | Measures it, and reports null results |
 | Reporting raw screener hits | **Benjamini-Hochberg (1995)** | Scanning many names produces hits by construction |
+| A journal that tells you whether you were right | **One that shows what you wrote, and what has moved** | Grading its own entries would be a backtest of one, on a self-selected sample, with no control for the theses never written down. Movement is reported as movement |
 | Sizing on a correlation because it seems reasonable | **Measuring whether correlations persist first** | One year's pairwise correlations rank-correlate 0.50-0.65 with the next year's across four universes, where the ranking's information coefficient was indistinguishable from zero. That gap is the whole licence for the portfolio panel, and a test fails if a re-measurement removes it |
 | A bare screen flag | **Bayes on the screen's published error rates** | A screen that catches most manipulators on a population where manipulation is rare still produces mostly false alarms. The prevalence decides the answer and nobody can measure it, so it is a control — and the conclusion holds across every value the literature supports |
 | An accounting score with no provenance | **The published sample, on the axes that can be checked** | Piotroski was fitted on US value stocks in 1976-1996, Altman on 1960s manufacturers, Beneish on 1980s SEC cases. Every use today is outside all three, which is provenance rather than a defect — so it is stated, never coloured, and never counted into a fit score |
@@ -381,6 +401,8 @@ Full reasoning, effect sizes, and the validation results are in
 app/          Next.js App Router pages, error boundaries
 components/   One panel per lens + shared UI primitives
 lib/          API client, wire types, CSV export, formatting
+              journal.ts  The thesis journal — client-only by design, so its
+                          logic is tested by scripts/check_frontend.mjs
 api/
   index.py    One FastAPI app — routing, rate limiting, validation
   _lib/       The engines:
@@ -528,7 +550,10 @@ layer — CI fails if you forget:
 ```
 
 CI (`.github/workflows/ci.yml`) runs pytest + ruff, the manual's drift check, tsc + eslint +
-build, and a production `npm audit`.
+build, and a production `npm audit`. `npm run check:frontend` covers the logic that only ever
+runs in a browser — the confluence rail's independence count and the thesis journal — and
+enforces one source-level invariant the compiled assertions cannot see: that nothing about a
+reader's own thesis appears in the request layer.
 
 ---
 
@@ -612,7 +637,9 @@ thresholds that would fire on noise. Calendar effects
 sentiment would need full article text and a lexicon that covers Indonesian.
 
 **No state.** No accounts, no saved watchlists, no persistence on any server. The reading mode,
-the holding horizon and the holdings list live in your own browser's storage and go no further;
+the holding horizon, the holdings list and the thesis journal live in your own browser's storage
+and go no further — the journal never crosses the wire at all, and the build fails if it starts
+to;
 every session starts empty on a new machine. The portfolio route is the one place personal
 input crosses the wire, and what that does and does not cost is set out on the panel itself.
 
