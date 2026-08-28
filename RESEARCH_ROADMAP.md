@@ -254,8 +254,15 @@ trend are both functions of the same price and volume series; only value and qua
 filings. Four lenses that agree are therefore weaker evidence than four *independent* tests
 agreeing.
 
-This now appears in the confluence rail itself rather than in a footnote. Quantifying the
-correlation between lens votes across a universe remains open work — see below.
+This now appears in the confluence rail itself rather than in a footnote.
+
+**Quantified in §15, and the answer was not the one the caveat predicted.** Across 168 names
+in four index universes, the two families' verdicts agree at κ = +0.03 — indistinguishable
+from chance, so the cross-check is sound. But Flow and Trend, the pair grouped together here
+*because* they read the same series, agree at κ = +0.03 as well: the redundancy this section
+asserts shows up in the code and not in the votes. The grouping was left alone anyway, because
+a vote that correlates with nothing is what an independent reading and an uninformative one
+both look like.
 
 ---
 
@@ -1048,14 +1055,218 @@ fresh load.
 
 ---
 
+## 15. The claim the app makes loudest, finally measured
+
+This app's central assertion is not that any lens is right. It is that four
+lenses rest on **two independent bodies of data**, and therefore that when those
+two agree, "agreement between them is not one fact counted twice". The
+confluence rail prints a count built on that assertion on every single run, and
+`explain._agreement` states it in prose: *"the price record and the filings share
+no inputs."*
+
+Nothing measured it. Both surfaces said so — the rail in smaller type
+underneath, the field manual in its own section — and both gave the same reason:
+*"the ranking panel measures its own overlap because a scan gives it a
+cross-section to measure from, and a single ticker does not."*
+
+That reason is true of a request and false of a script. §11 established the rule
+this project runs on — a measurement that informs a decision has to be taken
+before the decision is built — and this was the one place the rule had been
+applied to everything except the app's own headline.
+
+### Why chance-corrected agreement, and not agreement
+
+Raw agreement between two lenses is uninterpretable, for exactly the reason a
+raw screener hit count is. If the Value lens calls a company cheap on 70% of
+names and the Quality lens calls one sound on 70%, the two land on the same
+label **58% of the time while sharing nothing at all** — and 58% reported on its
+own reads as substantial corroboration.
+
+So the statistic is Cohen's kappa: observed agreement minus the agreement each
+lens's *own marginal habits* already supply, over the room that leaves. It is 0
+when two lenses agree exactly as often as chance predicts, 1 when they never
+disagree, and negative when they agree less than chance. This is the third place
+in the codebase the same correction appears — `eventstudy.screener_significance`
+applies it to scan hits, `pretrade` to check flags — and it is the same argument
+each time.
+
+Kendall's tau-b rides alongside because kappa and tau-b answer different
+questions. Kappa asks whether two lenses reach the same *label*; tau-b asks
+whether, when they differ, they differ in a consistent *direction*, treating the
+vote as the ordered scale it is. Two lenses that rarely produce an identical
+word but never point opposite ways have a low kappa and a high tau-b, and that
+combination means something neither number shows alone.
+
+Intervals are bootstrapped over **names**, not derived from Cohen's closed-form
+variance. That form conditions on the observed marginals, and here the marginals
+are themselves estimates — how often the Value lens calls a company cheap is a
+property of the sample, not a fixed design — so the closed form understates the
+uncertainty. Same preference for resampling over an assumed standard error that
+sized the Hurst band and found the spread estimator's resolution floor.
+
+### What it ran on, and what that cost
+
+`scripts/measure_lens_agreement.py` pushes all 168 deduplicated names of the four
+index universes through the **production payload builders** — the same
+`whale_payload`, `technical_payload`, `valuation_payload` and `quality_payload`
+that `/api/confluence` calls, with the parameters the ticker bar actually sends.
+The votes come out of `explain.for_synthesis` and the family votes out of
+`explain._family_votes`, not out of a copy of either.
+
+That fidelity is the whole point and it is why this could not reuse
+`calibrate_checks.py`'s batched shortcut. A pre-trade check is three estimator
+calls deep, so measuring it from a batch download costs nothing. A lens *vote* is
+the end of a chain — fetch, engineer features, fit an Isolation Forest, classify
+the flow bias — and reassembling that chain outside the payload builders would
+have measured a lookalike of the app. Nothing batches, the run is fourteen
+minutes, and that is the correct trade.
+
+**A lens that could not read does not vote.** `None`, never 0. A bank's refused
+accounting screens recorded as a neutral vote would manufacture agreement with
+every other lens that happened to be quiet, which is the "absence is not
+evidence" error §7 built a whole `notChecked` list to avoid, arriving in a new
+place. A test asserts the two readings *differ*, so a later change that mapped
+`None` to `0` fails rather than passing on a coincidence.
+
+### The result: the claim survives
+
+| Population | n | They agree | Chance agrees | κ | 95% interval |
+|---|---|---|---|---|---|
+| All four universes | 167 | 35.3% | 33.1% | **+0.03** | −0.07 to +0.14 |
+| US — Dow 30 + Nasdaq-100 | 121 | 36.4% | 32.8% | **+0.05** | −0.08 to +0.17 |
+| IDX — IDX30 + LQ45 | 46 | 32.6% | 25.6% | **+0.10** | −0.05 to +0.25 |
+
+**Not distinguishable from zero on any population.** The price record and the
+filings reach the same verdict about as often as two unrelated readings with
+those habits would, so agreement between them really is two facts rather than
+one counted twice. The rail's arithmetic is doing what it claims.
+
+Two independent runs on the same day returned those three headline figures
+**identical to three decimals** (+0.033, +0.053, +0.095), which is the
+reproducibility a stamped number needs before it is worth stamping.
+
+### The finding nobody was looking for: the redundant pair is not redundant
+
+The grouping collapses Flow and Trend into one price vote *because they read the
+same OHLCV series*. That is a fact about the code. Whether their **verdicts**
+behave that way is not, and it had never been checked:
+
+| Pair | κ (all) | κ (US) | κ (IDX) | τb (all) |
+|---|---|---|---|---|
+| **Flow · Trend** — declared redundant | **+0.03** | +0.07 | −0.02 | −0.02 |
+| Flow · Value | +0.00 | +0.00 | +0.02 | +0.07 |
+| Flow · Quality | **−0.10** | −0.10 | −0.05 | −0.24 |
+| Trend · Value | **−0.14** | −0.10 | +0.01 | −0.18 |
+| Trend · Quality | −0.05 | −0.10 | +0.05 | +0.00 |
+| Value · Quality | +0.01 | +0.01 | −0.14 | −0.03 |
+
+Flow and Trend — the one pair the app treats as a single reading — agree at
+κ = +0.03. Their verdicts are all but unrelated. And the participation ratio
+says the same thing from the other end: across the 138 names where every lens
+read, the four carry **3.72 lenses' worth of independent information** (US 3.74,
+IDX 3.59) rather than the two the rail collapses them to.
+
+**The grouping was not loosened, and the reason matters more than the number.**
+A kappa near zero is equally consistent with two readings carrying genuinely
+separate information and with at least one of them being noise — votes that are
+mostly noise are uncorrelated with everything too. The Flow lens's own event
+study (§5) returns no significant effect on most tickers it is pointed at. A
+lens that is independent *because it is uninformative* has not earned a vote of
+its own, and this measurement cannot tell those two cases apart. So the
+conservative collapse stands, and the panel now says why it stands rather than
+implying the four were known to be two.
+
+### Two negative pairs, one of which explains itself
+
+Two intervals exclude zero, and both are **negative** — the lenses agree *less*
+than chance.
+
+**Trend · Value at −0.14** is mechanical rather than interesting. A stock that
+has trended up is by construction less likely to sit below a discounted cash
+flow's range: the same price is in the numerator of one lens's verdict and the
+denominator of the other's. It is the strongest signed relationship in the table
+and it is an artefact of what the two measure, not a fact about markets.
+
+**Flow · Quality at −0.10, τb = −0.24** has no such explanation, and it is
+recorded here without one. Unusual buying pressure showing up slightly more
+often on companies whose accounting screens report concerns is either a real
+pattern, a selection effect in which names produce anomalies, or noise at the
+edge of what 153 names can resolve. Nothing here settles it.
+
+### The IDX coverage gap, again, in a new place
+
+`calibrate_checks.py` found that Yahoo's fundamentals coverage for smaller
+Indonesian listings is the single biggest fragility in this project. It bites
+here too, and it is why every figure is reported per market:
+
+| Lens could read | US | IDX |
+|---|---|---|
+| Flow | 98% | 100% |
+| Trend | 99% | 100% |
+| Value | **94%** | **80%** |
+| Quality | **94%** | **85%** |
+
+Every pairwise n is bounded by that. The IDX filings agreement rests on 30 to 39
+names against the US's 109 to 115, which is exactly why the IDX interval is
+nearly twice as wide and why a blended figure would have described neither
+market.
+
+### What changed in the product
+
+The warrant clause in `explain._agreement` used to assert. It now reports, and
+**all three branches ship**: a kappa indistinguishable from zero earns the
+claim, a positive one that excludes zero takes it away in the same sentence
+("worth less than two independent readings"), and a negative one is reported as
+the oddity it is. A module that could only phrase the result it hoped for would
+have decided the answer before the run, and `test_synthesis.py` exercises each
+branch against a planted measurement.
+
+Underneath it, the working: the arithmetic, the interval, the declared-redundant
+pair by name, the effective lens count against the collapse, and the two things
+the measurement explicitly cannot settle. It is **never coloured** — same rule
+§8 applies to provenance. A kappa is not good news or bad news about a company;
+it would be the same number on a wonderful business and a failing one, and
+tinting it green would turn "the cross-check is sound" into "the stock is fine".
+
+The confluence rail's caveat lost the clause that is no longer true. Which lens
+reads which data is still a stated assumption and always will be; how far the
+two actually reach the same verdict is not.
+
+### What it does not claim
+
+**Kappa measures redundancy, not causation.** A high kappa would not prove two
+families share inputs — two independent tests of a genuinely sound company
+should agree — and a low one does not prove they read different data. What it
+bounds is precisely the claim the rail makes, which is an *information* claim:
+whether the second reading adds anything to the first. Where the overlap came
+from is not identified and the panel says so.
+
+**It is a measurement of this app, not of the market.** The unit is a vote
+derived from a prose verdict, so what is measured is how often two panels'
+headline stances coincide across 168 large caps — not how correlated the
+underlying information is. Move a verdict band and this number moves, which is
+why the script has to be re-run whenever one does.
+
+**It never becomes a weight.** Nothing downstream reads the kappa except the
+sentence that reports it. A measured agreement scaling a verdict would be the
+composite score this app refuses to have, arrived at sideways through a
+statistic that sounds too technical to be a recommendation. The payload's key
+set is asserted for the same reason `test_pretrade.py` asserts on its own.
+
+> Cohen (1960), *Educational and Psychological Measurement* 20(1).
+> Kendall (1945), *Biometrika* 33(3). Efron & Tibshirani (1993), *An
+> Introduction to the Bootstrap*. Measured 29 August 2026 by
+> `scripts/measure_lens_agreement.py`; stamped in `api/_lib/lens_agreement.json`.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
 |---|---|
 | Placing a company in a book-to-market quintile | §8 declines this rather than inventing a breakpoint. It needs a universe-wide scan of book values, and fundamentals do not batch |
-| Measure the lens-vote correlation empirically | Needs a cross-sectional run over many tickers; the caveat is stated qualitatively meanwhile |
 | Multi-factor cost of equity (Fama-French) | Factor returns are freely available for the US; constructing IDX factors is a project in itself |
-| Sensitivity grid (growth × discount rate) | Cheap — `pv_of_growing_stream` is already vectorised over both axes |
+| Sensitivity grid (growth × discount rate) | Cheap, though not quite as cheap as this row used to claim: `pv_of_growing_stream` is vectorised over DRAWS, with growth, discount rate and terminal growth broadcast row-wise, so a grid means flattening a meshgrid into that axis rather than an outer product it already supports |
 | Peer / sector relative multiples | Needs a peer-set source beyond yfinance |
 | IDX fundamentals curation | The durable moat, and the largest single effort |
 

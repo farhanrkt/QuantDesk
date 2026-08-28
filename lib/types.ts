@@ -719,6 +719,49 @@ export interface SynthesisReading {
 
 export interface SynthesisNote { title: string; text: string }
 
+/**
+ * One pair of readings, and how much they agree beyond what chance supplies.
+ *
+ * `kappa` is null where it is genuinely undefined — two lenses that never
+ * varied cannot be shown to agree beyond chance, and 0 would read as "no better
+ * than chance" rather than "this sample cannot say". `usable` is decided in
+ * Python against the minimum sample; never re-derive it here.
+ *
+ * There is deliberately no confidence field and no weight. This is a caveat
+ * with a number on it, and the moment anything downstream multiplied by it the
+ * app would have the composite score it refuses to have.
+ */
+export interface AgreementPair {
+  a: string; b: string;
+  n: number;
+  observed: number;
+  chance: number;
+  kappa: number | null;
+  tauB: number | null;
+  low: number | null;
+  high: number | null;
+  excludesZero: boolean;
+  usable: boolean;
+}
+
+/** The measured half of the app's central claim. Absent when never measured. */
+export interface AgreementMeasurement {
+  measuredOn: string;
+  scope: string;
+  families: AgreementPair;
+  pairs: AgreementPair[];
+  lenses: {
+    available: boolean;
+    reason?: string;
+    lenses?: string[];
+    measuredLenses?: number;
+    effectiveLenses?: number;
+    completeCases?: number;
+    droppedForNoVariation?: string[];
+  };
+  reading: string;
+}
+
 export interface Synthesis {
   headline: string;
   tone: string;
@@ -726,6 +769,8 @@ export interface Synthesis {
   agreement: {
     text: string; tone: string;
     independentSources: number; lensesReading: number;
+    /** Present only when the measurement has been run and is usable. */
+    measured?: AgreementMeasurement;
   };
   /** Named conflicts. The most useful sentences on the page. */
   tensions: SynthesisNote[];

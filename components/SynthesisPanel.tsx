@@ -1,9 +1,9 @@
 "use client";
 
 import { AlertTriangle, ArrowRight, EyeOff, Scale } from "lucide-react";
-import type { Synthesis } from "@/lib/types";
+import type { AgreementMeasurement, Synthesis } from "@/lib/types";
 import { TONE_HEX, TONE_TEXT, useDetail } from "@/components/ui/explain";
-import { cn } from "@/lib/utils";
+import { cn, pct, signed } from "@/lib/utils";
 
 /**
  * What the four lenses add up to, in sentences.
@@ -44,6 +44,82 @@ function Block({
   );
 }
 
+/**
+ * The measurement behind the claim in the sentence above it.
+ *
+ * NOT COLOURED, AND THAT IS THE SAME RULE §8 APPLIES TO PROVENANCE. A kappa is
+ * not good news or bad news about this company — it is a fact about how much
+ * two of this app's own readings overlap across a universe, and it would be the
+ * same number on a wonderful business and a failing one. Tinting it green when
+ * it is low would turn "the cross-check is sound" into "the stock is fine",
+ * which is exactly the reading the whole panel exists to prevent. The tone
+ * belongs to the sentence above; this block is grey in every state.
+ *
+ * The six lens pairs sit behind a disclosure because they are supporting
+ * detail: the headline is the one pair the app's arithmetic rests on, and the
+ * rest is there for a reader who wants to check whether the DECLARED grouping
+ * behaves the way it is declared to. Flow and Trend are supposed to be the
+ * redundant pair — that is where it would show up, or fail to.
+ */
+function Measured({ data }: { data: AgreementMeasurement }) {
+  const rows = data.pairs.filter((p) => p.usable);
+  return (
+    <div className="mt-3 border-t border-rule/60 pt-3">
+      <p className="text-[0.72rem] leading-relaxed text-ash">{data.reading}</p>
+      {rows.length > 0 && (
+        <details className="mt-2">
+          <summary className="eyebrow cursor-pointer list-none text-ash
+                              transition-colors hover:text-chalk focus-visible:outline-none
+                              focus-visible:ring-1 focus-visible:ring-tech">
+            Every pair, measured ({rows.length})
+          </summary>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-left text-[0.7rem]">
+              <thead>
+                <tr className="eyebrow border-b border-rule [&>th]:py-1.5 [&>th]:pr-3
+                               [&>th]:font-normal">
+                  <th>Pair</th>
+                  <th className="text-right">Agree</th>
+                  <th className="text-right">By chance</th>
+                  <th className="text-right">κ</th>
+                  <th className="text-right">95% interval</th>
+                  <th className="text-right">τb</th>
+                  <th className="text-right">Names</th>
+                </tr>
+              </thead>
+              <tbody className="text-ash">
+                {rows.map((p) => (
+                  <tr key={`${p.a}-${p.b}`} className="border-b border-rule/40 last:border-0">
+                    <td className="py-1.5 pr-3 text-chalk/80">{p.a} · {p.b}</td>
+                    <td className="num py-1.5 pr-3 text-right">{pct(p.observed, 0)}</td>
+                    <td className="num py-1.5 pr-3 text-right">{pct(p.chance, 0)}</td>
+                    <td className="num py-1.5 pr-3 text-right text-chalk/80">
+                      {signed(p.kappa)}
+                    </td>
+                    <td className="num py-1.5 pr-3 text-right">
+                      {p.low === null || p.high === null
+                        ? "—" : `${signed(p.low)} to ${signed(p.high)}`}
+                    </td>
+                    <td className="num py-1.5 pr-3 text-right">{signed(p.tauB)}</td>
+                    <td className="num py-1.5 text-right">{p.n}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+      <p className="mt-2 text-[0.6rem] leading-relaxed text-ash">
+        Measured {data.measuredOn} across {data.scope}. κ is agreement minus the agreement
+        each pair&apos;s own habits already produce; τb is whether they order the same way.
+        A rate measured today decays with the lists it was taken on — re-run{" "}
+        <code className="font-mono">scripts/measure_lens_agreement.py</code> after changing
+        what any lens concludes.
+      </p>
+    </div>
+  );
+}
+
 export function SynthesisPanel({ data }: { data: Synthesis }) {
   const detail = useDetail();
   const guided = detail === "simple";
@@ -78,6 +154,7 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
         <p className={cn("text-sm leading-relaxed", TONE_TEXT[agreement.tone])}>
           {agreement.text}
         </p>
+        {agreement.measured && <Measured data={agreement.measured} />}
       </Block>
 
       {data.tensions.length > 0 && (

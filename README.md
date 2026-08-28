@@ -47,9 +47,18 @@ their verdicts in a row. When methods that share no inputs land in the same plac
 worth more than any one of them shouting.
 
 **The honest caveat, which the app shows you on screen:** the four are not equally
-independent. Flow and Trend are both computed from the same price-and-volume series, so
-they agree more often than four unrelated tests would. Value and Quality read the filings
-and carry most of the genuinely separate information.
+independent. Flow and Trend are both computed from the same price-and-volume series, so the
+app collapses them into one vote rather than counting four.
+
+**And that caveat is now measured, not asserted.** Across 168 names in four index universes,
+the price record and the filings reach the same verdict about as often as chance puts them
+there — **κ = +0.03, on an interval that straddles zero** — so agreement between them really
+is two facts rather than one counted twice. The surprise was the other half: Flow and Trend,
+the pair grouped together *because* they read the same series, agree at κ = +0.03 too, and
+the four lenses together carry **3.7 lenses' worth of independent information** rather than
+the two the count collapses them to. The grouping was left alone anyway, and the panel says
+why: a vote that correlates with nothing is what an independent reading and an uninformative
+one both look like, and the Flow lens's own event study already returns nulls.
 
 ---
 
@@ -329,6 +338,31 @@ not *no edge*. Survivorship, costs and sample size are stated alongside.
 Measured offline by `scripts/backtest_ranking.py` and stamped with its date. Re-run it after
 changing anything in `ranking.py`.
 
+**Do the four lenses actually say different things?** The app's loudest claim is not that any
+lens is right — it is that four lenses rest on **two independent bodies of data**, so agreement
+between those two is not one fact counted twice. The rail prints a count built on that claim on
+every run, and until now nothing had checked it.
+
+The check is Cohen's κ between the two families' actual verdicts across 168 names in four index
+universes, because raw agreement is uninterpretable: a lens calling 70% of companies cheap and
+one calling 70% sound land on the same label **58% of the time while sharing nothing at all**.
+Chance-corrected, price and filings come out at **κ = +0.03 (US +0.05, IDX +0.10)**, on
+intervals that straddle zero in all three. **The claim survives** — measured now, not asserted,
+and the sentence on the panel is written from whichever way the number came out.
+
+The unexpected half: **Flow and Trend, the pair the app collapses into one vote precisely
+because they read the same price series, agree at κ = +0.03 as well.** The four together carry
+3.7 lenses' worth of independent information rather than the two they are counted as. The
+grouping was left alone regardless, and the panel says why — a vote uncorrelated with everything
+is what an independent reading and an uninformative one both look like, and the Flow lens's own
+event study returns nulls. Two pairs came out *negatively* correlated; one of those (a rising
+price making a DCF look expensive) explains itself, and the other is recorded without an
+explanation.
+
+Measured offline by `scripts/measure_lens_agreement.py`, which pushes every name through the
+same four production engines a real request uses. Re-run it after changing what any lens
+concludes.
+
 **Pre-trade checks.** Nine conditions that would give a careful buyer pause, drawn entirely
 from figures the four lenses already computed — so the panel costs no extra fetch and every
 line can be traced to the tab that owns it.
@@ -389,6 +423,7 @@ where a constant was invented, it got replaced by an estimator.
 | Reporting raw screener hits | **Benjamini-Hochberg (1995)** | Scanning many names produces hits by construction |
 | `returns[returns < 0].std()` for Sortino | **The published root-mean-square shortfall** | They are different statistics. The old one ran 0.85x on ordinary returns, 1.44x where losses are rare and large, and exactly zero when every loss is the same size — where Sortino came back as 4.7e14. See RESEARCH_ROADMAP §13 |
 | A journal that tells you whether you were right | **One that shows what you wrote, and what has moved** | Grading its own entries would be a backtest of one, on a self-selected sample, with no control for the theses never written down. Movement is reported as movement |
+| Asserting that four lenses are two independent readings | **Cohen's κ between the families' actual verdicts** | Two lenses with skewed habits agree most of the time while sharing nothing: one that calls 70% of companies cheap and one that calls 70% sound land on the same label 58% of the time by construction. Chance-corrected, the price record and the filings come out at κ = +0.03 across 168 names — so the cross-check is earned. The same run found the pair the app declares REDUNDANT agrees no more than that |
 | Sizing on a correlation because it seems reasonable | **Measuring whether correlations persist first** | One year's pairwise correlations rank-correlate 0.50-0.65 with the next year's across four universes, where the ranking's information coefficient was indistinguishable from zero. That gap is the whole licence for the portfolio panel, and a test fails if a re-measurement removes it |
 | A bare screen flag | **Bayes on the screen's published error rates** | A screen that catches most manipulators on a population where manipulation is rare still produces mostly false alarms. The prevalence decides the answer and nobody can measure it, so it is a control — and the conclusion holds across every value the literature supports |
 | An accounting score with no provenance | **The published sample, on the axes that can be checked** | Piotroski was fitted on US value stocks in 1976-1996, Altman on 1960s manufacturers, Beneish on 1980s SEC cases. Every use today is outside all three, which is provenance rather than a defect — so it is stated, never coloured, and never counted into a fit score |
@@ -432,6 +467,8 @@ api/
                                 the sample it was validated on
               portfolio.py      The candidate against a book of holdings —
                                 correlation, independence, risk against money
+              lensagreement.py  How much the four lenses actually agree, once
+                                each one's own habits are accounted for
               posterior.py      What a flag is worth once you account for how
                                 rare the thing it screens for is
               explain.py        Plain-English interpretation for every metric,
@@ -447,6 +484,10 @@ scripts/
   measure_correlation_stability.py
                       Do correlations persist? The measurement that
                       licenses the portfolio panel to inform position size
+  measure_lens_agreement.py
+                      Do the four lenses actually carry separate
+                      information? The measurement behind the rail's
+                      "two independent sources"
 tests/        1,100 offline tests
 ```
 
@@ -549,6 +590,15 @@ the panel prints with confidence.
 .venv/bin/python scripts/calibrate_checks.py
 ```
 
+The rail's claim that four lenses are two independent readings is measured the same way, and
+re-run on the same terms: after anything that changes what a lens CONCLUDES — a verdict band,
+a tone, the family grouping itself. It costs a full pass through all four production engines
+for every name in four universes, which is why it is a script rather than a request.
+
+```bash
+.venv/bin/python scripts/measure_lens_agreement.py
+```
+
 The field manual's glossary is generated, so regenerate it after touching the explanation
 layer — CI fails if you forget:
 
@@ -616,6 +666,14 @@ fitted on the whole loaded window, so selection is not point-in-time even though
 market model is. That picks about 93% of the events a strictly point-in-time detector would;
 the Flow tab's walk-forward mode has no look-ahead at all. The Flow lens has no walk-forward validation
 enabled by default because it costs minutes per ticker.
+
+**Measured lens agreement is a measurement of this app, not of the market.** The unit is a vote
+derived from a prose verdict, so what κ describes is how often two panels' headline stances
+coincide across 168 large caps — not how correlated the underlying information is. Move a verdict
+band and the number moves. It also cannot say *why* two readings overlap: two independent tests
+of a genuinely sound company should agree, so redundancy and a shared truth look identical from
+there. And a κ near zero cannot distinguish a reading that carries separate information from one
+that is mostly noise.
 
 **Firing rates decay with the lists they were measured on.** The pre-trade panel's base rates
 come from the four universes below, so they inherit every one of that section's problems plus

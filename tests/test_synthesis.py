@@ -59,11 +59,19 @@ def quality(verdict="SOUND", applicable=True, beneish="clean", altman="safe", sc
                 "altman": {"band": altman}, "beneish": {"band": beneish}})
 
 
-def build(**kw):
+def build(measured=None, **kw):
+    """The synthesis, with NO agreement measurement unless a test supplies one.
+
+    Passed explicitly rather than left to the default, which would read
+    `lens_agreement.json` off disk — and a suite whose assertions depended on
+    whether a research script had been re-run would be a suite that failed for
+    reasons unrelated to the code under test. The measured branches get their
+    own tests below, with a planted measurement.
+    """
     payload = {"anomaly": flow(), "technical": trend(), "valuation": value(),
                "quality": quality()}
     payload.update(kw)
-    return E.for_synthesis(payload)
+    return E.for_synthesis(payload, agreement_measurement=measured)
 
 
 def all_text(s) -> str:
@@ -118,7 +126,89 @@ def test_four_agreeing_lenses_report_two_independent_sources():
     assert s["agreement"]["lensesReading"] == 4
     assert s["agreement"]["independentSources"] == 2, "four panels are not four opinions"
     assert s["agreement"]["tone"] == "good"
-    assert "share no inputs" in s["agreement"]["text"]
+    # With no measurement in hand the warrant is stated as an assumption and
+    # says so. The three measured branches are asserted below.
+    assert "read different data" in s["agreement"]["text"]
+    assert "stated assumption" in s["agreement"]["text"]
+    assert "measured" not in s["agreement"]
+
+
+# --------------------------------------------------------------------------- #
+# The warrant — the clause that says WHY agreement is worth anything
+#
+# Three branches, and all three have to ship. The claim "agreement between them
+# is not one fact counted twice" was an assertion for the whole life of this app
+# until §15 measured it, and a module that could only phrase the result it hoped
+# for would have decided the answer before the run. So each branch is exercised
+# with a planted measurement, and the guarantee that matters most — that no
+# combination ever produces an instruction — is asserted across all of them.
+# --------------------------------------------------------------------------- #
+def measured(kappa: float, excludes_zero: bool, n: int = 141) -> dict:
+    """A stamped agreement measurement in the shape `_warrant` reads."""
+    return {"measuredOn": "2026-08-29", "scope": "the Dow 30 and the Nasdaq-100",
+            "families": {"kappa": kappa, "n": n, "observed": 0.44, "chance": 0.41,
+                         "excludesZero": excludes_zero, "usable": True},
+            "pairs": [], "lenses": {"available": False},
+            "reading": "a planted measurement"}
+
+
+def agreeing(**kw):
+    return build(technical=trend(tone="bull"), valuation=value(verdict="UNDERVALUED"),
+                 quality=quality(verdict="SOUND"),
+                 anomaly=flow(recent=3, bias="Accumulation"), **kw)
+
+
+def test_a_null_agreement_measurement_earns_the_claim_rather_than_assuming_it():
+    s = agreeing(measured=measured(0.03, excludes_zero=False))
+    text = s["agreement"]["text"]
+    assert "measured rather than assumed" in text
+    assert "two facts and not one counted twice" in text
+    assert "141 names in the Dow 30 and the Nasdaq-100" in text
+    assert s["agreement"]["measured"]["families"]["kappa"] == 0.03
+
+
+def test_a_redundant_measurement_takes_the_claim_away():
+    """The branch that had to exist for the measurement to mean anything. If the
+    two families agree well beyond chance, "the strongest thing this app can
+    say" is overstating it, and the sentence has to concede that rather than
+    carrying on beside a number that contradicts it."""
+    s = agreeing(measured=measured(0.52, excludes_zero=True))
+    text = s["agreement"]["text"]
+    assert "worth less than two independent readings" in text
+    assert "not one fact counted twice" not in text
+    assert "measured rather than assumed" not in text
+
+
+def test_below_chance_agreement_is_reported_as_the_oddity_it_is():
+    s = agreeing(measured=measured(-0.28, excludes_zero=True))
+    assert "agree LESS often than chance" in s["agreement"]["text"]
+    assert "reassurance" in s["agreement"]["text"]
+
+
+@pytest.mark.parametrize("m", [None, measured(0.03, False), measured(0.52, True),
+                               measured(-0.28, True)])
+def test_no_warrant_branch_ever_produces_an_instruction(m):
+    """The guarantee that outranks everything else in this file, checked against
+    every way the warrant can now be phrased."""
+    text = all_text(agreeing(measured=m))
+    for phrase in FORBIDDEN:
+        assert phrase not in text, f"the {'measured' if m else 'assumed'} warrant said {phrase!r}"
+
+
+def test_the_measurement_is_carried_but_never_consumed():
+    """It rides beside the sentence it justifies and nothing else reads it. A
+    measured agreement that started scaling a verdict would be the composite
+    score this app refuses to have, arrived at through a Greek letter."""
+    high = agreeing(measured=measured(0.52, excludes_zero=True))
+    low = agreeing(measured=measured(0.03, excludes_zero=False))
+    for key in ("tone", "independentSources", "lensesReading"):
+        assert high["agreement"][key] == low["agreement"][key]
+    assert high["headline"] == low["headline"]
+    assert [r["vote"] for r in high["readings"]] == [r["vote"] for r in low["readings"]]
+
+
+def test_an_unmeasured_run_carries_no_measurement_key_at_all():
+    assert "measured" not in agreeing(measured=None)["agreement"]
 
 
 def test_a_price_filings_disagreement_is_named_as_the_finding():
@@ -131,7 +221,8 @@ def test_a_price_filings_disagreement_is_named_as_the_finding():
 
 
 def test_one_family_alone_is_reported_as_having_no_cross_check():
-    s = E.for_synthesis({"valuation": value(), "quality": quality()})
+    s = E.for_synthesis({"valuation": value(), "quality": quality()},
+                        agreement_measurement=None)
     assert s["agreement"]["independentSources"] == 1
     assert "no cross-check" in s["agreement"]["text"]
 
@@ -222,11 +313,11 @@ def test_a_structured_error_detail_is_flattened_rather_than_dumped():
 def test_degenerate_payloads_never_raise(payload):
     """Every engine can return a shape nobody expected. The panel whose job is
     to explain the others must not be the one that 500s."""
-    s = E.for_synthesis(payload)
+    s = E.for_synthesis(payload, agreement_measurement=None)
     assert isinstance(s["headline"], str) and s["caveat"]
 
 
 def test_nothing_usable_says_so_plainly():
-    s = E.for_synthesis({})
+    s = E.for_synthesis({}, agreement_measurement=None)
     assert "no lens" in s["headline"].lower()
     assert s["agreement"]["independentSources"] == 0

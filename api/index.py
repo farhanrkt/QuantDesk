@@ -1245,7 +1245,13 @@ async def confluence(
     # computation would eventually drift from them. A failed leg becomes a
     # stated blind spot inside it rather than an exception.
     return ok({"ticker": symbol, **legs,
-               "synthesis": explain.for_synthesis(legs),
+               # The market reaches the synthesis for the same reason it reaches
+               # `pretrade.assess`, and is taken from the RESOLVED symbol for the
+               # same reason too: the measured agreement between the two families
+               # was taken on a different population in each market, and a bare
+               # code with the wrong market selected would quote the wrong one.
+               "synthesis": explain.for_synthesis(
+                   legs, market=symbols.market_of(symbol)),
                # The market decides which population the firing rates describe.
                # Taken from the RESOLVED symbol rather than the query parameter,
                # for the same reason every engine downstream of `symbols.resolve`

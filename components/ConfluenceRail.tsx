@@ -334,10 +334,10 @@ export function ConfluenceRail({
           These lenses are not fully independent: flow and trend are both functions of the same
           price and volume series, while value and quality both read the filings — so four
           panels rest on two bodies of data. The verdict above counts those two rather than the
-          four, which is why it can say &ldquo;both&rdquo; where the grid shows four. The
-          grouping is a stated assumption about what shares a source, not a measured
-          correlation; the ranking panel measures its own overlap because a scan gives it a
-          cross-section to measure from, and a single ticker does not.
+          four, which is why it can say &ldquo;both&rdquo; where the grid shows four. Which lens
+          reads which data is a stated assumption and stays one; how far the two actually reach
+          the same verdict is not, and the panel below carries that measurement with the number
+          it came out at.
         </p>
       </div>
 

@@ -3007,6 +3007,13 @@ def for_ranking_row(row: dict) -> dict:
 # rail's vote arithmetic, so the two cannot disagree about a tally.
 SYNTHESIS_FAMILY = {"flow": "price", "trend": "price",
                     "value": "filings", "quality": "filings"}
+
+# The GROUPING above stays a declared assumption — nothing measures which data a
+# lens reads, and nothing could. What is now measured is its CONSEQUENCE: how
+# often the two families' verdicts actually coincide once each family's own
+# habits are accounted for. `lensagreement` holds that measurement and
+# `_warrant` below is where it either earns this app's central claim or takes it
+# away. See §15 of RESEARCH_ROADMAP.md.
 FAMILY_LABEL = {"price": "price and volume", "filings": "the filings"}
 
 # Verbatim from the app's own framing. A DCF whose terminal value is more than
@@ -3189,7 +3196,49 @@ def _family_votes(readings: Sequence[dict]) -> dict:
     return out
 
 
-def _agreement(readings: Sequence[dict], families: dict) -> dict:
+def _warrant(measured: Optional[dict]) -> str:
+    """WHY agreement between the two families is worth anything — the clause
+    that carries this app's central claim, written from the measurement.
+
+    Until §15 this was an assertion: "the price record and the filings share no
+    inputs — so agreement between them is not one fact counted twice." Nothing
+    checked it. The grouping into families is still a declared assumption and
+    always will be, but its CONSEQUENCE is now measured across four index
+    universes, and this is where the measurement either earns the claim or
+    takes it away.
+
+    Three branches, and all three ship. A module that could only phrase the
+    result it hoped for would have decided the answer before running it.
+    """
+    if not measured:
+        # Never measured, or measured on too few names. Back to the stated
+        # assumption, said as an assumption — which is what the confluence rail
+        # has always admitted in smaller type.
+        return ("because the price record and the filings read different data — though "
+                "how far their verdicts actually overlap is a stated assumption here "
+                "rather than something this app has measured")
+
+    families = measured["families"]
+    kappa, n = families["kappa"], families["n"]
+    where = f"across {n} names in {measured['scope']}"
+
+    if not families.get("excludesZero"):
+        return (f"and that is measured rather than assumed: {where}, the two reach the "
+                f"same verdict no more often than their own separate habits already "
+                f"put them there (κ = {kappa:+.2f}), so agreement between them really "
+                f"is two facts and not one counted twice")
+    if kappa > 0:
+        return (f"with one measured qualification: {where}, the two agree rather more "
+                f"often than chance alone would produce (κ = {kappa:+.2f}), so the "
+                f"second reading is partly predictable from the first and this is "
+                f"worth less than two independent readings")
+    return (f"with one measured oddity: {where}, the two agree LESS often than chance "
+            f"alone would produce (κ = {kappa:+.2f}), which is a finding in its own "
+            f"right rather than reassurance about either of them")
+
+
+def _agreement(readings: Sequence[dict], families: dict,
+               measured: Optional[dict] = None) -> dict:
     """The cross-check sentence — the one claim this whole app is built on."""
     reading_count = len([r for r in readings if r["tone"] != "none"])
     if not families:
@@ -3212,8 +3261,7 @@ def _agreement(readings: Sequence[dict], families: dict) -> dict:
         direction = "the same constructive direction" if price > 0 else "the same negative direction"
         return {**base, "tone": "good" if price > 0 else "bad", "text": (
             f"Both bodies of data point in {direction}. That is the strongest thing this "
-            f"app can say, because the price record and the filings share no inputs — so "
-            f"agreement between them is not one fact counted twice.")}
+            f"app can say, {_warrant(measured)}.")}
 
     if price and filings and price != filings:
         up = "price and volume" if price > 0 else "the filings"
@@ -3379,14 +3427,38 @@ def _next_checks(payload: dict, readings: dict) -> list[str]:
     return out
 
 
-def for_synthesis(payload: dict) -> dict:
+# `for_synthesis(payload)` loads the stamped agreement measurement from disk;
+# `for_synthesis(payload, agreement_measurement=None)` says there is none. Those
+# are different situations and one default could not tell them apart — the
+# second is a state the panel renders honestly rather than a bug to paper over.
+# Same device as `pretrade._LOAD_FROM_DISK`, and what lets the synthesis tests
+# exercise both warrants without a file on disk.
+_LOAD_FROM_DISK = object()
+
+
+def for_synthesis(payload: dict, market: Optional[str] = None,
+                  agreement_measurement=_LOAD_FROM_DISK) -> dict:
     """Everything the four lenses add up to, in sentences.
 
     `payload` is the `/api/confluence` response — each leg carrying its own
     `ok` flag — so this reads exactly the figures the panels render rather than
     recomputing them, and a failed leg becomes a stated blind spot instead of an
     exception.
+
+    `market` selects which population the agreement measurement describes, for
+    the reason `pretrade` takes one: the filings lenses read on a very different
+    share of Indonesian names than US ones, so the two families' agreement is
+    measured on a different population in each market and a blend describes
+    neither.
     """
+    # LOCAL, deliberately. Nothing else in this module imports from `_lib` at
+    # module level, and that is what keeps the dependency one-directional —
+    # `pretrade` imports `explain`, so `explain` acquiring imports of its own is
+    # how a cycle would start.
+    from . import lensagreement
+
+    if agreement_measurement is _LOAD_FROM_DISK:
+        agreement_measurement = lensagreement.for_synthesis(market)
     readers = {"flow": ("anomaly", _read_flow), "trend": ("technical", _read_trend),
                "value": ("valuation", _read_value), "quality": ("quality", _read_quality)}
 
@@ -3404,7 +3476,14 @@ def for_synthesis(payload: dict) -> dict:
 
     ordered = [readings[k] for k in ("flow", "trend", "value", "quality") if k in readings]
     families = _family_votes(ordered)
-    agreement = _agreement(ordered, families)
+    agreement = _agreement(ordered, families, agreement_measurement)
+    # The measurement rides along beside the sentence it justifies, so the panel
+    # can show the arithmetic behind the clause rather than asking the reader to
+    # take a Greek letter on trust. It is never consumed by anything else: the
+    # moment a measured agreement started scaling a verdict, this app would have
+    # the composite score it refuses to have.
+    if agreement_measurement:
+        agreement = {**agreement, "measured": agreement_measurement}
 
     lenses = agreement["lensesReading"]
     sources = agreement["independentSources"]
