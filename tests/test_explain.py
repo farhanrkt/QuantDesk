@@ -538,6 +538,43 @@ def test_story_states_the_numbers_the_tables_state():
     assert "break-even" in text               # worst 3y window ~0%
 
 
+def test_the_story_never_summarises_a_horizon_that_was_not_measured():
+    """Unsupported horizons are now REPORTED rather than dropped, so the presence
+    of a 3-year row stopped meaning there is a 3-year answer. A summary that
+    picked it up by key would tell a reader the stock made money in every window
+    it never measured."""
+    story = E.long_horizon_story("NEW", _block(rollingReturns=[
+        {"years": 1, "usable": True, "worst": -0.30, "positiveShare": 0.7, "windows": 900},
+        {"years": 3, "usable": False, "windows": 0, "reason": "Needs about 776 days."},
+    ]))
+    text = " ".join(story["paragraphs"])
+    assert "held for 1 years" in text or "held for 1 year" in text, text
+    assert "held for 3" not in text
+
+
+def test_simple_mode_gets_a_measured_horizon_not_an_empty_card():
+    """The bare `rollingWorst` key is what Simple mode renders. Preferring the
+    3-year row by key alone would hand it a 'needs more history' card while a
+    perfectly good 1-year answer sat beside it."""
+    out = E.for_long_term(_block(rollingReturns=[
+        {"years": 1, "usable": True, "worst": -0.30, "positiveShare": 0.7, "windows": 900},
+        {"years": 3, "usable": False, "windows": 0, "reason": "Needs about 776 days."},
+    ]))
+    assert out["rollingWorst"]["band"] != "unavailable"
+    assert out["rollingWorst"] is out["rollingWorst.1"]
+    # ...and the unsupported horizon still gets its own entry, quoting the fix.
+    assert out["rollingWorst.3"]["band"] == "unavailable"
+    assert "Needs about 776 days" in out["rollingWorst.3"]["reading"]
+
+
+def test_an_unsupported_horizon_never_reads_as_a_result():
+    unavailable = E.explain("rollingWorst", None, years=5,
+                            reason="Needs about 1,280 trading days of history.")
+    assert unavailable["band"] == "unavailable"
+    assert unavailable["tone"] == "none"
+    assert "1,280" in unavailable["reading"]
+
+
 def test_story_says_when_the_trend_is_noise():
     story = E.long_horizon_story("XYZ", _block(
         hurst=0.50,

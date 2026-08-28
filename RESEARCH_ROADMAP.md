@@ -556,13 +556,83 @@ prose version in the more prominent place while the figure sat one tab away.
 
 ---
 
+## 10. A stated holding horizon
+
+**Added 28 August 2026.** The rolling-return distribution is the strongest evidence in this
+app. It replaces "it returned 16% a year" — which describes one start date — with what EVERY
+start date got, and the worst entry in that distribution is the number position sizing exists
+to survive. It sat behind a tab, a section and a fixed 1/3/5-year table nobody chose.
+
+The missing piece was not the table. It was that **nothing in the app ever asked how long the
+reader intends to hold**, so "the worst outcome at your horizon" was not a question the app
+could be asked. It now is: a horizon is stated once, persisted like the reading mode, and read
+by both the new bar above the tabs and the table itself.
+
+Why it matters is visible in one ticker. On AAPL over the app's default five-year range:
+
+| Held for | Worst any buyer did | Made money |
+|---|---|---|
+| 1 year | **-30.2%** a year | 84% of 1,002 windows |
+| 2 years | **-2.3%** a year | 99% of 750 windows |
+| 3 years | **+0.2%** a year | 100% of 498 windows |
+
+Those are three completely different investments, and until now the app answered as though the
+question had one answer.
+
+### The horizon never reaches the API
+
+Every horizon the loaded history supports arrives already computed in the technical payload, so
+the control selects rather than re-runs. A query parameter would have put a ten-to-sixteen
+second four-lens round trip behind a control whose entire purpose is to be moved around — and
+the same discipline as the posterior curve applies: the server has already done the arithmetic,
+so shipping it is cheaper than shipping the inputs and recomputing in the browser.
+
+Three years is the default because it is the shortest horizon over which the distribution stops
+being dominated by the entry date, and because it is what the plain-English summary has always
+quoted. One year would flatter almost everything; ten would report "needs more history" for most
+tickers at the range this app loads.
+
+### The bug the horizon exposed
+
+`rolling_returns` used to `continue` past a horizon the history could not support, so the row
+simply was not there. **On the app's own default five-year range the five-year row was always
+missing** — five years of daily bars is about twenty-six short of the twenty-one overlapping
+five-year windows a distribution needs — and a reader could not tell whether the stock had
+never had a bad five-year stretch or whether nobody had looked.
+
+That is the absence-reads-as-evidence failure the pre-trade panel is built against, sitting
+unnoticed in the oldest table in the app. Unsupported horizons now come back marked, carrying
+the exact shortfall and the fix: *"Needs about 1,280 trading days to have 21 overlapping
+5-year periods, and this range has 1,254 — 26 short. Widen the chart range."*
+
+Two consumers had to change with it, and both would have been quietly wrong otherwise: the
+plain-English summary picked the 3-year row by key, and the Simple-mode metric card did the
+same. With unsupported horizons now present, "there is a 3-year row" stopped meaning "there is
+a 3-year answer", and a summary built from one would have described windows it never measured.
+Both now select the longest MEASURED horizon. Tests cover exactly that.
+
+### The earnings check, and why it is not here
+
+"Does an earnings date land inside the holding horizon" was the last of the pre-trade checks
+listed in §7 and deferred for wanting a horizon. The horizon now exists and the check still
+should not ship, for a reason the calibration rule supplies:
+
+**Every listed company reports quarterly.** At any holding horizon of three months or more, an
+earnings print inside the window is a certainty — the check would fire on essentially 100% of
+any universe and §7's own rule would demote it to a base condition on the spot. It is only
+informative at horizons of days to weeks, which is the short-term section's territory rather
+than this one's, and it is the one candidate check that needs a new upstream call on the app's
+busiest route. Building it would mean paying a fetch on every confluence run to print a line
+that says "this company will report earnings", which everybody already knows.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
 |---|---|
 | Placing a company in a book-to-market quintile | §8 declines this rather than inventing a breakpoint. It needs a universe-wide scan of book values, and fundamentals do not batch |
 | Portfolio context — correlation, effective independent positions, marginal risk | The largest gap. Holdings must stay client-side to respect the no-state stance, and correlation-aware sizing is a predictive claim that needs its own measurement (does this period's correlation describe the next one?) before it can ship |
-| A stated holding horizon | `rollingReturns` is fixed at 1/3/5 years, so "the worst outcome at YOUR horizon" cannot be answered, and neither can "does an earnings date land inside it" |
 | Measure the lens-vote correlation empirically | Needs a cross-sectional run over many tickers; the caveat is stated qualitatively meanwhile |
 | Multi-factor cost of equity (Fama-French) | Factor returns are freely available for the US; constructing IDX factors is a project in itself |
 | Sensitivity grid (growth × discount rate) | Cheap — `pv_of_growing_stream` is already vectorised over both axes |

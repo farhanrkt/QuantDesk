@@ -9,6 +9,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Explain, ExplainedRow, ExplainedStat, TONE_HEX, useDetail,
 } from "@/components/ui/explain";
+import { useHorizon } from "@/components/ui/horizon";
 import type { ExplainMap, LongTermBlock } from "@/lib/types";
 import { cn, num, pct, signedPct } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
           plainEnglish } = data;
   const detail = useDetail();
   const simple = detail === "simple";
+  const horizon = useHorizon();
   const ex: ExplainMap = data.explain ?? {};
 
   const verdictColor = view.tone === "bull" ? UP : view.tone === "bear" ? DOWN : ASH;
@@ -152,35 +154,67 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                   </tr>
                 </thead>
                 <tbody>
-                  {rollingReturns.map((row) => (
-                    <tr key={row.years}
-                        className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
-                      <td className="num px-5 py-2 font-semibold">
-                        <span className="flex items-center gap-1.5">
-                          {row.years}y
-                          <Explain explain={ex[`rollingWorst.${row.years}`]} />
-                        </span>
-                      </td>
-                      <td className={cn("num px-5 py-2 text-right",
-                                        row.worst >= 0 ? "text-acc" : "text-dist")}>
-                        {signedPct(row.worst)}
-                      </td>
-                      {!simple && (
-                        <td className="num px-5 py-2 text-right text-ash">{signedPct(row.p25)}</td>
-                      )}
-                      <td className="num px-5 py-2 text-right font-semibold">
-                        {signedPct(row.median)}
-                      </td>
-                      {!simple && (
-                        <td className="num px-5 py-2 text-right text-ash">{signedPct(row.p75)}</td>
-                      )}
-                      <td className="num px-5 py-2 text-right text-acc">{signedPct(row.best)}</td>
-                      <td className="num px-5 py-2 text-right">{pct(row.positiveShare, 0)}</td>
-                      {!simple && (
-                        <td className="num px-5 py-2 text-right text-ash">{row.windows}</td>
-                      )}
-                    </tr>
-                  ))}
+                  {rollingReturns.map((row) => {
+                    // A HORIZON THE HISTORY CANNOT SUPPORT GETS A ROW SAYING SO.
+                    // These used to be dropped, and on the app's default range
+                    // the five-year row usually was — leaving a reader unable to
+                    // tell whether the stock had never had a bad five-year
+                    // stretch or whether nobody had looked.
+                    const measured = row.usable !== false && row.worst != null;
+                    const chosen = row.years === horizon;
+                    if (!measured) {
+                      return (
+                        <tr key={row.years} className="border-b border-rule/60 last:border-0">
+                          <td className={cn("num px-5 py-2 font-semibold",
+                                            chosen ? "text-chalk" : "text-ash")}>
+                            <span className="flex items-center gap-1.5">
+                              {row.years}y
+                              <Explain explain={ex[`rollingWorst.${row.years}`]} />
+                            </span>
+                          </td>
+                          <td className="px-5 py-2 text-[0.7rem] leading-relaxed text-ash"
+                              colSpan={simple ? 4 : 7}>
+                            {row.reason ?? "Not enough loaded history for this horizon."}
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return (
+                      <tr key={row.years}
+                          className={cn("border-b border-rule/60 last:border-0 hover:bg-raised/60",
+                                        chosen && "bg-raised/70")}>
+                        <td className="num px-5 py-2 font-semibold">
+                          <span className="flex items-center gap-1.5">
+                            {row.years}y
+                            {chosen && (
+                              <span className="eyebrow text-tech" title="your stated horizon">
+                                yours
+                              </span>
+                            )}
+                            <Explain explain={ex[`rollingWorst.${row.years}`]} />
+                          </span>
+                        </td>
+                        <td className={cn("num px-5 py-2 text-right",
+                                          (row.worst ?? 0) >= 0 ? "text-acc" : "text-dist")}>
+                          {signedPct(row.worst)}
+                        </td>
+                        {!simple && (
+                          <td className="num px-5 py-2 text-right text-ash">{signedPct(row.p25)}</td>
+                        )}
+                        <td className="num px-5 py-2 text-right font-semibold">
+                          {signedPct(row.median)}
+                        </td>
+                        {!simple && (
+                          <td className="num px-5 py-2 text-right text-ash">{signedPct(row.p75)}</td>
+                        )}
+                        <td className="num px-5 py-2 text-right text-acc">{signedPct(row.best)}</td>
+                        <td className="num px-5 py-2 text-right">{pct(row.positiveShare, 0)}</td>
+                        {!simple && (
+                          <td className="num px-5 py-2 text-right text-ash">{row.windows}</td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

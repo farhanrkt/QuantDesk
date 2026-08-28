@@ -187,11 +187,30 @@ def test_rolling_returns_expose_a_bad_window(history):
     assert one_year["p25"] <= one_year["median"] <= one_year["p75"]
 
 
-def test_rolling_returns_skip_horizons_longer_than_the_history():
+def test_a_horizon_the_history_cannot_support_is_marked_not_dropped():
+    """It used to vanish, and on the app's own default range the five-year row
+    usually did. A reader then could not tell whether the stock had never had a
+    bad five-year stretch or whether nobody had looked — which is the
+    absence-reads-as-evidence failure, in the oldest table in the app."""
     short = price_path(np.linspace(100, 130, 400))
-    assert L.rolling_returns(short, years=(1, 3, 5)) == [
-        r for r in L.rolling_returns(short, years=(1,))
-    ]
+    rows = {r["years"]: r for r in L.rolling_returns(short, years=(1, 3, 5))}
+
+    assert set(rows) == {1, 3, 5}, "every requested horizon must be accounted for"
+    assert rows[1]["usable"] is True
+    for horizon in (3, 5):
+        assert rows[horizon]["usable"] is False
+        assert rows[horizon]["windows"] == 0
+        # The reason has to be actionable, not a shrug.
+        assert "Widen the chart range" in rows[horizon]["reason"]
+        assert "400" in rows[horizon]["reason"], "say how much history there actually is"
+        # And it must carry no numbers that would read as a result.
+        assert "worst" not in rows[horizon] and "median" not in rows[horizon]
+
+
+def test_the_default_horizons_are_the_ones_a_holder_would_state():
+    assert L.HOLDING_HORIZONS == (1, 2, 3, 5, 10)
+    rows = L.rolling_returns(price_path(np.linspace(100, 130, 400)))
+    assert [r["years"] for r in rows] == list(L.HOLDING_HORIZONS)
 
 
 # ============================================================================ #

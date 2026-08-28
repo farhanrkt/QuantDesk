@@ -4,6 +4,7 @@ import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { AnomalyPanel } from "@/components/AnomalyPanel";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
+import { HoldingHorizonBar } from "@/components/HoldingHorizonBar";
 import { EventStudyPanel } from "@/components/EventStudyPanel";
 import { NewsPanel } from "@/components/NewsPanel";
 import { PeersPanel } from "@/components/PeersPanel";
@@ -18,6 +19,7 @@ import { ManualRescue } from "@/components/ValuationControls";
 import { ValuationPanel } from "@/components/ValuationPanel";
 import { Card } from "@/components/ui/card";
 import { DetailProvider, DetailToggle, useDetailLevel } from "@/components/ui/explain";
+import { HorizonProvider, useHoldingHorizon } from "@/components/ui/horizon";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { Tabs } from "@/components/ui/tabs";
 import { useEngines, useEventStudy, usePeers, type RunOptions } from "@/lib/api";
@@ -102,6 +104,11 @@ export default function Home() {
   // short version of the technical lens wants the short version of the quality
   // lens too, and a per-panel switch makes them say so four times.
   const [detail, setDetail] = useDetailLevel();
+  // How long the reader means to hold, stated once and read by the horizon bar
+  // and the rolling-return table. It never reaches the API: every horizon the
+  // loaded history supports is already in the technical payload, so changing it
+  // selects rather than re-runs.
+  const [horizon, setHorizon] = useHoldingHorizon();
 
   // PROGRESS, NOT JUST BUSY. One shared spinner gated on the SLOWEST lens meant a
   // ten-to-sixteen-second first run behind a dead button with nothing to say
@@ -145,6 +152,7 @@ export default function Home() {
 
   return (
     <DetailProvider level={detail}>
+    <HorizonProvider value={horizon}>
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
       <header className="mb-8 border-b border-rule pb-6">
         <div className="flex flex-wrap items-end justify-between gap-4">
@@ -191,6 +199,13 @@ export default function Home() {
           <ConfluenceRail ticker={resolvedTicker} anomaly={anomaly}
                           technical={technical} valuation={valuation}
                           quality={quality} />
+
+          {/* The frame everything below is read through: what this length of
+              ownership has historically been like. Above the synthesis because
+              it is neither a summary nor an objection — the synthesis then says
+              what the lenses report, and the pre-trade panel what argues
+              against acting on them. */}
+          <HoldingHorizonBar state={technical} horizon={horizon} onHorizon={setHorizon} />
 
           {/* Reads the assembled payload, so it can only appear once every leg
               has settled. That is the right coupling: a summary of four lenses
@@ -289,6 +304,7 @@ export default function Home() {
         listings. Educational and research use only — not investment advice.
       </footer>
     </main>
+    </HorizonProvider>
     </DetailProvider>
   );
 }

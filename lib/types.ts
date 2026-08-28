@@ -391,9 +391,22 @@ export interface LongTermCheck {
   tone: string; horizon: string;
 }
 
+/**
+ * One holding-period distribution.
+ *
+ * `usable` is false for a horizon the loaded history cannot support, and such a
+ * row carries `reason` and NOTHING ELSE — no worst, no median. That is
+ * deliberate: these rows used to be dropped, so a reader could not tell whether
+ * a stock had never had a bad five-year stretch or whether nobody had looked.
+ * Never render a figure from a row whose `usable` is false; there is none.
+ */
 export interface RollingReturnRow {
-  years: number; windows: number; best: number; worst: number;
-  median: number; mean: number; positiveShare: number; p25: number; p75: number;
+  years: number;
+  usable?: boolean;
+  reason?: string;
+  windows: number;
+  best?: number; worst?: number; median?: number; mean?: number;
+  positiveShare?: number; p25?: number; p75?: number;
 }
 
 export interface LongTermBlock {

@@ -213,7 +213,21 @@ def risk_metrics(close: pd.Series, risk_free: float = 0.0) -> dict:
     }
 
 
-def rolling_returns(close: pd.Series, years: Sequence[int] = (1, 3, 5)) -> list[dict]:
+# The horizons a holder might actually state. Not a tuning parameter: these are
+# the periods someone says out loud when asked how long they intend to own
+# something, and every one that the loaded history cannot support is REPORTED as
+# unsupported rather than dropped — see below.
+HOLDING_HORIZONS: tuple[int, ...] = (1, 2, 3, 5, 10)
+
+# A distribution needs more than one draw. Twenty extra bars past the window
+# length is twenty-one overlapping periods, which is few but is the point below
+# which "the worst N-year outcome" stops describing a distribution and starts
+# describing one date.
+MIN_WINDOWS = 20
+
+
+def rolling_returns(close: pd.Series,
+                    years: Sequence[float] = HOLDING_HORIZONS) -> list[dict]:
     """Every N-year holding period in the history, summarised.
 
     THE MOST USEFUL SINGLE TABLE for a long-term investor, because it answers
@@ -221,19 +235,40 @@ def rolling_returns(close: pd.Series, years: Sequence[int] = (1, 3, 5)) -> list[
     "what would I have earned buying at a RANDOM moment and holding N years?".
     The worst case in that distribution is the number that decides position
     size, and it is invisible in any single-path backtest.
+
+    A HORIZON THE HISTORY CANNOT SUPPORT COMES BACK MARKED, NOT MISSING. This
+    used to `continue`, so a five-year row simply was not there — and on the
+    app's own default range it usually was not, because five years of daily bars
+    is about twenty short of the twenty-one overlapping five-year windows this
+    needs. A reader could not tell whether the stock had never had a bad
+    five-year stretch or whether nobody had looked. That is the same
+    absence-reads-as-evidence failure the pre-trade panel is built against,
+    sitting in the oldest table in the app.
     """
     prices = close.dropna()
     out = []
     for horizon in years:
         window = int(horizon * TRADING_DAYS)
-        if len(prices) < window + 20:
+        needed = window + MIN_WINDOWS
+        if len(prices) < needed:
+            short_by = needed - len(prices)
+            out.append({
+                "years": horizon, "usable": False, "windows": 0,
+                "reason": (f"Needs about {needed:,} trading days of history to have "
+                           f"{MIN_WINDOWS + 1} overlapping {horizon}-year periods to compare, "
+                           f"and this range has {len(prices):,} — {short_by:,} short. Widen "
+                           f"the chart range."),
+            })
             continue
         ratio = prices / prices.shift(window)
         annualised = (ratio ** (1.0 / horizon) - 1.0).dropna()
         if annualised.empty:
+            out.append({"years": horizon, "usable": False, "windows": 0,
+                        "reason": "No complete period of this length in the loaded prices."})
             continue
         out.append({
             "years": horizon,
+            "usable": True,
             "windows": len(annualised),
             "best": float(annualised.max()),
             "worst": float(annualised.min()),

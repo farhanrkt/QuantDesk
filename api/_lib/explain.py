@@ -883,13 +883,17 @@ def _correlation(value, benchmark=None, **_):
 
 
 @metric("rollingWorst")
-def _rolling_worst(value, years=None, positiveShare=None, **_):
+def _rolling_worst(value, years=None, positiveShare=None, reason=None, windows=None, **_):
     horizon = f"{years}-year" if years else "multi-year"
     label = f"Worst {horizon} outcome"
     what = (f"Out of every possible {horizon} holding period in this history, the one that "
             f"turned out worst. It answers 'what if I had bought at the worst moment?'")
     if not _known(value):
-        return unavailable(label, what, f"needs more than {years or 'several'} years of history")
+        # The row carries WHY, including how much history is missing. A generic
+        # "needs more years" would hide that the fix is one dropdown away.
+        return unavailable(
+            label, what,
+            (reason or f"needs more than {years or 'several'} years of history").rstrip("."))
     band = _ladder(value, ((-0.10, "bad"), (0.0, "poor"), (0.05, "fair"),
                            (0.12, "good"), (None, "excellent")))
     reading = (f"The unluckiest {horizon} entry still returned {_signed_pct(value)} a year. ")
@@ -2262,13 +2266,14 @@ def long_horizon_story(ticker: str, block: dict) -> dict:
     # The single most useful sentence in the summary, because it replaces "it
     # returned X" (one lucky start date) with "here is what EVERY start date
     # would have given you".
-    chosen = None
-    for row in rolling:
-        if row.get("years") == 3:
-            chosen = row
-            break
-    if chosen is None and rolling:
-        chosen = rolling[-1]
+    # USABLE rows only. Unsupported horizons are now reported rather than
+    # dropped, so "there is a 3-year row" no longer means "there is a 3-year
+    # answer" — and a summary built from one would say a stock made money in
+    # every window it never measured.
+    usable = [row for row in rolling if row.get("usable", True) and _known(row.get("worst"))]
+    chosen = next((row for row in usable if row.get("years") == 3), None)
+    if chosen is None and usable:
+        chosen = usable[-1]
     if chosen:
         horizon = chosen.get("years")
         worst = chosen.get("worst")
@@ -2422,17 +2427,24 @@ def for_long_term(block: dict, ticker: str = "", risk_free: float = 0.0,
         if result:
             out[f"relativeExcess.{label}"] = result
 
-    for row in block.get("rollingReturns") or []:
+    rolling_rows = block.get("rollingReturns") or []
+    for row in rolling_rows:
         result = explain("rollingWorst", row.get("worst"), years=row.get("years"),
-                         positiveShare=row.get("positiveShare"))
+                         positiveShare=row.get("positiveShare"),
+                         reason=row.get("reason"), windows=row.get("windows"))
         if result:
             out[f"rollingWorst.{row.get('years')}"] = result
-    # The 3-year row is the one Simple mode shows, so it gets the bare key too.
-    if "rollingWorst.3" in out:
-        out["rollingWorst"] = out["rollingWorst.3"]
-    elif block.get("rollingReturns"):
-        last = block["rollingReturns"][-1]
-        out["rollingWorst"] = out.get(f"rollingWorst.{last.get('years')}")
+    # The bare key is what Simple mode renders, so it has to point at a horizon
+    # that was actually measured. Preferring the 3-year row by key alone would
+    # now hand Simple mode a "needs more history" card while a perfectly good
+    # 1-year answer sat beside it.
+    measured = [row for row in rolling_rows
+                if row.get("usable", True) and _known(row.get("worst"))]
+    preferred = next((row for row in measured if row.get("years") == 3), None)
+    if preferred is None and measured:
+        preferred = measured[-1]
+    if preferred is not None:
+        out["rollingWorst"] = out.get(f"rollingWorst.{preferred.get('years')}")
 
     if coppock:
         out["coppock"] = explain("coppock", coppock[-1].get("value"),

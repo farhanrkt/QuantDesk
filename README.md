@@ -110,6 +110,14 @@ book is shallow.
 **How.** Five sections behind a horizon selector, ordered longest-first so that reading
 left to right walks from the strongest evidence to the weakest.
 
+**You say how long you would hold it**, once, and the app answers that question rather than a
+fixed one. Above the tabs sits what every holder of that length actually got: the worst entry,
+the typical one, and how many of those overlapping periods made money. On AAPL the one-year
+worst case is **-30% a year** and the three-year worst case is **+0.2%** — three completely
+different investments, and until there was a horizon the app answered as though the question
+had one answer. A horizon the loaded history cannot support says so, with the shortfall and
+the fix, rather than quietly going missing.
+
 **Long horizon** leads, because that is what a multi-year holder is actually asking. A
 checklist — 200-day average, Faber's 10-month rule, 12-1 momentum, ADX, Hurst exponent,
 trend-line fit, 52-week position, drawdown survivability — each line saying which way it
@@ -384,7 +392,7 @@ docs/
 scripts/
   build_glossary.py   Regenerates that glossary, and CI's drift check
   calibrate_checks.py How often each pre-trade check fires, measured offline
-tests/        1,034 offline tests
+tests/        1,038 offline tests
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -565,7 +573,10 @@ there carries its evidence grade. Over one to four weeks prices have historicall
 *reversal* rather than continuation — the opposite of the twelve-month effect — which the
 panel states rather than hides.
 
-**Not implemented on purpose.** Order-flow toxicity (VPIN/PIN) needs trade-level data; a
+**Not implemented on purpose.** An "earnings inside your holding horizon" check: every listed
+company reports quarterly, so at any horizon of three months or more it fires on essentially
+everything and the pre-trade panel's own calibration rule demotes it to a base condition
+immediately. Order-flow toxicity (VPIN/PIN) needs trade-level data; a
 daily approximation would be a different number wearing the name. Multi-bar chart patterns
 (head and shoulders, flags, wedges) are named and declined rather than matched with fixed
 thresholds that would fire on noise. Calendar effects
