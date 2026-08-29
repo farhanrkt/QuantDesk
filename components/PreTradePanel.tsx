@@ -220,14 +220,12 @@ export function PreTradePanel({ data }: { data: PreTrade }) {
       <div className="px-5 pb-4 pt-5" style={{ background: `${PRETRADE}0F` }}>
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <h2 style={{ color: PRETRADE }}>{data.headline}</h2>
-          {/* No universe named up here on purpose. Each line is scored against
-              the universes for its own market, so a single label in the header
-              would contradict half the lines beneath it. */}
-          {data.calibration?.measuredOn && (
-            <span className="num text-micro text-ash">
-              rates measured {data.calibration.measuredOn}
-            </span>
-          )}
+          {/* The measurement date was printed twice — here, and again in the
+              caveat below. Once is enough, and the caveat is where it belongs:
+              beside the sentence that explains what a firing rate is. No
+              universe is named in either place, because each line is scored
+              against the universes for its OWN market and a single label would
+              contradict half the lines beneath it. */}
         </div>
         <p className="prose-col mt-2 text-base leading-relaxed text-body">{data.framing}</p>
       </div>

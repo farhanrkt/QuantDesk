@@ -275,6 +275,31 @@ tone, and "not investment advice".
 | Longest single block | 239w | 52w |
 | Page height, Trend | 11,166px | 9,775px |
 
+**The two panels above every tab now collapse to their conclusion.** The
+synthesis and the pre-trade panel are the only things a reader meets on all
+seven tabs, so whatever they show by default is shown seven times.
+
+The synthesis dropped its per-lens grid entirely — that was a *duplicate*, not a
+cut: the confluence rail directly above already names each lens, its verdict and
+a sentence of detail. Printing the same four verdicts again cost 220 words and
+900 pixels, seven times over. What is left is what only that panel can say.
+
+| | before | after |
+|---|---|---|
+| Synthesis | 372w / 1,898px | **99w / 432px** |
+| Pre-trade | 107w / 642px | 104w / 622px |
+| Trend tab height | 9,775px | **8,289px** |
+
+**What may never collapse.** A summary that folds to a bare title is a hidden
+paragraph; each of these folds to its own answer. So the agreement sentence
+stays outside the synthesis disclosure, the fired conditions never collapse in
+the pre-trade panel, and "an empty panel is not a clean bill of health" is
+always in the open — folding that one would be the exact bug that panel exists
+to prevent, arriving through a layout decision.
+
+The disclosure handle is built from what is actually inside it, so it can never
+offer "where they conflict" on a company that has none.
+
 **The tab bar is sticky**, which is the structural half of the same complaint.
 The reading order — summary, then objections, then lenses — is the argument the
 app is making and moving the tabs above it would break that. Sticking them keeps

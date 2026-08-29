@@ -2,7 +2,7 @@
 
 import { AlertTriangle, ArrowRight, ChevronRight, EyeOff, Scale } from "lucide-react";
 import type { AgreementMeasurement, Synthesis } from "@/lib/types";
-import { TONE_HEX, TONE_TEXT, useDetail } from "@/components/ui/explain";
+import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
 import { cn, pct, signed } from "@/lib/utils";
 
 /**
@@ -38,10 +38,6 @@ import { cn, pct, signed } from "@/lib/utils";
  *
  *   Prose stops at a readable measure. These paragraphs ran to 96ch.
  */
-
-const LENS_HUE: Record<string, string> = {
-  flow: "#2FBFA4", trend: "#6B9BFF", value: "#E8B44C", quality: "#C9A227",
-};
 
 /**
  * One region of the argument.
@@ -204,7 +200,10 @@ function Measured({ data }: { data: AgreementMeasurement }) {
 }
 
 export function SynthesisPanel({ data }: { data: Synthesis }) {
-  const guided = useDetail() === "simple";
+  // Guided/Full no longer splits this panel. It used to decide whether the next
+  // steps were spelled out or collapsed, and now everything below the conclusion
+  // is behind one control in both modes — a distinction that no longer had
+  // anything to distinguish.
   const { agreement } = data;
 
   const steps = (
@@ -224,89 +223,94 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
 
   return (
     <section className="animate-rise overflow-hidden rounded-xl border border-rule bg-panel">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 pb-4 pt-5">
-        <h2>What this adds up to</h2>
-        <p className="text-meta text-ash">{data.headline}</p>
-      </div>
+      {/* THE PANEL OPENS TO ITS CONCLUSION AND NOTHING ELSE.
+          It sits above all seven tabs, so whatever shows by default is shown
+          seven times to a reader working through the lenses. What survives that
+          repetition is the sentence answering "do they agree?" — the reason the
+          panel exists. Everything else is worth reading once and is one click
+          away.
 
-      {/* Each lens in one sentence, colour-keyed to the lens that said it. */}
-      <div className="grid gap-px border-t border-rule bg-rule sm:grid-cols-2">
-        {data.readings.map((r) => (
-          <div key={r.key} className="bg-panel px-5 py-4">
-            <div className="mb-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-              <span className="text-micro font-semibold uppercase tracking-wider"
-                    style={{ color: LENS_HUE[r.key] }}>
-                {r.lens}
-              </span>
-              <span className={cn("text-lead font-semibold", TONE_TEXT[r.tone])}>
-                {r.verdict}
-              </span>
-              <span className="ml-auto shrink-0 text-micro text-faint">
-                reads {r.familyLabel}
-              </span>
-            </div>
-            <p className="prose-col text-meta leading-relaxed text-body">{r.sentence}</p>
-          </div>
-        ))}
-      </div>
+          That sentence is OUTSIDE the disclosure on purpose. A summary that
+          collapses to a bare title is a hidden paragraph; this one collapses to
+          its own answer.
 
-      <Block icon={Scale} title="Do they agree?" tone={agreement.tone}>
-        {/* THE LEAD. One sentence at 17px in the tone colour, the working below
-            it at 15px and closed. A reader who stops after this line has the
-            finding rather than a fragment of it. */}
-        <p className={cn("prose-col text-lead leading-snug", TONE_TEXT[agreement.tone])}>
+          THE PER-LENS GRID IS GONE, AND THAT WAS A DUPLICATE RATHER THAN A CUT.
+          The confluence rail above already names each lens, its verdict and a
+          sentence of detail — visible on a wide screen, one tap away on a narrow
+          one. Printing the same four verdicts again cost 220 words and 900
+          pixels above every tab. "What this adds up to" is now only the adding
+          up. */}
+      <div className="px-5 pb-4 pt-5">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <h2>What this adds up to</h2>
+          <p className="text-meta text-ash">{data.headline}</p>
+        </div>
+        <p className={cn("prose-col mt-3 text-lead leading-snug", TONE_TEXT[agreement.tone])}>
           {agreement.text}
         </p>
-        {agreement.measured && <Measured data={agreement.measured} />}
-      </Block>
+      </div>
 
-      {data.tensions.length > 0 && (
-        <Block icon={AlertTriangle} title="Where they pull against each other" tone="warn">
-          <ul className="space-y-4">
-            {data.tensions.map((t) => (
-              <li key={t.title} className="border-l border-warn/40 pl-4">
-                <h4 className="text-lead font-semibold text-warn">{t.title}</h4>
-                <p className="prose-col mt-1 text-base leading-relaxed text-body">{t.text}</p>
-              </li>
-            ))}
-          </ul>
-        </Block>
-      )}
+      <details className="group border-t border-rule">
+        <summary className="flex cursor-pointer list-none items-center gap-2.5 px-5 py-3.5
+                            text-meta text-ash transition-colors hover:bg-raised/40
+                            hover:text-chalk focus-visible:outline-none
+                            focus-visible:ring-2 focus-visible:ring-tech">
+          <ChevronRight aria-hidden
+                        className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
+          {/* Built from what is actually inside, so the handle never promises a
+              section that is not there — a disclosure listing "where they
+              conflict" on a company with no conflicts is a small lie. */}
+          {(() => {
+            const parts = [
+              agreement.measured && "how much the two overlap",
+              data.tensions.length > 0 && "where they conflict",
+              data.blindSpots.length > 0 && "what none of them can see",
+              "what to check next",
+            ].filter(Boolean) as string[];
+            const joined = parts.length > 1
+              ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`
+              : parts[0];
+            return joined.charAt(0).toUpperCase() + joined.slice(1);
+          })()}
+        </summary>
 
-      {data.blindSpots.length > 0 && (
-        <Block icon={EyeOff} title="What this cannot tell you about this company"
-               weight="quiet" collapsible>
-          <ul className="space-y-3.5">
-            {data.blindSpots.map((b) => (
-              <li key={b.title}>
-                <h4 className="text-meta font-semibold text-chalk">{b.title}</h4>
-                <p className="prose-col mt-0.5 text-meta leading-relaxed text-ash">{b.text}</p>
-              </li>
-            ))}
-          </ul>
-        </Block>
-      )}
+        {agreement.measured && (
+          <Block icon={Scale} title="How much the two actually overlap" tone={agreement.tone}>
+            <Measured data={agreement.measured} />
+          </Block>
+        )}
 
-      {/* Guided readers get the next steps spelled out. In Full mode they are
-          collapsed to a single line, because someone who has been here before
-          does not need to be told to open the tab they are about to click. */}
-      {guided ? (
+        {data.tensions.length > 0 && (
+          <Block icon={AlertTriangle} title="Where they pull against each other" tone="warn">
+            <ul className="space-y-4">
+              {data.tensions.map((t) => (
+                <li key={t.title} className="border-l border-warn/40 pl-4">
+                  <h4 className="text-lead font-semibold text-warn">{t.title}</h4>
+                  <p className="prose-col mt-1 text-base leading-relaxed text-body">{t.text}</p>
+                </li>
+              ))}
+            </ul>
+          </Block>
+        )}
+
+        {data.blindSpots.length > 0 && (
+          <Block icon={EyeOff} title="What this cannot tell you about this company"
+                 weight="quiet">
+            <ul className="space-y-3.5">
+              {data.blindSpots.map((b) => (
+                <li key={b.title}>
+                  <h4 className="text-meta font-semibold text-chalk">{b.title}</h4>
+                  <p className="prose-col mt-0.5 text-meta leading-relaxed text-ash">{b.text}</p>
+                </li>
+              ))}
+            </ul>
+          </Block>
+        )}
+
         <Block icon={ArrowRight} title="What to check next">{steps}</Block>
-      ) : (
-        <details className="group border-t border-rule">
-          <summary className="flex cursor-pointer list-none items-center gap-2.5 px-5 py-3.5
-                              text-meta text-ash transition-colors hover:text-chalk
-                              focus-visible:outline-none focus-visible:ring-2
-                              focus-visible:ring-tech">
-            <ChevronRight aria-hidden
-                          className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
-            What to check next ({data.nextChecks.length})
-          </summary>
-          <div className="px-5 pb-5 pl-11">{steps}</div>
-        </details>
-      )}
+      </details>
 
-      <p className="prose-col border-t border-rule px-5 py-4 text-meta leading-relaxed text-faint">
+      <p className="prose-col border-t border-rule px-5 py-4 text-meta leading-relaxed text-ash">
         {data.caveat}
       </p>
     </section>
