@@ -259,7 +259,9 @@ def test_a_random_walk_verdict_downgrades_the_price_lenses():
     s = build(technical=trend(hurst="indistinguishable"))
     spot = next((b for b in s["blindSpots"] if "noise" in b["title"]), None)
     assert spot is not None
-    assert "downgrade" in spot["text"]
+    # The guarantee is that the blind spot tells the reader to discount the
+    # price lenses, not the verb it uses. Wording shortened in the v2 copy pass.
+    assert "discount" in spot["text"]
     # Clean case must NOT print it.
     assert not any("noise" in b["title"] for b in build()["blindSpots"])
 

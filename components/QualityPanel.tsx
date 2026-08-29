@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, Minus, X } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
 import {
   Explain, ExplainedStat, TONE_HEX, useDetail,
 } from "@/components/ui/explain";
@@ -214,12 +214,10 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
         </CardHeader>
         <CardBody className="space-y-3">
           <p className="text-base leading-relaxed text-body">{data.headline}</p>
-          <Explainer summary="Three published tests, each asking something different" defaultOpen>
-            Is the business improving (Piotroski)? Is it far from running out of money (Altman)?
-            Do the numbers look massaged (Beneish)?
-            {" "}All three read the accounts rather than the share price, which is what makes
-            them worth setting beside the other lenses.
-          </Explainer>
+          <p className="prose-col text-meta text-ash">
+            Three published tests: is the business improving, is it far from running out of
+            money, do the numbers look massaged. All read the accounts, not the price.
+          </p>
         </CardBody>
       </Card>
 
@@ -245,14 +243,10 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
           </CardHeader>
           <CardBody className="px-0">
             <div className="px-5 pb-3">
-              <Explainer summary="Where each test came from — and why being “outside” is not a warning">
-                Each was built on a particular set of companies, in a particular market, in
-                particular years. Those samples ended between 1965 and 1996, so every practical
-                use today sits outside them.
-                {" "}That is provenance, not a defect. Matching the sample would not make a
-                score right, and missing it does not make one wrong — but a number carried a
-                long way from where it was tested should say so.
-              </Explainer>
+              <p className="prose-col text-meta text-ash">
+                These samples ended between 1965 and 1996, so every use today is outside them.
+                That is provenance, not a warning.
+              </p>
             </div>
             {Object.entries(data.domains.screens).map(([key, screen]) => (
               <div key={key} className="border-t border-rule">
@@ -272,11 +266,8 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
               </div>
             ))}
             <div className="border-t border-rule px-5 pb-1 pt-3">
-              <Note>
-                There is deliberately no overall fit score. Counting how many rows match would
-                be a reliability rating, and none of these papers says how its model behaves on
-                a company like this one.
-              </Note>
+              <Note>No overall fit score: counting matching rows would be a reliability
+                rating none of these papers supports.</Note>
             </div>
           </CardBody>
         </Card>
@@ -317,10 +308,9 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                 </li>
               ))}
             </ul>
-            <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
-              A tick means that measure improved on last year, or was already healthy. Anything
-              that could not be worked out scores nothing and is never counted as a pass — so
-              the total moves with how complete the filings are.
+            <p className="prose-col px-5 pt-3 text-meta text-ash">
+              A tick means improved on last year, or already healthy. Anything not computable
+              scores nothing — never a pass.
             </p>
           </CardBody>
         </Card>
@@ -347,11 +337,8 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                     );
                   })}
                 </dl>
-                <Note>
-                  The emerging-market version, so an Indonesian and a US listing sit on the same
-                  scale. Safe above 5.85, distress below 4.35 — and the gap between is a zone
-                  the model declines to call either way.
-                </Note>
+                <Note>Safe above 5.85, distress below 4.35; between them the model declines
+                  to call it. Emerging-market version, so IDX and US share a scale.</Note>
               </CardBody>
             </Card>
           )}
@@ -375,11 +362,8 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                     );
                   })}
                 </dl>
-                <Note>
-                  A screen, not a finding. It catches about three-quarters of known manipulators
-                  — which, because manipulation is rare, still means most flags are false alarms.
-                  Every row is this year over last, so 1.00 means unchanged.
-                </Note>
+                <Note>A screen, not a finding: most flags are false alarms. Every row is this
+                  year over last, so 1.00 means unchanged.</Note>
               </CardBody>
             </Card>
           )}
@@ -388,10 +372,6 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
 
       <Note>
         None of the three was built on banks or insurers, so none is reported for them.
-        Research use only.
-        {" "}<span className="text-faint">
-          Piotroski (2000); Altman Z&apos;&apos; (2005 emerging-market variant); Beneish (1999).
-        </span>
       </Note>
     </div>
   );

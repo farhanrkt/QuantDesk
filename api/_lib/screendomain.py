@@ -282,12 +282,9 @@ def _event_rate(company: dict) -> dict:
         "prevalence", "How common the event was in the sample",
         "50 manipulators against 1,708 controls, about 3% of the estimation sample",
         "a listed company drawn from no sample at all", OUTSIDE,
-        "Manipulators were deliberately over-represented: the model was fitted where "
-        "roughly one firm in thirty-four was a known manipulator, and detected "
-        "manipulation among listed companies is rarer than that in the wild. A screen "
-        "tuned on an enriched sample produces more false alarms on a population where "
-        "the event is rarer, which is why a flag here is a reason to read the filings "
-        "rather than a finding.")
+        "Manipulators were deliberately over-represented — about one firm in thirty-four, "
+        "far commoner than in the wild. A screen tuned that way raises more false alarms "
+        "here, so a flag is a reason to read the filings rather than a finding.")
 
 
 def assess(company: dict, symbol: Optional[str] = None,

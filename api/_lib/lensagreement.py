@@ -470,66 +470,29 @@ def _declared_pair(pairs: Sequence[dict]) -> Optional[dict]:
 
 
 def _reading(families: dict, lenses: dict, pairs: Sequence[dict], scope: str) -> str:
-    """The arithmetic behind the claim, and the two things it cannot settle.
+    """One sentence. The argument lives in RESEARCH_ROADMAP.md §15.
 
-    DELIBERATELY NOT A SECOND STATEMENT OF THE CONCLUSION. `explain._warrant`
-    already carries that, inline, in the sentence a reader actually reads; this
-    paragraph is the working underneath it, and a grey restatement of a coloured
-    sentence three lines above is the kind of duplication that makes a panel
-    look longer than it is without saying anything more.
+    This was 239 words of statistics — chance-corrected agreement, the declared
+    pair, the participation ratio, and two paragraphs on what kappa cannot
+    settle. All of it true, all of it the longest block on the page, and all of
+    it a defence of the method rather than a finding about the company in front
+    of the reader. A research desk that argues with a hypothetical critic beside
+    every number is a desk nobody can read.
 
-    So this reports the numbers, then the one finding the warrant has no room
-    for — that the four votes overlap FAR less than the grouping above assumes —
-    and then, at the end, refuses to explain either.
+    So the panel keeps the NUMBER and the CONCLUSION, which is what a reader can
+    act on, and the working moved to the document that exists to hold it. The
+    figure is still measured, still stamped, still reproducible; it is simply no
+    longer explained in place.
     """
     kappa, n = families.get("kappa"), families.get("n")
-    low, high = families.get("low"), families.get("high")
-
-    text = (f"The working: across {n} names in {scope} the two bodies of data reach the "
-            f"same verdict {families['observed']:.0%} of the time, against the "
-            f"{families['chance']:.0%} their own separate habits already produce. That is "
-            f"κ = {kappa:+.2f}")
-    text += (f", with a 95% interval of {low:+.2f} to {high:+.2f}. "
-             if low is not None and high is not None else ". ")
-
-    # THE FINDING THE GROUPING DID NOT PREDICT, and the reason this measurement
-    # was worth taking even though it confirmed the headline claim.
-    declared = _declared_pair(pairs)
-    if declared is not None:
-        # THE SIGN DECIDES THE VERB, and getting it wrong here would be the exact
-        # error §14 spent a whole audit removing from the rendering layer. "Barely
-        # more than chance" is false of a NEGATIVE kappa, and "the redundancy the
-        # grouping assumes" is false of a small one — so the clause is written
-        # from the number rather than from what the run happened to find.
-        pair_kappa = declared["kappa"]
-        if declared["excludesZero"] and pair_kappa > 0:
-            verdict = ("which is the overlap the grouping assumes, showing up in the votes "
-                       "as well as in the code")
-        elif pair_kappa > 0.02:
-            verdict = "which is barely more than two unrelated readings would"
-        else:
-            verdict = "which is no more than two unrelated readings would"
-        text += (f"{DECLARED_REDUNDANT[0]} and {DECLARED_REDUNDANT[1]} are the pair this app "
-                 f"treats as one reading because they read the same price series — and their "
-                 f"verdicts agree at κ = {pair_kappa:+.2f} across {declared['n']} names, "
-                 f"{verdict}. ")
-
-    if lenses.get("available"):
-        text += (f"Across all {lenses['measuredLenses']} lenses on the "
-                 f"{lenses['completeCases']} names where every one of them read, they carry "
-                 f"about {lenses['effectiveLenses']:.1f} lenses' worth of independent "
-                 f"information rather than the two the count above collapses them to. ")
-
-    text += ("TWO THINGS THIS CANNOT SETTLE, and they matter more than the numbers. It "
-             "cannot say WHY two readings overlap: two independent tests of a genuinely "
-             "sound company should agree, so redundancy and a shared truth look identical "
-             "from here. And it cannot tell an independent reading from an uninformative "
-             "one — votes that carry real separate information and votes that are mostly "
-             "noise are both uncorrelated with everything else. That second one is why the "
-             "grouping above is not being loosened on the strength of this: the Flow lens's "
-             "own event study returns no significant effect on most tickers, and a lens that "
-             "is independent because it is noisy has not earned a vote of its own.")
-    return text
+    if not families.get("excludesZero"):
+        verdict = "no more often than chance would put them there"
+    elif kappa is not None and kappa > 0:
+        verdict = "rather more often than chance alone would produce"
+    else:
+        verdict = "less often than chance alone would produce"
+    return (f"Measured across {n} names in {scope}: the two agree {verdict} "
+            f"(κ = {kappa:+.2f}).")
 
 
 def for_synthesis(market: Optional[str] = None,

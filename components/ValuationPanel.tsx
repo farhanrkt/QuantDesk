@@ -7,7 +7,7 @@ import {
 import { CornerUpLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader, CardTitle, Note, Stat } from "@/components/ui/card";
-import { ExplainedStat, TONE_TEXT, useDetail } from "@/components/ui/explain";
+import { Explain, ExplainedStat, TONE_TEXT, useDetail } from "@/components/ui/explain";
 import { DownloadButton } from "@/components/ui/controls";
 import { ValuationControls } from "@/components/ValuationControls";
 import type { ValuationOptions } from "@/lib/api";
@@ -151,15 +151,19 @@ export function ValuationPanel({
                   <CornerUpLeft aria-hidden className="h-3 w-3" />
                   Working the model backwards
                 </div>
-                <p className="text-base leading-relaxed text-body">
+                <p className="prose-col text-base leading-relaxed text-body">
                   {ex.impliedGrowth.reading}
                 </p>
-                <p className="mt-1.5 text-meta leading-relaxed text-ash">
-                  {ex.impliedGrowth.action}
-                </p>
+                {/* `action` is 122 words and it is the longest single block on
+                    this tab. It belongs where every other `action` lives — behind
+                    the info icon — not printed twice the length of the reading it
+                    follows. The affordance is right here on the figure. */}
               </div>
               <div className="shrink-0 text-right">
-                <div className="eyebrow mb-1">Implied growth</div>
+                <div className="eyebrow mb-1 flex items-center justify-end gap-1.5">
+                  Implied growth
+                  <Explain explain={ex.impliedGrowth} />
+                </div>
                 <div className={cn("num text-h2 font-semibold leading-none",
                                    TONE_TEXT[ex.impliedGrowth.tone])}>
                   {ex.impliedGrowth.valueText}

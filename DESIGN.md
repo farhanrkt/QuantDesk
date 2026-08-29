@@ -252,6 +252,34 @@ already renders `DCF` as "cash-flow model". `Mean CAR` became `Mean abnormal
 return`; `RSI`, `ADX` and `MFI` stayed, because they are the conventional labels
 and each already carries an info button.
 
+**A third pass cut, rather than disclosed.** The owner revised `PRODUCT.md`
+constraint 7 on 29 August 2026 after the second pass still read as overwhelming.
+Measured before that cut: **2,294 words of prose against 174 words of data on one
+tab — thirteen words of explanation per word of number** — and the first control
+inside a tab sat 4,300px down.
+
+What went: the app arguing for its own methodology. The 239-word statistics
+block behind the lens-agreement figure, the 96-word explanation of why four
+panels count as two sources, the 100-word "how to read this" in the header, the
+122-word `action` printed beside the implied-growth figure. All of it true, all
+of it now in `RESEARCH_ROADMAP.md` and the field manual, both linked.
+
+What stayed, and may never go: every number and the base rate beside it, every
+null result and refusal, "an empty panel is not a clean bill of health", every
+tone, and "not investment advice".
+
+| | before | after |
+|---|---|---|
+| Prose on the Trend tab | 2,294w | 1,552w |
+| Prose per word of data | 13.2 : 1 | 9 : 1 |
+| Longest single block | 239w | 52w |
+| Page height, Trend | 11,166px | 9,775px |
+
+**The tab bar is sticky**, which is the structural half of the same complaint.
+The reading order — summary, then objections, then lenses — is the argument the
+app is making and moving the tabs above it would break that. Sticking them keeps
+the order and still puts every tool one click from any scroll position.
+
 Rules that survived the pass:
 
 - Expand an acronym unless it is the column's real name and has an `Explain`.

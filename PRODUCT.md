@@ -78,10 +78,27 @@ These are durable product facts. Future work preserves them; none is a style pre
    reach a server; `scripts/check_frontend.mjs` fails the build if `lib/api.ts` so much as
    mentions the journal.
 
-7. **Every figure explains itself.** Each number carries what it measures in plain English,
-   whether *this* value is good or bad and why, and what would make you act differently —
-   or admits nothing would. This content may be restructured or progressively disclosed.
-   It may not be deleted.
+7. **Every figure explains itself — in one sentence, on the page.** Each number carries
+   what it measures and whether *this* value is good or bad. The rest — why, what would
+   change it, the evidence grade — lives behind the figure's own info icon.
+
+   *Revised 29 August 2026, by the owner.* This constraint previously read "may be
+   restructured or progressively disclosed, may not be deleted", and that was wrong in
+   practice: it produced a screen carrying **thirteen words of prose per word of data**,
+   with the first control on a tab **4,300px down**. Text can now be cut.
+
+   What may still never be cut, because the app's honesty rests on it:
+
+   - any **number**, and any **base rate** a number is quoted against;
+   - a **null result** or a refusal (`applicable: false`, the withheld checks, the
+     candlestick firewall);
+   - the sentence that says an **empty panel is not a clean bill of health**;
+   - a **tone** — the judgement of whether a value is good or bad;
+   - "not investment advice".
+
+   What should be cut on sight: the app arguing for its own methodology. Why an estimator
+   was chosen, what a statistic cannot identify, which paper it came from. That belongs in
+   `RESEARCH_ROADMAP.md` and `docs/field-manual.html`, both linked from the page.
 
 ## Terminology
 
@@ -98,18 +115,28 @@ These are durable product facts. Future work preserves them; none is a style pre
 - Measured artifacts, each stamped with its date, in `api/_lib/*.json`.
 - `docs/field-manual.html` — beginner's guide; its glossary is **generated** from
   `api/_lib/explain.py` and CI fails if a metric is added without regenerating.
-- Four network scripts in `scripts/` deliberately outside CI. Re-run after touching what
+- Five network scripts in `scripts/` deliberately outside CI. Re-run after touching what
   they measure; a stale stamped number is worse than none.
 
 ## Accessibility
 
-Audited 29 Aug 2026, and the findings are open work rather than a claim of conformance:
-48 of 74 interactive elements on the Trend tab are under the 24×24 WCAG 2.2 minimum (the
-info icon is 14×14); both tablists and both radiogroups declare an ARIA pattern without
-its keyboard contract; eight sites use `text-ash` at 40–70% alpha, which composites to
-2.2–3.2:1. The base palette itself clears AA (`ash` on `panel` is 5.18:1).
+Audited and fixed 29 Aug 2026. What the audit found and what happened to it:
 
-Page-level horizontal overflow at 375px was fixed in `08627c1`.
+| Finding | Now |
+|---|---|
+| 48 of 74 interactive elements under 24×24 (the info icon was 14px) | 0 on desktop |
+| Both tablists and both radiogroups declared an ARIA pattern with no keyboard contract | roving tabindex, arrow keys, Home/End |
+| Eight `text-ash` alpha sites compositing to 2.2–3.2:1 | gone with the text ladder |
+| Page-level horizontal overflow at 375px | 0, every tab |
+| 25 `aria-controls` pointing at ids not in the document | 0 |
+| Both tablists announcing as "Lenses" | the inner one is "Time horizon" |
+
+Verified by walking the real tab order: 64 focusables, none unnamed, none without a
+visible focus style, no positive `tabindex`. Seven of these rules are now enforced by
+`npm run check:frontend` so they cannot come back.
+
+**Not a conformance claim.** Nobody has listened to this with a screen reader — the
+keyboard contract is implemented and measured, but how it *sounds* is untested.
 
 ## Voice
 

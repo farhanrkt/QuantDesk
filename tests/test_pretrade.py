@@ -181,7 +181,10 @@ def test_demoted_conditions_are_still_true_and_the_framing_says_so():
                     calibration(altmanDistress=P.BASE_RATE_MAX + 0.2))
     assert result["flags"] == [] and result["baseConditions"]
     assert "None of the conditions" not in result["framing"]
-    assert "true of this company" in result["framing"]
+    # The guarantee is that the framing AFFIRMS these are true of this company
+    # rather than implying nothing was found. Wording shortened in the v2 copy
+    # pass; this file's own docstring says wording is free to change.
+    assert "true here" in result["framing"]
 
 
 @pytest.mark.parametrize("pl", [
@@ -286,7 +289,10 @@ def test_an_uncalibrated_check_never_renders_however_loudly_it_fires():
     assert "altmanDistress" not in fired_ids(result)
     assert "altmanDistress" not in {n["id"] for n in result["notChecked"]}
     assert "altmanDistress" in {u["id"] for u in result["uncalibrated"]}
-    assert "withheld rather than shown uncalibrated" in all_text(result)
+    # The guarantee is that the panel SAYS why it is holding one back, not the
+    # phrasing it uses. Shortened in the v2 copy pass; the claim is unchanged.
+    assert "withheld" in all_text(result)
+    assert "base rate" in all_text(result)
 
 
 def test_a_rate_measured_on_too_few_names_is_treated_as_no_rate():

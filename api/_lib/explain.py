@@ -1870,7 +1870,7 @@ def _implied_growth(value, assumedGrowth=None, engine=None, **_):
 
     return make(
         label=label, what=what, reading=reading + gap,
-        action=("This is the number to argue with. Ask whether you believe THIS company can "
+        action=("The number to argue with. Ask whether you believe THIS company can "
                 "grow at that rate for five years — you know things about the business the "
                 "model does not. If you think it can do better, the price is cheap on this "
                 "model; if worse, expensive. That judgement is yours, and it is a far more "
@@ -2360,21 +2360,19 @@ def long_horizon_story(ticker: str, block: dict) -> dict:
     caveats = []
     if hurst_verdict == "indistinguishable":
         caveats.append(
-            "a statistical test on this price history cannot tell it apart from a random walk — "
-            "and that test is noisy enough that saying so is the honest answer rather than a "
-            "weak one — which means the trend lines and momentum readings further down are "
-            "probably describing noise rather than a real pattern")
+            "a statistical test cannot tell this price history apart from a random walk, so "
+            "the trend readings below are probably describing noise")
     elif hurst_verdict == "meanReverting":
         caveats.append(
-            "this price series has historically tended to REVERSE rather than continue, so "
-            "trend-following readings below should be discounted")
+            "this series has historically tended to reverse rather than continue, so discount "
+            "the trend readings below")
     if years is not None and years < 3:
         caveats.append(
-            f"there are only about {years:.0f} years of history loaded, which is thin for any "
-            f"statement about multi-year holding — set the range to 10y or max for a fuller picture")
+            f"only about {years:.0f} years of history is loaded, which is thin for any "
+            f"multi-year statement — try 10y or max")
     caveats.append(
-        "none of this knows anything about the business itself — it is price history alone, and "
-        "would read exactly the same on a company about to be delisted")
+        "none of this knows anything about the business — it would read the same on a company "
+        "about to be delisted")
     lead = "Worth remembering: " if len(caveats) == 1 else "Two things to remember: "
     if len(caveats) > 2:
         lead = "A few things to remember: "
@@ -3268,10 +3266,8 @@ def _agreement(readings: Sequence[dict], families: dict,
         down = "the filings" if price > 0 else "price and volume"
         return {**base, "tone": "warn", "text": (
             f"They disagree: {up} read constructively while {down} do not. The "
-            f"disagreement is the finding. It usually means the market is pricing "
-            f"something the accounts have not shown yet, or that the accounts are "
-            f"showing something the price has not reacted to — and which of those it is "
-            f"cannot be settled from this page.")}
+            f"disagreement is the finding, and this page cannot settle which side is "
+            f"right.")}
 
     active = "price and volume" if price else "the filings"
     quiet = "the filings" if price else "price and volume"
@@ -3340,16 +3336,12 @@ def _blind_spots(payload: dict, readings: dict) -> list[dict]:
         hurst = ((technical.get("longTerm") or {}).get("hurstReading")) or {}
         if hurst.get("verdict") == "indistinguishable":
             out.append({"title": "The trend tools may be describing noise", "text": (
-                "The Hurst exponent cannot separate this price series from a random walk "
-                "at the amount of history loaded. That is the app's own honesty check, and "
-                "when it fires the right response is to downgrade every price-based "
-                "reading on the page rather than act on it. The filings-based lenses are "
-                "unaffected.")})
+                "This price history cannot be told apart from a random walk, so discount "
+                "every price-based reading here. The filings lenses are unaffected.")})
         if not technical.get("hasLongTerm"):
             out.append({"title": "No long-horizon reading", "text": (
-                "There is not enough loaded history for the multi-year section, which is "
-                "the part with the strongest evidence behind it. Widen the chart range to "
-                "5y or more and run it again.")})
+                "Not enough history for the multi-year section — the part with the "
+                "strongest evidence. Set the range to 5y or more.")})
 
     valuation = _leg(payload, "valuation")
     if valuation:
@@ -4002,16 +3994,14 @@ INSIDE_WORD, OUTSIDE_WORD, UNKNOWN_WORD = "inside", "outside", "unknown"
 # inline text because `tests/test_pretrade.py` asserts its presence in EVERY
 # state, including — especially — the one where nothing fired.
 ABSENCE_IS_NOT_EVIDENCE = (
-    "An empty panel is not a clean bill of health. These are the specific conditions this "
-    "app is able to test, nothing more, and a company can be a poor holding for reasons "
-    "none of them describes."
+    "An empty panel is not a clean bill of health — only that none of the conditions "
+    "this app can test fired."
 )
 
 # Appended only when something actually went untested, because a caveat that
 # points at an absent section teaches a reader to skip the caveats.
 NOTHING_UNTESTED_CLAUSE = (
-    " The conditions listed as not checked were never evaluated at all, which is a "
-    "different thing again from evaluating them and finding nothing."
+    " Anything listed as not checked was never evaluated at all."
 )
 
 
@@ -4034,15 +4024,13 @@ def for_pretrade(flags: Sequence[dict], base_conditions: Sequence[dict],
     if flags:
         framing = (
             "Each condition below is true of this company right now. Beside each one is how "
-            "often it is true across a published universe of companies — because a condition "
-            "that is common is a description of the market rather than a finding about this "
-            "name, and the two are indistinguishable without that number."
+            "often it is true across a published universe — a common condition describes "
+            "the market, not this company."
         )
     elif base_conditions:
         framing = (
-            "Nothing unusual fired here. The conditions below are true of this company, and "
-            "also true of most companies in its market — so they describe the market it "
-            "trades in rather than singling this one out."
+            "Nothing unusual fired. The conditions below are true here and true of most of "
+            "this market, so they describe the market rather than this company."
         )
     else:
         framing = (
@@ -4057,23 +4045,19 @@ def for_pretrade(flags: Sequence[dict], base_conditions: Sequence[dict],
     notes = {}
     if base_conditions:
         notes["base"] = (
-            "These are true of this company and also true of more than "
-            f"{int((calibration or {}).get('baseRateMax', 0.33) * 100)}% of the calibration "
-            "universe. They are shown because they are real, and kept out of the flags "
-            "because presenting a base rate as an alarm is how a research tool manufactures "
-            "conviction out of nothing."
+            "True here, and true of more than "
+            f"{int((calibration or {}).get('baseRateMax', 0.33) * 100)}% of the universe. "
+            "Real, but not a finding about this company."
         )
     if not_checked:
         notes["notChecked"] = (
-            "These were never tested — a refused lens, a missing filing, an estimate below "
-            "what the data can resolve. Not tested is not the same as clear, and this app "
-            "will not print the second when it means the first."
+            "Never tested — a refused lens, a missing filing, an estimate the data cannot "
+            "resolve. Not tested is not clear."
         )
     if uncalibrated:
         notes["uncalibrated"] = (
-            "This app knows how to evaluate these and is not showing them, because nobody "
-            "has measured how often they fire. A flag without a base rate is not "
-            "interpretable, so it is withheld rather than shown uncalibrated."
+            "Testable, but nobody has measured how often they fire. A flag without a base "
+            "rate is not readable, so it is withheld."
         )
 
     # The stamp deliberately does NOT name a universe. Each line carries the
@@ -4083,9 +4067,8 @@ def for_pretrade(flags: Sequence[dict], base_conditions: Sequence[dict],
     # above it on every second ticker.
     stamp = None
     if calibration and calibration.get("measuredOn"):
-        stamp = (f"Firing rates measured on {calibration['measuredOn']}, each against the "
-                 f"universe named beside it. Index membership decays, so the date is part "
-                 f"of the reading.")
+        stamp = (f"Rates measured {calibration['measuredOn']}, each against the universe "
+                 f"named beside it.")
 
     return {
         "headline": "What would give a careful buyer pause",
@@ -4095,8 +4078,6 @@ def for_pretrade(flags: Sequence[dict], base_conditions: Sequence[dict],
         "caveat": (
             ABSENCE_IS_NOT_EVIDENCE
             + (NOTHING_UNTESTED_CLAUSE if not_checked else "")
-            + " Nothing here is a recommendation, and no combination of these conditions "
-              "adds up to one — they are reasons to go and look at something specific, "
-              "each one naming where in the app that number lives."
+            + " None of this is a recommendation."
         ),
     }

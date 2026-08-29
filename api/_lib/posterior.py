@@ -277,12 +277,10 @@ def for_beneish(band: Optional[str], prior: Optional[float] = None,
             "specificity": 1.0 - BENEISH_FALSE_POSITIVE,
             "citation": BENEISH_CITATION,
             "note": (
-                f"At the {BENEISH_CUTOFF} cutoff Beneish reports the model classifying "
-                f"about {_pct(BENEISH_SENSITIVITY, 0)} of manipulators correctly and "
-                f"misclassifying about {_pct(BENEISH_FALSE_POSITIVE, 1)} of "
-                f"non-manipulators — a trade-off he chose for a 30-to-1 relative cost of "
-                f"missing a manipulator against raising a false alarm. Both figures are "
-                f"measured on that paper's own data."),
+                f"At the {BENEISH_CUTOFF} cutoff the model catches about "
+                f"{_pct(BENEISH_SENSITIVITY, 0)} of manipulators and misclassifies about "
+                f"{_pct(BENEISH_FALSE_POSITIVE, 1)} of everyone else — a trade-off chosen "
+                f"at a 30-to-1 cost of missing a manipulator, on the paper's own data."),
         },
         "curve": points,
         "anchors": PRIOR_ANCHORS,

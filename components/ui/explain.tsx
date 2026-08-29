@@ -350,6 +350,22 @@ export function Explain({ explain }: { explain?: Explanation }) {
   );
 }
 
+
+/**
+ * The first sentence of a reading, for the inline Guided line.
+ *
+ * Splits on a full stop followed by a space and a capital, so decimals,
+ * "e.g." and "£1.2bn" survive. Anything already short is returned whole rather
+ * than cut at a clause, because a truncated judgement reads as a broken one.
+ */
+function firstSentence(text: string): string {
+  if (!text) return text;
+  const trimmed = text.trim();
+  if (trimmed.split(/\s+/).length <= 18) return trimmed;
+  const end = trimmed.search(/[.!?](?=\s+[A-Z"“])/);
+  return end === -1 ? trimmed : trimmed.slice(0, end + 1);
+}
+
 /**
  * A number with its explanation attached — the unit Job 1 is really about.
  *
@@ -386,15 +402,19 @@ export function ExplainedStat({
       </div>
       <div className={cn("num text-figure font-semibold leading-none", colour)}>{shown}</div>
       {sub && <div className="mt-2 text-micro leading-snug text-ash">{sub}</div>}
-      {/* GUIDED: show the interpretation of THIS value without a click. It is
-          the `reading` line only — the full three-part explanation stays behind
-          the icon, so the affordance still has a job and the card does not
-          become a wall. A reader who never discovers the icon has still been
-          told whether the number in front of them is good or bad. */}
+      {/* GUIDED: the interpretation of THIS value, without a click — but only
+          its FIRST SENTENCE.
+
+          The reading runs two or three sentences: the judgement, then why, then
+          what follows from it. A dozen stats to a panel and that is four hundred
+          words of elaboration a reader did not ask for, which is most of how a
+          screen ended up at thirteen words of prose per word of data. The first
+          sentence carries the judgement — the thing a reader who never finds the
+          icon still needs — and the rest is one click away, unchanged. */}
       {!open && guided && explain && explain.tone !== "none" && (
         <div className={cn("mt-2.5 border-t border-ruleSoft pt-2.5 text-meta leading-relaxed",
                            TONE_TEXT[explain.tone] ?? "text-chalk")}>
-          {explain.reading}
+          {firstSentence(explain.reading)}
         </div>
       )}
       {open && explain && (

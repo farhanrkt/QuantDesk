@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { AnomalyPanel } from "@/components/AnomalyPanel";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
@@ -188,39 +188,18 @@ export default function Home() {
             <h1 className="font-mono tracking-[0.16em]">QUANTDESK</h1>
             <p className="mt-1.5 text-base text-ash">
               Four models read the same stock from different data — and say where they
-              disagree.
+              disagree.{" "}
+              <a href="/docs/field-manual.html"
+                 className="text-tech underline decoration-tech/40 hover:decoration-tech">
+                New to this?
+              </a>
             </p>
           </div>
           <DetailToggle level={detail} onChange={setDetail} />
         </div>
-        <details className="group mt-4">
-          <summary className="inline-flex h-8 cursor-pointer list-none items-center gap-2
-                              rounded text-meta text-ash transition-colors hover:text-chalk
-                              focus-visible:outline-none focus-visible:ring-2
-                              focus-visible:ring-tech">
-            <ChevronRight aria-hidden
-                          className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
-            How to read this
-          </summary>
-          <div className="prose-col mt-3 space-y-2.5 pl-6 text-meta leading-relaxed text-ash">
-            <p>
-              Flow reads volume, Trend reads price, Value reads the cash flows, Quality reads
-              the balance sheet. Where methods that share no inputs land in the same place,
-              that is worth more than any one of them shouting — and the app measures how much
-              more rather than assuming it.
-            </p>
-            <p>
-              Every number carries an{" "}
-              <span className="font-semibold text-body">i</span> that explains what it
-              measures, whether this value is good or bad, and what would make you act
-              differently — or admits that nothing would.{" "}
-              <span className="font-semibold text-body">Guided</span> puts those readings on
-              the page and folds the expert controls away;{" "}
-              <span className="font-semibold text-body">Full</span> is every control and every
-              indicator.
-            </p>
-          </div>
-        </details>
+        {/* The 100-word "How to read this" disclosure is gone. It taught the app
+            to a reader who had not entered a ticker yet — the worst possible
+            moment — and docs/field-manual.html exists to do that properly. */}
       </header>
 
       <div className="mb-8">
@@ -272,7 +251,17 @@ export default function Home() {
           {preTrade && <PreTradePanel data={preTrade} />}
 
           <div>
-            <Tabs tabs={TABS} active={tab} onChange={setTab} />
+            {/* STICKY, because the tools were four thousand pixels down.
+                The reading order is deliberate — the summary, then what argues
+                against it, then the lenses — and moving the tabs above the
+                synthesis would break the argument the app is making. Sticking
+                them keeps the order and still puts every tool one click away
+                from any scroll position, which was the actual complaint. */}
+            <div className="sticky top-0 z-20 -mx-4 bg-ink/95 px-4 backdrop-blur
+                            supports-[backdrop-filter]:bg-ink/80 sm:-mx-6 sm:px-6
+                            lg:-mx-8 lg:px-8">
+              <Tabs tabs={TABS} active={tab} onChange={setTab} />
+            </div>
             <div className="pt-6">
               <TabPanel id="flow" active={tab}>
                 <div className="space-y-4">

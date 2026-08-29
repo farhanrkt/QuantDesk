@@ -408,106 +408,67 @@ def test_the_pair_payload_reports_its_own_arithmetic():
 
 
 # --------------------------------------------------------------------------- #
-# 7. The working, and the two things it refuses to conclude
+# 7. The sentence, and what it may not turn into
 #
-# The BRANCHING conclusion — whether the app's central claim survives this
-# measurement — lives in `explain._warrant`, inline in the sentence a reader
-# actually reads, and is exercised in `test_synthesis.py`. What is asserted here
-# is that this paragraph carries the arithmetic underneath it and never a second
-# copy of that conclusion, because a grey restatement of a coloured sentence
-# three lines above adds length and nothing else.
+# The reading was 239 words: chance-corrected agreement, the declared pair, the
+# participation ratio, and two paragraphs on what kappa cannot settle. All true,
+# all the longest block on the page, and all a defence of the method rather than
+# a finding about the company. It moved to RESEARCH_ROADMAP §15, which exists to
+# hold exactly that.
+#
+# What is asserted here is what survived: the number, the scope, a direction
+# read from the SIGN rather than from what the run happened to find, and no
+# causal claim. That last one is the whole reason a short sentence is safe —
+# "they agree no more than chance" is a measurement; "they are independent"
+# would be a conclusion the statistic cannot support.
 # --------------------------------------------------------------------------- #
-def test_the_reading_shows_its_arithmetic_rather_than_repeating_the_verdict():
+@pytest.mark.parametrize("table, phrase", [
+    # Indistinguishable from zero — as the real run came out.
+    ({(1, 1): 49, (1, 0): 21, (0, 1): 21, (0, 0): 9},
+     "no more often than chance would put them there"),
+    # Agreeing well beyond chance: the branch that would take the claim away.
+    ({(1, 1): 95, (1, 0): 5, (0, 1): 5, (0, 0): 95},
+     "rather more often than chance alone would produce"),
+    # Below chance, which is a finding rather than reassurance.
+    ({(1, 1): 5, (1, 0): 60, (0, 1): 60, (0, 0): 5},
+     "less often than chance alone would produce"),
+])
+def test_the_reading_reads_its_own_sign(table, phrase):
+    """All three branches ship. A module that could only phrase the result it
+    hoped for would have decided the answer before the run."""
+    report = LA.for_synthesis("US", measurement(table))
+    assert phrase in report["reading"]
+
+
+def test_the_reading_carries_the_number_and_the_denominator():
+    """A kappa with no sample size behind it is not a measurement. The scope has
+    to travel with it for the same reason the pre-trade panel names the universe
+    beside every firing rate."""
     report = LA.for_synthesis("US", measurement(
         {(1, 1): 49, (1, 0): 21, (0, 1): 21, (0, 0): 9}))
     reading = report["reading"]
-    assert "58% of the time" in reading
-    assert "58% their own separate habits" in reading
     assert "κ = +0.00" in reading
-    assert "95% interval" in reading
-    # The conclusion belongs to the warrant, not here.
-    assert "not one fact counted twice" not in reading
-    assert "measured rather than assumed" not in reading
-
-
-def planted_flow_trend(table: dict) -> dict:
-    """A measurement whose Flow/Trend pair realises a planted table exactly."""
-    flow, trend = from_table(table)
-    rng = np.random.default_rng(4)
-    votes = {"flow": flow, "trend": trend,
-             "value": list(rng.choice([-1, 0, 1], size=len(flow))),
-             "quality": list(rng.choice([-1, 0, 1], size=len(flow)))}
-    families = from_table({(1, 1): 49, (1, 0): 21, (0, 1): 21, (0, 0): 9})
-    price = list(families[0]) * (len(flow) // 100)
-    filings = list(families[1]) * (len(flow) // 100)
-    population = {"label": "the test universe", "names": len(flow),
-                  **LA.measure(votes, {"price": price, "filings": filings})}
-    return {"measuredOn": "2026-08-29", "populations": {"US": population}}
-
-
-@pytest.mark.parametrize("table, phrase", [
-    # As the real run came out: the pair declared redundant is not.
-    ({(1, 1): 49, (1, 0): 21, (0, 1): 21, (0, 0): 9},
-     "no more than two unrelated readings would"),
-    # Overlapping, but not so far from chance that the sample can pin it.
-    ({(1, 1): 53, (1, 0): 17, (0, 1): 17, (0, 0): 13},
-     "barely more than two unrelated readings would"),
-    # The grouping vindicated — the branch that would have to ship if the run
-    # had come out the other way.
-    ({(1, 1): 95, (1, 0): 5, (0, 1): 5, (0, 0): 95},
-     "the overlap the grouping assumes"),
-])
-def test_the_reading_names_the_declared_pair_and_reads_its_sign(table, phrase):
-    """Flow and Trend are collapsed into one vote because they read the same
-    price series. Whether their VERDICTS behave that way is the sharpest thing
-    this measurement can check, so the paragraph names that pair rather than
-    leaving it in a table nobody opens — and the verb comes from the number.
-
-    "Barely more than chance" is false of a negative kappa and "the overlap the
-    grouping assumes" is false of a small one. Writing the clause from what the
-    run happened to find is precisely the error §14 spent an audit removing from
-    the rendering layer, so all three branches are exercised here.
-    """
-    reading = LA.for_synthesis("US", planted_flow_trend(table))["reading"]
-    assert "Flow and Trend are the pair this app treats as one reading" in reading
-    assert phrase in reading
-
-
-def test_a_negative_declared_pair_is_never_called_more_than_chance():
-    reading = LA.for_synthesis("US", planted_flow_trend(
-        {(1, 1): 10, (1, 0): 60, (0, 1): 60, (0, 0): 10}))["reading"]
-    assert "no more than two unrelated readings would" in reading
-    assert "barely more" not in reading
-
-
-def test_the_reading_reports_the_effective_count_against_the_collapse():
-    """Four lenses collapsed into two votes, measured as carrying nearly four
-    lenses' worth. Naming the gap is the finding the warrant has no room for."""
-    report = LA.for_synthesis("US", measurement(
-        {(1, 1): 49, (1, 0): 21, (0, 1): 21, (0, 0): 9}))
-    assert "lenses' worth of independent information" in report["reading"]
-    assert "the two the count above collapses them to" in report["reading"]
+    assert "100 names" in reading
+    assert "the test universe" in reading
 
 
 @pytest.mark.parametrize("table", [
-    {(1, 1): 49, (1, 0): 21, (0, 1): 21, (0, 0): 9},      # indistinguishable from zero
-    {(1, 1): 95, (1, 0): 5, (0, 1): 5, (0, 0): 95},       # strongly redundant
-    {(1, 1): 5, (1, 0): 60, (0, 1): 60, (0, 0): 5},       # below chance
+    {(1, 1): 49, (1, 0): 21, (0, 1): 21, (0, 0): 9},
+    {(1, 1): 95, (1, 0): 5, (0, 1): 5, (0, 0): 95},
+    {(1, 1): 5, (1, 0): 60, (0, 1): 60, (0, 0): 5},
 ])
-def test_no_measurement_is_ever_allowed_to_explain_itself(table):
-    """The two refusals, asserted however the number came out.
+def test_the_reading_never_makes_a_causal_claim(table):
+    """Kappa measures redundancy, not causation: two independent tests of a
+    sound company should agree, so a low reading is not evidence of
+    independence and a high one is not evidence of shared inputs. The short
+    sentence is only safe because it states the MEASUREMENT and stops.
 
-    A kappa cannot say WHY two readings overlap — two independent tests of a
-    sound company should agree — and it cannot tell an independent reading from
-    an uninformative one, because a lens that is mostly noise is uncorrelated
-    with everything too. The second is why the grouping is not loosened on the
-    strength of this, and both have to survive every branch.
-    """
+    Shortening prose is exactly where a hedge gets dropped by accident, so the
+    words that would constitute the overclaim are named here."""
     reading = LA.for_synthesis("US", measurement(table))["reading"]
-    assert "cannot say WHY" in reading
-    assert "redundancy and a shared truth look identical" in reading
-    assert "independent reading from an uninformative one" in reading
-    assert "independent because it is noisy has not earned a vote" in reading
+    for overclaim in ("independent", "unrelated", "share no inputs", "proves",
+                      "because", "therefore"):
+        assert overclaim not in reading.lower(), f"reading claims more than κ supports: {overclaim}"
 
 
 # --------------------------------------------------------------------------- #

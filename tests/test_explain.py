@@ -648,7 +648,9 @@ def test_story_survives_a_nearly_empty_block():
     story = E.long_horizon_story("NEW", {"risk": {}, "drawdown": {},
                                          "rollingReturns": [], "position": {}})
     assert story["paragraphs"]                # the honesty paragraph always runs
-    assert "price history alone" in story["paragraphs"][-1]
+    # The guarantee is that the closing paragraph says this lens knows nothing
+    # about the business. Wording shortened in the v2 copy pass.
+    assert "knows anything about the business" in story["paragraphs"][-1]
 
 
 def test_story_admits_a_loss_rather_than_softening_it():

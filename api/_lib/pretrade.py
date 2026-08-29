@@ -345,13 +345,12 @@ def _hurst_random_walk(payload: dict) -> dict:
         return quiet()
     low = reading.get("randomWalkLow")
     high = reading.get("randomWalkHigh")
-    band_text = (f", inside the {low:.2f}-{high:.2f} band a random walk produces at this "
-                 f"sample size" if _known(low) and _known(high) else "")
+    band_text = (f", inside the {low:.2f}-{high:.2f} a random walk produces here"
+                 if _known(low) and _known(high) else "")
     return fires(
-        f"The Hurst exponent reads {reading['hurst']:.2f}{band_text}. At this amount of "
-        f"history the price series cannot be told apart from a random walk, which means "
-        f"the trend readings, the support levels and the momentum figures on the Trend "
-        f"tab may be describing noise. The filings-based lenses are unaffected.",
+        f"Hurst reads {reading['hurst']:.2f}{band_text}, so this price history cannot be "
+        f"told apart from a random walk. Discount the Trend tab; the filings lenses are "
+        f"unaffected.",
         band="caution", value_text=f"{reading['hurst']:.2f}")
 
 

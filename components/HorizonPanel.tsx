@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowRight, Ban, Target } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
 import {
   Explain, ExplainedRow, ExplainedStat, TONE_HEX, useDetail,
 } from "@/components/ui/explain";
@@ -164,12 +164,10 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
               </div>
             )}
 
-            <Explainer summary="The stop sits beyond a level the price has turned at before, not at a round number">
-              If a stop placed there is hit, the reason for the trade has actually broken —
-              which is not true of &ldquo;down 8%&rdquo;.
-              {" "}Position size is then the arithmetic that keeps the two consistent: a wider
-              stop means a smaller position, for the same money at risk.
-            </Explainer>
+            <Note>
+              The stop sits beyond a level the price turned at before, not at a round
+              percentage. A wider stop means a smaller position for the same money at risk.
+            </Note>
           </CardBody>
         </Card>
       ) : (
@@ -299,13 +297,10 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                 </ul>
               )}
               <div className="rounded border border-warn/30 bg-warn/5 px-3 py-2">
-                <Explainer tone="warn"
-                           summary="Shown because you will meet them elsewhere — never used to place a trade here">
-                  Marshall, Young &amp; Rose (2006) tested the standard candlestick set against
-                  randomly generated price series on Dow stocks and found no value in them. So
-                  they are named and graded, and no entry, stop or target on this page is
-                  allowed to come from one.
-                </Explainer>
+                <Note tone="warn">
+                  Shown because you will meet them elsewhere. No entry, stop or target here
+                  ever comes from one — tested against random price series, they show no value.
+                </Note>
               </div>
               <div>
                 <div className="eyebrow mb-1.5">What this app will not claim to detect</div>
@@ -321,13 +316,11 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                   ))}
                 </ul>
                 <div className="mt-2">
-                  <Explainer summary="Why these are declined rather than detected badly">
-                    Each needs a judgement about where the shape begins, and two honest
-                    implementations disagree. Lo, Mamaysky &amp; Wang (2000) needed heavy
-                    statistical machinery simply to <em>define</em> them, and found a shift in
-                    the spread of returns rather than a tradeable edge.
-                    {" "}A simple threshold matcher would fire several times a month on noise.
-                  </Explainer>
+                  <Note>
+                    Each needs a judgement about where the shape begins. A simple matcher would
+                    fire several times a month on noise, so they are declined rather than
+                    detected badly.
+                  </Note>
                 </div>
               </div>
             </CardBody>
@@ -384,9 +377,8 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                     ))}
                     <div className="pt-1">
                       <Note>
-                        A gap is a band of prices the stock jumped straight over, so almost
-                        nobody traded inside it and there is no support there. The common claim
-                        that gaps always fill is not supported — many never do.
+                        Prices the stock jumped over, so almost nobody traded there. Gaps do
+                        not always fill.
                       </Note>
                     </div>
                   </>

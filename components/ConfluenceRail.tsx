@@ -414,28 +414,16 @@ export function ConfluenceRail({
         <LensChips readings={readings} />
       </div>
 
-      {/* Agreement is the product's headline claim, so its main weakness
-          belongs next to it rather than in a footnote. Set at a readable
-          measure: v1 ran this paragraph the full width of the container. */}
-      <details className="group border-t border-rule">
-        <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-3
-                            text-meta text-ash transition-colors hover:text-chalk
-                            focus-visible:outline-none focus-visible:ring-2
-                            focus-visible:ring-tech">
-          <ChevronRight aria-hidden
-                        className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
-          Why four lenses count as {agreement.independent === 1 ? "one source" : "two sources"}
-        </summary>
-        <div className="prose-col px-5 pb-4 pl-11 text-meta">
-          These lenses are not fully independent: flow and trend are both functions of the same
-          price and volume series, while value and quality both read the filings — so four
-          panels rest on two bodies of data. The verdict above counts those two rather than the
-          four, which is why it can say &ldquo;both&rdquo; where the grid shows four. Which lens
-          reads which data is a stated assumption and stays one; how far the two actually reach
-          the same verdict is not, and the panel below carries that measurement with the number
-          it came out at.
-        </div>
-      </details>
+      {/* ONE LINE, NOT NINETY-SIX WORDS. The paragraph here explained why four
+          panels count as two sources, why the grouping is declared rather than
+          measured, and what the ranking panel does differently — a defence of
+          the method, permanently open, above every tab. The reasoning is in
+          RESEARCH_ROADMAP §6 and §15; what a reader needs beside the count is
+          what the count counts. */}
+      <p className="border-t border-rule px-5 py-2.5 text-meta text-ash">
+        Flow and Trend both read price and volume; Value and Quality both read the filings.
+        The count is of data sources, not panels.
+      </p>
 
       <button
         type="button"
