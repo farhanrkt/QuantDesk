@@ -5,7 +5,7 @@ import {
   Scatter, Tooltip, XAxis, YAxis,
 } from "recharts";
 import type { TooltipProps } from "recharts";
-import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Explainer, Stat } from "@/components/ui/card";
 import { ExplainedStat, ExplanationBody, useDetail } from "@/components/ui/explain";
 import { DownloadButton } from "@/components/ui/controls";
 import type { AnomalyPoint, AnomalyResponse, ExplainMap } from "@/lib/types";
@@ -216,13 +216,17 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
                 <ExplanationBody explain={ex.cusumEpisode} />
               </div>
             )}
-            <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
-              An institution building a position splits the order over weeks so no single day
-              stands out — which makes it invisible to the day-by-day detector above. This test
-              adds up small deviations instead, so a run of unremarkable days trips a threshold
-              none of them would alone. &quot;Began&quot; is the estimated start;
-              &quot;confirmed&quot; is when there was enough evidence to say so.
-            </p>
+            <div className="px-5 pt-3">
+              <Explainer summary="Why a patient buyer is invisible to the detector above">
+                A large buyer splits the order across weeks precisely so no single day stands
+                out — and a test that scores each day on its own can only ever catch the
+                impatient one.
+                {" "}This one adds up small deviations instead, so a run of unremarkable days
+                can trip a threshold none of them would alone. &ldquo;Began&rdquo; is the
+                estimated start; &ldquo;confirmed&rdquo; is when there was enough evidence to
+                say so.
+              </Explainer>
+            </div>
           </CardBody>
         </Card>
       )}
@@ -244,9 +248,9 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
         </CardHeader>
         <CardBody className="px-0">
           {anomalies.length === 0 ? (
-            <p className="px-5 text-base text-ash">
-              No day in this window crossed the detection threshold. That is a result, not a
-              failure — the cutoff is absolute, so a calm stock genuinely returns nothing.
+            <p className="prose-col px-5 text-base text-ash">
+              No day in this window was unusual enough to flag. That is a result, not a failure:
+              the cutoff is fixed, so a calm stock genuinely returns nothing.
             </p>
           ) : (
             <div className="max-h-[22rem] overflow-auto">

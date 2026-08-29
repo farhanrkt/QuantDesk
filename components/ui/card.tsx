@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -157,5 +158,76 @@ export function Stat({
       </div>
       {sub && <div className="mt-2 text-micro leading-snug text-ash">{sub}</div>}
     </div>
+  );
+}
+
+
+/**
+ * A long explanation, with its point on the outside.
+ *
+ * THE SINGLE BIGGEST SOURCE OF OVERLOAD IN THIS APP. Fifty paragraphs across
+ * the panels ran past ninety characters and one ran to ninety-six WORDS, each
+ * of them permanently open, each of them explaining a method to a reader who
+ * had not yet decided whether they cared about the method. Read end to end they
+ * are the best thing here; met all at once they are why nobody reaches the
+ * numbers.
+ *
+ * So the argument keeps its full text and gains a one-line summary. `summary`
+ * has to be a claim rather than a label — "Seven columns are not seven tests"
+ * is worth opening, "About this table" is not — because a disclosure whose
+ * handle says nothing is just a hidden paragraph.
+ *
+ * NOT A CUT. Every word is still on the page, one click away, selectable and
+ * printable. `PRODUCT.md` constraint 7 allows exactly this and forbids the
+ * other thing.
+ */
+export function Explainer({
+  summary, tone, defaultOpen = false, children,
+}: {
+  /** A claim, not a label. It is the only part most readers will see. */
+  summary: string;
+  /** `explain.tone`, where the server has one. Never picked from a number. */
+  tone?: string;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details open={defaultOpen} className="group">
+      <summary className={cn(
+        "flex min-h-[24px] cursor-pointer list-none items-start gap-2 rounded py-1",
+        "text-meta transition-colors hover:text-chalk",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tech",
+        tone ? TONE_SUMMARY[tone] ?? "text-ash" : "text-ash",
+      )}>
+        <ChevronRight aria-hidden
+                      className="mt-0.5 h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
+        <span>{summary}</span>
+      </summary>
+      <div className="prose-col mt-2 pl-6 text-meta leading-relaxed text-ash">
+        {children}
+      </div>
+    </details>
+  );
+}
+
+const TONE_SUMMARY: Record<string, string> = {
+  good: "text-acc", bad: "text-dist", warn: "text-warn",
+  neutral: "text-ash", none: "text-ash",
+};
+
+/**
+ * A short aside that is worth reading but is not the point of the panel.
+ *
+ * Distinct from `Explainer` by length rather than importance: under about
+ * twenty-five words a disclosure costs the reader more than it saves.
+ */
+export function Note({
+  children, tone,
+}: { children: React.ReactNode; tone?: "warn" | "quiet" }) {
+  return (
+    <p className={cn("prose-col text-meta leading-relaxed",
+                     tone === "warn" ? "text-warn" : "text-ash")}>
+      {children}
+    </p>
   );
 }

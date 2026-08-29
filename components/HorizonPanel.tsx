@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowRight, Ban, Target } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import {
   Explain, ExplainedRow, ExplainedStat, TONE_HEX, useDetail,
 } from "@/components/ui/explain";
@@ -164,12 +164,12 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
               </div>
             )}
 
-            <p className="text-meta leading-relaxed text-ash">
-              The stop is placed just beyond a level the price has previously turned at, not at a
-              round percentage — if it is hit, the reason for the trade has actually broken.
-              Position size is the arithmetic that makes those two facts consistent: a wider stop
-              means a smaller position for the same money at risk.
-            </p>
+            <Explainer summary="The stop sits beyond a level the price has turned at before, not at a round number">
+              If a stop placed there is hit, the reason for the trade has actually broken —
+              which is not true of &ldquo;down 8%&rdquo;.
+              {" "}Position size is then the arithmetic that keeps the two consistent: a wider
+              stop means a smaller position, for the same money at risk.
+            </Explainer>
           </CardBody>
         </Card>
       ) : (
@@ -299,13 +299,13 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                 </ul>
               )}
               <div className="rounded border border-warn/30 bg-warn/5 px-3 py-2">
-                <p className="text-meta leading-relaxed text-warn/90">
-                  These are shown because you will see them on any chart and deserve to know
-                  what they are. They are not used to place any entry, stop or target here.
+                <Explainer tone="warn"
+                           summary="Shown because you will meet them elsewhere — never used to place a trade here">
                   Marshall, Young &amp; Rose (2006) tested the standard candlestick set against
-                  a bootstrap of randomly generated open-high-low-close series on Dow component
-                  stocks and found no value in them.
-                </p>
+                  randomly generated price series on Dow stocks and found no value in them. So
+                  they are named and graded, and no entry, stop or target on this page is
+                  allowed to come from one.
+                </Explainer>
               </div>
               <div>
                 <div className="eyebrow mb-1.5">What this app will not claim to detect</div>
@@ -320,13 +320,15 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                     </li>
                   ))}
                 </ul>
-                <p className="mt-2 text-meta leading-relaxed text-ash">
-                  These need a judgement about where a shape begins, and two honest
-                  implementations disagree. Lo, Mamaysky &amp; Wang (2000) needed nonparametric
-                  kernel regression with a cross-validated bandwidth just to DEFINE them, and
-                  reported a shift in the return distribution rather than a tradeable edge. A
-                  fixed-threshold matcher would fire several times a month on noise.
-                </p>
+                <div className="mt-2">
+                  <Explainer summary="Why these are declined rather than detected badly">
+                    Each needs a judgement about where the shape begins, and two honest
+                    implementations disagree. Lo, Mamaysky &amp; Wang (2000) needed heavy
+                    statistical machinery simply to <em>define</em> them, and found a shift in
+                    the spread of returns rather than a tradeable edge.
+                    {" "}A simple threshold matcher would fire several times a month on noise.
+                  </Explainer>
+                </div>
               </div>
             </CardBody>
           </Card>
@@ -380,11 +382,13 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                         </span>
                       </div>
                     ))}
-                    <p className="pt-1 text-meta leading-relaxed text-ash">
-                      A gap is a band of prices the stock jumped straight over, so almost nobody
-                      transacted inside it and there is no established support there. The common
-                      claim that gaps always fill is not supported — many never do.
-                    </p>
+                    <div className="pt-1">
+                      <Note>
+                        A gap is a band of prices the stock jumped straight over, so almost
+                        nobody traded inside it and there is no support there. The common claim
+                        that gaps always fill is not supported — many never do.
+                      </Note>
+                    </div>
                   </>
                 )}
               </CardBody>

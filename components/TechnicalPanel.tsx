@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import type { TooltipProps } from "recharts";
 import { useState } from "react";
-import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Note, Stat } from "@/components/ui/card";
 import { IndicatorGrid } from "@/components/IndicatorGrid";
 import { HorizonPanel } from "@/components/HorizonPanel";
 import { LongTermPanel } from "@/components/LongTermPanel";
@@ -157,11 +157,13 @@ export function TechnicalPanel({
       )}
 
       {!data.hasLongTerm && active === "chart" && (
-        <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-meta leading-relaxed text-warn">
-          The long-horizon section needs at least a year of history. Set the chart range to
-          5y, 10y or max to get drawdown depth, rolling multi-year returns and relative
-          strength — a &quot;worst 3-year window&quot; computed from one year of data would be
-          a statistic with nothing behind it.
+        <div className="rounded-lg border border-warn/40 bg-warn/5 px-4 py-3.5">
+          <p className="prose-col text-meta leading-relaxed text-warn">
+            The long-horizon section needs at least a year of history. Set the chart range to
+            5y or longer for drawdown depth, multi-year returns and relative strength — a
+            &ldquo;worst 3-year window&rdquo; built from one year of data would be a number
+            with nothing behind it.
+          </p>
         </div>
       )}
 
@@ -185,11 +187,20 @@ export function TechnicalPanel({
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             {summary.chips.map((chip) => (
+              // A DOT, NOT A 2px LEFT BORDER. The coloured side-stripe is the most
+              // recognisable tell of a generated interface, and it does the job worse:
+              // on a rounded card the stripe fights the corner, and at 2px it reads as
+              // trim rather than as a status. The tone still comes from the server.
               <div key={chip.label}
-                   className="flex-1 basis-36 rounded border-l-2 bg-raised px-3 py-2"
-                   style={{ borderLeftColor: chip.tone === "bull" ? UP : chip.tone === "bear" ? DOWN
-                                            : chip.tone === "warn" ? FAST : "#7A8CA0" }}>
-                <div className="eyebrow mb-0.5">{chip.label}</div>
+                   className="flex-1 basis-36 rounded-lg border border-ruleSoft bg-raised
+                              px-3.5 py-2.5">
+                <div className="mb-1 flex items-center gap-2">
+                  <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ background: chip.tone === "bull" ? UP
+                                             : chip.tone === "bear" ? DOWN
+                                             : chip.tone === "warn" ? FAST : "#63748A" }} />
+                  <span className="eyebrow">{chip.label}</span>
+                </div>
                 <div className={cn("num text-base font-semibold", TONE[chip.tone] ?? "text-chalk")}>
                   {chip.value}
                 </div>
@@ -342,11 +353,12 @@ export function TechnicalPanel({
         </CardBody>
       </Card>
 
-      <p className="text-meta leading-relaxed text-ash">
-        Change since compares the latest close with the price on the signal day. It ignores costs,
-        dividends and timing, so treat it as a rough scorecard. Indicators are computed on the
-        visible window only — a one-year range gives the 200-day average roughly fifty valid bars.
-      </p>
+      <Note>
+        &ldquo;Change since&rdquo; compares today&apos;s close with the price on the signal day,
+        ignoring costs, dividends and timing — a rough scorecard, not a return. Everything here
+        is computed on the visible window only, so a one-year range leaves the 200-day average
+        about fifty usable days.
+      </Note>
       </div>
     </div>
   );

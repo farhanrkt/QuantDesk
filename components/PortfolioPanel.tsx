@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, Layers } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import { Explain, ExplainedRow, TONE_TEXT, useDetail } from "@/components/ui/explain";
 import { ApplyButton } from "@/components/ui/controls";
 import type { Engine, ExplainMap, PortfolioResponse } from "@/lib/types";
@@ -115,11 +115,14 @@ export function PortfolioPanel({
                          disabled={others.length === 0 || !ticker}>
               Compare with {ticker || "this ticker"}
             </ApplyButton>
-            <span className="text-meta leading-relaxed text-ash">
-              Kept in this browser only — this app has no accounts and no database. The list
-              is sent to answer this one question and forgotten. It travels in the request
-              body rather than the address, which is the one route here that does: a URL is
-              logged by every hop that handles it, and a portfolio has no business in a log.
+            <span className="min-w-0">
+              <Explainer summary="Your holdings stay in this browser">
+                There are no accounts and no database here. The list is sent to answer this one
+                question and then forgotten.
+                {" "}It is the only request in the app that travels in the body rather than the
+                address, because a web address is written into a log by every machine that
+                handles it — and a list of what you own has no business in a log.
+              </Explainer>
             </span>
           </div>
         </CardBody>
@@ -258,10 +261,10 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
                 </tbody>
               </table>
             </div>
-            <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
-              The two columns are the point. A position holding a tenth of the money and a
-              quarter of the risk is not diversified by being one of ten — it is the
-              portfolio wearing a smaller name.
+            <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
+              Compare the two columns. A holding with a tenth of the money and a quarter of the
+              risk is not diversified by being one of ten — it is the whole portfolio under a
+              smaller name.
             </p>
           </CardBody>
         </Card>
@@ -287,11 +290,11 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
                 </li>
               ))}
             </ul>
-            <p className="text-meta leading-relaxed text-ash">
-              Everything above is price and volume only. The filings do not batch, so there
-              is no quality or valuation dimension to this comparison — two companies can
-              correlate at 0.9 and be entirely different businesses.
-            </p>
+            <Note>
+              All of this is price and volume only — the filings cannot be fetched in bulk, so
+              nothing here knows what these businesses do. Two companies can move together 0.9
+              of the time and be nothing alike.
+            </Note>
           </CardBody>
         </Card>
       )}

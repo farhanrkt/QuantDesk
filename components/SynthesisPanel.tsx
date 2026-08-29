@@ -53,27 +53,57 @@ const LENS_HUE: Record<string, string> = {
  * the back door of a font size.
  */
 function Block({
-  icon: Icon, title, tone, weight = "finding", children,
+  icon: Icon, title, tone, weight = "finding", collapsible, children,
 }: {
   icon: typeof Scale;
   title: string;
   tone?: string;
   weight?: "finding" | "quiet";
+  /**
+   * Collapsed by default. Only for a block whose TITLE already states its
+   * point: "What this cannot tell you about this company" says the thing even
+   * shut, so closing it hides the list and not the claim.
+   *
+   * This panel and the pre-trade one sit above every tab — 1,080 words between
+   * them, met again on each of the seven. What the reader must not be able to
+   * miss is the agreement sentence and the named tensions; the enumeration of
+   * blind spots is worth reading and worth reaching for.
+   */
+  collapsible?: boolean;
   children: React.ReactNode;
 }) {
-  return (
-    <div className={cn("border-t border-rule px-5 py-5",
-                       weight === "quiet" && "bg-sunken/40")}>
-      <div className="mb-3 flex items-center gap-2.5">
-        <Icon aria-hidden className="h-4 w-4 shrink-0"
-              style={{ color: tone ? TONE_HEX[tone] : "#8496A9" }} />
-        <h3 className={cn("text-meta font-semibold uppercase tracking-wider",
+  const head = (
+    <>
+      <Icon aria-hidden className="h-4 w-4 shrink-0"
+            style={{ color: tone ? TONE_HEX[tone] : "#8496A9" }} />
+      <span className={cn("text-meta font-semibold uppercase tracking-wider",
                           weight === "quiet" ? "text-ash" : "text-chalk")}>
-          {title}
-        </h3>
+        {title}
+      </span>
+    </>
+  );
+  if (!collapsible) {
+    return (
+      <div className={cn("border-t border-rule px-5 py-5",
+                         weight === "quiet" && "bg-sunken/40")}>
+        <h3 className="mb-3 flex items-center gap-2.5">{head}</h3>
+        {children}
       </div>
-      {children}
-    </div>
+    );
+  }
+  return (
+    <details className={cn("group border-t border-rule",
+                           weight === "quiet" && "bg-sunken/40")}>
+      <summary className="flex cursor-pointer list-none items-center gap-2.5 px-5 py-4
+                          transition-colors hover:bg-raised/40 focus-visible:outline-none
+                          focus-visible:ring-2 focus-visible:ring-tech">
+        <ChevronRight aria-hidden
+                      className="h-4 w-4 shrink-0 text-faint transition-transform
+                                 group-open:rotate-90" />
+        {head}
+      </summary>
+      <div className="px-5 pb-5">{children}</div>
+    </details>
   );
 }
 
@@ -244,7 +274,8 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
       )}
 
       {data.blindSpots.length > 0 && (
-        <Block icon={EyeOff} title="What this cannot tell you about this company" weight="quiet">
+        <Block icon={EyeOff} title="What this cannot tell you about this company"
+               weight="quiet" collapsible>
           <ul className="space-y-3.5">
             {data.blindSpots.map((b) => (
               <li key={b.title}>

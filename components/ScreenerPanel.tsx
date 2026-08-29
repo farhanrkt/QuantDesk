@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import {
   ApplyButton, DownloadButton, Field, NumberField, SelectField,
 } from "@/components/ui/controls";
@@ -75,11 +75,10 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
       <Card>
         <CardHeader><CardTitle>Cross-asset screener</CardTitle></CardHeader>
         <CardBody className="space-y-4">
-          <p className="text-meta leading-relaxed text-ash">
-            Scan a universe and surface only the names showing fresh whale activity. Symbols
-            carrying their own suffix keep it, so a mixed list works on the US setting — up to
-            20 at a time, since each symbol costs an upstream fetch and a model fit.
-          </p>
+          <Explainer summary="Scans a list and shows only the names with fresh unusual trading">
+            Symbols keep their own suffix, so a mixed US and IDX list works on either setting.
+            {" "}Capped at 20 a scan: each symbol costs one download and one model fit.
+          </Explainer>
           <Field label="Universe" hint="Comma or newline separated.">
             <textarea
               value={tickers}
@@ -133,10 +132,10 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
             </p>
           )}
           {mode === "walkforward" && (
-            <p className="text-micro text-warn">
-              Walk-forward refits per step, so the server caps it at 5 symbols per scan. Use
-              Threshold or Robust to screen a full universe.
-            </p>
+            <Note tone="warn">
+              Walk-forward refits the model at every step, so it is capped at 5 symbols. Use
+              Threshold or Robust for a whole list.
+            </Note>
           )}
         </CardBody>
       </Card>
@@ -176,9 +175,10 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
           </CardHeader>
           <CardBody className="px-0">
             {rows.length === 0 ? (
-              <p className="px-5 text-base text-ash">
-                No institutional activity detected across this universe in the window. Widen the
-                look-back, lengthen the history, or loosen the detection mode.
+              <p className="prose-col px-5 text-base text-ash">
+                Nothing unusual traded in any of these names over this window. Try a longer
+                look-back or a looser detection setting — and note that finding nothing is a
+                result, not a failure.
               </p>
             ) : (
               <div className="overflow-x-auto">
@@ -259,19 +259,19 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
           <p className="text-meta leading-relaxed text-body">
             {state.data.significance.reading}
           </p>
-          <p className="mt-2 text-meta leading-relaxed text-ash">
-            Scanning many names produces hits by construction. Each ticker&apos;s recent count is
-            tested against its OWN long-run flag rate — so a chronically noisy stock needs far
-            more activity to qualify than a normally quiet one — and the q-value column applies a
-            Benjamini-Hochberg false-discovery-rate correction across the whole scan.
-          </p>
+          <Explainer summary="Scan enough names and some will look unusual by chance — this corrects for that">
+            Each ticker is measured against <em>its own</em> normal flag rate, so a habitually
+            noisy stock has to do much more to qualify than a quiet one. The q-value column then
+            corrects across the whole scan for the number of names tested
+            (Benjamini-Hochberg).
+          </Explainer>
         </div>
       )}
 
-      <p className="text-meta leading-relaxed text-ash">
-        Symbols that fail to fetch are skipped rather than aborting the scan, so a shorter result
-        list can mean a bad symbol as easily as a quiet one. Educational and research use only.
-      </p>
+      <Note>
+        A symbol that fails to download is skipped rather than stopping the scan, so a short
+        list can mean a bad ticker as easily as a quiet market. Research use only.
+      </Note>
     </div>
   );
 }

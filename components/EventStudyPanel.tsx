@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Explainer } from "@/components/ui/card";
 import { ApplyButton } from "@/components/ui/controls";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import type { CarSummary, EventStudyResponse, Engine } from "@/lib/types";
@@ -146,7 +146,7 @@ export function EventStudyPanel({
               <thead>
                 <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                   <th>Horizon</th>
-                  <th className="text-right">Mean CAR</th>
+                  <th className="text-right">Mean abnormal return</th>
                   <th className="text-right">Median</th>
                   <th className="text-right">t</th>
                   <th className="text-right">Significance</th>
@@ -182,7 +182,7 @@ export function EventStudyPanel({
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Direction</th><th>Horizon</th>
-                    <th className="text-right">Mean CAR</th>
+                    <th className="text-right">Mean abnormal return</th>
                     <th className="text-right">t</th>
                     <th className="text-right">n</th>
                   </tr>
@@ -210,11 +210,13 @@ export function EventStudyPanel({
                 </tbody>
               </table>
             </div>
-            <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
-              The question that matters is not whether anomalies predict returns, but whether the
-              accumulation label predicts something different from the distribution one. If both
-              rows look alike, the direction classifier is not carrying information.
-            </p>
+            <div className="px-5 pt-3">
+              <Explainer summary="If both rows look alike, the buying/selling label means nothing">
+                The question here is not whether unusual days predict returns. It is whether
+                days labelled <em>buying</em> behave differently from days labelled
+                <em>selling</em>. If the two rows match, that label is not carrying information.
+              </Explainer>
+            </div>
           </CardBody>
         </Card>
       )}

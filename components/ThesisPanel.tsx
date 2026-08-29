@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, Lock, Trash2 } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import { ApplyButton, Field, NumberField, PercentField } from "@/components/ui/controls";
 import { useHorizon } from "@/components/ui/horizon";
 import {
@@ -121,14 +121,13 @@ export function ThesisPanel({
           </span>
         </CardHeader>
         <CardBody className="space-y-4">
-          <p className="text-meta leading-relaxed text-ash">
-            The point of writing a thesis down is that the version you wrote before you knew
-            the outcome is still there afterwards, in the words you actually used. So an
-            entry is timestamped, snapshotted against what this app was showing at the time,
-            and <span className="text-body">cannot be edited once saved</span>. Nothing
-            here is ever scored — no verdict, no profit and loss, no marking of your own
-            homework.
-          </p>
+          <Explainer summary="Saved entries cannot be edited, and nothing here is ever scored"
+                     defaultOpen>
+            The point of writing it down is that the version you wrote <em>before</em> you knew
+            the outcome is still there afterwards, in the words you actually used. So each entry
+            is timestamped, saved alongside what the app was showing at the time, and locked.
+            {" "}There is no verdict, no profit and loss, and no marking of your own homework.
+          </Explainer>
 
           <div className="space-y-1.5">
             <span className="eyebrow">What has to be true for this to work?</span>
@@ -158,11 +157,11 @@ export function ThesisPanel({
                          focus:border-tech/60 focus:outline-none
                          focus-visible:ring-1 focus-visible:ring-tech"
             />
-            <p className="text-meta leading-relaxed text-ash">
-              A thesis with no falsifier is a hope. If nothing you could observe would change
-              your mind, the entry below will still save it — but you will read it back one
-              day and know.
-            </p>
+            <Note>
+              A thesis with nothing that could disprove it is a hope. If no observation would
+              change your mind, this will still save — but you will read it back one day and
+              know.
+            </Note>
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
@@ -180,10 +179,10 @@ export function ThesisPanel({
             <ApplyButton onClick={save} disabled={!ready}>Lock this entry</ApplyButton>
           </div>
           {!ready && (
-            <p className="text-meta text-ash">
-              Both the thesis and the falsifier are needed. Half a thesis is worse than none —
-              it reads back as agreement with whatever happened.
-            </p>
+            <Note>
+              Both halves are needed. Half a thesis reads back later as agreement with whatever
+              happened to occur.
+            </Note>
           )}
         </CardBody>
       </Card>
@@ -201,11 +200,11 @@ export function ThesisPanel({
                 <span className="text-base leading-relaxed text-body">{c.detail}</span>
               </div>
             ))}
-            <p className="text-meta leading-relaxed text-ash">
-              Disagreeing with the model is a respectable thing to do — the reverse DCF exists
-              to be argued with. Disagreeing without noticing is not, and that is all this
-              names.
-            </p>
+            <Note>
+              Disagreeing with the model is a perfectly respectable thing to do — the
+              price-implied growth figure exists to be argued with. Disagreeing without
+              noticing is not, and that is all this names.
+            </Note>
           </CardBody>
         </Card>
       )}
@@ -228,16 +227,14 @@ export function ThesisPanel({
       <Card>
         <CardHeader><CardTitle>Where this is kept</CardTitle></CardHeader>
         <CardBody className="space-y-3">
-          <p className="text-meta leading-relaxed text-ash">
-            In this browser&apos;s local storage and nowhere else. This app has no accounts
-            and no database, and a thesis is the last thing that should be an exception — so
-            it is never sent anywhere, not even to draw the checks above, which run here.
+          <p className="prose-col text-meta leading-relaxed text-ash">
+            In this browser and nowhere else. It is never sent anywhere — not even to draw the
+            checks above, which run here on your own machine.
           </p>
-          <p className="text-meta leading-relaxed text-warn/90">
-            That also means it is one cleared cache, one private window or one new machine
-            away from gone. Local storage is not a place to keep something you care about.
-            Export it.
-          </p>
+          <Note tone="warn">
+            Which also means it is one cleared cache, one private window or one new machine
+            away from gone. Export it.
+          </Note>
           <button
             type="button"
             onClick={exportAll}

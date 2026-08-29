@@ -5,7 +5,7 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { Check, Minus, X } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
 import {
   Explain, ExplainedRow, ExplainedStat, TONE_HEX, TONE_TEXT, useDetail,
 } from "@/components/ui/explain";
@@ -230,11 +230,11 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                 </tbody>
               </table>
             </div>
-            <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
-              Read a row like this: &quot;buying on any day in this history and holding for that
-              many years, here is the range of yearly returns you would have got&quot;. The
-              <span className="text-body"> worst </span>column is the one that decides
-              position size — a headline growth rate quietly reports only the one path that
+            <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
+              Read a row as: buying on <em>any</em> day in this history and holding that many
+              years, here is the range of yearly returns you would have got. The
+              <span className="font-semibold text-body"> worst </span>column is the one that
+              decides position size — a headline growth rate reports only the single path that
               happened to occur.
             </p>
           </CardBody>
@@ -286,18 +286,18 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                           fill="url(#ddFill)" isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
-                <p className="mt-1 text-meta leading-relaxed text-ash">
-                  The line is how far below its best-ever price it sat on each day. Zero means a
-                  new high; every dip is a stretch where holders were down on paper.
+                <p className="prose-col mt-1 text-meta leading-relaxed text-ash">
+                  How far below its best-ever price it sat each day. Zero is a new high; every
+                  dip is a stretch where holders were down on paper.
                 </p>
               </>
             )}
 
-            <p className="mt-3 text-meta leading-relaxed text-ash">
+            <Note>
               Depth is only half of it. A 30% fall that recovers in a quarter is survivable; a
               15% one that grinds on for three years is where most people sell. The Ulcer index
-              scores both at once, which is why it is here beside the maximum.
-            </p>
+              scores depth and duration together, which is why it sits beside the maximum.
+            </Note>
           </CardBody>
         </Card>
       )}
@@ -377,8 +377,8 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                 </tbody>
               </table>
             </div>
-            <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
-              The real alternative is never cash — it is the index fund you could have bought
+            <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
+              The real alternative was never cash — it was the index fund you could have bought
               instead. A stock up 40% while the market rose 60% has cost its holder money in the
               only sense that matters.
             </p>

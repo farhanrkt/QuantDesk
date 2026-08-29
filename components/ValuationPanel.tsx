@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import { CornerUpLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Note, Stat } from "@/components/ui/card";
 import { ExplainedStat, TONE_TEXT, useDetail } from "@/components/ui/explain";
 import { DownloadButton } from "@/components/ui/controls";
 import { ValuationControls } from "@/components/ValuationControls";
@@ -107,11 +107,11 @@ export function ValuationPanel({
             at {pct(data.discountRate, 1)} a year puts it nearer {mc.p50Label} — a range of
             {" "}{mc.p25Label} to {mc.p75Label} once the assumptions are allowed to vary.
           </p>
-          <p className="text-meta leading-relaxed text-ash">
-            This is not a forecast of the share price. It is what the business is worth IF the
-            growth and discount rates below are right, and they are estimates. That is why the
-            output is a range and why every input is editable.
-          </p>
+          <Note tone="warn">
+            This is not a price forecast. It is what the business is worth <em>if</em> the growth
+            and discount rates below are right — and those are estimates. Which is why the answer
+            is a range, and why every input is yours to change.
+          </Note>
         </CardBody>
       </Card>
 

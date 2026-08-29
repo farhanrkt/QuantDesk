@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import {
   ApplyButton, Field, SelectField,
 } from "@/components/ui/controls";
@@ -225,13 +225,14 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
           )}
         </CardHeader>
         <CardBody className="space-y-4">
-          <p className="text-meta leading-relaxed text-ash">
-            This ranks every name in a list against the others on seven signals built from price
-            and volume, then orders them. It is a shortlisting tool: its job is to decide which
-            three or four names are worth opening the four lenses on, not to tell you what to
-            buy. Every figure is a POSITION WITHIN THIS SCAN — a name at 90 is ahead of its peers
-            here, which is not the same as going up.
-          </p>
+          <Explainer summary="A shortlist, not a verdict — and 90 means “ahead of these peers”, not “going up”">
+            Every name in the list is scored against the others on seven measures built from
+            price and volume, then ordered. The job is to pick the three or four worth opening
+            the four lenses on.
+            {" "}Every figure is a position <em>within this scan</em>: a name at 90 beat 90% of
+            the others here today. It is not a forecast, and none of these measures knows
+            anything about the business.
+          </Explainer>
 
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Universe"
@@ -357,13 +358,12 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                     })}
                   </div>
                 )}
-                <p className="text-meta leading-relaxed text-ash">
-                  Seven columns look like seven tests. Where two of them correlate above 0.7 they
-                  are one test wearing two labels, and the composite gives that single fact
-                  double weight. The figure in the header is the participation ratio of the
-                  correlation matrix — how many genuinely independent signals the composite is
-                  actually averaging. It is measured from this scan, not asserted.
-                </p>
+                <Explainer summary="Seven columns are not seven tests">
+                  Where two columns move together above 0.7 they are one measure wearing two
+                  names, and averaging them counts that single fact twice. The figure in the
+                  header says how many genuinely separate measures the score is really averaging.
+                  {" "}It is measured from this scan rather than assumed.
+                </Explainer>
               </CardBody>
             </Card>
           )}
@@ -518,27 +518,30 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               )}
 
               <div className="space-y-2 px-5 pt-4">
-                <p className="text-meta leading-relaxed text-ash">
-                  Every number in this table is a percentile within this scan, 0 to 100. The
-                  score is a weighted mean of them — weights follow how well each signal is
-                  supported in the literature, shown as a dot beside each column heading, and
-                  that weighting is a judgement rather than a finding. Click a row&apos;s arrow
-                  to see how it got its score; click the ticker to load it into all four lenses.
+                <p className="prose-col text-meta leading-relaxed text-ash">
+                  Click a row&apos;s arrow to see how it earned its score, or the ticker to load
+                  it into all four lenses.
                 </p>
+                <Explainer summary="What the 0–100 numbers mean, and why the score is a judgement">
+                  Every number is a rank within this scan: 0 is last, 100 is first. The score
+                  averages them, weighted by how well each measure is supported in published
+                  research — the dot beside each column heading shows that support.
+                  {" "}Those weights are a judgement, not a finding.
+                </Explainer>
                 {data.missing.length > 0 && (
-                  <p className="text-meta leading-relaxed text-warn/90">
+                  <Note tone="warn">
                     {data.missing.length} symbol{data.missing.length === 1 ? "" : "s"} could not
-                    be ranked: <span className="font-mono">{data.missing.join(", ")}</span>. That
-                    is either a delisting or acquisition since the list was written, or too
-                    little price history — under {data.minBars} trading days a name is dropped
-                    rather than ranked on whichever signals happened to compute.
-                  </p>
+                    be ranked: <span className="num">{data.missing.join(", ")}</span>. Either
+                    delisted since this list was written, or under {data.minBars} days of price
+                    history — too little to rank on, so the name is dropped rather than scored
+                    on whichever measures happened to work.
+                  </Note>
                 )}
                 {data.benchmark == null && (
-                  <p className="text-meta leading-relaxed text-warn/90">
-                    The benchmark index did not fetch, so the &quot;versus the index&quot; column
-                    is empty for every name and each score is built from one fewer signal.
-                  </p>
+                  <Note tone="warn">
+                    The index did not load, so &ldquo;versus the index&rdquo; is empty and every
+                    score here is built from one fewer measure.
+                  </Note>
                 )}
               </div>
             </CardBody>
@@ -624,12 +627,10 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
         </>
       )}
 
-      <p className="text-meta leading-relaxed text-ash">
-        Ranking is a shortlisting device. It says which names stand out against these particular
-        peers on these particular measures today, which is a much weaker claim than it looks —
-        and none of the signals here knows anything about the business. Educational and research
-        use only.
-      </p>
+      <Note>
+        A rank says which names stand out against <em>these</em> peers on <em>these</em> measures
+        today — a much weaker claim than it looks. Research use only.
+      </Note>
     </div>
   );
 }

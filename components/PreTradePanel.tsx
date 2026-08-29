@@ -127,28 +127,80 @@ function Check({ check }: { check: PreTradeCheck }) {
  * everything the app is qualifying or admitting is recessed.
  */
 function Group({
-  icon: Icon, title, note, tone, weight = "finding", children,
+  icon: Icon, title, note, tone, weight = "finding", collapsible, summary, children,
 }: {
   icon: typeof Layers;
   title: string;
   note?: string;
   tone?: string;
   weight?: "finding" | "quiet";
+  /**
+   * Collapsed by default, with `summary` carrying the whole point on the
+   * outside. This panel and the synthesis sit above EVERY tab, so between them
+   * a reader passed 1,080 words and 2,600 pixels before reaching a single lens
+   * — on every tab, every time.
+   *
+   * WHAT MAY BE COLLAPSED IS DECIDED BY MEANING, NOT BY LENGTH. Conditions that
+   * FIRED never collapse: they are the reason the panel exists. What collapses
+   * is the qualifying material — conditions that are ordinary for this market,
+   * and conditions that could not be tested — and only because the summary line
+   * states the qualification itself. "Three conditions could not be tested,
+   * which is not the same as clear" carries the meaning of the section without
+   * the section being open, which is the only version of this that is honest.
+   */
+  collapsible?: boolean;
+  summary?: string;
   children: React.ReactNode;
 }) {
-  return (
-    <div className={cn("border-t border-rule", weight === "quiet" && "bg-sunken/40")}>
-      <div className="flex items-center gap-2.5 px-5 pb-1.5 pt-4">
-        <Icon aria-hidden className="h-4 w-4 shrink-0"
-              style={{ color: tone ? TONE_HEX[tone] : "#8496A9" }} />
-        <h3 className={cn("text-meta font-semibold uppercase tracking-wider",
+  const head = (
+    <>
+      <Icon aria-hidden className="h-4 w-4 shrink-0"
+            style={{ color: tone ? TONE_HEX[tone] : "#8496A9" }} />
+      <span className={cn("text-meta font-semibold uppercase tracking-wider",
                           weight === "quiet" ? "text-ash" : "text-chalk")}>
-          {title}
-        </h3>
-      </div>
+        {title}
+      </span>
+    </>
+  );
+  const body = (
+    <>
       {note && <p className="prose-col px-5 pb-2 text-meta leading-relaxed text-ash">{note}</p>}
       {children}
-    </div>
+    </>
+  );
+
+  if (!collapsible) {
+    return (
+      <div className={cn("border-t border-rule", weight === "quiet" && "bg-sunken/40")}>
+        <h3 className="flex items-center gap-2.5 px-5 pb-1.5 pt-4">{head}</h3>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <details className={cn("group border-t border-rule",
+                           weight === "quiet" && "bg-sunken/40")}>
+      {/* THE SUMMARY LIVES INSIDE `summary`, which is the whole point of it.
+          Put anywhere else in the `details` it renders only when the section is
+          OPEN — that is, exactly when the reader no longer needs it — and the
+          collapsed state goes back to being a bare label hiding a paragraph.
+          Caught by reading the rendered text of a closed group. */}
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-x-2.5 gap-y-1
+                          px-5 py-3.5 transition-colors hover:bg-raised/40
+                          focus-visible:outline-none focus-visible:ring-2
+                          focus-visible:ring-tech">
+        <ChevronRight aria-hidden
+                      className="h-4 w-4 shrink-0 text-faint transition-transform
+                                 group-open:rotate-90" />
+        {head}
+        {summary && (
+          <span className="w-full pl-[26px] text-meta text-ash sm:ml-auto sm:w-auto sm:pl-0">
+            {summary}
+          </span>
+        )}
+      </summary>
+      {body}
+    </details>
   );
 }
 
@@ -188,7 +240,8 @@ export function PreTradePanel({ data }: { data: PreTrade }) {
 
       {baseConditions.length > 0 && (
         <Group icon={Layers} title="True here, and ordinary for this market"
-               note={data.notes.base} weight="quiet">
+               note={data.notes.base} weight="quiet" collapsible
+               summary="true of this company, and of most of its market">
           <ul>{baseConditions.map((c) => <Check key={c.id} check={c} />)}</ul>
         </Group>
       )}
@@ -198,7 +251,8 @@ export function PreTradePanel({ data }: { data: PreTrade }) {
           who would otherwise read silence as a pass. */}
       {notChecked.length > 0 && (
         <Group icon={CircleSlash} title="Not checked" note={data.notes.notChecked}
-               weight="quiet">
+               weight="quiet" collapsible
+               summary="never tested — which is not the same as clear">
           <ul className="px-5 pb-2">
             {(guided ? notChecked : notChecked.slice(0, 3)).map((entry) => (
               <NotCheckedRow key={entry.id} label={entry.label} reason={entry.reason} />
@@ -226,7 +280,8 @@ export function PreTradePanel({ data }: { data: PreTrade }) {
 
       {uncalibrated.length > 0 && (
         <Group icon={HelpCircle} title="Withheld for want of a base rate"
-               note={data.notes.uncalibrated} weight="quiet">
+               note={data.notes.uncalibrated} weight="quiet" collapsible
+               summary="no measured firing rate, so not shown as a flag">
           <p className="prose-col px-5 pb-3 text-meta leading-relaxed text-ash">
             {uncalibrated.map((u) => u.label).join(". ")}.
           </p>

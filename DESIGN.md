@@ -34,9 +34,23 @@ Taken on the default view (AAPL, Trend tab) before any change:
 | Identical card containers | 71 | three differentiated strata |
 | Desktop page height | 8,415px | 7,034px |
 
-The last row is the one that settles the "less text vs. more readable" argument:
-**not one sentence was deleted, the type got bigger, and the page got shorter.**
-Progressive disclosure did that, not cutting.
+A second pass took the same treatment to every remaining panel and to the copy.
+Measured per tab, in Guided, on one ticker:
+
+| | before that pass | after |
+|---|---|---|
+| Words visible on the Trend tab | 2,476 | 1,975 |
+| Words visible, Portfolio tab | 1,437 | 936 |
+| Words one click away (per tab) | ~550 | ~1,100 |
+| Tab height, Trend | 7,128px | 6,073px |
+
+The shared header is what made this necessary: the synthesis (563 words) and the
+pre-trade panel (517 words) sit above **every** tab, so a reader met 1,080 words
+and 2,600px of the same prose on each of the seven.
+
+**The height rows settle the "less text vs. more readable" argument.** Not one
+sentence was deleted across either pass, the type got bigger, and both the page
+and every tab got shorter. Progressive disclosure did that, not cutting.
 
 ## Colour
 
@@ -138,6 +152,29 @@ runs to ~200 words of statistics and put Cohen's kappa in front of a reader who
 had not finished the paragraph about their company. Closed, with κ on the summary
 line so it is not a mystery box.
 
+**`Explainer` — a long explanation with its point on the outside.** The single
+biggest source of overload: fifty paragraphs across the panels ran past ninety
+characters, one to ninety-six *words*, every one permanently open, each
+explaining a method to a reader who had not decided they cared about the method.
+
+Its `summary` must be a **claim, not a label**. "Seven columns are not seven
+tests" is worth opening; "About this table" is a hidden paragraph with extra
+steps. The summary is the only part most readers will ever see, so it carries
+the meaning of the section on its own.
+
+**What may collapse is decided by meaning, not by length.** In the pre-trade
+panel, conditions that *fired* never collapse — they are why the panel exists.
+What collapses is the qualifying material (ordinary for this market, never
+tested, withheld for want of a base rate), and only because the summary states
+the qualification itself: *"never tested — which is not the same as clear"*
+carries the point while shut. In the synthesis, the blind-spot list collapses
+because its title already states its claim.
+
+The summary text must live **inside** the `<summary>` element. Anywhere else in
+the `<details>` it renders only when open — exactly when it is no longer needed —
+and the collapsed state reverts to a bare label. Caught by reading the rendered
+text of a closed group, not by reading the source.
+
 **Info button, 24×24.** The app's central promise is that every number explains
 itself; v1 drew the affordance carrying it at 14px. The ring grew, not the glyph,
 so a dense table row still reads as a table row.
@@ -163,6 +200,26 @@ Not a conformance claim — these are the things v2 actually fixed.
 - **iOS zoom.** Inputs are 16px below `sm`. Under that, iOS zooms on focus and
   does not zoom back.
 - **Browser surfaces** are themed: selection, caret, scrollbars, focus ring.
+
+## Copy
+
+Plain words where a plain word exists, and the jargon kept where it is the real
+name of the thing. An audit of rendered text found only seven genuinely opaque
+terms — most `DCF` / `DDM` / `percentile` hits were variable names, and the rail
+already renders `DCF` as "cash-flow model". `Mean CAR` became `Mean abnormal
+return`; `RSI`, `ADX` and `MFI` stayed, because they are the conventional labels
+and each already carries an info button.
+
+Rules that survived the pass:
+
+- Expand an acronym unless it is the column's real name and has an `Explain`.
+- Lead with the claim, not the method. "A shortlist, not a verdict" before the
+  paragraph about how the shortlist is built.
+- Cut filler, never a caveat or a number. Where a sentence is long because it is
+  carrying a hedge, it stays; where it is long because it was badly written, it
+  goes.
+- Second person over passive. "Your holdings stay in this browser", not "the
+  list is retained client-side".
 
 ## Motion
 

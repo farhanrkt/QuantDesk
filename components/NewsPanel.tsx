@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
 import type { Engine, NewsResponse } from "@/lib/types";
 
 /**
@@ -45,10 +45,13 @@ export function NewsPanel({ state }: { state: Engine<NewsResponse> }) {
             </li>
           ))}
         </ul>
-        <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
-          Headlines via Google News RSS. Relevance is best-effort and unverified — read them as
-          context for the signals above, not as confirmation of them.
-        </p>
+        <div className="px-5 pt-3">
+          <Note>
+            Headlines from Google News, unverified and matched by best effort. Context for the
+            signals above, never confirmation of them — nothing in this app reads them back as
+            data.
+          </Note>
+        </div>
       </CardBody>
     </Card>
   );
