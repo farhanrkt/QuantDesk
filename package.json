@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:api": "uvicorn index:app --app-dir api --reload --port 8000",
+    "dev:api": ".venv/bin/python -m uvicorn index:app --app-dir api --reload --port 8000",
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",

@@ -9,8 +9,9 @@
     },
     {
       "name": "quantdesk-api",
-      "runtimeExecutable": ".venv/bin/uvicorn",
-      "runtimeArgs": ["index:app", "--app-dir", "api", "--reload", "--port", "8000"],
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": ["-m", "uvicorn", "index:app", "--app-dir", "api",
+                      "--reload", "--port", "8000"],
       "port": 8000
     }
   ]

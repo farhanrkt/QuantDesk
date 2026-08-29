@@ -83,6 +83,14 @@ npm run dev
 
 Open <http://localhost:3000>, type a ticker (or click a preset), and hit **Run all lenses**.
 
+`dev:api` runs `.venv/bin/python -m uvicorn` rather than a bare `uvicorn`, so it does not
+depend on the environment being activated — and, more to the point, cannot pick up a different
+one. A bare `uvicorn` resolves through `PATH`, and a system Python that happens to have it
+installed will happily serve this app on whatever yfinance and pandas *it* has, which on the
+machine this was written on is a major version apart from the pinned ones. The cost is that
+the venv has to be at `.venv/`, exactly as the command above creates it; if you keep your
+environment somewhere else, point the script at your own interpreter.
+
 Indonesian listings take a `.JK` suffix — type `BBCA.JK`, or type `BBCA` and switch the
 market dropdown to IDX. Crypto takes a pair like `BTC-USD`.
 
