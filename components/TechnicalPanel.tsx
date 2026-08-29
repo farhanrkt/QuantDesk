@@ -131,7 +131,8 @@ export function TechnicalPanel({
 
   return (
     <div className="space-y-4 animate-rise">
-      <Tabs tabs={SECTIONS} active={active} onChange={setSection} />
+      <Tabs tabs={SECTIONS} active={active} onChange={setSection}
+            idPrefix="horizon" label="Time horizon" hasPanels={false} />
       {guided && (
         <p className="text-micro text-ash">
           Switch to <span className="text-body">Full</span> for the complete indicator

@@ -31,7 +31,9 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, cpSync } from "node:fs";
+import {
+  mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, cpSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -103,6 +105,142 @@ if (Object.keys(railFamilies).length < 4) {
                 + "the drift check between it and explain.py is not running.");
   process.exit(1);
 }
+
+// --------------------------------------------------------------------------- //
+// The v2 design rules, encoded so they cannot come back
+// --------------------------------------------------------------------------- //
+// EVERY RULE BELOW DESCRIBES A BUG THAT WAS ACTUALLY IN THIS CODEBASE, found by
+// measuring the rendered page rather than by reading the source. A design system
+// that lives only in DESIGN.md is a document; one the build enforces is a
+// system. This file already encodes two invariants for the same reason.
+//
+// Each check is a grep over source, so each is deliberately narrow: a rule that
+// fires on something legitimate would be turned off within a week, and a rule
+// nobody trusts protects nothing.
+//
+// COMMENTS ARE STRIPPED FIRST, and that is not an optimisation. This file's own
+// docstrings quote the patterns being banned — `LongTermPanel` explains the
+// sign-colouring rule by showing the expression it forbids — so a naive grep
+// fails the build on the comment that documents the rule. Caught by rule 7
+// firing on its own explanation the first time it ran.
+const stripComments = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+const uiFiles = [];
+for (const dir of ["components", "components/ui", "app"]) {
+  for (const name of readdirSync(join(ROOT, dir))) {
+    if (!/\.(tsx|css)$/.test(name)) continue;
+    uiFiles.push([join(dir, name), stripComments(readFileSync(join(ROOT, dir, name), "utf8"))]);
+  }
+}
+
+const designFailures = [];
+const fail = (file, rule, detail) => designFailures.push(`  ${file}\n    ${rule}\n    ${detail}`);
+
+// 1. A HEADING IS NEVER AN EYEBROW. `.eyebrow` is an 11px uppercase field label.
+//    v1 rendered its two most important section headings through it, which put
+//    them BELOW the body text they introduced — the inverted hierarchy the whole
+//    redesign existed to fix.
+for (const [file, src] of uiFiles) {
+  for (const m of src.matchAll(/<h[1-6][^>]*className="[^"]*\beyebrow\b/g)) {
+    fail(file, "A heading is wearing `.eyebrow`.",
+         "`.eyebrow` is a field label at 11px. Use the h2/h3 sizes from globals.css.");
+  }
+}
+
+// 2. PROSE IS NEVER SET AT THE CAPTION SIZE. `leading-relaxed` is what you set
+//    on a paragraph; `text-micro` is 11px, for units and footnotes. Together
+//    they mean a paragraph rendered as furniture — which is how a 96-word
+//    caveat ended up as the smallest text on its own panel.
+for (const [file, src] of uiFiles) {
+  if (/text-micro\s+leading-relaxed|leading-relaxed\s+text-micro\b/.test(src)) {
+    fail(file, "Prose set at `text-micro` (11px).",
+         "`leading-relaxed` marks a paragraph. Use `text-meta` or larger.");
+  }
+}
+
+// 3. FONT SIZES COME FROM THE SCALE. v1 rendered sixteen distinct sizes, 272 of
+//    402 nodes inside a 3px band, so no amount of colour could build a hierarchy
+//    on top of them. The allowlist is the two places an arbitrary value is
+//    correct and documented.
+const SIZE_ALLOWED = new Set([
+  "text-[1rem]",        // inputs below `sm`: iOS zooms a focused field under 16px
+  "text-[0.6875rem]",   // the `.eyebrow` definition itself, in globals.css
+]);
+for (const [file, src] of uiFiles) {
+  for (const m of src.matchAll(/text-\[[0-9.]+rem\]/g)) {
+    if (!SIZE_ALLOWED.has(m[0])) {
+      fail(file, `Arbitrary font size ${m[0]}.`,
+           "Use a step from the scale in tailwind.config.ts (micro/meta/base/lead/h3/h2/figure/h1).");
+    }
+  }
+}
+
+// 4. TEXT COLOUR COMES FROM THE LADDER, NOT FROM ALPHA. `text-chalk/80` and
+//    friends were how v1 faked a body colour it did not have; eight of them
+//    composited to 2.2-3.2:1 and failed contrast outright.
+for (const [file, src] of uiFiles) {
+  for (const m of src.matchAll(/text-(?:chalk|ash)\/\d+/g)) {
+    fail(file, `Alpha text colour ${m[0]}.`,
+         "Use chalk / body / ash / faint. Alpha on text was the contrast bug.");
+  }
+}
+
+// 5. A DECLARED ARIA PATTERN KEEPS ITS KEYBOARD CONTRACT. `role="tablist"` and
+//    `role="radiogroup"` both promise arrow keys and a single tab stop. v1
+//    declared four of them and implemented none — a screen reader announcing
+//    "tab, 2 of 7" where arrow keys do nothing is worse than a plain button,
+//    because the announcement teaches an interaction that is not there.
+for (const [file, src] of uiFiles) {
+  if (!/role="(tablist|radiogroup)"/.test(src)) continue;
+  if (!/onKeyDown/.test(src)) {
+    fail(file, "Declares `tablist`/`radiogroup` with no `onKeyDown`.",
+         "Those roles promise arrow-key navigation. Implement it or use plain buttons.");
+  }
+  if (!/tabIndex/.test(src)) {
+    fail(file, "Declares `tablist`/`radiogroup` with no roving `tabIndex`.",
+         "The group is one tab stop, not one per option.");
+  }
+}
+
+// 6. NO COLOURED SIDE STRIPE. A 2px accent border down one edge of a card is the
+//    most recognisable tell of a generated interface, and on a rounded corner it
+//    reads as trim rather than as status. A dot says the same thing.
+for (const [file, src] of uiFiles) {
+  if (/border-[lr]-(?:2|4|8)\b/.test(src)) {
+    fail(file, "Coloured side stripe (`border-l-2` or similar).",
+         "Use a status dot; the tone still comes from `explain.tone`.");
+  }
+}
+
+// 7. SIGN-BASED TONE IS A FIXED BUDGET, NOT A HABIT. Colour is decided once, in
+//    Python, from `explain.tone`. Six sites legitimately colour from a number's
+//    sign because the server has no interpretation to offer there — a day's
+//    price change, the seasonality grid — and RESEARCH_ROADMAP §14 documents
+//    them. This does not ban the pattern; it stops the list growing quietly.
+const SIGN_TONE_BUDGET = {
+  "components/AnomalyPanel.tsx": 2,     // a day's price change, twice
+  "components/EventStudyPanel.tsx": 1,  // gated on significance first, see carTone
+  "components/LongTermPanel.tsx": 1,    // the seasonality grid
+  "components/TechnicalPanel.tsx": 2,   // the day's change, and change-since
+};
+for (const [file, src] of uiFiles) {
+  const hits = [...src.matchAll(/[<>]=?\s*0\s*\?\s*"text-(?:acc|dist)"/g)].length;
+  const allowed = SIGN_TONE_BUDGET[file] ?? 0;
+  if (hits > allowed) {
+    fail(file, `Colours from a number's sign ${hits} times, budget ${allowed}.`,
+         "Direction is decided in api/_lib/explain.py. Read `explain.tone`, or add the "
+         + "site to SIGN_TONE_BUDGET with the reason Python cannot judge it.");
+  }
+}
+
+if (designFailures.length) {
+  console.error("\nDesign-system rules broken (see DESIGN.md):\n");
+  console.error(designFailures.join("\n\n"));
+  console.error("\nEach of these was a real bug found by measuring the rendered page.");
+  process.exit(1);
+}
+console.log(`  design rules: 7 checked across ${uiFiles.length} UI files`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));

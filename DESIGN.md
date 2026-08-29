@@ -200,6 +200,48 @@ Not a conformance claim — these are the things v2 actually fixed.
 - **iOS zoom.** Inputs are 16px below `sm`. Under that, iOS zooms on focus and
   does not zoom back.
 - **Browser surfaces** are themed: selection, caret, scrollbars, focus ring.
+- **`aria-controls` only where the target exists.** Every disclosure here renders
+  its content conditionally, so a permanent reference points at an id that is not
+  in the document — 25 of them were, on one screen. `aria-expanded` carries the
+  state; a reference to nothing is worse than none, because assistive technology
+  offers a jump that goes nowhere.
+- **Two tablists, two names.** Both announced themselves as "Lenses", so a
+  screen-reader user heard the same group name twice with no way to tell which
+  one they were in. The inner one is "Time horizon" now.
+
+**Verified by walking the real tab order**, not by reading the markup: 64
+focusable elements, zero without an accessible name, zero without a visible
+focus style, zero positive `tabindex`, zero dangling `aria-controls`, and all
+four roving groups at exactly one tab stop. Arrow keys and Home move both
+tablists and both radiogroups.
+
+**Not done:** nobody has listened to this with a screen reader. The keyboard
+contract is implemented and measured; how it *sounds* is untested.
+
+## The rules are enforced, not just written
+
+`npm run check:frontend` greps the UI source for seven of them, and each
+describes a bug that was really in this codebase:
+
+1. A heading wearing `.eyebrow` — the inverted hierarchy.
+2. Prose at `text-micro` (11px) — caught by `leading-relaxed`, which marks a
+   paragraph.
+3. Arbitrary font sizes outside the scale, allowlisting only the iOS 16px input
+   rule and the `.eyebrow` definition itself.
+4. Alpha text colours (`text-chalk/80`) — the contrast bug.
+5. A `tablist` or `radiogroup` declared without `onKeyDown` and a roving
+   `tabIndex`.
+6. A coloured side stripe (`border-l-2`).
+7. Sign-based tone colouring over a documented per-file budget.
+
+Comments are stripped before the greps — rule 7 fired on its own explanation the
+first time it ran, because `LongTermPanel`'s docstring quotes the expression it
+forbids. Each rule was verified to actually fail by breaking it on purpose and
+watching the build reject it.
+
+If a rule fires on something legitimate, widen it or extend its allowlist **with
+the reason**. Do not delete the check: a rule nobody trusts protects nothing, and
+a rule nobody has seen fail is a rule nobody should trust.
 
 ## Copy
 

@@ -28,13 +28,23 @@ export interface Tab {
  * jump, and `aria-controls` pointing at a real `TabPanel`.
  */
 export function Tabs({
-  tabs, active, onChange, idPrefix = "tab",
+  tabs, active, onChange, idPrefix = "tab", label = "Lenses", hasPanels = true,
 }: {
   tabs: Tab[];
   active: string;
   onChange: (id: string) => void;
+  /** False where the caller switches sections itself rather than using `TabPanel`. */
+  hasPanels?: boolean;
   /** Distinct per tablist, so the nested technical tabs cannot collide. */
   idPrefix?: string;
+  /**
+   * What this group of tabs IS. Two tablists render on the Trend tab — the
+   * seven lenses and the five horizons inside the technical panel — and both
+   * announced themselves as "Lenses", so a screen-reader user heard the same
+   * group name twice and had no way to tell which one they were in. Found by
+   * walking the real tab order rather than by reading the markup.
+   */
+  label?: string;
 }) {
   const strip = useRef<HTMLDivElement>(null);
 
@@ -59,7 +69,7 @@ export function Tabs({
     <div
       ref={strip}
       role="tablist"
-      aria-label="Lenses"
+      aria-label={label}
       onKeyDown={onKeyDown}
       className="flex flex-wrap gap-1 border-b border-rule"
     >
@@ -72,7 +82,15 @@ export function Tabs({
             role="tab"
             id={`${idPrefix}-${tab.id}`}
             aria-selected={selected}
-            aria-controls={`${idPrefix}panel-${tab.id}`}
+            // `aria-controls` ONLY where a `TabPanel` actually renders that id.
+            // The technical panel switches sections with a plain conditional, so
+            // pointing at `horizonpanel-long` would be a reference to an element
+            // that does not exist — worse than omitting it, because a screen
+            // reader offers the reader a jump that goes nowhere.
+            // Only the SELECTED tab's panel is in the document — `TabPanel`
+            // returns null for the rest — so only the selected tab may point at
+            // one. Six of seven were dangling before.
+            aria-controls={hasPanels && selected ? `${idPrefix}panel-${tab.id}` : undefined}
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(tab.id)}
             className={cn(

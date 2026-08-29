@@ -242,7 +242,14 @@ function InfoButton({
     <button
       type="button"
       aria-expanded={open}
-      aria-controls={controls}
+      // ONLY WHILE THE PANEL EXISTS. Every one of these renders its explanation
+      // conditionally, so a permanent `aria-controls` points at an id that is
+      // not in the document — 25 of them were, across one screen. `aria-expanded`
+      // is the attribute that carries the state; a reference to nothing is worse
+      // than no reference, because assistive technology offers the reader a jump
+      // that goes nowhere. Found by resolving every id rather than by reading
+      // the markup.
+      aria-controls={open ? controls : undefined}
       aria-label={open ? `Hide the explanation of ${label}` : `Explain ${label}`}
       onClick={onToggle}
       className={cn(
