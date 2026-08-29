@@ -70,7 +70,7 @@ function FlagWorth({ data, explain }: {
         <CardTitle>
           {data.flagged ? "What this flag is worth" : "What a clean reading is worth"}
         </CardTitle>
-        <span className="flex items-center gap-1.5 font-mono text-[0.65rem] text-ash">
+        <span className="flex items-center gap-1.5 font-mono text-micro text-ash">
           Beneish, cutoff {num(data.characteristics.cutoff)}
           <Explain explain={explain} />
         </span>
@@ -79,10 +79,10 @@ function FlagWorth({ data, explain }: {
         {/* The shift, not the level. A bare "0.84%" beside a clean score reads
             as a clean bill of health; the pair reads as what the test did. */}
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="num text-sm text-ash">{point.priorText}</span>
+          <span className="num text-base text-ash">{point.priorText}</span>
           <span className="text-ash">&rarr;</span>
-          <span className="num text-2xl font-semibold text-chalk">{shown}</span>
-          <span className="text-[0.78rem] leading-relaxed text-ash">
+          <span className="num text-h2 font-semibold text-chalk">{shown}</span>
+          <span className="text-meta leading-relaxed text-ash">
             {data.flagged
               ? `likely to be a real manipulator, so about ${point.falseAlarmText} of flags
                  like this are false alarms`
@@ -105,10 +105,10 @@ function FlagWorth({ data, explain }: {
           </div>
           <RangeField index={index} count={data.curve.length} onChange={setIndex}
                       label="Assumed rate of earnings manipulation" />
-          <p className="mt-2 text-[0.72rem] leading-relaxed text-ash">
+          <p className="mt-2 text-meta leading-relaxed text-ash">
             {point.label
               ? <>
-                  <span className="text-chalk/80">{point.label}</span> — {point.source}
+                  <span className="text-body">{point.label}</span> — {point.source}
                   {point.event ? `, counting ${point.event}` : ""}.
                   {point.extrapolated && (
                     <span className="text-warn/90">
@@ -122,15 +122,15 @@ function FlagWorth({ data, explain }: {
           </p>
         </div>
 
-        <p className="text-[0.78rem] leading-relaxed text-chalk/80">
+        <p className="text-meta leading-relaxed text-body">
           {data.robustRange.sentence}
         </p>
 
         {data.partialNote && (
-          <p className="text-[0.72rem] leading-relaxed text-warn/90">{data.partialNote}</p>
+          <p className="text-meta leading-relaxed text-warn/90">{data.partialNote}</p>
         )}
 
-        <p className="text-[0.7rem] leading-relaxed text-ash">
+        <p className="text-meta leading-relaxed text-ash">
           {data.characteristics.note} {data.caveat} Source: {data.characteristics.citation}.
         </p>
       </CardBody>
@@ -142,20 +142,20 @@ function Dimension({
   dimension, explain, guided,
 }: { dimension: DomainDimension; explain?: ExplainMap[string]; guided: boolean }) {
   return (
-    <li className="border-b border-rule/40 px-5 py-2 last:border-0">
+    <li className="border-b border-ruleSoft px-5 py-2 last:border-0">
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
-        <span className="flex items-center gap-1.5 text-xs text-chalk/90">
+        <span className="flex items-center gap-1.5 text-meta text-body">
           {dimension.name}
           <Explain explain={explain} />
         </span>
-        <span className={cn("num text-[0.65rem] uppercase tracking-[0.1em]",
-                            dimension.verdict === "outside" ? "text-chalk/70" : "text-ash")}>
+        <span className={cn("num text-micro uppercase tracking-[0.1em]",
+                            dimension.verdict === "outside" ? "text-body" : "text-ash")}>
           {VERDICT_WORD[dimension.verdict] ?? dimension.verdict}
         </span>
-        <span className="ml-auto num text-[0.68rem] text-ash">{dimension.thisUse}</span>
+        <span className="ml-auto num text-micro text-ash">{dimension.thisUse}</span>
       </div>
       {guided && (
-        <p className="mt-1 text-[0.7rem] leading-relaxed text-ash">{dimension.note}</p>
+        <p className="mt-1 text-meta leading-relaxed text-ash">{dimension.note}</p>
       )}
     </li>
   );
@@ -186,9 +186,9 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
       <Card className="animate-rise">
         <CardHeader><CardTitle>Accounting quality</CardTitle></CardHeader>
         <CardBody>
-          <p className="text-sm leading-relaxed text-ash">{data.reason}</p>
+          <p className="text-base leading-relaxed text-ash">{data.reason}</p>
           {data.sector && (
-            <p className="mt-3 font-mono text-[0.65rem] uppercase tracking-[0.1em] text-ash">
+            <p className="mt-3 font-mono text-micro uppercase tracking-[0.1em] text-ash">
               {data.sector}{data.industry ? ` · ${data.industry}` : ""}
             </p>
           )}
@@ -208,13 +208,13 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
       <Card accent={verdictColor}>
         <CardHeader>
           <CardTitle>What the filings say</CardTitle>
-          <span className="num text-xs font-semibold" style={{ color: verdictColor }}>
+          <span className="num text-meta font-semibold" style={{ color: verdictColor }}>
             {data.verdict ?? "—"}
           </span>
         </CardHeader>
         <CardBody className="space-y-3">
-          <p className="text-[0.95rem] leading-relaxed text-chalk/90">{data.headline}</p>
-          <p className="text-[0.78rem] leading-relaxed text-ash">
+          <p className="text-base leading-relaxed text-body">{data.headline}</p>
+          <p className="text-meta leading-relaxed text-ash">
             Three published tests, each asking something different: is the business improving
             (Piotroski), is it far from running out of money (Altman), and do the numbers look
             like they have been massaged (Beneish). They read the accounts, not the share price,
@@ -239,12 +239,12 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
         <Card>
           <CardHeader>
             <CardTitle>Where these numbers come from</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               scored on {data.domains.fiscalYear ?? "undated"} filings
             </span>
           </CardHeader>
           <CardBody className="px-0">
-            <p className="px-5 pb-3 text-[0.78rem] leading-relaxed text-ash">
+            <p className="px-5 pb-3 text-meta leading-relaxed text-ash">
               Each of these three was fitted on a particular set of companies, in a
               particular market, in particular years. Every practical use today is outside
               those samples — they ended between 1965 and 1996 — so this is provenance
@@ -256,9 +256,9 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
               <div key={key} className="border-t border-rule">
                 <div className="flex flex-wrap items-baseline justify-between gap-2 px-5 pb-1 pt-3">
                   <span className="eyebrow">{screen.label}</span>
-                  <span className="text-[0.62rem] text-ash">{screen.citation}</span>
+                  <span className="text-meta text-ash">{screen.citation}</span>
                 </div>
-                <p className="px-5 pb-2 text-[0.68rem] leading-relaxed text-ash">
+                <p className="px-5 pb-2 text-meta leading-relaxed text-ash">
                   Fitted on {screen.sample}.
                 </p>
                 <ul>
@@ -269,7 +269,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                 </ul>
               </div>
             ))}
-            <p className="border-t border-rule px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+            <p className="border-t border-rule px-5 pt-3 text-meta leading-relaxed text-ash">
               There is no fit score here on purpose. Counting how many axes match would be a
               reliability rating, and none of these papers reports how their model behaves
               on a company like this one — which is the whole reason the axes are listed
@@ -283,7 +283,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
         <Card>
           <CardHeader>
             <CardTitle>The nine health checks</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               {piotroski.signalsAvailable} of {piotroski.signalsTotal} computable
             </span>
           </CardHeader>
@@ -293,7 +293,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                        : piotroski.signals).map((signal) => (
                 <li key={signal.name}
                     className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b
-                               border-rule/60 px-5 py-2 last:border-0">
+                               border-ruleSoft px-5 py-2 last:border-0">
                   <span className="mt-0.5 shrink-0">
                     {signal.passed === null
                       ? <Minus aria-label="not computable" className="h-3.5 w-3.5 text-ash" />
@@ -301,20 +301,20 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                         ? <Check aria-label="pass" className="h-3.5 w-3.5 text-acc" />
                         : <X aria-label="fail" className="h-3.5 w-3.5 text-dist" />}
                   </span>
-                  <span className="min-w-0 flex-1 text-xs text-chalk/90">{signal.name}</span>
+                  <span className="min-w-0 flex-1 text-meta text-body">{signal.name}</span>
                   {/* NOT `shrink-0`. `detail` is a sentence, not a figure — "earnings backed
                       by cash rather than accruals" is 296px wide, and forbidding it to shrink
                       pushed the whole Quality tab 59px past a 375px viewport, so the PAGE
                       scrolled sideways rather than this row. Wrapping instead drops it to its
                       own line when the name has taken the width, and changes nothing above
                       the breakpoint where both already fit. */}
-                  <span className="num w-full text-[0.7rem] text-ash sm:w-auto">
+                  <span className="num w-full text-micro text-ash sm:w-auto">
                     {signal.detail}
                   </span>
                 </li>
               ))}
             </ul>
-            <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+            <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
               A tick means that measure improved on last year, or was already healthy. A check
               that could not be computed scores nothing — it is never counted as a pass, which
               is why the total moves with how complete the filings are.
@@ -329,8 +329,8 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
             <Card accent={TONE_HEX[ex.altman?.tone ?? "neutral"]}>
               <CardHeader><CardTitle>How far from running out of money</CardTitle></CardHeader>
               <CardBody className="space-y-3">
-                <p className="text-sm leading-relaxed text-chalk/80">{altman.reading}</p>
-                <dl className="space-y-1 text-[0.72rem]">
+                <p className="text-base leading-relaxed text-body">{altman.reading}</p>
+                <dl className="space-y-1 text-micro">
                   {Object.entries(altman.components).map(([key, value]) => {
                     const explain = ex[`altmanComponent.${key}`];
                     return (
@@ -339,12 +339,12 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                           {explain?.label ?? key}
                           <Explain explain={explain} />
                         </dt>
-                        <dd className="num text-chalk/80">{value === null ? "—" : num(value)}</dd>
+                        <dd className="num text-body">{value === null ? "—" : num(value)}</dd>
                       </div>
                     );
                   })}
                 </dl>
-                <p className="text-[0.68rem] leading-relaxed text-ash">
+                <p className="text-meta leading-relaxed text-ash">
                   This is the emerging-market version of Altman&apos;s score, so an Indonesian
                   listing and a US one are measured on the same scale. Safe above 5.85, distress
                   below 4.35, and the gap between them is a zone the model declines to call.
@@ -357,8 +357,8 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
             <Card accent={TONE_HEX[ex.beneish?.tone ?? "neutral"]}>
               <CardHeader><CardTitle>Do the earnings look massaged?</CardTitle></CardHeader>
               <CardBody className="space-y-3">
-                <p className="text-sm leading-relaxed text-chalk/80">{beneish.reading}</p>
-                <dl className="space-y-1 text-[0.72rem]">
+                <p className="text-base leading-relaxed text-body">{beneish.reading}</p>
+                <dl className="space-y-1 text-micro">
                   {Object.entries(beneish.indices).map(([key, value]) => {
                     const explain = ex[`beneishIndex.${key}`];
                     return (
@@ -367,12 +367,12 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                           {explain?.label ?? key}
                           <Explain explain={explain} />
                         </dt>
-                        <dd className="num text-chalk/80">{value === null ? "—" : num(value)}</dd>
+                        <dd className="num text-body">{value === null ? "—" : num(value)}</dd>
                       </div>
                     );
                   })}
                 </dl>
-                <p className="text-[0.68rem] leading-relaxed text-ash">
+                <p className="text-meta leading-relaxed text-ash">
                   A screen, not a finding. Beneish classified roughly three-quarters of known
                   manipulators correctly — which on a population where manipulation is rare also
                   means most flags are false positives. Every index is a this-year-over-last-year
@@ -384,7 +384,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
         </div>
       )}
 
-      <p className="text-xs leading-relaxed text-ash">
+      <p className="text-meta leading-relaxed text-ash">
         Piotroski (2000) scores nine fundamental trends; Altman&apos;s Z&apos;&apos;-score (2005
         emerging-market variant) estimates distance from distress; Beneish (1999) screens accrual
         patterns. All three were built on non-financial firms and are not reported for banks or

@@ -73,9 +73,26 @@ export function HorizonPicker({
   /** Horizons the loaded history can actually support. */
   available?: readonly number[];
 }) {
+  // A `radiogroup` promises arrow keys and one tab stop. v1 declared the role
+  // and implemented neither, so a screen reader announced a control that did
+  // not behave like one — worse than plain buttons, because the announcement
+  // teaches an interaction that is not there.
+  const move = (event: React.KeyboardEvent) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key))
+      return;
+    event.preventDefault();
+    const index = HORIZONS.indexOf(value);
+    const next =
+      event.key === "Home" ? 0
+        : event.key === "End" ? HORIZONS.length - 1
+          : event.key === "ArrowLeft" || event.key === "ArrowUp"
+            ? (index - 1 + HORIZONS.length) % HORIZONS.length
+            : (index + 1) % HORIZONS.length;
+    onChange(HORIZONS[next]);
+  };
   return (
-    <div role="radiogroup" aria-label="Holding horizon"
-         className="inline-flex rounded border border-rule bg-raised p-0.5">
+    <div role="radiogroup" aria-label="Holding horizon" onKeyDown={move}
+         className="inline-flex rounded-lg border border-rule bg-raised p-1">
       {HORIZONS.map((option) => {
         // An unsupported horizon stays SELECTABLE. Greying it out would hide
         // the one thing worth knowing — that this stock has no answer at that
@@ -88,14 +105,17 @@ export function HorizonPicker({
             type="button"
             role="radio"
             aria-checked={value === option}
+            tabIndex={value === option ? 0 : -1}
             onClick={() => onChange(option)}
             title={measured ? undefined : "Not enough loaded history for this horizon"}
             className={cn(
-              "rounded px-2.5 py-1 font-mono text-[0.65rem] uppercase tracking-[0.1em]",
-              "transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-tech",
+              // 28px tall, over the 24px target floor. v1 was 24 exactly and
+              // the label inside it was 10.4px.
+              "num min-w-[2.75rem] rounded px-3 py-1.5 text-meta font-medium",
+              "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-tech",
               value === option ? "bg-tech/20 text-chalk"
-                : measured ? "text-ash hover:text-chalk"
-                  : "text-ash/40 hover:text-ash",
+                : measured ? "text-ash hover:bg-rule/50 hover:text-chalk"
+                  : "text-faint hover:text-ash",
             )}
           >
             {option}y

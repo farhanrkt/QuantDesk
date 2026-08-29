@@ -47,7 +47,7 @@ export function TickerBar({
   };
 
   const controls = (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[0.68rem]">
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
       <label className="flex items-center gap-2 text-ash">
         <span className="eyebrow">Detection</span>
         <Select value={opts.mode} onChange={(e) => set("mode", e.target.value)} className="h-8">
@@ -66,8 +66,10 @@ export function TickerBar({
                  value={opts.scoreThreshold}
                  onChange={(e) => set("scoreThreshold", Number(e.target.value))}
                  aria-label="Decision score cutoff"
-                 className="h-8 w-20 rounded border border-rule bg-panel px-2 font-mono text-xs text-chalk" />
-          <span className="text-[0.65rem]">more negative = stricter</span>
+                 className="num h-9 w-24 rounded border border-rule bg-sunken px-2.5 text-meta
+                            text-chalk focus:border-tech/60 focus:outline-none
+                            focus-visible:ring-2 focus-visible:ring-tech" />
+          <span className="text-micro text-ash">more negative = stricter</span>
         </label>
       )}
       {opts.mode === "quota" && (
@@ -77,8 +79,10 @@ export function TickerBar({
                  value={+(opts.contamination * 100).toFixed(2)}
                  onChange={(e) => set("contamination", Number(e.target.value) / 100)}
                  aria-label="Anomaly quota percent"
-                 className="h-8 w-20 rounded border border-rule bg-panel px-2 font-mono text-xs text-chalk" />
-          <span className="text-[0.65rem]">% of days, forced</span>
+                 className="num h-9 w-24 rounded border border-rule bg-sunken px-2.5 text-meta
+                            text-chalk focus:border-tech/60 focus:outline-none
+                            focus-visible:ring-2 focus-visible:ring-tech" />
+          <span className="text-micro text-ash">% of days, forced</span>
         </label>
       )}
       {opts.mode === "mad" && (
@@ -88,8 +92,10 @@ export function TickerBar({
                  value={opts.madK}
                  onChange={(e) => set("madK", Number(e.target.value))}
                  aria-label="MAD tolerance"
-                 className="h-8 w-20 rounded border border-rule bg-panel px-2 font-mono text-xs text-chalk" />
-          <span className="text-[0.65rem]">MADs below rolling median</span>
+                 className="num h-9 w-24 rounded border border-rule bg-sunken px-2.5 text-meta
+                            text-chalk focus:border-tech/60 focus:outline-none
+                            focus-visible:ring-2 focus-visible:ring-tech" />
+          <span className="text-micro text-ash">MADs below rolling median</span>
         </label>
       )}
 
@@ -136,9 +142,9 @@ export function TickerBar({
       {/* The market selector now applies to every engine, not just valuation. */}
       {opts.market === "ID" && !opts.ticker.trim().toUpperCase().endsWith(".JK")
         && opts.ticker.trim() && (
-        <p className="text-[0.7rem] text-ash">
+        <p className="text-meta text-ash">
           Will resolve to{" "}
-          <span className="font-mono text-chalk/80">
+          <span className="num rounded bg-sunken px-1.5 py-0.5 font-semibold text-chalk">
             {opts.ticker.trim().toUpperCase()}.JK
           </span>{" "}
           for every engine.
@@ -146,26 +152,33 @@ export function TickerBar({
       )}
 
       {guided ? (
-        <details>
-          <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-ash
-                              transition-colors hover:text-chalk focus-visible:outline-none
-                              focus-visible:ring-1 focus-visible:ring-tech">
-            <SlidersHorizontal aria-hidden className="h-3 w-3" />
-            <span className="eyebrow">Advanced settings (4)</span>
+        <details className="group">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-2 rounded
+                              py-1 text-meta text-ash transition-colors hover:text-chalk
+                              focus-visible:outline-none focus-visible:ring-2
+                              focus-visible:ring-tech">
+            <SlidersHorizontal aria-hidden className="h-4 w-4 shrink-0" />
+            Advanced settings (4)
           </summary>
-          <div className="mt-3">{controls}</div>
+          <div className="mt-4 rounded-lg border border-ruleSoft bg-sunken px-4 py-3.5">
+            {controls}
+          </div>
         </details>
       ) : controls}
 
       {/* Presets stay OUT of the disclosure in both modes. They are how a
           newcomer gets a first result without already knowing a ticker. */}
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-meta text-faint">Try:</span>
         {PRESETS.map((preset) => (
           <button key={preset} type="button"
                   onClick={() => { const next = { ...opts, ticker: preset,
                                      market: preset.endsWith(".JK") ? "ID" as const : "US" as const };
                                    onChange(next); onRun(next); }}
-                  className="rounded border border-rule px-2 py-1 font-mono text-[0.65rem] text-ash transition-colors hover:border-tech/60 hover:text-chalk">
+                  className="num inline-flex h-8 items-center rounded-lg border border-rule
+                             bg-sunken px-3 text-meta font-medium text-ash transition-colors
+                             hover:border-tech/50 hover:bg-tech/10 hover:text-tech
+                             focus:outline-none focus-visible:ring-2 focus-visible:ring-tech">
             {preset}
           </button>
         ))}

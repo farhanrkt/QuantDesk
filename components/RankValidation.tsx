@@ -32,23 +32,23 @@ export function RankValidation({ data }: { data?: Validation }) {
   return (
     <section className="rounded border border-rule bg-panel">
       <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
-        <h3 className="eyebrow flex items-center gap-1.5">
+        <h3 className="text-h3 flex items-center gap-1.5">
           <FlaskConical aria-hidden className="h-3 w-3" />
           Does this ranking predict anything?
         </h3>
-        <span className="num text-[0.65rem] text-ash">
+        <span className="num text-micro text-ash">
           {data.tests} tests over {data.years} years &middot; measured {data.measuredOn}
         </span>
       </div>
 
       <div className="px-5 py-4">
-        <p className={cn("text-sm leading-relaxed", noEdge ? "text-warn" : "text-chalk/90")}>
+        <p className={cn("text-base leading-relaxed", noEdge ? "text-warn" : "text-body")}>
           {data.headline}
         </p>
 
         {rows.length > 0 && (
           <div className="mt-4 overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-meta">
               <thead>
                 <tr className="border-b border-rule text-ash">
                   <th className="py-1.5 pr-3 font-normal">Holding period</th>
@@ -58,9 +58,9 @@ export function RankValidation({ data }: { data?: Validation }) {
                   <th className="py-1.5 text-right font-normal">Smallest detectable</th>
                 </tr>
               </thead>
-              <tbody className="text-chalk/80">
+              <tbody className="text-body">
                 {rows.map((r) => (
-                  <tr key={r.horizonDays} className="border-b border-rule/40 last:border-0">
+                  <tr key={r.horizonDays} className="border-b border-ruleSoft last:border-0">
                     <td className="py-1.5 pr-3">
                       {r.horizonDays} trading days
                       <span className="ml-1.5 text-ash">
@@ -87,14 +87,14 @@ export function RankValidation({ data }: { data?: Validation }) {
         )}
 
         {/* The distinction the whole panel turns on. */}
-        <p className="mt-3 text-[0.72rem] leading-relaxed text-ash">
-          <span className="text-chalk/80">Rank vs return</span> is the correlation, within
+        <p className="mt-3 text-meta leading-relaxed text-ash">
+          <span className="text-body">Rank vs return</span> is the correlation, within
           each period, between where a name ranked and what it did next; zero means the order
-          carried no information. <span className="text-chalk/80">q</span> is the p-value after
+          carried no information. <span className="text-body">q</span> is the p-value after
           correcting for having run {data.tests} tests &mdash; running that many produces a
           winner by construction, and {num(data.expectedByChance ?? 0, 1)} of them are expected
           to clear the usual cutoff by chance alone.{" "}
-          <span className="text-chalk/80">Smallest detectable</span> is the weakest relationship
+          <span className="text-body">Smallest detectable</span> is the weakest relationship
           this sample could have found; a genuinely useful one in this field is nearer 0.03, so
           a blank result here means <em>too small to see</em> rather than <em>not there</em>.
         </p>
@@ -102,7 +102,7 @@ export function RankValidation({ data }: { data?: Validation }) {
         {data.caveats && data.caveats.length > 0 && (
           <ul className="mt-3 space-y-1 border-t border-rule pt-3">
             {data.caveats.map((c) => (
-              <li key={c} className="text-[0.7rem] leading-relaxed text-ash">&middot; {c}</li>
+              <li key={c} className="text-meta leading-relaxed text-ash">&middot; {c}</li>
             ))}
           </ul>
         )}

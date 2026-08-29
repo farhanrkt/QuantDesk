@@ -46,11 +46,14 @@ export function HoldingHorizonBar({
   const measured = row && row.usable !== false && row.worst != null;
 
   return (
-    <section className="animate-rise rounded border border-rule bg-panel">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-        <div className="flex items-center gap-2">
-          <Clock aria-hidden className="h-3.5 w-3.5 text-ash" />
-          <span className="eyebrow">If you held this for</span>
+    <section className="animate-rise overflow-hidden rounded-xl border border-rule bg-panel">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Clock aria-hidden className="h-4 w-4 shrink-0 text-tech" />
+          {/* A real question at reading size. v1 asked it in 10.88px uppercase
+              grey, which made the one control that changes what every number
+              below means look like a table header. */}
+          <h2 className="text-h3">If you held this for</h2>
           <HorizonPicker value={horizon} onChange={onHorizon} available={available} />
         </div>
         {explain && (
@@ -58,58 +61,66 @@ export function HoldingHorizonBar({
             type="button"
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
-            className="eyebrow text-ash transition-colors hover:text-chalk focus:outline-none
-                       focus-visible:ring-1 focus-visible:ring-tech"
+            className="inline-flex h-8 items-center rounded-lg border border-rule px-3
+                       text-meta font-medium text-ash transition-colors
+                       hover:border-tech/50 hover:bg-tech/10 hover:text-tech
+                       focus:outline-none focus-visible:ring-2 focus-visible:ring-tech"
           >
             {open ? "Less" : "What this means"}
           </button>
         )}
       </div>
 
-      <div className="border-t border-rule px-5 py-4">
+      <div className="border-t border-rule px-5 py-5">
         {!data.hasLongTerm ? (
-          <p className="text-[0.82rem] leading-relaxed text-ash">
+          <p className="prose-col text-base leading-relaxed text-ash">
             The chart range is too short for any holding-period history. Set it to 5y or
             longer and this becomes the strongest evidence on the page.
           </p>
         ) : !measured ? (
-          <p className="text-[0.82rem] leading-relaxed text-ash">
+          <p className="prose-col text-base leading-relaxed text-ash">
             {row?.reason
               ?? `No ${horizon}-year holding periods in the loaded history.`}{" "}
-            <span className="text-chalk/70">
+            <span className="text-body">
               Nothing is known about {horizon}-year outcomes for this stock here — which is
               not the same as nothing having gone wrong over one.
             </span>
           </p>
         ) : (
           <>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <div className="eyebrow mb-0.5">Worst any buyer did</div>
-                <div className={cn("num text-xl font-semibold",
+            {/* THE WORST COLUMN LEADS, and it is the only one that takes a
+                tone. It is the number position sizing has to survive; the
+                median and the hit rate are context for it, so they are set at
+                the same size but stay neutral. Ranking them by colour would be
+                the app deciding which of three facts matters most, and here it
+                genuinely does — Python said so, in `_rolling_worst`. */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="rounded-lg border border-ruleSoft bg-sunken px-4 py-3.5">
+                <div className="eyebrow mb-2">Worst any buyer did</div>
+                <div className={cn("num text-figure font-semibold leading-none",
                                    explain ? TONE_TEXT[explain.tone] : "text-chalk")}>
                   {signedPct(row.worst)}
                 </div>
-                <div className="text-[0.65rem] text-ash">a year, at the unluckiest entry</div>
+                <div className="mt-2 text-micro text-ash">a year, at the unluckiest entry</div>
               </div>
-              <div>
-                <div className="eyebrow mb-0.5">Typical</div>
-                <div className="num text-xl font-semibold text-chalk">
+              <div className="rounded-lg border border-ruleSoft bg-sunken px-4 py-3.5">
+                <div className="eyebrow mb-2">Typical</div>
+                <div className="num text-figure font-semibold leading-none text-chalk">
                   {signedPct(row.median)}
                 </div>
-                <div className="text-[0.65rem] text-ash">a year, middle of the range</div>
+                <div className="mt-2 text-micro text-ash">a year, middle of the range</div>
               </div>
-              <div>
-                <div className="eyebrow mb-0.5">Made money</div>
-                <div className="num text-xl font-semibold text-chalk">
+              <div className="rounded-lg border border-ruleSoft bg-sunken px-4 py-3.5">
+                <div className="eyebrow mb-2">Made money</div>
+                <div className="num text-figure font-semibold leading-none text-chalk">
                   {pct(row.positiveShare, 0)}
                 </div>
-                <div className="text-[0.65rem] text-ash">
+                <div className="mt-2 text-micro text-ash">
                   of {row.windows} overlapping periods
                 </div>
               </div>
             </div>
-            <p className="mt-3 text-[0.72rem] leading-relaxed text-ash">
+            <p className="prose-col mt-4 text-meta leading-relaxed text-ash">
               Every {horizon}-year stretch in the loaded history, not the one that happened to
               start when the chart does. The worst column is the one that sets position size —
               a headline annual return quietly describes a single lucky start date.
@@ -118,7 +129,7 @@ export function HoldingHorizonBar({
         )}
 
         {open && explain && (
-          <div className="mt-3 border-t border-rule pt-3">
+          <div className="mt-4 rounded-lg border border-ruleSoft bg-sunken px-4 py-3.5">
             <ExplanationBody explain={explain} />
           </div>
         )}

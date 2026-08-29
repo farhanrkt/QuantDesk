@@ -39,7 +39,7 @@ function TechTooltip({ active, payload }: TooltipProps<number, string>) {
   const p = payload?.[0]?.payload as ChartPoint | undefined;
   if (!active || !p) return null;
   return (
-    <div className="rounded border border-rule bg-ink/95 px-3 py-2 text-xs">
+    <div className="rounded border border-rule bg-ink/95 px-3 py-2 text-meta">
       <div className="num mb-1 text-ash">{p.date}</div>
       <div className="num">O {num(p.open)} · H {num(p.high)} · L {num(p.low)} · C {num(p.close)}</div>
       {p.sma50 != null && <div className="num" style={{ color: FAST }}>50-day {num(p.sma50)}</div>}
@@ -133,8 +133,8 @@ export function TechnicalPanel({
     <div className="space-y-4 animate-rise">
       <Tabs tabs={SECTIONS} active={active} onChange={setSection} />
       {guided && (
-        <p className="text-[0.68rem] text-ash">
-          Switch to <span className="text-chalk/80">Full</span> for the complete indicator
+        <p className="text-micro text-ash">
+          Switch to <span className="text-body">Full</span> for the complete indicator
           grid — ADX, Aroon, Stochastic, Williams %R, CCI, Coppock and the rest, grouped by
           the horizon each one speaks to.
         </p>
@@ -157,7 +157,7 @@ export function TechnicalPanel({
       )}
 
       {!data.hasLongTerm && active === "chart" && (
-        <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-xs leading-relaxed text-warn">
+        <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-meta leading-relaxed text-warn">
           The long-horizon section needs at least a year of history. Set the chart range to
           5y, 10y or max to get drawdown depth, rolling multi-year returns and relative
           strength — a &quot;worst 3-year window&quot; computed from one year of data would be
@@ -177,7 +177,7 @@ export function TechnicalPanel({
 
       <Card accent={TECH}>
         <CardBody className="pt-5">
-          <p className="text-[0.95rem] leading-relaxed">
+          <p className="text-base leading-relaxed">
             {splitEmphasis(summary.headline).map((part, i) =>
               part.bold ? <b key={i} className="font-semibold text-chalk">{part.text}</b>
                         : <span key={i} className="text-ash">{part.text}</span>
@@ -190,7 +190,7 @@ export function TechnicalPanel({
                    style={{ borderLeftColor: chip.tone === "bull" ? UP : chip.tone === "bear" ? DOWN
                                             : chip.tone === "warn" ? FAST : "#7A8CA0" }}>
                 <div className="eyebrow mb-0.5">{chip.label}</div>
-                <div className={cn("num text-sm font-semibold", TONE[chip.tone] ?? "text-chalk")}>
+                <div className={cn("num text-base font-semibold", TONE[chip.tone] ?? "text-chalk")}>
                   {chip.value}
                 </div>
               </div>
@@ -200,7 +200,7 @@ export function TechnicalPanel({
       </Card>
 
       {!data.hasSma200 && (
-        <div className="rounded border border-warn/40 bg-warn/10 px-4 py-3 text-xs text-warn">
+        <div className="rounded border border-warn/40 bg-warn/10 px-4 py-3 text-meta text-warn">
           The 200-day average needs 200 trading days and this range is shorter, so the slow line
           and its crossover signals are missing. Pick a longer range.
         </div>
@@ -223,7 +223,7 @@ export function TechnicalPanel({
                            min={2} max={12} />
             </Field>
             <ApplyButton onClick={() => onApply({ srWindow, srLevels })} busy={busy} />
-            <span className="pb-2 text-[0.7rem] text-ash">
+            <span className="pb-2 text-micro text-ash">
               {levels.length} level{levels.length === 1 ? "" : "s"} drawn
             </span>
           </div>
@@ -233,7 +233,7 @@ export function TechnicalPanel({
       <Card>
         <CardHeader>
           <CardTitle>Price · {data.range} · {data.bars} bars</CardTitle>
-          <span className="font-mono text-[0.65rem] text-ash">{data.currency}</span>
+          <span className="font-mono text-micro text-ash">{data.currency}</span>
         </CardHeader>
         <CardBody>
           <ResponsiveContainer width="100%" height={320}>
@@ -308,12 +308,12 @@ export function TechnicalPanel({
         </CardHeader>
         <CardBody className="px-0">
           {signals.length === 0 ? (
-            <p className="px-5 text-sm text-ash">
+            <p className="px-5 text-base text-ash">
               The 50-day and 200-day averages never crossed inside this range. Try a longer one.
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Date</th><th>What happened</th>
@@ -323,7 +323,7 @@ export function TechnicalPanel({
                 </thead>
                 <tbody>
                   {signals.map((s) => (
-                    <tr key={s.date} className="border-b border-rule/60 last:border-0">
+                    <tr key={s.date} className="border-b border-ruleSoft last:border-0">
                       <td className="num px-5 py-2 text-ash">{s.date}</td>
                       <td className="px-5 py-2" style={{ color: s.type === "Buy" ? UP : DOWN }}>
                         {s.description}
@@ -342,7 +342,7 @@ export function TechnicalPanel({
         </CardBody>
       </Card>
 
-      <p className="text-xs leading-relaxed text-ash">
+      <p className="text-meta leading-relaxed text-ash">
         Change since compares the latest close with the price on the signal day. It ignores costs,
         dividends and timing, so treat it as a rough scorecard. Indicators are computed on the
         visible window only — a one-year range gives the 200-day average roughly fifty valid bars.

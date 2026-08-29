@@ -3,7 +3,7 @@
 import {
   createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState,
 } from "react";
-import { ArrowDown, ArrowUp, Info } from "lucide-react";
+import { ArrowDown, ArrowUp, Info, X } from "lucide-react";
 import type { Explanation, ExplainMap } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -38,8 +38,17 @@ export const TONE_HEX: Record<string, string> = {
   good: "#35C4A8",
   bad: "#FF6B6B",
   warn: "#F2C14E",
-  neutral: "#7A8CA0",
-  none: "#7A8CA0",
+  neutral: "#8496A9",
+  none: "#8496A9",
+};
+
+/** Surfaces for a tone, used by chips and callouts. Never picked from a number. */
+export const TONE_FIELD: Record<string, string> = {
+  good: "border-acc/35 bg-acc/10 text-acc",
+  bad: "border-dist/40 bg-dist/10 text-dist",
+  warn: "border-warn/35 bg-warn/10 text-warn",
+  neutral: "border-rule bg-raised text-chalk",
+  none: "border-rule bg-raised text-ash",
 };
 
 const EVIDENCE_NOTE: Record<string, string> = {
@@ -50,9 +59,9 @@ const EVIDENCE_NOTE: Record<string, string> = {
 };
 
 const EVIDENCE_TONE: Record<string, string> = {
-  strong: "text-acc/80",
+  strong: "text-acc",
   moderate: "text-ash",
-  weak: "text-warn/90",
+  weak: "text-warn",
   none: "text-ash",
 };
 
@@ -78,9 +87,6 @@ const STORAGE_KEY = "quantdesk.detail";
  * nothing renamed, nothing added. That second promise is the load-bearing one:
  * a mode that "simplifies" by taking capability away from the people who came
  * for the capability is a mode they turn off once and never trust again.
- *
- * The choice persists because a reader who wants one of them wants it every
- * time, and re-picking it on each load is its own small insult.
  */
 export function DetailProvider({
   level, children,
@@ -106,23 +112,43 @@ export function useDetailLevel(): [DetailLevel, (v: DetailLevel) => void] {
   return [level, update];
 }
 
+/**
+ * A two-option switch that behaves like one.
+ *
+ * v1 declared `role="radiogroup"` with `role="radio"` children and implemented
+ * none of the keyboard contract that promises — a screen reader announced a
+ * radio group, the reader pressed an arrow key, and nothing happened. Declaring
+ * a pattern you have not built is worse than declaring nothing, so this now
+ * carries the roving tabindex and arrow keys the role commits to.
+ */
 export function DetailToggle({
   level, onChange,
 }: { level: DetailLevel; onChange: (v: DetailLevel) => void }) {
+  const options = ["simple", "detailed"] as const;
+  const move = (event: React.KeyboardEvent) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    event.preventDefault();
+    onChange(level === "simple" ? "detailed" : "simple");
+  };
   return (
     <div role="radiogroup" aria-label="Reading mode"
-         className="inline-flex rounded border border-rule bg-raised p-0.5">
-      {(["simple", "detailed"] as const).map((option) => (
+         className="inline-flex rounded-lg border border-rule bg-raised p-1">
+      {options.map((option) => (
         <button
           key={option}
           type="button"
           role="radio"
           aria-checked={level === option}
+          // ONE TAB STOP for the whole group, which is what a radiogroup means.
+          tabIndex={level === option ? 0 : -1}
+          onKeyDown={move}
           onClick={() => onChange(option)}
           className={cn(
-            "rounded px-3 py-1 font-mono text-[0.65rem] uppercase tracking-[0.12em]",
-            "transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-tech",
-            level === option ? "bg-tech/20 text-chalk" : "text-ash hover:text-chalk",
+            "rounded px-3.5 py-1.5 text-meta font-medium transition-colors",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-tech",
+            level === option
+              ? "bg-tech/20 text-chalk shadow-sm"
+              : "text-ash hover:text-chalk",
           )}
         >
           {option === "simple" ? "Guided" : "Full"}
@@ -139,8 +165,8 @@ function ArrowFor({ direction }: { direction: Explanation["goodDirection"] }) {
   if (direction === "none") return null;
   const Icon = direction === "high" ? ArrowUp : ArrowDown;
   return (
-    <span className="inline-flex items-center gap-1 text-[0.6rem] text-ash">
-      <Icon aria-hidden className="h-2.5 w-2.5" />
+    <span className="inline-flex items-center gap-1 text-micro text-ash">
+      <Icon aria-hidden className="h-3 w-3" />
       {direction === "high" ? "higher is better" : "lower is better"}
     </span>
   );
@@ -155,27 +181,40 @@ function ArrowFor({ direction }: { direction: Explanation["goodDirection"] }) {
  * or `<p>` inside a `<span>` is invalid HTML. The browser silently reparents
  * it, which is how the popover ended up escaping its own positioning context.
  * `display: block` on a span gives identical layout and is legal anywhere.
+ *
+ * THE THREE LABELS ARE THE STRUCTURE. v1 set them as inline run-in eyebrows the
+ * same size as the text they introduced, so the block read as one grey paragraph
+ * with occasional capitals. Stacking them makes the shape of the answer visible
+ * before any of it is read, and a reader who only wants the middle one can find
+ * it.
  */
 export function ExplanationBody({ explain }: { explain: Explanation }) {
   return (
-    <span className="block space-y-2 text-[0.72rem] leading-relaxed">
-      <span className="block text-ash">
-        <span className="eyebrow mr-1.5">What it is</span>
-        {explain.what}
+    <span className="block space-y-3">
+      <span className="block">
+        <span className="eyebrow mb-1 block">What it is</span>
+        <span className="block text-meta leading-relaxed text-body">{explain.what}</span>
       </span>
-      <span className={cn("block", TONE_TEXT[explain.tone] ?? "text-chalk", "opacity-95")}>
-        <span className="eyebrow mr-1.5 text-ash">This reading</span>
-        {explain.reading}
+      <span className="block">
+        <span className="eyebrow mb-1 block">This reading</span>
+        <span className={cn("block text-meta font-medium leading-relaxed",
+                            TONE_TEXT[explain.tone] ?? "text-chalk")}>
+          {explain.reading}
+        </span>
       </span>
-      <span className="block text-chalk/70">
-        <span className="eyebrow mr-1.5 text-ash">What to do</span>
-        {explain.action}
+      <span className="block">
+        <span className="eyebrow mb-1 block">What to do</span>
+        <span className="block text-meta leading-relaxed text-body">{explain.action}</span>
       </span>
-      <span className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5">
+      <span className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-ruleSoft pt-2.5">
         <ArrowFor direction={explain.goodDirection} />
         {explain.evidence && (
-          <span className={cn("text-[0.6rem]", EVIDENCE_TONE[explain.evidence] ?? "text-ash")}>
-            Evidence: {explain.evidence} — {EVIDENCE_NOTE[explain.evidence]}
+          <span className={cn("text-micro", EVIDENCE_TONE[explain.evidence] ?? "text-ash")}>
+            <span className="font-semibold uppercase tracking-wide">
+              {explain.evidence} evidence
+            </span>
+            {" — "}
+            <span className="text-ash">{EVIDENCE_NOTE[explain.evidence]}</span>
           </span>
         )}
       </span>
@@ -183,28 +222,39 @@ export function ExplanationBody({ explain }: { explain: Explanation }) {
   );
 }
 
-/** The shared button. Every affordance in the app that opens prose is this one. */
+/**
+ * The shared button. Every affordance in the app that opens prose is this one,
+ * and there are dozens of them on a screen.
+ *
+ * IT IS 24x24, WHICH IS THE ENTIRE POINT OF THIS REVISION. v1 drew it at 14 or
+ * 16px — an audit found 48 of 74 interactive elements on the Trend tab below
+ * the WCAG 2.2 minimum, and this component was most of them. The app's central
+ * promise is that every number explains itself; on a phone the affordance
+ * carrying that promise was effectively unhittable.
+ *
+ * The RING is what grew, not the glyph: the icon stays small so a dense table
+ * row still looks like a table row, while padding takes the hit area to 24.
+ */
 function InfoButton({
-  label, open, onToggle, controls, small,
-}: {
-  label: string; open: boolean; onToggle: () => void; controls: string; small?: boolean;
-}) {
+  label, open, onToggle, controls,
+}: { label: string; open: boolean; onToggle: () => void; controls: string }) {
   return (
     <button
       type="button"
       aria-expanded={open}
       aria-controls={controls}
-      aria-label={`Explain ${label}`}
+      aria-label={open ? `Hide the explanation of ${label}` : `Explain ${label}`}
       onClick={onToggle}
       className={cn(
-        "inline-flex shrink-0 items-center justify-center rounded-full border border-rule",
-        "text-ash transition-colors hover:border-tech/60 hover:text-tech",
-        "focus:outline-none focus-visible:ring-1 focus-visible:ring-tech",
-        small ? "h-3.5 w-3.5" : "h-4 w-4",
-        open && "border-tech/60 text-tech",
+        "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
+        "border transition-colors",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-tech",
+        open
+          ? "border-tech/60 bg-tech/15 text-tech"
+          : "border-rule text-faint hover:border-tech/50 hover:bg-tech/10 hover:text-tech",
       )}
     >
-      <Info aria-hidden className={small ? "h-2 w-2" : "h-2.5 w-2.5"} />
+      <Info aria-hidden className="h-3.5 w-3.5" />
     </button>
   );
 }
@@ -219,6 +269,13 @@ function InfoButton({
  * measures itself and flips to right-aligned when it would overflow. Escape
  * must close it. And clicking anywhere else must close it, because a panel you
  * can only dismiss by finding the same tiny button again is a trap.
+ *
+ * IT IS NOT `role="tooltip"`, WHICH v1 CLAIMED. A tooltip is a short label
+ * describing its trigger, announced through `aria-describedby` and never
+ * interactive. This is three labelled paragraphs with a heading and a close
+ * button, opened by a click, and a screen reader told it was a tooltip gets
+ * neither the disclosure semantics nor a way in. A labelled group behind
+ * `aria-expanded`/`aria-controls` describes what is actually here.
  */
 export function Explain({ explain }: { explain?: Explanation }) {
   const [open, setOpen] = useState(false);
@@ -252,20 +309,33 @@ export function Explain({ explain }: { explain?: Explanation }) {
 
   if (!explain) return null;
   return (
-    <span ref={wrapper} className="relative inline-flex">
-      <InfoButton label={explain.label} open={open} controls={id} small
+    <span ref={wrapper} className="relative inline-flex align-middle">
+      <InfoButton label={explain.label} open={open} controls={id}
                   onToggle={() => { setFlip(false); setOpen((v) => !v); }} />
       {open && (
         <span
           ref={panel}
           id={id}
-          role="tooltip"
+          role="group"
+          aria-label={explain.label}
           className={cn(
-            "absolute top-5 z-30 block rounded border border-rule bg-ink/95 px-3 py-2 shadow-xl",
-            "w-[min(20rem,calc(100vw-2rem))]",
+            "absolute top-7 z-30 block rounded-lg border border-rule bg-raised",
+            "px-4 py-3.5 shadow-pop",
+            "w-[min(22rem,calc(100vw-2rem))]",
             flip ? "right-0" : "left-0",
           )}
         >
+          <span className="mb-2.5 flex items-start justify-between gap-3 border-b border-ruleSoft pb-2">
+            <span className="block text-meta font-semibold text-chalk">{explain.label}</span>
+            <button type="button" onClick={() => setOpen(false)}
+                    aria-label={`Close the explanation of ${explain.label}`}
+                    className="-mr-1 -mt-0.5 inline-flex h-6 w-6 shrink-0 items-center
+                               justify-center rounded text-faint transition-colors
+                               hover:bg-rule/60 hover:text-chalk focus:outline-none
+                               focus-visible:ring-2 focus-visible:ring-tech">
+              <X aria-hidden className="h-3.5 w-3.5" />
+            </button>
+          </span>
           <ExplanationBody explain={explain} />
         </span>
       )}
@@ -298,24 +368,25 @@ export function ExplainedStat({
   const shown = value ?? explain?.valueText ?? "—";
   const colour = tone ?? (explain ? TONE_TEXT[explain.tone] : undefined) ?? "text-chalk";
   return (
-    <div className="rounded border border-rule bg-panel px-4 py-3">
-      <div className="mb-1 flex items-start justify-between gap-2">
-        <span className="eyebrow">{label ?? explain?.label ?? ""}</span>
+    <div className={cn("rounded-lg border bg-panel px-4 py-3.5 transition-colors",
+                       explain ? TONE_BORDER_SOFT[explain.tone] ?? "border-rule" : "border-rule")}>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <span className="eyebrow pt-0.5">{label ?? explain?.label ?? ""}</span>
         {explain && (
           <InfoButton label={explain.label} open={open} controls={id}
                       onToggle={() => setOpen((v) => !v)} />
         )}
       </div>
-      <div className={cn("num text-lg font-semibold leading-tight", colour)}>{shown}</div>
-      {sub && <div className="mt-0.5 text-[0.7rem] leading-snug text-ash">{sub}</div>}
+      <div className={cn("num text-figure font-semibold leading-none", colour)}>{shown}</div>
+      {sub && <div className="mt-2 text-micro leading-snug text-ash">{sub}</div>}
       {/* GUIDED: show the interpretation of THIS value without a click. It is
           the `reading` line only — the full three-part explanation stays behind
           the icon, so the affordance still has a job and the card does not
           become a wall. A reader who never discovers the icon has still been
           told whether the number in front of them is good or bad. */}
       {!open && guided && explain && explain.tone !== "none" && (
-        <div className={cn("mt-1.5 text-[0.72rem] leading-relaxed",
-                           TONE_TEXT[explain.tone] ?? "text-chalk", "opacity-90")}>
+        <div className={cn("mt-2.5 border-t border-ruleSoft pt-2.5 text-meta leading-relaxed",
+                           TONE_TEXT[explain.tone] ?? "text-chalk")}>
           {explain.reading}
         </div>
       )}
@@ -328,6 +399,15 @@ export function ExplainedStat({
   );
 }
 
+/** Tone as a whisper on a border — enough to group, never enough to shout. */
+const TONE_BORDER_SOFT: Record<string, string> = {
+  good: "border-acc/25",
+  bad: "border-dist/30",
+  warn: "border-warn/25",
+  neutral: "border-rule",
+  none: "border-rule",
+};
+
 /** A label-and-value row with the same affordance, for two-column lists. */
 export function ExplainedRow({
   label, value, explain, tone,
@@ -338,19 +418,19 @@ export function ExplainedRow({
   const shown = value ?? explain?.valueText ?? "—";
   const colour = tone ?? (explain ? TONE_TEXT[explain.tone] : undefined) ?? "text-chalk";
   return (
-    <div className="border-b border-rule/40 pb-1.5 last:border-0">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="flex items-center gap-1.5 text-ash">
-          {label ?? explain?.label}
+    <div className="border-b border-ruleSoft py-2 last:border-0">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2 text-meta text-ash">
+          <span className="truncate">{label ?? explain?.label}</span>
           {explain && (
-            <InfoButton label={explain.label} open={open} controls={id} small
+            <InfoButton label={explain.label} open={open} controls={id}
                         onToggle={() => setOpen((v) => !v)} />
           )}
         </span>
-        <span className={cn("num font-semibold", colour)}>{shown}</span>
+        <span className={cn("num shrink-0 text-meta font-semibold", colour)}>{shown}</span>
       </div>
       {open && explain && (
-        <div id={id} className="mt-2 rounded border border-rule bg-ink/40 px-3 py-2">
+        <div id={id} className="mt-2.5 rounded border border-ruleSoft bg-sunken px-3.5 py-3">
           <ExplanationBody explain={explain} />
         </div>
       )}

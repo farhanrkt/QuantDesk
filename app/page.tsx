@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { AnomalyPanel } from "@/components/AnomalyPanel";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
@@ -23,7 +23,7 @@ import { Card } from "@/components/ui/card";
 import { DetailProvider, DetailToggle, useDetailLevel } from "@/components/ui/explain";
 import { HorizonProvider, useHoldingHorizon } from "@/components/ui/horizon";
 import { PanelSkeleton } from "@/components/ui/skeleton";
-import { Tabs } from "@/components/ui/tabs";
+import { TabPanel, Tabs } from "@/components/ui/tabs";
 import {
   useEngines, useEventStudy, usePeers, usePortfolio, type RunOptions,
 } from "@/lib/api";
@@ -36,11 +36,16 @@ const INITIAL: RunOptions = {
   contamination: 0.02, madK: 3.0, scoreThreshold: -0.10,
 };
 
+// LABELLED BY THE QUESTION, NOT THE METHOD. "Flow · anomalies" and "Intrinsic
+// value" name the technique, which tells a newcomer nothing about whether the
+// tab is worth opening. The hues are the lens identity colours from
+// `ConfluenceRail.LENS_HUE`, so a chip in the rail and the tab that owns it are
+// the same colour.
 const TABS = [
-  { id: "flow", label: "Flow · anomalies", accent: "#35C4A8" },
-  { id: "trend", label: "Technicals", accent: "#5B8DEF" },
-  { id: "value", label: "Intrinsic value", accent: "#E8B44C" },
-  { id: "quality", label: "Quality", accent: "#F2C14E" },
+  { id: "flow", label: "Who is trading it", accent: "#2FBFA4" },
+  { id: "trend", label: "What the price did", accent: "#6B9BFF" },
+  { id: "value", label: "What it is worth", accent: "#E8B44C" },
+  { id: "quality", label: "Are the numbers real", accent: "#C9A227" },
   // The fourth question this app can answer — how does it sit against what I
   // already own — and the only one that needs an input other than a ticker.
   { id: "portfolio", label: "Portfolio fit", accent: "#6FD0C0" },
@@ -64,19 +69,19 @@ function Panel<T>({
   if (state.status === "error") {
     const { failure } = state;
     return (
-      <Card className="border-dist/40 bg-dist/5">
-        <div className="flex gap-3 p-5">
-          <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
+      <Card tone="bad" className="bg-dist/5">
+        <div className="flex gap-3.5 p-5">
+          <AlertTriangle aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-dist" />
           <div className="min-w-0 flex-1">
-            <div className="eyebrow mb-1 text-dist">This engine could not run</div>
-            <p className="text-sm leading-relaxed text-chalk/80">{failure.message}</p>
+            <h3 className="mb-1.5 text-lead text-dist">This engine could not run</h3>
+            <p className="prose-col text-base leading-relaxed text-body">{failure.message}</p>
             {/* A data gap the user can close is a different problem from a
                 business the model cannot value. Only the former gets a form —
                 and the form has to be here, because the panel that normally
                 holds it never rendered. */}
             {failure.manualRequired && (
               <>
-                <p className="mt-2 text-xs leading-relaxed text-warn">
+                <p className="prose-col mt-2.5 text-meta leading-relaxed text-warn">
                   Yahoo is missing{" "}
                   {failure.missing?.length ? failure.missing.join(", ") : "a required figure"} for
                   this listing. Enter it below to value the company anyway.
@@ -170,27 +175,52 @@ export default function Home() {
     <DetailProvider level={detail}>
     <HorizonProvider value={horizon}>
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* THE HEADER STOPPED EXPLAINING ITSELF AT LENGTH. v1 spent a 68-word
+          paragraph up here on how the app works, in 12px grey, above the fold,
+          before the reader had entered a ticker or seen a single number — the
+          worst possible moment to teach anything. The tagline says what the app
+          does in one line; the mechanics moved to a disclosure that a reader
+          opens when they have a reason to care, and Guided mode explains itself
+          in place, beside the numbers it applies to. */}
       <header className="mb-8 border-b border-rule pb-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="font-mono text-2xl font-semibold tracking-[0.22em]">QUANTDESK</h1>
-            <p className="eyebrow mt-2">
-              Flow · Trend · Value · Quality — US &amp; IDX
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+          <div className="min-w-0">
+            <h1 className="font-mono tracking-[0.16em]">QUANTDESK</h1>
+            <p className="mt-1.5 text-base text-ash">
+              Four models read the same stock from different data — and say where they
+              disagree.
             </p>
           </div>
-          <div className="flex flex-col items-end gap-3">
-            <DetailToggle level={detail} onChange={setDetail} />
-            <p className="max-w-sm text-xs leading-relaxed text-ash">
-              Four models read the same ticker from different data. Where they agree is more
-              interesting than what any one of them says alone — with the caveat that they are
-              not equally independent. Every number has an{" "}
-              <span className="text-chalk/80">i</span> beside it explaining what it means.{" "}
-              <span className="text-chalk/80">Guided</span> adds those readings to the page and
-              folds the expert controls away; <span className="text-chalk/80">Full</span> is
-              every control and every indicator.
-            </p>
-          </div>
+          <DetailToggle level={detail} onChange={setDetail} />
         </div>
+        <details className="group mt-4">
+          <summary className="inline-flex h-8 cursor-pointer list-none items-center gap-2
+                              rounded text-meta text-ash transition-colors hover:text-chalk
+                              focus-visible:outline-none focus-visible:ring-2
+                              focus-visible:ring-tech">
+            <ChevronRight aria-hidden
+                          className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
+            How to read this
+          </summary>
+          <div className="prose-col mt-3 space-y-2.5 pl-6 text-meta leading-relaxed text-ash">
+            <p>
+              Flow reads volume, Trend reads price, Value reads the cash flows, Quality reads
+              the balance sheet. Where methods that share no inputs land in the same place,
+              that is worth more than any one of them shouting — and the app measures how much
+              more rather than assuming it.
+            </p>
+            <p>
+              Every number carries an{" "}
+              <span className="font-semibold text-body">i</span> that explains what it
+              measures, whether this value is good or bad, and what would make you act
+              differently — or admits that nothing would.{" "}
+              <span className="font-semibold text-body">Guided</span> puts those readings on
+              the page and folds the expert controls away;{" "}
+              <span className="font-semibold text-body">Full</span> is every control and every
+              indicator.
+            </p>
+          </div>
+        </details>
       </header>
 
       <div className="mb-8">
@@ -200,12 +230,13 @@ export default function Home() {
 
       {!started ? (
         <div className="space-y-6">
-          <div className="rounded border border-dashed border-rule px-6 py-16 text-center">
-            <p className="eyebrow mb-2">No ticker loaded</p>
-            <p className="mx-auto max-w-md text-sm leading-relaxed text-ash">
-              Enter a symbol above, or pick one of the presets. Indonesian listings take the{" "}
-              <code className="font-mono text-chalk/80">.JK</code> suffix; crypto takes a pair such
-              as <code className="font-mono text-chalk/80">BTC-USD</code>.
+          <div className="rounded-xl border border-dashed border-rule px-6 py-16 text-center">
+            <h2 className="mb-2">Enter a ticker to begin</h2>
+            <p className="mx-auto max-w-measure text-base leading-relaxed text-ash">
+              Type a symbol above, or pick one of the presets. Indonesian listings take the{" "}
+              <code className="rounded bg-sunken px-1.5 py-0.5 font-mono text-meta text-body">.JK</code>{" "}
+              suffix; crypto takes a pair such as{" "}
+              <code className="rounded bg-sunken px-1.5 py-0.5 font-mono text-meta text-body">BTC-USD</code>.
             </p>
           </div>
           <RankingPanel onSelect={handleSelect} />
@@ -242,8 +273,8 @@ export default function Home() {
 
           <div>
             <Tabs tabs={TABS} active={tab} onChange={setTab} />
-            <div className="pt-5">
-              {tab === "flow" && (
+            <div className="pt-6">
+              <TabPanel id="flow" active={tab}>
                 <div className="space-y-4">
                   <Panel state={anomaly}>{(d) => <AnomalyPanel data={d} />}</Panel>
                   <EventStudyPanel
@@ -256,8 +287,8 @@ export default function Home() {
                   />
                   <NewsPanel state={news} />
                 </div>
-              )}
-              {tab === "trend" && (
+              </TabPanel>
+              <TabPanel id="trend" active={tab}>
                 <div className="space-y-4">
                   <Panel state={technical}>
                     {(d) => (
@@ -274,8 +305,8 @@ export default function Home() {
                                 ticker: opts.ticker, market: opts.market, universe,
                               })} />
                 </div>
-              )}
-              {tab === "value" && (
+              </TabPanel>
+              <TabPanel id="value" active={tab}>
                 <Panel
                   state={valuation}
                   rescue={(failure) => (
@@ -291,16 +322,16 @@ export default function Home() {
                                     csvUrl={csvUrl()} />
                   )}
                 </Panel>
-              )}
-              {tab === "quality" && (
+              </TabPanel>
+              <TabPanel id="quality" active={tab}>
                 <Panel state={quality}>{(d) => <QualityPanel data={d} />}</Panel>
-              )}
+              </TabPanel>
               {/* THE SNAPSHOT IS ASSEMBLED HERE, FROM WHAT IS ON SCREEN. A
                   thesis is frozen against the numbers the reader was actually
                   looking at, so these are read from the settled legs rather
                   than re-fetched — a snapshot taken from a second request
                   would record a page nobody saw. */}
-              {tab === "thesis" && (
+              <TabPanel id="thesis" active={tab}>
                 <ThesisPanel
                   ticker={resolvedTicker}
                   snapshot={{
@@ -320,8 +351,8 @@ export default function Home() {
                     firedChecks: (preTrade?.flags ?? []).map((f) => f.explain.label),
                   }}
                 />
-              )}
-              {tab === "portfolio" && (
+              </TabPanel>
+              <TabPanel id="portfolio" active={tab}>
                 <PortfolioPanel
                   state={portfolio}
                   ticker={resolvedTicker}
@@ -329,8 +360,8 @@ export default function Home() {
                     candidate: opts.ticker, market: opts.market, holdings, weights,
                   })}
                 />
-              )}
-              {tab === "screen" && (
+              </TabPanel>
+              <TabPanel id="screen" active={tab}>
                 <div className="space-y-8">
                   <RankingPanel onSelect={handleSelect} />
                   {/* The anomaly screener still answers a question the ranking
@@ -338,19 +369,17 @@ export default function Home() {
                       one-off event rather than a standing characteristic. It
                       keeps its own multiple-testing correction, so it stays. */}
                   <div>
-                    <h2 className="eyebrow mb-3">
-                      Or scan for fresh unusual activity instead
-                    </h2>
+                    <h2 className="mb-3">Or scan for fresh unusual activity instead</h2>
                     <ScreenerPanel onSelect={handleSelect} />
                   </div>
                 </div>
-              )}
+              </TabPanel>
             </div>
           </div>
         </div>
       )}
 
-      <footer className="hairline mt-16 pt-5 text-xs leading-relaxed text-ash">
+      <footer className="hairline prose-col mt-16 pt-5 text-meta leading-relaxed text-faint">
         Prices and filings from Yahoo Finance, unaudited and occasionally incomplete for IDX
         listings. Educational and research use only — not investment advice.
       </footer>

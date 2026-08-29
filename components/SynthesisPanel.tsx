@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowRight, EyeOff, Scale } from "lucide-react";
+import { AlertTriangle, ArrowRight, ChevronRight, EyeOff, Scale } from "lucide-react";
 import type { AgreementMeasurement, Synthesis } from "@/lib/types";
 import { TONE_HEX, TONE_TEXT, useDetail } from "@/components/ui/explain";
 import { cn, pct, signed } from "@/lib/utils";
@@ -21,23 +21,56 @@ import { cn, pct, signed } from "@/lib/utils";
  * tensions and the blind spots — which are placed ABOVE the next steps on
  * purpose, so nobody reaches "what to do" without passing "what this cannot
  * tell you".
+ *
+ * WHAT v2 CHANGED, AND WHY NONE OF IT IS A CUT. Not one sentence was deleted.
+ * The panel was unreadable because every block arrived at the same weight: four
+ * lens readings, a cross-check, the tensions, the blind spots and the next
+ * steps, all at 12px, all in the same grey, one after another for eight hundred
+ * words. Three fixes, none of them subtractive:
+ *
+ *   Blocks are TYPED rather than uniform. A tension is a finding and reads like
+ *   one; a blind spot is an admission and reads quieter; the working behind the
+ *   agreement measurement is a disclosure and starts closed. A reader can tell
+ *   from the shape of a block whether it is telling them something new.
+ *
+ *   Long findings open with a LEAD line at 17px and continue at 15px, so
+ *   stopping after one line still leaves you holding the finding.
+ *
+ *   Prose stops at a readable measure. These paragraphs ran to 96ch.
  */
 
-const LENS_HEX: Record<string, string> = {
-  flow: "#35C4A8", trend: "#5B8DEF", value: "#E8B44C", quality: "#F2C14E",
+const LENS_HUE: Record<string, string> = {
+  flow: "#2FBFA4", trend: "#6B9BFF", value: "#E8B44C", quality: "#C9A227",
 };
 
+/**
+ * One region of the argument.
+ *
+ * `weight` is the only knob and it is deliberately coarse: `finding` for things
+ * the app is telling you, `quiet` for things it is admitting. A third option
+ * would be a severity scale, and a severity scale over blind spots is a ranking
+ * of how bad the gaps are — the composite this panel refuses, arriving through
+ * the back door of a font size.
+ */
 function Block({
-  icon: Icon, title, tone, children,
+  icon: Icon, title, tone, weight = "finding", children,
 }: {
-  icon: typeof Scale; title: string; tone?: string; children: React.ReactNode;
+  icon: typeof Scale;
+  title: string;
+  tone?: string;
+  weight?: "finding" | "quiet";
+  children: React.ReactNode;
 }) {
   return (
-    <div className="border-t border-rule px-5 py-4">
-      <div className="mb-2 flex items-center gap-2">
-        <Icon aria-hidden className="h-3.5 w-3.5"
-              style={{ color: tone ? TONE_HEX[tone] : "#7A8CA0" }} />
-        <span className="eyebrow">{title}</span>
+    <div className={cn("border-t border-rule px-5 py-5",
+                       weight === "quiet" && "bg-sunken/40")}>
+      <div className="mb-3 flex items-center gap-2.5">
+        <Icon aria-hidden className="h-4 w-4 shrink-0"
+              style={{ color: tone ? TONE_HEX[tone] : "#8496A9" }} />
+        <h3 className={cn("text-meta font-semibold uppercase tracking-wider",
+                          weight === "quiet" ? "text-ash" : "text-chalk")}>
+          {title}
+        </h3>
       </div>
       {children}
     </div>
@@ -55,103 +88,143 @@ function Block({
  * which is exactly the reading the whole panel exists to prevent. The tone
  * belongs to the sentence above; this block is grey in every state.
  *
- * The six lens pairs sit behind a disclosure because they are supporting
- * detail: the headline is the one pair the app's arithmetic rests on, and the
- * rest is there for a reader who wants to check whether the DECLARED grouping
- * behaves the way it is declared to. Flow and Trend are supposed to be the
- * redundant pair — that is where it would show up, or fail to.
+ * IT STARTS CLOSED IN v2. The working runs to about two hundred words of
+ * statistics and it sat open, at body weight, directly under the sentence it
+ * supports — so a reader met a paragraph about Cohen's kappa before finishing
+ * the paragraph about their company. Closed by default, with the number itself
+ * on the summary line so the disclosure is not a mystery box, and nothing
+ * removed.
  */
 function Measured({ data }: { data: AgreementMeasurement }) {
   const rows = data.pairs.filter((p) => p.usable);
   return (
-    <div className="mt-3 border-t border-rule/60 pt-3">
-      <p className="text-[0.72rem] leading-relaxed text-ash">{data.reading}</p>
-      {rows.length > 0 && (
-        <details className="mt-2">
-          <summary className="eyebrow cursor-pointer list-none text-ash
-                              transition-colors hover:text-chalk focus-visible:outline-none
-                              focus-visible:ring-1 focus-visible:ring-tech">
-            Every pair, measured ({rows.length})
-          </summary>
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-left text-[0.7rem]">
-              <thead>
-                <tr className="eyebrow border-b border-rule [&>th]:py-1.5 [&>th]:pr-3
-                               [&>th]:font-normal">
-                  <th>Pair</th>
-                  <th className="text-right">Agree</th>
-                  <th className="text-right">By chance</th>
-                  <th className="text-right">κ</th>
-                  <th className="text-right">95% interval</th>
-                  <th className="text-right">τb</th>
-                  <th className="text-right">Names</th>
-                </tr>
-              </thead>
-              <tbody className="text-ash">
-                {rows.map((p) => (
-                  <tr key={`${p.a}-${p.b}`} className="border-b border-rule/40 last:border-0">
-                    <td className="py-1.5 pr-3 text-chalk/80">{p.a} · {p.b}</td>
-                    <td className="num py-1.5 pr-3 text-right">{pct(p.observed, 0)}</td>
-                    <td className="num py-1.5 pr-3 text-right">{pct(p.chance, 0)}</td>
-                    <td className="num py-1.5 pr-3 text-right text-chalk/80">
-                      {signed(p.kappa)}
-                    </td>
-                    <td className="num py-1.5 pr-3 text-right">
-                      {p.low === null || p.high === null
-                        ? "—" : `${signed(p.low)} to ${signed(p.high)}`}
-                    </td>
-                    <td className="num py-1.5 pr-3 text-right">{signed(p.tauB)}</td>
-                    <td className="num py-1.5 text-right">{p.n}</td>
+    <div className="mt-4 rounded-lg border border-ruleSoft bg-sunken">
+      <details className="group">
+        <summary className="flex cursor-pointer list-none items-center gap-2.5 px-4 py-3
+                            text-meta text-ash transition-colors hover:text-chalk
+                            focus-visible:outline-none focus-visible:ring-2
+                            focus-visible:ring-tech">
+          <ChevronRight aria-hidden
+                        className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
+          <span className="min-w-0">
+            How much do the two actually overlap? Measured:{" "}
+            <span className="num font-semibold text-chalk">
+              κ = {signed(data.families.kappa)}
+            </span>{" "}
+            across {data.families.n} names
+          </span>
+        </summary>
+
+        <div className="space-y-4 px-4 pb-4 pl-11">
+          <p className="prose-col text-meta text-ash">{data.reading}</p>
+
+          {rows.length > 0 && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-micro">
+                <caption className="sr-only">
+                  Chance-corrected agreement between each pair of lenses
+                </caption>
+                <thead>
+                  <tr className="border-b border-rule text-faint [&>th]:py-2 [&>th]:pr-3
+                                 [&>th]:font-medium">
+                    <th scope="col">Pair</th>
+                    <th scope="col" className="text-right">Agree</th>
+                    <th scope="col" className="text-right">By chance</th>
+                    <th scope="col" className="text-right">κ</th>
+                    <th scope="col" className="text-right">95% interval</th>
+                    <th scope="col" className="text-right">τb</th>
+                    <th scope="col" className="text-right">Names</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      )}
-      <p className="mt-2 text-[0.6rem] leading-relaxed text-ash">
-        Measured {data.measuredOn} across {data.scope}. κ is agreement minus the agreement
-        each pair&apos;s own habits already produce; τb is whether they order the same way.
-        A rate measured today decays with the lists it was taken on — re-run{" "}
-        <code className="font-mono">scripts/measure_lens_agreement.py</code> after changing
-        what any lens concludes.
-      </p>
+                </thead>
+                <tbody className="text-ash">
+                  {rows.map((p) => (
+                    <tr key={`${p.a}-${p.b}`} className="border-b border-ruleSoft last:border-0">
+                      <th scope="row" className="py-2 pr-3 text-left font-medium text-body">
+                        {p.a} · {p.b}
+                      </th>
+                      <td className="num py-2 pr-3 text-right">{pct(p.observed, 0)}</td>
+                      <td className="num py-2 pr-3 text-right">{pct(p.chance, 0)}</td>
+                      <td className="num py-2 pr-3 text-right font-semibold text-chalk">
+                        {signed(p.kappa)}
+                      </td>
+                      <td className="num py-2 pr-3 text-right">
+                        {p.low === null || p.high === null
+                          ? "—" : `${signed(p.low)} to ${signed(p.high)}`}
+                      </td>
+                      <td className="num py-2 pr-3 text-right">{signed(p.tauB)}</td>
+                      <td className="num py-2 text-right">{p.n}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="prose-col text-meta leading-relaxed text-faint">
+            Measured {data.measuredOn} across {data.scope}. κ is agreement minus the agreement
+            each pair&apos;s own habits already produce; τb is whether they order the same way.
+            A rate measured today decays with the lists it was taken on — re-run{" "}
+            <code className="font-mono text-ash">scripts/measure_lens_agreement.py</code> after
+            changing what any lens concludes.
+          </p>
+        </div>
+      </details>
     </div>
   );
 }
 
 export function SynthesisPanel({ data }: { data: Synthesis }) {
-  const detail = useDetail();
-  const guided = detail === "simple";
+  const guided = useDetail() === "simple";
   const { agreement } = data;
 
+  const steps = (
+    <ol className="space-y-3">
+      {data.nextChecks.map((c, i) => (
+        <li key={c} className="flex gap-3">
+          <span aria-hidden
+                className="num mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center
+                           rounded-full bg-tech/15 text-micro font-semibold text-tech">
+            {i + 1}
+          </span>
+          <span className="prose-col text-base leading-relaxed text-body">{c}</span>
+        </li>
+      ))}
+    </ol>
+  );
+
   return (
-    <section className="animate-rise rounded border border-rule bg-panel">
-      <div className="flex flex-wrap items-baseline justify-between gap-3 px-5 py-3">
-        <h2 className="eyebrow">What this adds up to</h2>
-        <span className="num text-[0.68rem] text-ash">{data.headline}</span>
+    <section className="animate-rise overflow-hidden rounded-xl border border-rule bg-panel">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-5 pb-4 pt-5">
+        <h2>What this adds up to</h2>
+        <p className="text-meta text-ash">{data.headline}</p>
       </div>
 
       {/* Each lens in one sentence, colour-keyed to the lens that said it. */}
       <div className="grid gap-px border-t border-rule bg-rule sm:grid-cols-2">
         {data.readings.map((r) => (
-          <div key={r.key} className="bg-panel px-5 py-3.5">
-            <div className="mb-1 flex items-baseline gap-2">
-              <span className="eyebrow" style={{ color: LENS_HEX[r.key] }}>{r.lens}</span>
-              <span className={cn("num text-sm font-semibold", TONE_TEXT[r.tone])}>
+          <div key={r.key} className="bg-panel px-5 py-4">
+            <div className="mb-2 flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+              <span className="text-micro font-semibold uppercase tracking-wider"
+                    style={{ color: LENS_HUE[r.key] }}>
+                {r.lens}
+              </span>
+              <span className={cn("text-lead font-semibold", TONE_TEXT[r.tone])}>
                 {r.verdict}
               </span>
-              <span className="ml-auto text-[0.6rem] text-ash/70">
+              <span className="ml-auto shrink-0 text-micro text-faint">
                 reads {r.familyLabel}
               </span>
             </div>
-            <p className="text-xs leading-relaxed text-chalk/80">{r.sentence}</p>
+            <p className="prose-col text-meta leading-relaxed text-body">{r.sentence}</p>
           </div>
         ))}
       </div>
 
       <Block icon={Scale} title="Do they agree?" tone={agreement.tone}>
-        <p className={cn("text-sm leading-relaxed", TONE_TEXT[agreement.tone])}>
+        {/* THE LEAD. One sentence at 17px in the tone colour, the working below
+            it at 15px and closed. A reader who stops after this line has the
+            finding rather than a fragment of it. */}
+        <p className={cn("prose-col text-lead leading-snug", TONE_TEXT[agreement.tone])}>
           {agreement.text}
         </p>
         {agreement.measured && <Measured data={agreement.measured} />}
@@ -159,11 +232,11 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
 
       {data.tensions.length > 0 && (
         <Block icon={AlertTriangle} title="Where they pull against each other" tone="warn">
-          <ul className="space-y-2.5">
+          <ul className="space-y-4">
             {data.tensions.map((t) => (
-              <li key={t.title}>
-                <span className="text-sm font-semibold text-warn">{t.title}. </span>
-                <span className="text-sm leading-relaxed text-chalk/80">{t.text}</span>
+              <li key={t.title} className="border-l border-warn/40 pl-4">
+                <h4 className="text-lead font-semibold text-warn">{t.title}</h4>
+                <p className="prose-col mt-1 text-base leading-relaxed text-body">{t.text}</p>
               </li>
             ))}
           </ul>
@@ -171,12 +244,12 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
       )}
 
       {data.blindSpots.length > 0 && (
-        <Block icon={EyeOff} title="What this cannot tell you about this company">
-          <ul className="space-y-2.5">
+        <Block icon={EyeOff} title="What this cannot tell you about this company" weight="quiet">
+          <ul className="space-y-3.5">
             {data.blindSpots.map((b) => (
               <li key={b.title}>
-                <span className="text-sm font-semibold text-chalk/90">{b.title}. </span>
-                <span className="text-sm leading-relaxed text-ash">{b.text}</span>
+                <h4 className="text-meta font-semibold text-chalk">{b.title}</h4>
+                <p className="prose-col mt-0.5 text-meta leading-relaxed text-ash">{b.text}</p>
               </li>
             ))}
           </ul>
@@ -187,33 +260,22 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
           collapsed to a single line, because someone who has been here before
           does not need to be told to open the tab they are about to click. */}
       {guided ? (
-        <Block icon={ArrowRight} title="What to check next">
-          <ol className="space-y-2">
-            {data.nextChecks.map((c, i) => (
-              <li key={c} className="flex gap-2.5 text-sm leading-relaxed text-chalk/80">
-                <span className="num shrink-0 text-ash">{String(i + 1).padStart(2, "0")}</span>
-                <span>{c}</span>
-              </li>
-            ))}
-          </ol>
-        </Block>
+        <Block icon={ArrowRight} title="What to check next">{steps}</Block>
       ) : (
-        <details className="group border-t border-rule px-5 py-3">
-          <summary className="eyebrow cursor-pointer list-none text-ash hover:text-chalk">
+        <details className="group border-t border-rule">
+          <summary className="flex cursor-pointer list-none items-center gap-2.5 px-5 py-3.5
+                              text-meta text-ash transition-colors hover:text-chalk
+                              focus-visible:outline-none focus-visible:ring-2
+                              focus-visible:ring-tech">
+            <ChevronRight aria-hidden
+                          className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
             What to check next ({data.nextChecks.length})
           </summary>
-          <ol className="mt-3 space-y-2">
-            {data.nextChecks.map((c, i) => (
-              <li key={c} className="flex gap-2.5 text-sm leading-relaxed text-chalk/80">
-                <span className="num shrink-0 text-ash">{String(i + 1).padStart(2, "0")}</span>
-                <span>{c}</span>
-              </li>
-            ))}
-          </ol>
+          <div className="px-5 pb-5 pl-11">{steps}</div>
         </details>
       )}
 
-      <p className="border-t border-rule px-5 py-3 text-[0.68rem] leading-relaxed text-ash">
+      <p className="prose-col border-t border-rule px-5 py-4 text-meta leading-relaxed text-faint">
         {data.caveat}
       </p>
     </section>

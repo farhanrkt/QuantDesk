@@ -87,16 +87,16 @@ export function PortfolioPanel({
       <Card accent={PORTFOLIO}>
         <CardHeader>
           <CardTitle>What you already own</CardTitle>
-          <span className="font-mono text-[0.65rem] text-ash">
+          <span className="font-mono text-micro text-ash">
             {others.length} holding{others.length === 1 ? "" : "s"}, stored in this browser
           </span>
         </CardHeader>
         <CardBody className="space-y-3">
-          <p className="text-[0.82rem] leading-relaxed text-ash">
+          <p className="text-meta leading-relaxed text-ash">
             Every other lens here reads one company on its own, which hides the most common
             way a portfolio goes wrong: the candidate is the fourth copy of a bet already
             held. Paste what you own — one symbol per line or comma separated, with{" "}
-            <code className="font-mono text-chalk/80">TICKER:WEIGHT</code> if the sizes differ.
+            <code className="font-mono text-body">TICKER:WEIGHT</code> if the sizes differ.
           </p>
           <textarea
             value={raw}
@@ -105,8 +105,8 @@ export function PortfolioPanel({
             spellCheck={false}
             aria-label="Holdings"
             placeholder="AAPL, MSFT:2, BBCA.JK"
-            className="w-full rounded border border-rule bg-ink px-3 py-2 font-mono text-xs
-                       text-chalk placeholder:text-ash/60 focus:border-tech/60
+            className="w-full rounded border border-rule bg-ink px-3 py-2 font-mono text-meta
+                       text-chalk placeholder:text-faint focus:border-tech/60
                        focus:outline-none focus-visible:ring-1 focus-visible:ring-tech"
           />
           <div className="flex flex-wrap items-center gap-3">
@@ -115,7 +115,7 @@ export function PortfolioPanel({
                          disabled={others.length === 0 || !ticker}>
               Compare with {ticker || "this ticker"}
             </ApplyButton>
-            <span className="text-[0.68rem] leading-relaxed text-ash">
+            <span className="text-meta leading-relaxed text-ash">
               Kept in this browser only — this app has no accounts and no database. The list
               is sent to answer this one question and forgotten. It travels in the request
               body rather than the address, which is the one route here that does: a URL is
@@ -130,7 +130,7 @@ export function PortfolioPanel({
           <CardBody>
             <div className="flex gap-3">
               <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
-              <p className="text-sm leading-relaxed text-chalk/80">{state.failure.message}</p>
+              <p className="text-base leading-relaxed text-body">{state.failure.message}</p>
             </div>
           </CardBody>
         </Card>
@@ -148,7 +148,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
     return (
       <Card>
         <CardBody>
-          <p className="text-sm leading-relaxed text-ash">{data.reason}</p>
+          <p className="text-base leading-relaxed text-ash">{data.reason}</p>
         </CardBody>
       </Card>
     );
@@ -162,7 +162,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
       <Card accent={TONE_HEXish(ex.effectiveHoldings?.tone)}>
         <CardHeader>
           <CardTitle>Is this a bet you already hold?</CardTitle>
-          <span className="flex items-center gap-1.5 font-mono text-[0.65rem] text-ash">
+          <span className="flex items-center gap-1.5 font-mono text-micro text-ash">
             {data.observations} trading days
             <Explain explain={ex.effectiveHoldings} />
           </span>
@@ -170,10 +170,10 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
         <CardBody className="space-y-3">
           {independence && (
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="num text-2xl font-semibold text-chalk">
+              <span className="num text-h2 font-semibold text-chalk">
                 {num(independence.after ?? 0, 1)}
               </span>
-              <span className="text-[0.82rem] leading-relaxed text-ash">
+              <span className="text-meta leading-relaxed text-ash">
                 independent bets across {independence.withCandidate} positions — from{" "}
                 {num(independence.before ?? 0, 1)} across {independence.holdings} before
                 adding this one. An unrelated name would have added a full bet.
@@ -181,8 +181,8 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
             </div>
           )}
           {ex.effectiveHoldings && (
-            <p className={cn("text-[0.82rem] leading-relaxed",
-                             TONE_TEXT[ex.effectiveHoldings.tone] ?? "text-chalk/80")}>
+            <p className={cn("text-meta leading-relaxed",
+                             TONE_TEXT[ex.effectiveHoldings.tone] ?? "text-body")}>
               {ex.effectiveHoldings.reading}
             </p>
           )}
@@ -192,9 +192,9 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
       <Card>
         <CardHeader>
           <CardTitle>How closely it tracks each holding</CardTitle>
-          <span className="font-mono text-[0.65rem] text-ash">past year</span>
+          <span className="font-mono text-micro text-ash">past year</span>
         </CardHeader>
-        <CardBody className="space-y-1.5 text-xs">
+        <CardBody className="space-y-1.5 text-meta">
           {(data.pairs ?? []).map((pair) => (
             <ExplainedRow key={pair.ticker}
                           label={pair.ticker}
@@ -202,7 +202,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
                           explain={ex[`holdingCorrelation.${pair.ticker}`]} />
           ))}
           {(data.missing ?? []).length > 0 && (
-            <p className="pt-2 text-[0.7rem] leading-relaxed text-ash">
+            <p className="pt-2 text-meta leading-relaxed text-ash">
               Not compared: {(data.missing ?? []).join(", ")} — too few trading days in
               common to mean anything. Dropped rather than estimated.
             </p>
@@ -214,13 +214,13 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
         <Card>
           <CardHeader>
             <CardTitle>Where the risk actually sits</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               {data.equalWeighted ? "equal weights assumed" : "your weights"}
             </span>
           </CardHeader>
           <CardBody className="px-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Position</th>
@@ -233,7 +233,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
                   {[...rows].sort((a, b) => b.riskShare - a.riskShare).map((row) => {
                     const explain = ex[`riskShare.${row.ticker}`];
                     return (
-                      <tr key={row.ticker} className="border-b border-rule/60 last:border-0">
+                      <tr key={row.ticker} className="border-b border-ruleSoft last:border-0">
                         <td className="num px-5 py-2">
                           <span className="flex items-center gap-1.5">
                             {row.ticker}
@@ -258,7 +258,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
                 </tbody>
               </table>
             </div>
-            <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+            <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
               The two columns are the point. A position holding a tenth of the money and a
               quarter of the risk is not diversified by being one of ten — it is the
               portfolio wearing a smaller name.
@@ -271,23 +271,23 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
         <Card>
           <CardHeader>
             <CardTitle>Why this one is allowed to inform position size</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               measured {data.stability.measuredOn}
             </span>
           </CardHeader>
           <CardBody className="space-y-2">
-            <p className="text-[0.82rem] leading-relaxed text-chalk/80">
+            <p className="text-meta leading-relaxed text-body">
               {data.stability.headline}
             </p>
             <ul className="space-y-1">
               {(data.stability.caveats ?? []).map((caveat) => (
-                <li key={caveat} className="flex gap-2 text-[0.7rem] leading-relaxed text-ash">
+                <li key={caveat} className="flex gap-2 text-meta leading-relaxed text-ash">
                   <Layers aria-hidden className="mt-0.5 h-3 w-3 shrink-0" />
                   <span>{caveat}</span>
                 </li>
               ))}
             </ul>
-            <p className="text-[0.7rem] leading-relaxed text-ash">
+            <p className="text-meta leading-relaxed text-ash">
               Everything above is price and volume only. The filings do not batch, so there
               is no quality or valuation dimension to this comparison — two companies can
               correlate at 0.9 and be entirely different businesses.

@@ -1,0 +1,187 @@
+# Design
+
+<!-- impeccable:design-schema 1 -->
+
+Written from the built v2 surface, 29 August 2026. It describes what shipped; it
+is not a wish list. Anything here that the code contradicts is a bug in this
+file.
+
+## The thesis
+
+**A research desk that ranks evidence, not companies.**
+
+The category default is a dashboard whose largest element is a verdict. This
+refuses that permanently — `PRODUCT.md` constraint 1, guarded by two pytest
+suites. So the largest element is the ticker, the second largest is the question
+each lens is answering, and the reader's own eye does the combining.
+
+The whole v2 problem was that refusing a verdict had been confused with refusing
+*hierarchy*. Every finding arrived at the same weight, so a page that would not
+tell you what to think also would not tell you where to start.
+
+## What was wrong, measured
+
+Taken on the default view (AAPL, Trend tab) before any change:
+
+| | v1 | v2 |
+|---|---|---|
+| Distinct font sizes rendered | 16, with 272 of 402 nodes inside a 3px band | 7, each step ≥15% from its neighbour |
+| Text in the de-emphasis grey | 54% | 36% |
+| Section headings | `h2` at **10.88px**, below the 12px body it introduced | 22px |
+| Prose ≥12 words under 13px | many | 0 |
+| Interactive elements under 24×24 | 48 of 74 | 0 of 59 desktop, 1 of 60 mobile |
+| Longest line | 96ch at 673px, worse on desktop | capped at 40rem / ~68ch |
+| Identical card containers | 71 | three differentiated strata |
+| Desktop page height | 8,415px | 7,034px |
+
+The last row is the one that settles the "less text vs. more readable" argument:
+**not one sentence was deleted, the type got bigger, and the page got shorter.**
+Progressive disclosure did that, not cutting.
+
+## Colour
+
+Two systems that must never blend.
+
+**Identity** — which model is speaking. Structural, always on, says nothing
+about the company. A lens is its colour whether its reading is excellent or
+catastrophic.
+
+| | |
+|---|---|
+| `flow` | `#2FBFA4` |
+| `trend` | `#6B9BFF` |
+| `value` | `#E8B44C` |
+| `quality` | `#C9A227` |
+| `thesis` | `#A78BFA` |
+
+**Tone** — what the server concluded. Arrives from `explain.tone` and from
+nowhere else. A component that picks one of these from the sign of a number has
+re-litigated a judgement Python already made, which is the bug class §14 spent a
+whole audit removing.
+
+| | |
+|---|---|
+| `acc` (good) | `#35C4A8` |
+| `dist` (bad) | `#FF6B6B` |
+| `warn` | `#F2C14E` |
+
+Before v2 these overlapped: the flow lens's teal and the "accumulation" verdict
+were one token doing two jobs, so a lens name and a conclusion rendered
+identically and neither read as meaningful.
+
+**Strata and text.** Colour commits at region scale — a lens hue owns a tinted
+header field, not a 2px strip of trim.
+
+| Ground | | | Text | | |
+|---|---|---|---|---|---|
+| `ink` | `#080C10` | page | `chalk` | `#E7EEF5` | headings, figures |
+| `panel` | `#111820` | standard surface | `body` | `#C3CFDC` | running prose |
+| `raised` | `#161F29` | above the page | `ash` | `#8496A9` | captions, units |
+| `sunken` | `#0C1116` | wells inside a panel | `faint` | `#63748A` | furniture |
+| `rule` / `ruleSoft` | `#1E2A36` / `#18222C` | hairlines | | | |
+
+`body` is the v2 addition and it carries most of the change. v1 had two text
+colours, and 54% of every screen was the dimmer one — when more than half a page
+is de-emphasised, nothing is emphasised.
+
+Dark, and not by category habit: this is read at a desk, at length, beside
+filings and a broker tab, in the evening as often as not.
+
+## Type
+
+`Inter` for prose, `IBM Plex Mono` for measured numerals. Mono is for data, never
+as a costume for "technical" — v1 also spent it on headings, buttons and tab
+labels, and v2 took it back.
+
+| Token | Size | Use |
+|---|---|---|
+| `micro` | 11px | units, footnotes, table headers, `.eyebrow` |
+| `meta` | 13px | captions, table cells, secondary prose |
+| `base` | 15px | running prose. The body default. |
+| `lead` | 17px | the one sentence that carries a finding |
+| `h3` | 17px | subsection |
+| `h2` | 22px | section |
+| `figure` | 24px | a headline number |
+| `h1` | 28px | the ticker |
+
+**The lead-line rule.** A long finding opens at `lead` and continues at `base`,
+so a reader who stops after one line still holds the finding. It is the cheapest
+progressive disclosure available and it costs no interaction.
+
+**`.eyebrow` is a field label and never a heading.** It names the value directly
+beneath it. An `h2` wearing it is the inverted hierarchy v2 exists to fix.
+
+**Measure.** `prose-col` caps at `40rem`; `prose-col-wide` at `46rem`.
+
+## Components
+
+**Surfaces are three, not one.** `panel` for a finding, `sunken` for a well
+inside one (quoted figures, working, raw data), `raised` for something floating
+(controls, popovers). 71 identical containers marked where a box started and not
+what kind of thing was in it.
+
+**Lens chips.** Four lenses, four words, four tone dots, on a fixed grid. The one
+piece of at-a-glance this app allows itself, agreed with the owner on 29 August
+2026. Never summed, averaged, counted or ordered by strength — three greens and a
+red stay three greens and a red, and the synthesis says in sentences what a score
+cannot. They wrap rather than truncate: "Above model range" clipped to "Above
+mod…" is not a shorter verdict, it is a different one.
+
+**Blocks are typed, not uniform.** `finding` for what the app is telling you,
+`quiet` (recessed) for what it is admitting. Deliberately two values: a third
+would be a severity scale, and a severity scale over blind spots is a ranking of
+how bad the gaps are — the composite this app refuses, arriving through a font
+size.
+
+**Disclosures start closed and name what is inside.** The lens-agreement working
+runs to ~200 words of statistics and put Cohen's kappa in front of a reader who
+had not finished the paragraph about their company. Closed, with κ on the summary
+line so it is not a mystery box.
+
+**Info button, 24×24.** The app's central promise is that every number explains
+itself; v1 drew the affordance carrying it at 14px. The ring grew, not the glyph,
+so a dense table row still reads as a table row.
+
+**Icons** are lucide, one stroke weight. No emoji, no unicode glyphs.
+
+## Accessibility
+
+Not a conformance claim — these are the things v2 actually fixed.
+
+- **Target size.** 48 of 74 elements were under 24×24. Now 0 on desktop.
+- **Declared ARIA patterns now keep their contracts.** Both tablists and both
+  radiogroups declared roles and implemented none of the keyboard behaviour those
+  roles promise. A screen reader announcing "tab, 2 of 7" where arrow keys do
+  nothing is worse than a plain button. Roving tabindex, arrow keys, Home/End,
+  `aria-controls`, and a real `role="tabpanel"`.
+- **The `Explain` popover is no longer `role="tooltip"`.** It is three labelled
+  paragraphs with a heading and a close button, opened by a click. A tooltip is a
+  short non-interactive label.
+- **Contrast.** Eight sites used `text-ash` at 40–70% alpha, composited to
+  2.2–3.2:1. Gone with the ladder. Base palette clears AA: `ash` on `panel` is
+  4.82:1, `body` 8.9:1.
+- **iOS zoom.** Inputs are 16px below `sm`. Under that, iOS zooms on focus and
+  does not zoom back.
+- **Browser surfaces** are themed: selection, caret, scrollbars, focus ring.
+
+## Motion
+
+One authored moment: `animate-rise`, 260ms, `cubic-bezier(0.22,1,0.36,1)`, on
+panels as they arrive. A pending lens pulses its own rule at the same rate its
+panel skeleton does, so a slow engine reads as slow rather than broken.
+Everything respects `prefers-reduced-motion`.
+
+## What this design may not do
+
+Inherited from `PRODUCT.md` and repeated here because a visual system is exactly
+where they get broken by accident.
+
+1. No composite verdict, in any visual form — no count, badge, ring, meter,
+   gauge, ordering, or size difference that implies one lens outranks another.
+2. Colour by `explain.tone` only. Six documented sign-based exceptions survive
+   where Python has no interpretation to offer.
+3. Absence never renders as a pass. There is no green tick in the pre-trade
+   panel because there is no pass state to draw.
+4. Full mode may not be degraded to serve Guided.
+5. Explanations may be restructured or progressively disclosed. They may not be
+   deleted.

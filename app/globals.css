@@ -5,23 +5,65 @@
 @layer base {
   html { color-scheme: dark; }
   body {
-    @apply bg-ink text-chalk antialiased;
+    @apply bg-ink text-body antialiased;
+    /* 15px, not 12px. The single change that does most of the work: v1 set no
+       base size at all, so every component picked its own between 8.8 and 12px
+       and the page had sixteen of them. */
+    @apply text-base;
     background-image:
-      radial-gradient(60rem 30rem at 50% -10rem, rgba(91,141,239,0.07), transparent 70%);
+      radial-gradient(70rem 34rem at 50% -12rem, rgba(107,155,255,0.06), transparent 72%);
     background-repeat: no-repeat;
   }
+
   /* Every numeral in this product is monospaced and tabular. Columns of
-     figures that jitter as they update are unreadable. */
+     figures that jitter as they update are unreadable. Mono is for MEASURED
+     values only — v1 also spent it on headings, buttons and tab labels, where
+     it was a costume for "technical" rather than a legibility decision. */
   .num { @apply font-mono tabular-nums; }
-  ::selection { background: rgba(53,196,168,0.28); }
+
+  /* Headings carry their own weight. v1 rendered its two most important section
+     headings through `.eyebrow` — 10.88px uppercase grey — which put them below
+     the body text they introduced. */
+  h1 { @apply text-h1 font-semibold tracking-tight text-chalk; }
+  h2 { @apply text-h2 font-semibold tracking-tight text-chalk; }
+  h3 { @apply text-h3 font-semibold text-chalk; }
+
+  ::selection { background: rgba(53,196,168,0.28); color: #E7EEF5; }
   :focus-visible { @apply outline-none ring-2 ring-tech/70 ring-offset-2 ring-offset-ink; }
+
+  /* Browser surfaces belong to the design system too. */
+  html { caret-color: #6B9BFF; scrollbar-color: #2A3948 #080C10; scrollbar-width: thin; }
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: #080C10; }
+  ::-webkit-scrollbar-thumb {
+    background: #2A3948; border-radius: 99px; border: 3px solid #080C10;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #3A4C5E; }
+  ::-webkit-scrollbar-corner { background: #080C10; }
+  a { text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
 }
 
 @layer components {
+  /* A FIELD LABEL, and only that. It names the value directly beneath it and is
+     never a heading — an `h2` wearing this class is the inverted hierarchy v2
+     exists to fix. Kept uppercase because at 11px in a dense grid the extra
+     word-shape helps, and dropped a size from v1's 0.68rem. */
   .eyebrow {
-    @apply font-mono text-[0.68rem] uppercase tracking-[0.18em] text-ash;
+    @apply font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-faint;
   }
   .hairline { @apply border-t border-rule; }
+
+  /* Running prose stops at a readable measure instead of spanning the container.
+     v1's synthesis paragraphs ran to 96ch in a 673px pane and further on a
+     desktop; 65-75ch is where the eye stops losing the line return. */
+  .prose-col { @apply max-w-measure text-base text-body; }
+  .prose-col-wide { @apply max-w-measureWide text-base text-body; }
+
+  /* THE LEAD SENTENCE. Long findings open with one line at 17px and continue at
+     15px, so a reader who stops after the first line has still been told the
+     thing. It is the cheapest form of progressive disclosure there is and it
+     needs no interaction. */
+  .lead { @apply text-lead text-chalk; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -34,4 +76,4 @@
 
 /* Recharts overrides — the library's defaults are light-theme. */
 .recharts-cartesian-grid line { stroke: #1E2A36; }
-.recharts-text { fill: #7A8CA0; font-size: 11px; }
+.recharts-text { fill: #8496A9; font-size: 11px; }

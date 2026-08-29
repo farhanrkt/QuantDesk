@@ -40,7 +40,7 @@ function carTone(summary: CarSummary | null): string {
 function CarRow({ horizon, summary }: { horizon: string; summary: CarSummary | null }) {
   if (!summary) {
     return (
-      <tr className="border-b border-rule/60 last:border-0">
+      <tr className="border-b border-ruleSoft last:border-0">
         <td className="num px-5 py-2">+{horizon}d</td>
         <td colSpan={5} className="px-5 py-2 text-ash">too few events to test</td>
       </tr>
@@ -48,7 +48,7 @@ function CarRow({ horizon, summary }: { horizon: string; summary: CarSummary | n
   }
   const sig = significance(summary.pValue);
   return (
-    <tr className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
+    <tr className="border-b border-ruleSoft last:border-0 hover:bg-raised/60">
       <td className="num px-5 py-2">+{horizon}d</td>
       <td className={cn("num px-5 py-2 text-right", carTone(summary))}>
         {summary.meanCar >= 0 ? "+" : ""}{pct(summary.meanCar, 2)}
@@ -85,9 +85,9 @@ export function EventStudyPanel({
       <Card>
         <CardHeader><CardTitle>Has this signal ever worked?</CardTitle></CardHeader>
         <CardBody className="space-y-3">
-          <p className="text-xs leading-relaxed text-ash">
+          <p className="text-meta leading-relaxed text-ash">
             Measure the cumulative abnormal return after every anomaly detected on{" "}
-            <span className="font-mono text-chalk/80">{ticker || "this ticker"}</span> over five
+            <span className="font-mono text-body">{ticker || "this ticker"}</span> over five
             years, against a market model fitted on the 120 trading days ending ten days before
             each event. The answer is frequently that there is no measurable effect — which is
             worth knowing before acting on the panel above.
@@ -107,7 +107,7 @@ export function EventStudyPanel({
           <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
           <div>
             <div className="eyebrow mb-1 text-dist">The study could not run</div>
-            <p className="text-sm leading-relaxed text-chalk/80">{state.failure.message}</p>
+            <p className="text-base leading-relaxed text-body">{state.failure.message}</p>
           </div>
         </div>
       </Card>
@@ -121,7 +121,7 @@ export function EventStudyPanel({
       <Card>
         <CardHeader><CardTitle>Signal validation</CardTitle></CardHeader>
         <CardBody>
-          <p className="text-sm leading-relaxed text-ash">{study.reason}</p>
+          <p className="text-base leading-relaxed text-ash">{study.reason}</p>
         </CardBody>
       </Card>
     );
@@ -136,13 +136,13 @@ export function EventStudyPanel({
       <Card accent={anySignificant ? (headline && headline.meanCar >= 0 ? UP : DOWN) : undefined}>
         <CardHeader>
           <CardTitle>Abnormal returns after each anomaly</CardTitle>
-          <span className="font-mono text-[0.65rem] text-ash">
+          <span className="font-mono text-micro text-ash">
             {study.events} of {anomalies} events · {period} · vs {benchmark}
           </span>
         </CardHeader>
         <CardBody className="px-0">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-meta">
               <thead>
                 <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                   <th>Horizon</th>
@@ -162,9 +162,9 @@ export function EventStudyPanel({
             </table>
           </div>
 
-          <div className={cn("mx-5 mt-4 rounded border px-4 py-3 text-xs leading-relaxed",
+          <div className={cn("mx-5 mt-4 rounded border px-4 py-3 text-meta leading-relaxed",
                              anySignificant
-                               ? "border-acc/40 bg-acc/5 text-chalk/85"
+                               ? "border-acc/40 bg-acc/5 text-body"
                                : "border-rule bg-raised/40 text-ash")}>
             {anySignificant
               ? "At least one horizon shows abnormal returns distinguishable from zero at the 5% level. In-sample, on one ticker, with overlapping windows — treat it as a reason to test further, not as a result."
@@ -178,7 +178,7 @@ export function EventStudyPanel({
           <CardHeader><CardTitle>By flow direction</CardTitle></CardHeader>
           <CardBody className="px-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Direction</th><th>Horizon</th>
@@ -191,7 +191,7 @@ export function EventStudyPanel({
                   {Object.entries(study.byDirection).flatMap(([direction, horizons]) =>
                     Object.entries(horizons).map(([horizon, summary]) => (
                       <tr key={`${direction}-${horizon}`}
-                          className="border-b border-rule/60 last:border-0">
+                          className="border-b border-ruleSoft last:border-0">
                         <td className="px-5 py-2"
                             style={{ color: direction === "Accumulation" ? UP : DOWN }}>
                           {direction}
@@ -210,7 +210,7 @@ export function EventStudyPanel({
                 </tbody>
               </table>
             </div>
-            <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+            <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
               The question that matters is not whether anomalies predict returns, but whether the
               accumulation label predicts something different from the distribution one. If both
               rows look alike, the direction classifier is not carrying information.
@@ -220,7 +220,7 @@ export function EventStudyPanel({
       )}
 
       {earningsProximity.available && earningsProximity.tagged > 0 && (
-        <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-xs leading-relaxed text-warn">
+        <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-meta leading-relaxed text-warn">
           {earningsProximity.tagged} of {earningsProximity.total} anomalies fall within{" "}
           {earningsProximity.window} days of an earnings release. Those are the market repricing
           an announcement rather than anyone&apos;s footprint, and the drift afterwards is a
@@ -229,14 +229,14 @@ export function EventStudyPanel({
       )}
 
       {study.caveat && (
-        <p className="text-xs leading-relaxed text-ash">{study.caveat}</p>
+        <p className="text-meta leading-relaxed text-ash">{study.caveat}</p>
       )}
       {/* HOW THE EVENTS WERE CHOSEN is a different question from how each CAR
           was measured, and only the second was ever disclosed here. The market
           model's estimation window ends before the event; the detector that
           decides which days ARE events is fitted on the whole window. */}
       {study.selectionCaveat && (
-        <p className="text-xs leading-relaxed text-ash">{study.selectionCaveat}</p>
+        <p className="text-meta leading-relaxed text-ash">{study.selectionCaveat}</p>
       )}
     </div>
   );

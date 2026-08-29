@@ -116,16 +116,16 @@ export function ThesisPanel({
       <Card accent={THESIS}>
         <CardHeader>
           <CardTitle>Write it down before you act</CardTitle>
-          <span className="font-mono text-[0.65rem] text-ash">
+          <span className="font-mono text-micro text-ash">
             {entries.length} entr{entries.length === 1 ? "y" : "ies"}, in this browser only
           </span>
         </CardHeader>
         <CardBody className="space-y-4">
-          <p className="text-[0.82rem] leading-relaxed text-ash">
+          <p className="text-meta leading-relaxed text-ash">
             The point of writing a thesis down is that the version you wrote before you knew
             the outcome is still there afterwards, in the words you actually used. So an
             entry is timestamped, snapshotted against what this app was showing at the time,
-            and <span className="text-chalk/80">cannot be edited once saved</span>. Nothing
+            and <span className="text-body">cannot be edited once saved</span>. Nothing
             here is ever scored — no verdict, no profit and loss, no marking of your own
             homework.
           </p>
@@ -138,8 +138,8 @@ export function ThesisPanel({
               rows={3}
               aria-label="What has to be true"
               placeholder="The specific thing you are betting on."
-              className="w-full rounded border border-rule bg-ink px-3 py-2 text-xs
-                         leading-relaxed text-chalk placeholder:text-ash/60
+              className="w-full rounded border border-rule bg-ink px-3 py-2 text-meta
+                         leading-relaxed text-chalk placeholder:text-faint
                          focus:border-tech/60 focus:outline-none
                          focus-visible:ring-1 focus-visible:ring-tech"
             />
@@ -153,12 +153,12 @@ export function ThesisPanel({
               rows={2}
               aria-label="What would falsify this"
               placeholder="Something observable, that you would actually notice."
-              className="w-full rounded border border-rule bg-ink px-3 py-2 text-xs
-                         leading-relaxed text-chalk placeholder:text-ash/60
+              className="w-full rounded border border-rule bg-ink px-3 py-2 text-meta
+                         leading-relaxed text-chalk placeholder:text-faint
                          focus:border-tech/60 focus:outline-none
                          focus-visible:ring-1 focus-visible:ring-tech"
             />
-            <p className="text-[0.68rem] leading-relaxed text-ash">
+            <p className="text-meta leading-relaxed text-ash">
               A thesis with no falsifier is a hope. If nothing you could observe would change
               your mind, the entry below will still save it — but you will read it back one
               day and know.
@@ -180,7 +180,7 @@ export function ThesisPanel({
             <ApplyButton onClick={save} disabled={!ready}>Lock this entry</ApplyButton>
           </div>
           {!ready && (
-            <p className="text-[0.68rem] text-ash">
+            <p className="text-meta text-ash">
               Both the thesis and the falsifier are needed. Half a thesis is worse than none —
               it reads back as agreement with whatever happened.
             </p>
@@ -192,16 +192,16 @@ export function ThesisPanel({
         <Card accent="#F2C14E">
           <CardHeader>
             <CardTitle>Where this disagrees with the page</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">before you save</span>
+            <span className="font-mono text-micro text-ash">before you save</span>
           </CardHeader>
           <CardBody className="space-y-2.5">
             {live.map((c) => (
               <div key={c.key}>
-                <span className="text-sm font-semibold text-warn">{c.title}. </span>
-                <span className="text-sm leading-relaxed text-chalk/80">{c.detail}</span>
+                <span className="text-base font-semibold text-warn">{c.title}. </span>
+                <span className="text-base leading-relaxed text-body">{c.detail}</span>
               </div>
             ))}
-            <p className="text-[0.7rem] leading-relaxed text-ash">
+            <p className="text-meta leading-relaxed text-ash">
               Disagreeing with the model is a respectable thing to do — the reverse DCF exists
               to be argued with. Disagreeing without noticing is not, and that is all this
               names.
@@ -214,7 +214,7 @@ export function ThesisPanel({
         <Card>
           <CardHeader>
             <CardTitle>What you wrote about {ticker.toUpperCase()}</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">as written, unedited</span>
+            <span className="font-mono text-micro text-ash">as written, unedited</span>
           </CardHeader>
           <CardBody className="space-y-4 px-0">
             {forTicker.map((entry) => (
@@ -228,12 +228,12 @@ export function ThesisPanel({
       <Card>
         <CardHeader><CardTitle>Where this is kept</CardTitle></CardHeader>
         <CardBody className="space-y-3">
-          <p className="text-[0.78rem] leading-relaxed text-ash">
+          <p className="text-meta leading-relaxed text-ash">
             In this browser&apos;s local storage and nowhere else. This app has no accounts
             and no database, and a thesis is the last thing that should be an exception — so
             it is never sent anywhere, not even to draw the checks above, which run here.
           </p>
-          <p className="text-[0.78rem] leading-relaxed text-warn/90">
+          <p className="text-meta leading-relaxed text-warn/90">
             That also means it is one cleared cache, one private window or one new machine
             away from gone. Local storage is not a place to keep something you care about.
             Export it.
@@ -244,7 +244,7 @@ export function ThesisPanel({
             disabled={entries.length === 0}
             className={cn(
               "inline-flex h-9 items-center gap-2 rounded border border-rule px-4",
-              "font-mono text-[0.65rem] uppercase tracking-[0.14em] text-chalk",
+              "font-mono text-micro uppercase tracking-[0.14em] text-chalk",
               "transition-colors hover:border-tech/60 disabled:cursor-not-allowed",
               "disabled:opacity-40 focus:outline-none focus-visible:ring-1 focus-visible:ring-tech",
             )}
@@ -268,31 +268,33 @@ function Entry({
     <div className="border-t border-rule px-5 pt-4 first:border-0 first:pt-0">
       <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <Lock aria-label="locked" className="h-3 w-3 text-ash" />
-        <span className="num text-[0.7rem] text-ash">
+        <span className="num text-micro text-ash">
           {new Date(entry.written).toLocaleString()}
         </span>
-        <span className="text-[0.68rem] text-ash">
+        <span className="text-micro text-ash">
           {entry.horizonYears}-year horizon
           {entry.growthBelief != null && `, expecting ${(entry.growthBelief * 100).toFixed(0)}% a year`}
           {entry.positionShare != null && `, ${(entry.positionShare * 100).toFixed(0)}% of the account`}
         </span>
         <button type="button" onClick={onDelete}
                 aria-label="Delete this entry"
-                className="ml-auto text-ash transition-colors hover:text-dist
+                className="-mr-1 ml-auto inline-flex h-6 w-6 shrink-0 items-center
+                           justify-center rounded text-ash transition-colors hover:bg-dist/10
+                           hover:text-dist
                            focus:outline-none focus-visible:ring-1 focus-visible:ring-tech">
           <Trash2 aria-hidden className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      <p className="text-sm leading-relaxed text-chalk/90">{entry.thesis}</p>
-      <p className="mt-1.5 text-[0.8rem] leading-relaxed text-ash">
+      <p className="text-base leading-relaxed text-body">{entry.thesis}</p>
+      <p className="mt-1.5 text-meta leading-relaxed text-ash">
         <span className="eyebrow mr-1.5">Wrong if</span>{entry.falsifier}
       </p>
 
       {written.length > 0 && (
         <ul className="mt-2 space-y-1">
           {written.map((c) => (
-            <li key={c.key} className="flex gap-2 text-[0.7rem] leading-relaxed text-ash">
+            <li key={c.key} className="flex gap-2 text-meta leading-relaxed text-ash">
               <AlertTriangle aria-hidden className="mt-0.5 h-3 w-3 shrink-0 text-warn/70" />
               <span>{c.title}, at the time of writing.</span>
             </li>
@@ -305,15 +307,15 @@ function Entry({
           <div className="eyebrow mb-1.5">What has moved since</div>
           <ul className="space-y-1">
             {moved.map((d) => (
-              <li key={d.key} className="flex items-baseline gap-2 text-[0.72rem]">
+              <li key={d.key} className="flex items-baseline gap-2 text-micro">
                 <span className="text-ash">{d.label}</span>
                 <span className="num ml-auto text-ash">{d.then}</span>
                 <span className="text-ash">&rarr;</span>
-                <span className="num text-chalk/90">{d.now}</span>
+                <span className="num text-body">{d.now}</span>
               </li>
             ))}
           </ul>
-          <p className="mt-1.5 text-[0.65rem] leading-relaxed text-ash">
+          <p className="mt-1.5 text-meta leading-relaxed text-ash">
             Movement, not a verdict. Nothing here says whether the thesis was right.
           </p>
         </div>

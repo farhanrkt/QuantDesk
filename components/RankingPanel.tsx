@@ -24,10 +24,10 @@ const DEFAULT_CUSTOM = "AAPL, NVDA, TSLA, JPM, KO, BBCA.JK, BBRI.JK, TLKM.JK";
 
 /** Percentiles get a heat colour, not a verdict colour — they are positions. */
 function heat(percentile: number | null): string {
-  if (percentile == null) return "text-ash/50";
+  if (percentile == null) return "text-faint";
   if (percentile >= 80) return "text-acc";
   if (percentile >= 60) return "text-acc/70";
-  if (percentile >= 40) return "text-chalk/70";
+  if (percentile >= 40) return "text-body";
   if (percentile >= 20) return "text-warn/80";
   return "text-dist/80";
 }
@@ -219,13 +219,13 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
         <CardHeader>
           <CardTitle>Scan a universe, then inspect the best few</CardTitle>
           {data && (
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               {data.ranked} of {data.requested} ranked
             </span>
           )}
         </CardHeader>
         <CardBody className="space-y-4">
-          <p className="text-[0.82rem] leading-relaxed text-ash">
+          <p className="text-meta leading-relaxed text-ash">
             This ranks every name in a list against the others on seven signals built from price
             and volume, then orders them. It is a shortlisting tool: its job is to decide which
             three or four names are worth opening the four lenses on, not to tell you what to
@@ -268,14 +268,14 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                 rows={3}
                 className={cn(
                   "w-full rounded border border-rule bg-raised px-3 py-2",
-                  "font-mono text-xs text-chalk transition-colors focus:border-tech/60",
+                  "font-mono text-meta text-chalk transition-colors focus:border-tech/60",
                 )}
               />
             </Field>
           )}
 
           {selected && (
-            <p className="text-[0.7rem] leading-relaxed text-ash">
+            <p className="text-meta leading-relaxed text-ash">
               {selected.note}{" "}
               <span className="text-warn/90">
                 This membership list was transcribed on {selected.asOf} and is not updated
@@ -293,7 +293,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
       {state.status === "loading" && (
         <Card>
           <CardBody>
-            <p className="mb-3 text-sm leading-relaxed text-ash">
+            <p className="mb-3 text-base leading-relaxed text-ash">
               Fetching {choice === CUSTOM ? "your list" : `${selected?.count ?? ""} symbols`} in
               batches of fifty and ranking them against each other. This takes a few seconds —
               one request per fifty names rather than one per name is what makes a universe
@@ -310,7 +310,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
             <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
             <div>
               <div className="eyebrow mb-1 text-dist">The scan could not run</div>
-              <p className="text-sm leading-relaxed text-chalk/80">{state.failure.message}</p>
+              <p className="text-base leading-relaxed text-body">{state.failure.message}</p>
             </div>
           </div>
         </Card>
@@ -324,14 +324,14 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               <CardHeader>
                 <CardTitle>How independent are these signals?</CardTitle>
                 {data.correlation.effectiveSignals != null && (
-                  <span className="num text-xs font-semibold text-warn">
+                  <span className="num text-meta font-semibold text-warn">
                     {num(data.correlation.effectiveSignals, 1)} of{" "}
                     {data.correlation.measuredSignals} independent
                   </span>
                 )}
               </CardHeader>
               <CardBody className="space-y-3">
-                <p className="text-[0.85rem] leading-relaxed text-chalk/85">
+                <p className="text-meta leading-relaxed text-body">
                   {data.correlation.reading}
                 </p>
                 {!simple && (data.correlation.pairs?.length ?? 0) > 0 && (
@@ -342,14 +342,14 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                         signals.find((s) => s.key === k)?.label ?? k;
                       return (
                         <div key={key}
-                             className="flex items-baseline justify-between gap-3 border-b border-rule/40 pb-1 text-xs last:border-0">
+                             className="flex items-baseline justify-between gap-3 border-b border-ruleSoft pb-1 text-meta last:border-0">
                           <span className="flex items-center gap-1.5 text-ash">
                             {labels(pair.a)} vs {labels(pair.b)}
                             <Explain explain={data.explain?.[key]} />
                           </span>
                           <span className={cn("num font-semibold",
                                               Math.abs(pair.correlation) > 0.7
-                                                ? "text-warn" : "text-chalk/70")}>
+                                                ? "text-warn" : "text-body")}>
                             {pair.correlation >= 0 ? "+" : ""}{num(pair.correlation)}
                           </span>
                         </div>
@@ -357,7 +357,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                     })}
                   </div>
                 )}
-                <p className="text-[0.7rem] leading-relaxed text-ash">
+                <p className="text-meta leading-relaxed text-ash">
                   Seven columns look like seven tests. Where two of them correlate above 0.7 they
                   are one test wearing two labels, and the composite gives that single fact
                   double weight. The figure in the header is the participation ratio of the
@@ -378,7 +378,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                   Dow ranking as a Nasdaq one is exactly the class of quiet
                   misattribution this codebase has been bitten by before. */}
               {stale && (
-                <span className="font-mono text-[0.65rem] font-normal normal-case text-warn">
+                <span className="font-mono text-micro font-normal normal-case text-warn">
                   showing the previous scan — press Rank them for {pendingName}
                 </span>
               )}
@@ -390,9 +390,9 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Filter ticker"
                   aria-label="Filter by ticker"
-                  className="h-7 w-28 rounded border border-rule bg-raised px-2 font-mono text-[0.7rem] text-chalk focus:border-tech/60"
+                  className="h-7 w-28 rounded border border-rule bg-raised px-2 font-mono text-micro text-chalk focus:border-tech/60"
                 />
-                <label className="flex items-center gap-1.5 text-[0.65rem] text-ash">
+                <label className="flex items-center gap-1.5 text-micro text-ash">
                   min score
                   <input
                     type="number"
@@ -401,7 +401,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                     max={100}
                     onChange={(e) => setMinComposite(Number(e.target.value) || 0)}
                     aria-label="Minimum composite score"
-                    className="h-7 w-14 rounded border border-rule bg-raised px-1.5 font-mono text-[0.7rem] text-chalk focus:border-tech/60"
+                    className="h-7 w-14 rounded border border-rule bg-raised px-1.5 font-mono text-micro text-chalk focus:border-tech/60"
                   />
                 </label>
                 <DownloadButton onClick={download}>CSV</DownloadButton>
@@ -412,7 +412,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                   because a row of seven percentiles is unreadable once you can
                   no longer see which name it belongs to. */}
               <div className="max-h-[36rem] overflow-auto">
-                <table className="w-full text-left text-xs">
+                <table className="w-full text-left text-meta">
                   <thead className="sticky top-0 z-20 bg-panel">
                     <tr className="eyebrow border-b border-rule [&>th]:px-3 [&>th]:py-2 [&>th]:font-normal [&>th]:align-bottom">
                       <th scope="col" className="w-8 bg-panel" />
@@ -448,7 +448,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                       return (
                         <Fragment key={row.ticker}>
                           <tr
-                              className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
+                              className="border-b border-ruleSoft last:border-0 hover:bg-raised/60">
                             <td className="px-3 py-1.5">
                               <button
                                 type="button"
@@ -493,12 +493,12 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                                 onChange={() => togglePick(row.ticker)}
                                 disabled={!picked.includes(row.ticker) && picked.length >= maxDeepen}
                                 aria-label={`Add ${row.ticker} to the shortlist`}
-                                className="h-3 w-3 accent-tech"
+                                className="h-[18px] w-[18px] shrink-0 accent-tech"
                               />
                             </td>
                           </tr>
                           {open && (
-                            <tr className="border-b border-rule/60">
+                            <tr className="border-b border-ruleSoft">
                               <td colSpan={signals.length + 6} className="bg-ink/40 px-5 py-4">
                                 <WhyRanked row={row} signals={allSignals} deep={deep} />
                               </td>
@@ -512,13 +512,13 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               </div>
 
               {rows.length === 0 && (
-                <p className="px-5 py-3 text-sm text-ash">
+                <p className="px-5 py-3 text-base text-ash">
                   Nothing matches the filter.
                 </p>
               )}
 
               <div className="space-y-2 px-5 pt-4">
-                <p className="text-[0.7rem] leading-relaxed text-ash">
+                <p className="text-meta leading-relaxed text-ash">
                   Every number in this table is a percentile within this scan, 0 to 100. The
                   score is a weighted mean of them — weights follow how well each signal is
                   supported in the literature, shown as a dot beside each column heading, and
@@ -526,7 +526,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                   to see how it got its score; click the ticker to load it into all four lenses.
                 </p>
                 {data.missing.length > 0 && (
-                  <p className="text-[0.7rem] leading-relaxed text-warn/90">
+                  <p className="text-meta leading-relaxed text-warn/90">
                     {data.missing.length} symbol{data.missing.length === 1 ? "" : "s"} could not
                     be ranked: <span className="font-mono">{data.missing.join(", ")}</span>. That
                     is either a delisting or acquisition since the list was written, or too
@@ -535,7 +535,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                   </p>
                 )}
                 {data.benchmark == null && (
-                  <p className="text-[0.7rem] leading-relaxed text-warn/90">
+                  <p className="text-meta leading-relaxed text-warn/90">
                     The benchmark index did not fetch, so the &quot;versus the index&quot; column
                     is empty for every name and each score is built from one fewer signal.
                   </p>
@@ -554,12 +554,12 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
           <Card accent={picked.length > 0 ? "#5B8DEF" : undefined}>
             <CardHeader>
               <CardTitle>Then look at the filings</CardTitle>
-              <span className="font-mono text-[0.65rem] text-ash">
+              <span className="font-mono text-micro text-ash">
                 {picked.length}/{maxDeepen} picked
               </span>
             </CardHeader>
             <CardBody className="space-y-3">
-              <p className="text-[0.8rem] leading-relaxed text-ash">
+              <p className="text-meta leading-relaxed text-ash">
                 Everything above is computed from price and volume, which is the half that can be
                 fetched for a hundred names at once. Accounting quality and intrinsic value need
                 the filings, and those come one company at a time — a few seconds each — which is
@@ -574,7 +574,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                   Run quality &amp; value
                 </ApplyButton>
                 {picked.length === 0 && (
-                  <span className="text-[0.7rem] text-ash">
+                  <span className="text-micro text-ash">
                     Pick some names in the table first.
                   </span>
                 )}
@@ -582,7 +582,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
 
               {deepState.status === "loading" && (
                 <>
-                  <p className="text-[0.75rem] leading-relaxed text-ash">
+                  <p className="text-meta leading-relaxed text-ash">
                     Reading the filings for {picked.length} compan
                     {picked.length === 1 ? "y" : "ies"}, one at a time — a few seconds each.
                   </p>
@@ -591,14 +591,14 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               )}
 
               {deepState.status === "error" && (
-                <p className="text-xs leading-relaxed text-dist">
+                <p className="text-meta leading-relaxed text-dist">
                   {deepState.failure.message}
                 </p>
               )}
 
               {deepState.status === "ready" && (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-left text-meta">
                     <thead>
                       <tr className="eyebrow border-b border-rule [&>th]:px-3 [&>th]:py-2 [&>th]:font-normal">
                         <th>Ticker</th>
@@ -614,7 +614,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                       ))}
                     </tbody>
                   </table>
-                  <p className="pt-3 text-[0.7rem] leading-relaxed text-ash">
+                  <p className="pt-3 text-meta leading-relaxed text-ash">
                     {deepState.data.caveat}
                   </p>
                 </div>
@@ -624,7 +624,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
         </>
       )}
 
-      <p className="text-xs leading-relaxed text-ash">
+      <p className="text-meta leading-relaxed text-ash">
         Ranking is a shortlisting device. It says which names stand out against these particular
         peers on these particular measures today, which is a much weaker claim than it looks —
         and none of the signals here knows anything about the business. Educational and research
@@ -688,16 +688,16 @@ function WhyRanked({
                  className="rounded border border-rule bg-panel px-3 py-2">
               <div className="mb-1 flex items-baseline justify-between gap-2">
                 <span className="eyebrow">{signal.label}</span>
-                <span className={cn("num text-sm font-semibold",
+                <span className={cn("num text-base font-semibold",
                                     heat(cell?.percentile ?? null))}>
                   {cell?.percentile == null ? "—" : cell.percentile.toFixed(0)}
                 </span>
               </div>
-              <p className="text-[0.7rem] leading-relaxed text-ash">
+              <p className="text-meta leading-relaxed text-ash">
                 {explanation?.reading ?? definition}
               </p>
               {explanation && (
-                <p className={cn("mt-1 text-[0.65rem]",
+                <p className={cn("mt-1 text-micro",
                                  TONE_TEXT[explanation.tone] ?? "text-ash")}>
                   weight {signal.weight.toFixed(1)} · {signal.evidence} evidence
                 </p>
@@ -707,14 +707,14 @@ function WhyRanked({
         })}
       </div>
       {deep && (
-        <div className="rounded border border-tech/40 bg-tech/5 px-3 py-2 text-[0.72rem] leading-relaxed">
+        <div className="rounded border border-tech/40 bg-tech/5 px-3 py-2 text-meta leading-relaxed">
           <span className="eyebrow mr-2">From the filings</span>
           {deep.quality.ok
-            ? <span className="text-chalk/80">{deep.quality.data.headline}</span>
+            ? <span className="text-body">{deep.quality.data.headline}</span>
             : <span className="text-ash">Quality could not be computed for this listing.</span>}
         </div>
       )}
-      <p className="text-[0.68rem] leading-relaxed text-ash">
+      <p className="text-meta leading-relaxed text-ash">
         Coverage {pct(row.coverage, 0)} — {row.signalsAvailable} of {row.signalsTotal} signals
         contributed. A signal with too little history is left out and the remaining weights are
         renormalised, rather than filling the gap with the universe median and calling it a
@@ -728,7 +728,7 @@ function DeepRow({ row }: { row: DeepenRow }) {
   const quality = row.quality.ok ? row.quality.data : null;
   const value = row.valuation.ok ? row.valuation.data : null;
   return (
-    <tr className="border-b border-rule/60 last:border-0">
+    <tr className="border-b border-ruleSoft last:border-0">
       <td className="num px-3 py-2 font-semibold">{row.ticker}</td>
       <td className="px-3 py-2">
         {quality == null ? <span className="text-ash">—</span>

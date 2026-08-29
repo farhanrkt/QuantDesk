@@ -32,7 +32,7 @@ function AnomalyTooltip({ active, payload }: TooltipProps<number, string>) {
   const p = payload?.[0]?.payload as ChartPoint | undefined;
   if (!active || !p) return null;
   return (
-    <div className="rounded border border-rule bg-ink/95 px-3 py-2 text-xs shadow-xl">
+    <div className="rounded border border-rule bg-ink/95 px-3 py-2 text-meta shadow-xl">
       <div className="num mb-1 text-ash">{p.date}</div>
       <div className="num">Close {num(p.close)}</div>
       {p.isAnomaly && (
@@ -109,7 +109,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
       <Card accent={biasColor}>
         <CardHeader>
           <CardTitle>Price with detected anomalies</CardTitle>
-          <div className="flex flex-wrap items-center gap-3 text-[0.68rem] text-ash">
+          <div className="flex flex-wrap items-center gap-3 text-micro text-ash">
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-2 w-2 rotate-45" style={{ background: ACC }} /> Accumulation
             </span>
@@ -158,7 +158,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
           is the move bigger than the spread, and is anyone accumulating
           patiently rather than in one visible print? */}
       {liquidity?.insideSpreadNoise && (
-        <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-xs leading-relaxed text-warn">
+        <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-meta leading-relaxed text-warn">
           The latest move is only {num(liquidity.moveVsSpread ?? 0, 1)}x the estimated
           round-trip spread of {pct(liquidity.warningSpread ?? 0, 2)}. On this listing a move
           that size does not survive the cost of trading it, however unusual the volume looks.
@@ -172,13 +172,13 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
             <CardTitle className="flex items-center gap-2">
               Slow, patient buying or selling
             </CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               CUSUM · h={accumulation.config.threshold} · k={accumulation.config.slack}
             </span>
           </CardHeader>
           <CardBody className="px-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Direction</th><th>Began</th><th>Confirmed</th><th>Ended</th>
@@ -190,7 +190,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
                 <tbody>
                   {accumulation.episodes.map((e) => (
                     <tr key={`${e.direction}-${e.start}`}
-                        className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
+                        className="border-b border-ruleSoft last:border-0 hover:bg-raised/60">
                       <td className="px-5 py-2" style={{ color: flowColor(e.direction) }}>
                         {e.direction}{e.ongoing && " · ongoing"}
                       </td>
@@ -216,7 +216,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
                 <ExplanationBody explain={ex.cusumEpisode} />
               </div>
             )}
-            <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+            <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
               An institution building a position splits the order over weeks so no single day
               stands out — which makes it invisible to the day-by-day detector above. This test
               adds up small deviations instead, so a run of unremarkable days trips a threshold
@@ -231,7 +231,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
         <CardHeader>
           <CardTitle>Event log · ranked by strength</CardTitle>
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               {config.mode} · {config.period}
               {config.mode === "threshold" && ` · cutoff ${config.scoreThreshold}`}
               {config.mode === "quota" && ` · ${pct(config.contamination)}`}
@@ -244,13 +244,13 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
         </CardHeader>
         <CardBody className="px-0">
           {anomalies.length === 0 ? (
-            <p className="px-5 text-sm text-ash">
+            <p className="px-5 text-base text-ash">
               No day in this window crossed the detection threshold. That is a result, not a
               failure — the cutoff is absolute, so a calm stock genuinely returns nothing.
             </p>
           ) : (
             <div className="max-h-[22rem] overflow-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-meta">
                 <thead className="sticky top-0 bg-panel">
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Date</th><th>Flow</th><th>Tag</th>
@@ -262,7 +262,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
                 </thead>
                 <tbody>
                   {(simple ? anomalies.slice(0, 8) : anomalies).map((a) => (
-                    <tr key={a.date} className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
+                    <tr key={a.date} className="border-b border-ruleSoft last:border-0 hover:bg-raised/60">
                       <td className="num px-5 py-2 text-ash">{a.date}</td>
                       <td className="px-5 py-2" style={{ color: flowColor(a.flow) }}>{a.flow}</td>
                       <td className="px-5 py-2 text-ash">{a.tag}</td>
@@ -278,7 +278,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
                             <div className="h-full rounded"
                                  style={{ width: `${a.strength}%`, background: flowColor(a.flow) }} />
                           </div>
-                          <span className="num w-6 text-right text-[0.7rem] text-ash">{a.strength}</span>
+                          <span className="num w-6 text-right text-micro text-ash">{a.strength}</span>
                         </div>
                       </td>
                     </tr>
@@ -291,16 +291,16 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
       </Card>
 
       {simple && anomalies.length > 8 && (
-        <p className="text-[0.7rem] text-ash">
+        <p className="text-meta text-ash">
           Showing the 8 strongest of {anomalies.length} flagged days. Switch to Detailed for the
           full log and the model settings behind it.
         </p>
       )}
 
-      <p className={cn("text-xs leading-relaxed text-ash", simple && "hidden")}>
+      <p className={cn("text-meta leading-relaxed text-ash", simple && "hidden")}>
         Isolation Forest over six behavioural features (return, RVOL, |return|, MFI, OBV z-score,
         intraday range), 200 estimators, seed 42, fit with{" "}
-        <span className="font-mono text-chalk/80">contamination=&quot;auto&quot;</span> so the
+        <span className="font-mono text-body">contamination=&quot;auto&quot;</span> so the
         decision score is an absolute scale and the anomaly count floats with the regime rather
         than being pinned to a fixed percentage. Flow is a four-way vote of OBV direction, A/D
         direction, MFI level and price direction. Anomalous activity has many benign causes —

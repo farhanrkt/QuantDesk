@@ -66,7 +66,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card accent={verdictColor}>
           <CardHeader>
             <CardTitle>In plain English</CardTitle>
-            <span className="num text-xs font-semibold" style={{ color: verdictColor }}>
+            <span className="num text-meta font-semibold" style={{ color: verdictColor }}>
               {view.verdict}
             </span>
           </CardHeader>
@@ -76,8 +76,8 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                  className={cn(
                    "leading-relaxed",
                    i === plainEnglish.paragraphs.length - 1
-                     ? "text-[0.78rem] text-ash"
-                     : "text-[0.95rem] text-chalk/90",
+                     ? "text-meta text-ash"
+                     : "text-base text-body",
                  )}>
                 {paragraph}
               </p>
@@ -101,17 +101,17 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       <Card>
         <CardHeader>
           <CardTitle>Long-horizon checklist</CardTitle>
-          <span className="num text-xs font-semibold" style={{ color: verdictColor }}>
+          <span className="num text-meta font-semibold" style={{ color: verdictColor }}>
             {view.passed}/{view.scored} pointing up
           </span>
         </CardHeader>
         <CardBody className="px-0">
-          <p className="px-5 pb-3 text-sm leading-relaxed text-chalk/85">{view.headline}</p>
+          <p className="px-5 pb-3 text-base leading-relaxed text-body">{view.headline}</p>
           <ul>
             {checks.map((check) => (
               <li key={check.label}
                   className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b
-                             border-rule/60 px-5 py-2 last:border-0">
+                             border-ruleSoft px-5 py-2 last:border-0">
                 <span className="mt-0.5 shrink-0">
                   {check.passed === null
                     ? <Minus aria-label="no reading" className="h-3.5 w-3.5 text-ash" />
@@ -119,20 +119,20 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                       ? <Check aria-label="points up" className="h-3.5 w-3.5 text-acc" />
                       : <X aria-label="points down" className="h-3.5 w-3.5 text-dist" />}
                 </span>
-                <span className="min-w-0 flex-1 text-xs text-chalk/90 sm:w-56 sm:flex-none">
+                <span className="min-w-0 flex-1 text-meta text-body sm:w-56 sm:flex-none">
                   {check.label}
                 </span>
                 {/* THE FIXED 224px LABEL LEAVES 73px FOR THIS ONE AT 375px, which is narrower
                     than its longest word, so the row — and therefore the page — scrolled
                     sideways. Below `sm` the detail takes a line of its own and the label takes
                     the width instead; at `sm` and above the two-column row is unchanged. */}
-                <span className="w-full text-[0.7rem] leading-relaxed text-ash sm:w-auto sm:flex-1">
+                <span className="w-full text-meta leading-relaxed text-ash sm:w-auto sm:flex-1">
                   {check.detail}
                 </span>
               </li>
             ))}
           </ul>
-          <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+          <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
             A tick means that line points upward, not that it is a reason to buy. {view.caveat}
           </p>
         </CardBody>
@@ -143,11 +143,11 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card>
           <CardHeader>
             <CardTitle>If you had bought at any point and held</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">% per year</span>
+            <span className="font-mono text-micro text-ash">% per year</span>
           </CardHeader>
           <CardBody className="px-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Held for</th>
@@ -171,7 +171,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                     const chosen = row.years === horizon;
                     if (!measured) {
                       return (
-                        <tr key={row.years} className="border-b border-rule/60 last:border-0">
+                        <tr key={row.years} className="border-b border-ruleSoft last:border-0">
                           <td className={cn("num px-5 py-2 font-semibold",
                                             chosen ? "text-chalk" : "text-ash")}>
                             <span className="flex items-center gap-1.5">
@@ -179,7 +179,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                               <Explain explain={ex[`rollingWorst.${row.years}`]} />
                             </span>
                           </td>
-                          <td className="px-5 py-2 text-[0.7rem] leading-relaxed text-ash"
+                          <td className="px-5 py-2 text-meta leading-relaxed text-ash"
                               colSpan={simple ? 4 : 7}>
                             {row.reason ?? "Not enough loaded history for this horizon."}
                           </td>
@@ -188,7 +188,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                     }
                     return (
                       <tr key={row.years}
-                          className={cn("border-b border-rule/60 last:border-0 hover:bg-raised/60",
+                          className={cn("border-b border-ruleSoft last:border-0 hover:bg-raised/60",
                                         chosen && "bg-raised/70")}>
                         <td className="num px-5 py-2 font-semibold">
                           <span className="flex items-center gap-1.5">
@@ -230,10 +230,10 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                 </tbody>
               </table>
             </div>
-            <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+            <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
               Read a row like this: &quot;buying on any day in this history and holding for that
               many years, here is the range of yearly returns you would have got&quot;. The
-              <span className="text-chalk/80"> worst </span>column is the one that decides
+              <span className="text-body"> worst </span>column is the one that decides
               position size — a headline growth rate quietly reports only the one path that
               happened to occur.
             </p>
@@ -246,7 +246,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card accent={DOWN}>
           <CardHeader>
             <CardTitle>What holding it cost</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               time spent below a previous high
             </span>
           </CardHeader>
@@ -286,14 +286,14 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                           fill="url(#ddFill)" isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
-                <p className="mt-1 text-[0.7rem] leading-relaxed text-ash">
+                <p className="mt-1 text-meta leading-relaxed text-ash">
                   The line is how far below its best-ever price it sat on each day. Zero means a
                   new high; every dip is a stretch where holders were down on paper.
                 </p>
               </>
             )}
 
-            <p className="mt-3 text-[0.7rem] leading-relaxed text-ash">
+            <p className="mt-3 text-meta leading-relaxed text-ash">
               Depth is only half of it. A 30% fall that recovers in a quarter is survivable; a
               15% one that grinds on for three years is where most people sell. The Ulcer index
               scores both at once, which is why it is here beside the maximum.
@@ -307,7 +307,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card>
           <CardHeader>
             <CardTitle>Was the risk paid for?</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               over {risk.observations} trading days
             </span>
           </CardHeader>
@@ -332,13 +332,13 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card accent={relativeStrength.outperforming ? UP : DOWN}>
           <CardHeader>
             <CardTitle>Against just owning the index</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               vs {relativeStrength.benchmark}
             </span>
           </CardHeader>
           <CardBody className="px-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Period</th>
@@ -351,7 +351,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                   {Object.entries(relativeStrength.periods).map(([label, row]) => {
                     const explain = ex[`relativeExcess.${label}`];
                     return (
-                      <tr key={label} className="border-b border-rule/60 last:border-0">
+                      <tr key={label} className="border-b border-ruleSoft last:border-0">
                         <td className="num px-5 py-2">
                           <span className="flex items-center gap-1.5">
                             {label}
@@ -377,7 +377,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                 </tbody>
               </table>
             </div>
-            <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+            <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
               The real alternative is never cash — it is the index fund you could have bought
               instead. A stock up 40% while the market rose 60% has cost its holder money in the
               only sense that matters.
@@ -392,7 +392,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
           {position.usable && (
             <Card>
               <CardHeader><CardTitle>Where it sits</CardTitle></CardHeader>
-              <CardBody className="space-y-2 text-xs">
+              <CardBody className="space-y-2 text-meta">
                 <ExplainedRow explain={ex.fromHigh52w} />
                 <ExplainedRow explain={ex.rangePosition} />
                 <ExplainedRow explain={ex.fromAllTimeHigh} />
@@ -411,12 +411,12 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
             <Card accent={TONE_HEX[ex.faberDistance?.tone ?? "neutral"]}>
               <CardHeader>
                 <CardTitle>A simple long-term trend rule</CardTitle>
-                <span className={cn("num text-xs font-semibold",
+                <span className={cn("num text-meta font-semibold",
                                     faber.signal === "invested" ? "text-acc" : "text-dist")}>
                   {faber.signal === "invested" ? "Stay invested" : "Stand aside"}
                 </span>
               </CardHeader>
-              <CardBody className="space-y-2 text-xs">
+              <CardBody className="space-y-2 text-meta">
                 <ExplainedRow explain={ex.faberDistance} />
                 <ExplainedRow label="Months in this stance"
                               value={String(faber.monthsInStance ?? 0)} tone="text-chalk" />
@@ -441,7 +441,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card>
           <CardHeader>
             <CardTitle>Year by year</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">total return each year</span>
+            <span className="font-mono text-micro text-ash">total return each year</span>
           </CardHeader>
           <CardBody>
             <ResponsiveContainer width="100%" height={150}>
@@ -471,7 +471,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card>
           <CardHeader>
             <CardTitle>Average return by calendar month</CardTitle>
-            <span className="font-mono text-[0.65rem] text-warn">descriptive only</span>
+            <span className="font-mono text-micro text-warn">descriptive only</span>
           </CardHeader>
           <CardBody>
             <div className="grid grid-cols-6 gap-2 lg:grid-cols-12">
@@ -486,17 +486,17 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                            : `${value >= 0 ? UP : DOWN}${Math.round(intensity * 40)
                                .toString(16).padStart(2, "0")}`,
                        }}>
-                    <div className="font-mono text-[0.6rem] uppercase text-ash">{month.month}</div>
-                    <div className={cn("num text-[0.7rem]",
+                    <div className="font-mono text-micro uppercase text-ash">{month.month}</div>
+                    <div className={cn("num text-micro",
                                        value >= 0 ? "text-acc" : "text-dist")}>
                       {month.mean == null ? "—" : signedPct(month.mean)}
                     </div>
-                    <div className="text-[0.55rem] text-ash">n={month.count}</div>
+                    <div className="text-micro text-ash">n={month.count}</div>
                   </div>
                 );
               })}
             </div>
-            <p className="mt-3 text-[0.7rem] leading-relaxed text-warn">
+            <p className="mt-3 text-meta leading-relaxed text-warn">
               {seasonality.caveat}
             </p>
           </CardBody>

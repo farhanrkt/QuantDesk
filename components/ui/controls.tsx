@@ -19,13 +19,13 @@ export function Field({
     <label className="flex flex-col gap-1">
       <span className="eyebrow">{label}</span>
       {children}
-      {hint && <span className="text-[0.65rem] leading-snug text-ash">{hint}</span>}
+      {hint && <span className="text-micro leading-snug text-ash">{hint}</span>}
     </label>
   );
 }
 
 const inputClass =
-  "h-9 w-full rounded border border-rule bg-raised px-2.5 font-mono text-xs text-chalk " +
+  "h-9 w-full rounded border border-rule bg-raised px-2.5 font-mono text-meta text-chalk " +
   "transition-colors hover:border-rule focus:border-tech/60 disabled:opacity-40";
 
 export function NumberField({
@@ -53,7 +53,7 @@ export function NumberField({
         }}
       />
       {suffix && (
-        <span className="pointer-events-none absolute right-2 font-mono text-[0.65rem] text-ash">
+        <span className="pointer-events-none absolute right-2 font-mono text-micro text-ash">
           {suffix}
         </span>
       )}
@@ -129,8 +129,26 @@ export function RangeField({
       value={index}
       aria-label={label}
       onChange={(e) => onChange(Number(e.target.value))}
-      className="h-1 w-full cursor-pointer appearance-none rounded bg-rule accent-tech
-                 focus:outline-none focus-visible:ring-1 focus-visible:ring-tech"
+      // THE TRACK IS 4px AND THE TARGET IS 24. A range input's box IS its track,
+      // so a hairline track is a hairline hit area — this one carries the
+      // Beneish prior, which is the single control the §9 argument turns on, and
+      // it was four pixels tall. Transparent padding grows the target without
+      // fattening the line, and the track is painted as a background gradient
+      // instead of as the element's own fill.
+      className="h-6 w-full cursor-pointer appearance-none bg-transparent accent-tech
+                 focus:outline-none focus-visible:ring-2 focus-visible:ring-tech
+                 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4
+                 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full
+                 [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-tech
+                 [&::-moz-range-track]:h-1 [&::-moz-range-track]:rounded-full
+                 [&::-moz-range-track]:bg-rule
+                 [&::-webkit-slider-runnable-track]:h-1
+                 [&::-webkit-slider-runnable-track]:rounded-full
+                 [&::-webkit-slider-runnable-track]:bg-rule
+                 [&::-webkit-slider-thumb]:-mt-1.5 [&::-webkit-slider-thumb]:h-4
+                 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none
+                 [&::-webkit-slider-thumb]:cursor-pointer
+                 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-tech"
     />
   );
 }
@@ -139,12 +157,12 @@ export function Toggle({
   checked, onChange, label,
 }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
-    <label className="flex cursor-pointer items-center gap-2 text-xs text-ash">
+    <label className="flex min-h-[24px] cursor-pointer items-center gap-2.5 text-meta text-ash">
       <input
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="h-3.5 w-3.5 accent-tech"
+        className="h-[18px] w-[18px] shrink-0 accent-tech"
       />
       {label}
     </label>
@@ -166,7 +184,7 @@ export function ApplyButton({
       disabled={busy || disabled}
       className={cn(
         "h-9 shrink-0 rounded border border-tech/50 bg-tech/10 px-4",
-        "font-mono text-[0.65rem] uppercase tracking-[0.14em] text-chalk",
+        "font-mono text-micro uppercase tracking-[0.14em] text-chalk",
         "transition-colors hover:bg-tech/20 disabled:cursor-not-allowed disabled:opacity-40",
       )}
     >
@@ -180,7 +198,7 @@ export function DownloadButton({
 }: { onClick?: () => void; href?: string; children: React.ReactNode }) {
   const className =
     "inline-flex h-8 items-center gap-1.5 rounded border border-rule px-2.5 " +
-    "font-mono text-[0.65rem] uppercase tracking-[0.12em] text-ash " +
+    "font-mono text-micro uppercase tracking-[0.12em] text-ash " +
     "transition-colors hover:border-tech/50 hover:text-chalk";
   const content = (
     <>

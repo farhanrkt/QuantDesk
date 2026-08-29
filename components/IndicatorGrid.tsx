@@ -38,11 +38,11 @@ export function IndicatorGrid({ explanations }: { explanations: ExplainMap }) {
     <div className="space-y-4">
       {simple && (
         <div className="rounded border border-rule bg-panel px-4 py-3">
-          <p className="text-[0.78rem] leading-relaxed text-ash">
+          <p className="text-meta leading-relaxed text-ash">
             These are the classical chart indicators, grouped by how long a horizon each one
             actually speaks to. Only the top group has any bearing on owning something for
             years; the bottom group describes the last two weeks and has weak evidence behind
-            it even for that. Press the <span className="text-chalk/80">i</span> beside any
+            it even for that. Press the <span className="text-body">i</span> beside any
             number to see what it measures and whether this reading is good or bad.
           </p>
         </div>
@@ -58,7 +58,7 @@ export function IndicatorGrid({ explanations }: { explanations: ExplainMap }) {
           <Card key={title}>
             <CardHeader>
               <CardTitle>{title}</CardTitle>
-              <span className="text-[0.65rem] text-ash">{subtitle}</span>
+              <span className="text-micro text-ash">{subtitle}</span>
             </CardHeader>
             <CardBody>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
