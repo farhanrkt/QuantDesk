@@ -101,9 +101,17 @@ def normalise(frame: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
       double-counts a day in every rolling window;
     * a column can arrive as object dtype, where arithmetic quietly produces
       objects rather than raising;
-    * a missing OHLC value forward-fills, because a gap in the middle of a bar
-      is a reporting artefact rather than a real price of zero — while Volume
-      fills with 0, because no trades IS zero volume;
+    * a missing OHLC value forward-fills IN THE INTERIOR ONLY, because a gap in
+      the middle of a series is a reporting artefact rather than a real price of
+      zero — while Volume fills with 0, because no trades IS zero volume;
+    * a TRAILING row that never carried a close is dropped rather than filled.
+      Yahoo publishes the current session with a volume and no prices, and under
+      `auto_adjust=True` the whole OHLC row arrives as NaN because the
+      adjustment factor is derived from the close. Forward-filling it invented a
+      bar: on 2026-08-28 AAPL was served with the previous session's OHLC and
+      that day's volume, so the app printed a 0.00% change and a "last daily
+      close" of $314.58 dated to a session it had no close for, and every
+      indicator rolled over a duplicated bar;
     * a non-positive close breaks every log and ratio downstream.
 
     Returns None rather than an empty frame when nothing survives, so callers
@@ -143,6 +151,15 @@ def normalise(frame: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
         out[column] = pd.to_numeric(out[column], errors="coerce")
     if "Volume" not in out.columns:
         out["Volume"] = 0.0
+
+    # TRUNCATE BEFORE FILLING, so the fill can only ever repair an interior gap.
+    # Trailing rows with no close of their own are sessions that have not
+    # settled, and carrying the previous day's prices forward onto them reports
+    # a bar that did not happen — see the docstring for the day this cost.
+    closed = out.index[out["Close"].notna()]
+    if len(closed) == 0:
+        return None
+    out = out.loc[:closed[-1]]
 
     out[["Open", "High", "Low", "Close"]] = out[["Open", "High", "Low", "Close"]].ffill()
     out["Volume"] = out["Volume"].fillna(0.0)

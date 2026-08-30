@@ -1784,10 +1784,17 @@ def _upside(value, engine=None, price_label=None, fair_label=None, **_):
         return unavailable(label, what, "the model could not produce a value")
     band = _ladder(value, ((-0.30, "bad"), (-0.10, "poor"), (0.10, "fair"),
                            (0.30, "good"), (None, "excellent")))
+    # SAY WHAT THE NUMBER IS A MOVE IN, rather than calling it a discount or a
+    # premium. This metric is a fraction of the PRICE, and both of those words
+    # are read against the fair value, which is a different base: a $112 estimate
+    # beside a $315 price was called "a 64% premium" when the premium the market
+    # is paying over that estimate is 180%. Phrased as the move required, the
+    # same 64% is exactly right — 315 less 64% is 112.
     reading = (f"The model's middle estimate is {fair_label or 'its fair value'} against a "
                f"market price of {price_label or 'today\'s price'} — "
-               + (f"a {_pct(abs(value), 0)} discount." if value >= 0
-                  else f"a {_pct(abs(value), 0)} premium.") + " ")
+               + (f"the price would have to rise {_pct(abs(value), 0)} to meet it."
+                  if value >= 0 else
+                  f"the price would have to fall {_pct(abs(value), 0)} to meet it.") + " ")
     if abs(value) > 0.5:
         reading += ("A gap that large is more often a sign the assumptions are wrong than a "
                     "genuine mispricing. Check the growth rate and the discount rate before "
@@ -3113,13 +3120,20 @@ def _read_value(data: dict) -> Optional[dict]:
     monte = data.get("monteCarlo") or {}
     if not verdict or monte.get("p50Label") is None:
         return None
-    upside = monte.get("upside")
     engine = ENGINE_WORDS.get(data.get("engine"), "model")
 
+    # MEASURED AGAINST THE FAIR VALUE, because "that" in this sentence IS the
+    # fair value. `upside` is a fraction of the PRICE — a different denominator —
+    # and printing it here produced the impossible: ITMG.JK at Rp 25,650 against
+    # a model value of Rp 66,540 read "the market price is 159% below that",
+    # when nothing can be more than 100% below anything. The honest figure for
+    # this sentence is 61%.
     where = ""
-    if _known(upside):
-        side = "below" if upside >= 0 else "above"
-        where = f", putting the market price {_pct(abs(upside), 0)} {side} that"
+    fair, spot = monte.get("p50"), data.get("price")
+    if _known(fair) and _known(spot) and fair:
+        gap = (spot - fair) / fair
+        side = "below" if gap <= 0 else "above"
+        where = f", putting the market price {_pct(abs(gap), 0)} {side} that"
     prob = monte.get("probUndervalued")
     runs = (f" {_pct(prob, 0)} of the simulated runs came out cheap."
             if _known(prob) else "")

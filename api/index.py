@@ -259,6 +259,21 @@ def resolved(ticker: str, market: str) -> str:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def resolved_with_market(ticker: str, market: str) -> tuple[str, str]:
+    """The symbol to fetch AND the market whose conventions describe it.
+
+    Every single-ticker route wants both, and wanting only the first is the bug
+    this returns a pair to prevent: the routes used to resolve the symbol from
+    the typed suffix and then keep the dropdown's market code, so "ITMG.JK" on
+    the default US setting fetched the Indonesian company and then priced it in
+    dollars off a US risk-free rate against ^GSPC. Reassigning `market` at the
+    point of resolution fixes currency, ERP, tax, benchmark index and screen
+    domain together, because all of them read that one variable downstream.
+    """
+    symbol = resolved(ticker, market)
+    return symbol, symbols.market_of(symbol)
+
+
 def csv_response(frame, filename: str) -> StreamingResponse:
     buffer = io.StringIO()
     frame.to_csv(buffer, index=False)
@@ -424,7 +439,7 @@ def isolation_forest(
                     "0 disables the benign-noise filter.",
     ),
 ):
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     return ok(whale_payload(symbol, period, mode, contamination, mad_k,
                             score_threshold, recent_days, min_turnover))
 
@@ -656,7 +671,7 @@ def peers(
     explanation layer produces. Change the group and the same company moves,
     which is the one thing a percentile must never let a reader forget.
     """
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     candidates = universes.containing(symbol)
 
     if universe:
@@ -916,7 +931,7 @@ def technical_analysis(
     sr_window: int = Query(10, ge=3, le=40),
     sr_levels: int = Query(6, ge=2, le=12),
 ):
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     return ok(technical_payload(symbol, range, sr_window, sr_levels, market.upper()))
 
 
@@ -996,7 +1011,7 @@ def intrinsic_value(
     manual_price: Optional[float] = Query(None, gt=0.0),
     manual_payout: Optional[float] = Query(None, ge=0.0, le=1.0),
 ):
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     return ok(valuation_payload(symbol, **_valuation_kwargs(
         market, engine, growth, terminal, rate, n_sims, sd_growth, sd_rate,
         sd_terminal, seed, fcf_basis, dps_basis, manual_base, manual_net_debt,
@@ -1030,7 +1045,7 @@ def intrinsic_value_simulation(
     The run is seeded, so this reproduces exactly the distribution the JSON
     endpoint summarised for the same query string.
     """
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     payload = valuation_payload(symbol, with_simulation=True, **_valuation_kwargs(
         market, engine, growth, terminal, rate, n_sims, sd_growth, sd_rate,
         sd_terminal, seed, fcf_basis, dps_basis, manual_base, manual_net_debt,
@@ -1067,11 +1082,15 @@ def quality_payload(symbol: str) -> dict:
     # depends on it.
     #
     # THE MARKET COMES FROM THE RESOLVED SYMBOL, NOT FROM THE QUERY PARAMETER.
-    # The two can disagree — `market` selects the conventions to value with,
-    # while the suffix decides what the listing actually is — and asking "is this
-    # an Indonesian listing?" is a question about the security. Reading the
-    # dropdown instead told a reader that TLKM.JK was a US listing, which is the
-    # class of silent mismatch `symbols.py` exists to prevent.
+    # Asking "is this an Indonesian listing?" is a question about the security,
+    # and reading the dropdown for it told a reader that TLKM.JK was a US
+    # listing — the class of silent mismatch `symbols.py` exists to prevent.
+    #
+    # This lens got the rule first and the others have since been brought in
+    # line: the conventions to VALUE with follow the listing too, because the
+    # alternative was ITMG.JK priced in dollars off a US risk-free rate. The
+    # routes now hand every lens a market derived the same way — see
+    # `resolved_with_market` — so this call and its neighbours cannot diverge.
     payload = quality.analyze(company, symbol=symbol,
                               market_code=symbols.market_of(symbol))
     payload["explain"] = explain.for_quality(payload)
@@ -1088,7 +1107,7 @@ def quality_scores(
     Returns `applicable: false` for banks and insurers rather than a number:
     none of the three models was built on financial firms and none transfers.
     """
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     return ok({"ticker": symbol, **quality_payload(symbol)})
 
 
@@ -1111,7 +1130,7 @@ def event_study(
     say anything. Walk-forward mode is not offered here — it would cost minutes
     and the market-model estimation already excludes look-ahead.
     """
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     config = AnalysisConfig(period=period, detection_mode=mode,
                             score_threshold=score_threshold)
     try:
@@ -1162,7 +1181,7 @@ def ticker_news(
     limit: int = Query(5, ge=1, le=10),
 ):
     """Third-party headlines. Display-only context — never an instruction source."""
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     return ok({"ticker": symbol, "items": news.fetch_news(symbol, limit=limit)})
 
 
@@ -1213,7 +1232,7 @@ async def confluence(
     render. See `_lib/pretrade.py` for why an uncalibrated check is withheld and
     why a common one is demoted from a flag to a base condition.
     """
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
 
     async def leg(name, fn):
         try:

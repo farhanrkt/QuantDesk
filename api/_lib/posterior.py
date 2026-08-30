@@ -250,8 +250,14 @@ def for_beneish(band: Optional[str], prior: Optional[float] = None,
     posterior = given_flag if flagged else given_clean
 
     points = curve()
-    flags = [p["givenFlag"] for p in points
-             if not p["extrapolated"] and p["prior"] <= 0.14]
+    # THE SPAN THE SENTENCE CLAIMS, so the fields and the prose cannot disagree.
+    # These were computed over the non-extrapolated stops only, which gave a
+    # robustRange of 2%-19% sitting in the same object as a sentence saying
+    # 3%-41%. Nothing rendered lowText/highText, so nothing contradicted itself
+    # on screen — but the next panel to reach for them would have.
+    anchor_priors = [a["prior"] for a in PRIOR_ANCHORS]
+    flags = [posterior_given_flag(min(anchor_priors)),
+             posterior_given_flag(max(anchor_priors))]
     partial = (indices_available is not None
                and indices_available < (indices_total or 8))
 

@@ -806,10 +806,16 @@ def analyze(
     manual_payout: Optional[float] = None,     # DDM diagnostics only
     with_simulation: bool = False,             # attach raw sims under "_simulation"
 ) -> dict:
-    market = MARKETS.get(market_code.upper(), MARKETS["US"])
-
     # One resolver for every engine — see _lib/symbols.py for why this matters.
-    symbol = symbols.resolve(ticker, market["code"])
+    symbol = symbols.resolve(ticker, market_code)
+
+    # AND ONE MARKET, TAKEN FROM THE SYMBOL rather than from the caller. A typed
+    # suffix already beats the dropdown when the symbol is resolved; if the
+    # conventions did not follow it here, this engine would fetch ITMG.JK and
+    # then value it as an American company — dollar sign, US 10-year, ^GSPC.
+    # Deriving it from the resolved symbol makes that unrepresentable rather
+    # than merely fixed at the routes, which is what the deepen path needs.
+    market = MARKETS.get(symbols.market_of(symbol), MARKETS["US"])
 
     data = fetch_company(symbol)
     rf_rate, rf_source = fetch_risk_free_rate(market["code"], market["risk_free_default"])

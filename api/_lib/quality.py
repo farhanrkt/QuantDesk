@@ -134,11 +134,17 @@ def piotroski_f_score(income, balance, cashflow) -> dict:
            f"{roa_prior:.1%} -> {roa_now:.1%}"
            if np.isfinite(roa_now) and np.isfinite(roa_prior) else "unavailable")
 
+    # THE DETAIL REPORTS THE TWO FIGURES, not the conclusion. It used to read
+    # "earnings backed by cash rather than accruals" whatever the test did, so a
+    # company that failed — AAPL FY2025, cash flow 30.9% of assets against a
+    # 31.2% ROA — rendered a red cross beside a sentence asserting the opposite.
+    # Every other signal here prints what it measured; this one now does too.
     cfo_over_assets = _ratio(cfo_now, assets_now)
     record("Cash flow exceeds accounting profit",
            cfo_over_assets > roa_now
            if np.isfinite(cfo_over_assets) and np.isfinite(roa_now) else None,
-           "earnings backed by cash rather than accruals")
+           f"cash {cfo_over_assets:.1%} vs profit {roa_now:.1%}"
+           if np.isfinite(cfo_over_assets) and np.isfinite(roa_now) else "unavailable")
 
     # --- leverage, liquidity, source of funds ---
     ltd_now, ltd_prior = _at(balance, "long_term_debt", 0), _at(balance, "long_term_debt", 1)
@@ -162,7 +168,8 @@ def piotroski_f_score(income, balance, cashflow) -> dict:
     record("No dilution",
            shares_now <= shares_prior * 1.001
            if np.isfinite(shares_now) and np.isfinite(shares_prior) else None,
-           "share count did not rise" if np.isfinite(shares_now) else "unavailable")
+           f"{shares_prior / 1e6:,.0f}M -> {shares_now / 1e6:,.0f}M shares"
+           if np.isfinite(shares_now) and np.isfinite(shares_prior) else "unavailable")
 
     # --- operating efficiency ---
     revenue_now, revenue_prior = _at(income, "revenue", 0), _at(income, "revenue", 1)

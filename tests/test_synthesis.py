@@ -235,6 +235,38 @@ def test_a_split_inside_one_family_is_named():
 
 
 # --------------------------------------------------------------------------- #
+# The gap is quoted against the thing the sentence names
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("p50", "price", "expected"),
+    [
+        # ITMG.JK, live: the sentence used to read "159% below that", which is
+        # `upside` — a fraction of the PRICE — printed against the fair value.
+        # Nothing can be more than 100% below anything.
+        (66_540.0, 25_650.0, "61% below that"),
+        (112.40, 314.58, "180% above that"),   # AAPL: was reported as 64%
+        (120.0, 100.0, "17% below that"),      # +20% upside is -16.7% from fair
+        (100.0, 100.0, "0% below that"),       # exactly on it
+    ],
+)
+def test_the_gap_is_measured_against_the_fair_value_it_names(p50, price, expected):
+    payload = {
+        "verdict": "UNDERVALUED", "engine": "DCF", "price": price,
+        "monteCarlo": {"p50Label": "x", "p50": p50,
+                       "upside": (p50 - price) / price, "probUndervalued": 0.8},
+        "baseCase": {"terminalShare": 0.35},
+    }
+    reading = next(r for r in E.for_synthesis(
+        {"valuation": leg(payload)}, agreement_measurement=None)["readings"]
+        if r["lens"] == "Value")
+    assert expected in reading["sentence"], reading["sentence"]
+    # A share price cannot be more than all of itself below something.
+    if "below" in reading["sentence"]:
+        percent = int(reading["sentence"].split("% below")[0].split()[-1])
+        assert percent <= 100, reading["sentence"]
+
+
+# --------------------------------------------------------------------------- #
 # Named tensions
 # --------------------------------------------------------------------------- #
 def test_cheap_plus_flagged_accounts_is_called_a_value_trap_shape():

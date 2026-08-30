@@ -208,6 +208,38 @@ def test_the_market_a_lens_is_told_comes_from_the_symbol_not_the_dropdown(client
     assert seen == {"symbol": "AAPL", "market_code": "US"}
 
 
+def test_every_lens_is_told_the_market_the_suffix_implies(client, monkeypatch):
+    """The quality lens got this rule first; these are the ones that had not.
+
+    Typing "ITMG.JK" and leaving the dropdown on its US default resolved the
+    right Indonesian company and then handed the valuation and technical
+    engines `market_code="US"`. Measured before the fix: Rp 25,650 rendered as
+    "$25,650.00", the cost of equity built from the US 10-year and a 5.5% ERP
+    rather than the IndoGB proxy and 7%, beta regressed against ^GSPC instead of
+    ^JKSE, and a fair value of Rp 98,000 where the correct run says Rp 67,525 —
+    an upside of +282% on the page instead of +159%.
+    """
+    seen = {}
+    monkeypatch.setattr(index.valuation, "analyze",
+                        lambda ticker, **kw: seen.update(
+                            valuation=kw.get("market_code")) or {"stub": True})
+    monkeypatch.setattr(index.technical, "analyze",
+                        lambda symbol, **kw: seen.update(
+                            technical=kw.get("market_code")) or {"stub": True})
+
+    client.get("/api/intrinsic-value", params={"ticker": "ITMG.JK", "market": "US"})
+    assert seen["valuation"] == "ID", "a typed .JK suffix must beat the dropdown"
+
+    client.get("/api/technical-analysis", params={"ticker": "ITMG.JK", "market": "US"})
+    assert seen["technical"] == "ID"
+
+    # The ordinary case is untouched, in both directions.
+    client.get("/api/intrinsic-value", params={"ticker": "AAPL", "market": "US"})
+    assert seen["valuation"] == "US"
+    client.get("/api/intrinsic-value", params={"ticker": "BBCA", "market": "ID"})
+    assert seen["valuation"] == "ID"
+
+
 def test_confluence_carries_the_pre_trade_block_even_when_legs_fail(client, monkeypatch):
     """The panel that names what could not be checked has to survive the case
     where nothing could be checked. A failed leg is its input, not its enemy."""

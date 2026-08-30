@@ -461,6 +461,43 @@ def test_normalise_enforces_the_contract_every_engine_relies_on():
     assert out.index.is_monotonic_increasing
 
 
+def test_an_unsettled_trailing_session_is_dropped_not_invented():
+    """Yahoo publishes the current session with a volume and no prices.
+
+    Under `auto_adjust=True` the whole OHLC row comes back NaN, because the
+    adjustment factor is derived from the close. Forward-filling it fabricated a
+    bar: on 2026-08-28 AAPL arrived carrying the previous session's OHLC and
+    that day's volume, so the app showed a 0.00% change and a "last daily close"
+    of $314.58 for a session it had no close for, and every rolling indicator
+    ran over a duplicated bar.
+    """
+    frame = _bar_frame()
+    last = frame.index[-1]
+    frame.loc[last, ["Open", "High", "Low", "Close"]] = np.nan
+    frame.loc[last, "Volume"] = 38_500_185          # a real volume, no prices
+
+    out = MD.normalise(frame)
+    assert last not in out.index, "a session with no close of its own is not a bar"
+    assert len(out) == len(frame) - 1
+    assert out["Close"].iloc[-1] == frame["Close"].iloc[-2], "the real last close survives"
+
+
+def test_an_interior_gap_still_forward_fills():
+    """Truncating the tail must not cost the fill its actual job."""
+    frame = _bar_frame()
+    frame.iloc[3, frame.columns.get_loc("Close")] = np.nan
+
+    out = MD.normalise(frame)
+    assert len(out) == len(frame), "an interior gap is a reporting artefact, not a missing day"
+    assert out["Close"].iloc[3] == out["Close"].iloc[2]
+
+
+def test_normalise_returns_none_when_no_session_ever_closed():
+    frame = _bar_frame()
+    frame[["Open", "High", "Low", "Close"]] = np.nan
+    assert MD.normalise(frame) is None
+
+
 @pytest.mark.parametrize("frame", [
     None, pd.DataFrame(),
     pd.DataFrame({"Close": [1.0, 2.0]}),                  # no OHLC
