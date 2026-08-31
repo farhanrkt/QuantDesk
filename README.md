@@ -534,6 +534,7 @@ Interactive docs at `/api/docs`.
 | `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. The one POST, and the one `no-store` |
 | `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
 | `GET /api/rank/deepen` | Quality + valuation for a shortlist of up to 8 |
+| `GET /api/exposure` | **What a whole universe moves with** — every name against the factors whose betas were measured to persist, as a cross-section. Needs no ticker |
 | `GET /api/screener` | Multi-ticker anomaly scan with FDR correction |
 | `GET /api/news` | Recent headlines |
 | `GET /api/intrinsic-value/simulation` | Every Monte Carlo draw, as CSV |

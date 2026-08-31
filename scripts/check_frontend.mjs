@@ -220,12 +220,36 @@ for (const [file, src] of uiFiles) {
 //    them. This does not ban the pattern; it stops the list growing quietly.
 const SIGN_TONE_BUDGET = {
   "components/AnomalyPanel.tsx": 2,     // a day's price change, twice
-  "components/EventStudyPanel.tsx": 1,  // gated on significance first, see carTone
-  "components/LongTermPanel.tsx": 1,    // the seasonality grid
+  // Two, and the second was invisible to the old pattern for the same reason
+  // LongTermPanel's were: it colours a Card accent from a constant pair rather
+  // than a Tailwind class. Both are gated on significance BEFORE they take a
+  // direction — see `carTone` — so an insignificant result stays grey however
+  // it is signed, which is the whole reason these two are allowed.
+  "components/EventStudyPanel.tsx": 2,
+  // Three, not one, and the number changed because the CHECK changed rather
+  // than the code. The seasonality grid colours twice — an inline background
+  // and the figure under it — and the calendar-returns bars colour a third
+  // time, but only the Tailwind one was visible to the old pattern. The budget
+  // read 1 while three sites existed, which is precisely the quiet growth this
+  // rule is here to stop. All three are the exceptions RESEARCH_ROADMAP §14
+  // documents: Python has no interpretation to offer for whether a month's
+  // average return being positive is good news.
+  "components/LongTermPanel.tsx": 3,
   "components/TechnicalPanel.tsx": 2,   // the day's change, and change-since
 };
+//    WIDENED 1 SEP 2026. The rule only ever matched Tailwind class ternaries,
+//    so `style={{ background: value < 0 ? DOWN : UP }}` walked straight past it.
+//    That was theoretical until the exposure work added two components that draw
+//    geometry from a beta and colour it from a constant — the next person to
+//    touch either will reach for an inline style, and the check has to be there
+//    when they do. Both forms count against the same budget.
+const SIGN_TONE_PATTERNS = [
+  /[<>]=?\s*0\s*\?\s*"text-(?:acc|dist)"/g,
+  /[<>]=?\s*0\s*\?\s*[A-Z_]{2,}\s*:\s*[A-Z_]{2,}/g,
+];
 for (const [file, src] of uiFiles) {
-  const hits = [...src.matchAll(/[<>]=?\s*0\s*\?\s*"text-(?:acc|dist)"/g)].length;
+  const hits = SIGN_TONE_PATTERNS
+    .reduce((n, pattern) => n + [...src.matchAll(pattern)].length, 0);
   const allowed = SIGN_TONE_BUDGET[file] ?? 0;
   if (hits > allowed) {
     fail(file, `Colours from a number's sign ${hits} times, budget ${allowed}.`,

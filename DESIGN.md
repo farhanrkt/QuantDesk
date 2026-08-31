@@ -277,7 +277,7 @@ tone, and "not investment advice".
 
 **The two panels above every tab now collapse to their conclusion.** The
 synthesis and the pre-trade panel are the only things a reader meets on all
-seven tabs, so whatever they show by default is shown seven times.
+eight tabs, so whatever they show by default is shown eight times.
 
 The synthesis dropped its per-lens grid entirely — that was a *duplicate*, not a
 cut: the confluence rail directly above already names each lens, its verdict and

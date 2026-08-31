@@ -277,6 +277,19 @@ export default function Home() {
             </p>
           </div>
           <RankingPanel onSelect={handleSelect} />
+          {/* REACHABLE WITHOUT A TICKER, because it needs none. This tier scans
+              a whole universe and the tab that holds it lives behind the
+              ticker gate, so until this was here the one screen in the app that
+              asks for no input could only be reached by supplying some. The
+              ranking scan was already offered on this landing for the same
+              reason. */}
+          <div>
+            <h2 className="mb-3">Or see what a whole market moves with</h2>
+            <ExposurePanel universeState={universes} market={opts.market}
+                           onMarketChange={(m) => setOpts((o) => ({ ...o, market: m }))}
+                           state={exposureScan} onScan={scanExposure}
+                           highlight={null} />
+          </div>
         </div>
       ) : (
         <div className="space-y-6">
