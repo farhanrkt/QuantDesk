@@ -1287,6 +1287,131 @@ set is asserted for the same reason `test_pretrade.py` asserts on its own.
 
 ---
 
+## 16. What a book has in common, and three things that did not work
+
+The portfolio panel could report that four holdings correlate at 0.82 and amount
+to about 1.6 independent positions. It could not say **why**, and "because they
+are one bet on energy" is the sentence that tells a holder whether the
+concentration is an accident or the whole thesis.
+
+`_lib/exposure.py` answers that, and most of what it records is what failed.
+
+### The market is removed first, and that is the design
+
+The first principal component of any set of stocks in one market is largely that
+market. Reporting it would fire on every portfolio ever entered — the same
+failure §8 avoids by refusing to colour a condition that holds for everybody. So
+the shared direction is split: the part that is the local index, reported
+plainly, and the part that is not, which is the only part offered for naming.
+
+Measured on real books, that second number is where the finding lives. A mixed
+defensive Indonesian portfolio is 58% index. An Indonesian coal book is 19%, and
+a US energy book is 5% — almost nothing of what moves those together is the
+market they are listed in.
+
+### Weekly, and the difference decided whether it shipped
+
+Every reference settles in a different time zone from an IDX close. On a
+concentrated coal book against crude the correlation is **0.17 daily and 0.52
+weekly**. Daily would have shipped a panel that cannot find energy in a book of
+energy companies.
+
+### Three nulls, recorded so they are not rebuilt
+
+**Foreign peer baskets.** Australian coal and Malaysian plantation pure-plays are
+non-circular by construction — no holding can be inside them — and they carry
+nine years of clean history where the Newcastle coal future stopped printing in
+December 2025. Against four Indonesian coal miners they reached 0.19-0.27, and
+on that book **palm oil scored higher than coal**. A labeller that cannot tell
+palm from coal on four coal miners is not a labeller.
+
+**Domestic leave-one-out baskets**, built from the resource names a holder does
+not own, did better at 0.28-0.49 and still never cleared the naming threshold.
+Worse, a nickel-and-gold book read **0.49 against coal** — a confident mislabel
+rather than a miss.
+
+**USDIDR is the dollar.** Of the 15 IDX names carrying a material raw USDIDR
+loading, **12 fall below threshold once the ICE dollar index is projected out**.
+The three survivors are BBNI, BBTN and CTRA — two domestically funded banks and
+a property developer, which is a coherent set. And the sign settles it: a miner
+with dollar revenue and rupiah costs should gain when the rupiah weakens, and
+every one measured is negative (ADRO −0.69, INCO −1.85). They fall when the
+rupiah falls, along with everything else in a risk-off week. That is global risk
+appetite wearing translation exposure's name, and labelling it "the rupiah"
+would have named the wrong fact.
+
+What ships is four globally traded contracts — gold, energy, copper, the dollar
+— because they cleared where the equity baskets did not. **The cost is stated on
+the panel: this names an energy exposure, not a coal one.**
+
+### It does not vote, and it is never coloured
+
+A beta has no bullish or bearish direction; a negative loading on the dollar is
+not a bad loading. Nothing here reaches `_family_votes` or `agreementOf`, so the
+kappa in §15 stays valid — see the "DO NOT" note there. Every figure is
+`context`, rendered neutral, for the reason §8 gives about provenance: a reader
+who bought four coal miners on purpose has a concentrated book doing exactly
+what they asked of it, and neither a green tint nor an amber one is a judgement
+this app can make.
+
+Two refusals are load-bearing. Two references landing within 0.10 name **neither**,
+because picking the larger would present a precision the sample does not have.
+And a reference that could not be *read* is reported as untested rather than as a
+driver found absent — the seam where constraint 3 is easiest to lose, since an
+empty result reads as "diversified" unless the words deny it.
+
+### A stale series that passed every check
+
+Found while looking for factor data: `MTF=F`, the Newcastle coal future, returns
+834 immaculate bars through `market_data` and last printed **2025-12-26**.
+`normalise` only drops a trailing row with no close, and every row in that frame
+has one. Nothing raised, logged or marked it.
+
+`ohlcv` and `ohlcv_batch` now refuse a series whose last bar is far older than
+the window asked for — **measured against that window, not against today**, so a
+backtest that asks for 2021 is not rejected for ending in 2021. Counted in
+sessions and converted using the frame's own observed spacing, because the IDX
+closes for the best part of a week around Idul Fitri and the US does not.
+
+Four call sites opt out by name, all four because they read the reader's own
+ticker: a suspended IDX listing has a last print that is old and still the fact
+someone came for. The batch has no opt-out, and that is where it mattered most —
+a holding delisted six months ago still clears `portfolio.MIN_OVERLAP` inside a
+252-day window, so it was contributing a correlation computed against a price
+that had stopped moving.
+
+No stamped artifact needed re-running, verified rather than assumed: across the
+Dow 30, IDX30, LQ45 and the curated resources list — 120 names — the rule drops
+nothing.
+
+### One list that is not an index
+
+`universes.idxresources` breaks this repo's own rule that a constituent list must
+be small, stable and **widely published**, and says so in its own note. It exists
+because not one of the four Indonesian palm-oil names is in the IDX30 or the
+LQ45, so a plantation basket could not be built from them at all.
+
+It is a separate list rather than additions to the index lists because writing
+AALI into the LQ45 would make that list say something false, undetectably from
+the output — the argument `universes.py` already makes for refusing to ship an
+S&P 500 list from memory. Keeping the index lists untouched also means all four
+stamped artifacts still describe the populations they were measured on, so none
+needed re-running and **κ cannot have moved off +0.03**.
+
+UNTR is deliberately absent, with a test pinning the absence. United Tractors
+files as Industrials, sells mining equipment, and reads R² 0.28 against the coal
+names with the Jakarta Composite removed — higher than HRUM, an actual coal
+miner, reads against its own peers. It is the best evidence in this repo that
+measuring exposure beats assuming it, and a hand-specified sector map would never
+have tested it. That result holds only while UNTR is outside the basket.
+
+> Measured 31 August 2026 on 98 equities and 9 reference series, weekly W-FRI log
+> returns, 2017-09 to 2026-08. The single-name exposure reading is **not** shipped
+> and is gated on a stability study of its own — betas measured in one year
+> predicting the next — which this section does not yet report.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
@@ -1296,6 +1421,8 @@ set is asserted for the same reason `test_pretrade.py` asserts on its own.
 | Sensitivity grid (growth × discount rate) | Cheap, though not quite as cheap as this row used to claim: `pv_of_growing_stream` is vectorised over DRAWS, with growth, discount rate and terminal growth broadcast row-wise, so a grid means flattening a meshgrid into that axis rather than an outer product it already supports |
 | Peer / sector relative multiples | Needs a peer-set source beyond yfinance |
 | IDX fundamentals curation | The durable moat, and the largest single effort |
+| Single-name exposure betas | §16 ships the portfolio half, which is descriptive. "This stock moves 0.7x as hard as its sector" invites forward use, so it is gated on a stability study — do this period's betas predict next period's — mirroring `measure_correlation_stability.py`. A four-year probe gives year-over-year rank correlations of +0.29 to +0.66, inside the band that licensed the portfolio feature, on three transitions where that study had six. Eight blocks are available; MBMA, NCKL and TAPG cannot supply them and must be excluded by name rather than quietly run on fewer |
+| Fundamental exposure — revenue against commodity prices | **Rejected on feasibility, not deferred.** `market_data` fetches annual statements only, five columns, and yfinance's quarterlies for these names return five or six with gaps — ADRO and PTBA are both missing 2025-09-30. Five irregular observations is not a weak estimate, it is not an estimate. Consequence: the reverse DCF's implied growth cannot be restated as an implied commodity path |
 
 **Corrected while writing this:** README quoted the price-implied growth rate moving across
 "24% to 42%" over a range of discount rates, in a sentence that read as something the app
