@@ -11,7 +11,7 @@ import { IndicatorGrid } from "@/components/IndicatorGrid";
 import { HorizonPanel } from "@/components/HorizonPanel";
 import { LongTermPanel } from "@/components/LongTermPanel";
 import { Tabs } from "@/components/ui/tabs";
-import { ExplainedRow, useDetail } from "@/components/ui/explain";
+import { Explain, useDetail } from "@/components/ui/explain";
 import { ApplyButton, DownloadButton, Field, NumberField } from "@/components/ui/controls";
 import type { TechnicalOptions } from "@/lib/api";
 import type { TechPoint, TechnicalResponse } from "@/lib/types";
@@ -23,6 +23,7 @@ const FAST = "#F2C14E";
 const SLOW = "#7FA8F5";
 const BAND = "#A78BFA";
 const UP = "#35C4A8";
+const EXPOSURE_HUE = "#D4763A";
 const DOWN = "#FF6B6B";
 
 /** A series row plus the derived columns the band and marker layers read. */
@@ -168,13 +169,60 @@ export function TechnicalPanel({
             anything. Python returns `context` for every figure here and this
             file never picks a colour from a number's sign or size.
           */}
-          <CardBody className="space-y-2">
-            {(data.exposure.factors ?? []).map((row) => (
-              <ExplainedRow key={row.key}
-                            label={row.label}
-                            value={`${num(row.beta, 2)}x`}
-                            explain={data.exposure?.explain?.[`factorExposure.${row.key}`]} />
-            ))}
+          <CardBody className="space-y-3">
+            {/*
+              A BAR FROM ZERO, NOT A ROW OF SENTENCES. Three numbers read as
+              three unrelated facts in prose; drawn from a common zero line they
+              read as one shape — which side of zero each sits on, and which is
+              the big one. The width scale is shared across the three rows, so
+              the comparison the eye makes is the true one.
+
+              The bar is a length, never a colour: filling a negative bar red
+              would say a stock that rises when the dollar falls is failing at
+              something, which is the judgement `DESIGN.md` reserves for Python
+              and which Python has deliberately not made here.
+            */}
+            {(() => {
+              const rows = data.exposure?.factors ?? [];
+              const widest = Math.max(0.25, ...rows.map((r) => Math.abs(r.beta)));
+              return rows.map((row) => {
+                const share = Math.abs(row.beta) / widest;
+                const negative = row.beta < 0;
+                return (
+                  <div key={row.key}>
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-meta text-body">{row.label}</span>
+                      <span className="flex items-center gap-1.5">
+                        <span className="num text-meta font-semibold text-chalk">
+                          {num(row.beta, 2)}x
+                        </span>
+                        <Explain
+                          explain={data.exposure?.explain?.[`factorExposure.${row.key}`]} />
+                      </span>
+                    </div>
+                    <div className="mt-1 flex h-2 w-full items-stretch">
+                      <div className="flex flex-1 justify-end">
+                        {negative && (
+                          <div style={{ width: `${share * 100}%`, background: EXPOSURE_HUE }}
+                               className="rounded-l-sm" />
+                        )}
+                      </div>
+                      <div className="w-px bg-faint" aria-hidden />
+                      <div className="flex flex-1 justify-start">
+                        {!negative && (
+                          <div style={{ width: `${share * 100}%`, background: EXPOSURE_HUE }}
+                               className="rounded-r-sm" />
+                        )}
+                      </div>
+                    </div>
+                    <p className="mt-1 text-meta leading-relaxed text-ash">
+                      explains {pct(row.rSquared, 0)} of its weekly moves · these betas
+                      held year to year at {num(row.rankCorrelation, 2)}
+                    </p>
+                  </div>
+                );
+              });
+            })()}
             {(data.exposure.factors ?? []).length === 0 && (
               <p className="prose-col text-meta leading-relaxed">
                 None of the tested factors accounted for enough of this stock&apos;s
