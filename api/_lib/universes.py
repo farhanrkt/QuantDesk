@@ -30,6 +30,31 @@ Three things follow, and all three are deliberate.
 3. THE LISTS THAT ARE HERE ARE THE ONES WHOSE MEMBERSHIP IS SMALL, STABLE AND
    WIDELY PUBLISHED — the Dow's thirty, the Nasdaq-100, and the two Indonesian
    headline indices. Even these will drift, which is what the as-of date is for.
+
+AND ONE LIST THAT IS NOT AN INDEX AT ALL
+----------------------------------------
+`idxresources` breaks rule 3 deliberately and is the only entry that does. It is
+a CURATED list — somebody's judgement about which Indonesian listings are
+resource plays — and no exchange publishes it, so there is no authority to check
+it against and no membership event to notice. That is a weaker footing than the
+four index lists and it is marked as such in its own note.
+
+It exists because a factor basket needs constituents and the index lists do not
+carry them: not one of the four Indonesian palm-oil names is in the IDX30 or the
+LQ45, so a CPO basket cannot be built from them at all.
+
+WHY IT IS A SEPARATE LIST RATHER THAN ADDITIONS TO idx30/lq45. AALI is not in
+the LQ45. Writing it into that list to make it reachable would make the list say
+something false, and the failure would be undetectable from the output — which
+is the exact argument point 2 above makes against shipping an S&P 500 list from
+memory. A curated list that admits it is curated costs nothing; a corrupted
+index list costs the file its point.
+
+It also keeps the four stamped artifacts valid. `measure_lens_agreement.py`,
+`calibrate_checks.py`, `measure_correlation_stability.py` and
+`backtest_ranking.py` all hardcode ("dow30", "nasdaq100", "idx30", "lq45"), so
+leaving those four lists untouched means every published measurement still
+describes the population it was measured on.
 """
 
 from __future__ import annotations
@@ -37,7 +62,10 @@ from __future__ import annotations
 from typing import Optional
 
 # The date these lists were last transcribed. Shown on the panel so a stale
-# universe is visible rather than assumed.
+# universe is visible rather than assumed. An entry may override it with its own
+# `asOf` — the curated list below does, because "when the index was transcribed"
+# and "when somebody last judged what counts as a coal name" are different facts
+# and a single date would quietly assert the stronger one for both.
 AS_OF = "2026-08-22"
 
 
@@ -101,7 +129,41 @@ UNIVERSES: dict[str, dict] = {
             "SIDO", "SMGR", "TLKM", "TOWR", "UNTR",
         ],
     },
+    "idxresources": {
+        "id": "idxresources",
+        "name": "IDX resources (curated)",
+        "market": "ID",
+        "asOf": "2026-08-31",
+        "note": ("Indonesian coal, nickel, palm oil and gold listings, grouped so a "
+                 "factor basket has constituents. NOT AN INDEX — nobody publishes this "
+                 "list and no exchange maintains it, so it carries the judgement of "
+                 "whoever last edited it rather than an authority. Six of these names "
+                 "are in neither the IDX30 nor the LQ45."),
+        "tickers": [
+            # Coal. ADRO, PTBA, ITMG, INDY and HRUM are index members; BUMI is not.
+            "ADRO", "PTBA", "ITMG", "INDY", "HRUM", "BUMI",
+            # Nickel. MBMA is already in the LQ45; NCKL is not.
+            "INCO", "ANTM", "MBMA", "NCKL",
+            # Palm oil. NONE of these four is in either index, which is the whole
+            # reason this list exists — there was no way to build a CPO basket.
+            "AALI", "LSIP", "DSNG", "TAPG",
+            # Gold and copper. ANTM appears above and is deliberately not repeated.
+            "MDKA",
+        ],
+    },
 }
+
+# DELIBERATELY ABSENT FROM `idxresources`: UNTR.
+#
+# United Tractors sells mining equipment and holds coal assets, and it reads a
+# higher R-squared against the coal names than one of the coal miners reads
+# against its own peers. That makes it the most interesting name in this file
+# and the one that must stay OUT of the basket: a factor built to explain UNTR
+# and then used to report that UNTR is coal-exposed explains nothing. Keeping it
+# out is what makes its exposure measurable rather than circular.
+#
+# The same argument is why any name in this list needs leave-one-out when it is
+# analysed against a basket it belongs to, and why UNTR does not.
 
 
 def get(universe_id: str) -> Optional[dict]:
@@ -117,7 +179,7 @@ def get(universe_id: str) -> Optional[dict]:
     from . import symbols
     return {
         **entry,
-        "asOf": AS_OF,
+        "asOf": entry.get("asOf", AS_OF),
         "tickers": [symbols.resolve(t, entry["market"]) for t in entry["tickers"]],
         "count": len(entry["tickers"]),
     }
@@ -147,7 +209,8 @@ def containing(symbol: str) -> list[dict]:
         if target in resolved:
             found.append({"id": entry["id"], "name": entry["name"],
                           "market": entry["market"], "note": entry["note"],
-                          "count": len(entry["tickers"]), "asOf": AS_OF})
+                          "count": len(entry["tickers"]),
+                          "asOf": entry.get("asOf", AS_OF)})
     found.sort(key=lambda e: -e["count"])
     return found
 
@@ -156,6 +219,7 @@ def catalogue() -> list[dict]:
     """Every predefined universe, without the ticker lists, for the picker."""
     return [
         {"id": entry["id"], "name": entry["name"], "market": entry["market"],
-         "note": entry["note"], "count": len(entry["tickers"]), "asOf": AS_OF}
+         "note": entry["note"], "count": len(entry["tickers"]),
+         "asOf": entry.get("asOf", AS_OF)}
         for entry in UNIVERSES.values()
     ]

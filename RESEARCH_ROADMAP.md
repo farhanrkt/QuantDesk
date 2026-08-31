@@ -1232,6 +1232,33 @@ The confluence rail's caveat lost the clause that is no longer true. Which lens
 reads which data is still a stated assumption and always will be; how far the
 two actually reach the same verdict is not.
 
+### DO NOT: a voting fifth lens is one easy commit from here
+
+**The affordance that makes this measurement easy to invalidate is already in the
+code, and it looks like an invitation.** `ConfluenceRail.tsx` declares
+
+    type Family = "price" | "filings";
+
+with a docstring explaining that the field is part of the type "so adding a fifth
+lens forces you to say what it reads", and `agreementOf` already branches
+`total === 2 ? "Both" : "All"` against the day there are three. Both were written
+as good hygiene. Together they mean a fifth lens that carries a `vote` and a new
+`Family` would compile, render a plausible headline, and silently make every
+number in this section wrong — the kappa above is measured between the two
+families that exist today, and `explain._family_votes` would be feeding a third.
+
+So, explicitly: **a new panel may not vote.** A reading that has no bullish or
+bearish direction — an exposure beta is the live example, since a negative beta
+is not a bad beta — must return no `vote` at all, and then it never reaches
+`agreementOf`, never touches `_family_votes`, and this artifact stays valid.
+
+If a genuinely directional fifth lens is ever wanted, the sequence is not
+negotiable: re-run `measure_lens_agreement.py` with the third family included,
+publish the three pairwise kappas, and only then change the rail's headline. The
+"two independent bodies of data" sentence is the loudest claim this app makes and
+§15 exists because it was shipped for months unmeasured. It must not become
+unmeasured again by accident.
+
 ### What it does not claim
 
 **Kappa measures redundancy, not causation.** A high kappa would not prove two

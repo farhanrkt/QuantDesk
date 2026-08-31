@@ -41,6 +41,59 @@ def test_membership_of_an_unknown_symbol_is_empty(symbol):
 
 
 # --------------------------------------------------------------------------- #
+# The one curated list, and the three things that make it safe
+# --------------------------------------------------------------------------- #
+def test_curated_list_did_not_leak_into_the_index_lists():
+    """The point of a separate list is that the index lists stay TRUE.
+
+    AALI is not in the LQ45 and writing it there to make it reachable would make
+    that list assert something false, undetectably from the output. This is the
+    same failure `universes.py` refuses an S&P 500 list to avoid.
+    """
+    for absent in ("AALI", "LSIP", "DSNG", "TAPG", "BUMI", "NCKL"):
+        assert absent not in universes.UNIVERSES["idx30"]["tickers"]
+        assert absent not in universes.UNIVERSES["lq45"]["tickers"]
+    assert universes.get("idx30")["count"] == 30
+    assert universes.get("lq45")["count"] == 45
+
+
+def test_curated_list_carries_its_own_as_of():
+    """`AS_OF` means "when the index was transcribed". A curated list's date means
+    "when somebody last judged the composition". One field cannot carry both, so an
+    entry may override, and the four index lists must keep the global date."""
+    assert universes.get("idxresources")["asOf"] != universes.AS_OF
+    for index_list in ("dow30", "nasdaq100", "idx30", "lq45"):
+        assert universes.get(index_list)["asOf"] == universes.AS_OF
+    catalogue = {c["id"]: c["asOf"] for c in universes.catalogue()}
+    assert catalogue["idxresources"] != catalogue["idx30"], "the picker must show both dates"
+
+
+def test_untr_is_not_in_the_resources_list():
+    """THE ONE MEMBERSHIP THAT IS LOAD-BEARING, and it is an absence.
+
+    United Tractors reads a higher R-squared against the coal names than one of
+    the coal miners reads against its own peers, which is the strongest evidence
+    that measuring exposure beats assuming it. That result only means anything
+    while UNTR is OUTSIDE the basket: a factor built from UNTR and then used to
+    report UNTR as coal-exposed has discovered nothing. Adding it here would
+    silently convert the finding into a tautology, so the absence is pinned.
+    """
+    assert "UNTR" not in universes.UNIVERSES["idxresources"]["tickers"]
+    assert "UNTR.JK" not in universes.get("idxresources")["tickers"]
+
+
+def test_curated_list_does_not_displace_an_index_peer_group():
+    """`containing` is ordered largest-first and the peers route takes the first
+    entry, so a new list could quietly change every default peer group. It is
+    smaller than both Indonesian indices, so it must sort last for a name in them.
+    """
+    assert [e["id"] for e in universes.containing("ADRO.JK")] == [
+        "lq45", "idx30", "idxresources"]
+    # A name in no index gets a peer group where it previously had none.
+    assert [e["id"] for e in universes.containing("AALI.JK")] == ["idxresources"]
+
+
+# --------------------------------------------------------------------------- #
 # The restatement
 # --------------------------------------------------------------------------- #
 UNIVERSE = {"id": "nasdaq100", "name": "Nasdaq-100", "market": "US",
