@@ -128,7 +128,10 @@ def fetch_data(ticker: str, start: dt.date, end: dt.date) -> pd.DataFrame:
     `analyze` below branches on `.empty` and every caller of this function has
     always done so.
     """
-    frame = market_data.ohlcv(ticker, start=start, end=end)
+    # OPT-OUT 3 OF 4. The reader's own ticker — see `market_data`'s module
+    # docstring. This lens reads a suspended listing and reports what it
+    # last did, which is the question a reader asks about a halted name.
+    frame = market_data.ohlcv(ticker, start=start, end=end, allow_stale=True)
     return frame if frame is not None else pd.DataFrame()
 
 

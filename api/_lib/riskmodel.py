@@ -265,7 +265,12 @@ def estimate_beta_for_symbol(symbol: str, market_code: str = "US", period: str =
     key = (symbol.upper(), period, dt.date.today().isoformat())
     history = _HISTORY_CACHE.get(key)
     if history is None:
-        history = market_data.ohlcv(symbol, period=period)
+        # OPT-OUT 2 OF 4, and the same reason as the other three: this is the
+        # reader's own ticker. A stale beta is a real cost, but it is carried by
+        # a stated window and a reported R-squared, whereas refusing here would
+        # send a suspended name down the Blume fallback with a note blaming the
+        # INDEX for a gap in the stock's own history.
+        history = market_data.ohlcv(symbol, period=period, allow_stale=True)
         if history is None:
             return estimate_beta(pd.DataFrame(), market_code, period, fallback_beta)
         if len(_HISTORY_CACHE) > 256:

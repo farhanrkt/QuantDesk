@@ -274,7 +274,10 @@ class WhaleTracker:
         # why `index.py` had to strip the timezone from three frames by hand
         # before the event study could align them. Every frame now arrives on
         # the same contract.
-        history = market_data.ohlcv(ticker, period=period)
+        history = market_data.ohlcv(
+            # OPT-OUT 4 OF 4. The reader's own ticker; see `market_data`'s
+            # module docstring for why these four are the only ones.
+            ticker, period=period, allow_stale=True)
         if history is None:
             raise DataFetchError(f"No data found for '{ticker}'. {symbols.hint(ticker)}")
 
