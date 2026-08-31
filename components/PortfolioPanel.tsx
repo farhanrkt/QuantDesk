@@ -192,6 +192,81 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
         </CardBody>
       </Card>
 
+      {data.driver?.usable && (
+        <Card>
+          <CardHeader>
+            <CardTitle>What these move with</CardTitle>
+            <span className="flex items-center gap-1.5 font-mono text-micro text-ash">
+              {data.driver.weeks} weeks
+              <Explain explain={ex.sharedDirection} />
+            </span>
+          </CardHeader>
+          {/*
+            NEVER TONE-COLOURED, and this is the panel where that is hardest to
+            hold. Being 60% driven by the energy complex is not good or bad news
+            about a book — it describes what is being held, and a reader who
+            bought four coal miners on purpose has a concentrated portfolio doing
+            exactly what they asked of it. Python returns `context` for every
+            figure here, which the tone map renders neutral; this file reads
+            those explanations and never picks a colour from a number's size.
+          */}
+          <CardBody className="space-y-3">
+            {ex.sharedDirection && (
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="num text-h2 font-semibold text-chalk">
+                  {pct(data.driver.varianceShare ?? 0, 0)}
+                </span>
+                <span className="text-meta leading-relaxed text-ash">
+                  of the week-to-week movement is one shared direction
+                  {data.driver.marketShare != null && (
+                    <> — of which {pct(data.driver.marketShare, 0)} is
+                    {" "}{data.driver.indexSymbol === "^JKSE"
+                      ? "the Jakarta Composite" : "the S&P 500"} itself</>
+                  )}
+                </span>
+              </div>
+            )}
+            {ex.sharedDirection && (
+              <p className="text-meta leading-relaxed text-body">
+                {ex.sharedDirection.reading}
+              </p>
+            )}
+            {ex.sharedDriver && (
+              <div className="border-t border-ruleSoft pt-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="eyebrow">What they have in common</span>
+                  <Explain explain={ex.sharedDriver} />
+                </div>
+                <p className="mt-1 text-meta leading-relaxed text-body">
+                  {ex.sharedDriver.reading}
+                </p>
+              </div>
+            )}
+            {(data.driver.tested ?? []).length > 0 && (
+              <Explainer summary="Four things were tested, and they are not the only things there are">
+                <p>
+                  The shared movement is compared against gold, energy, copper and the
+                  dollar — contracts that trade everywhere, so none of them can be one of
+                  your holdings. Peer baskets of miners and plantations were built and
+                  measured for this and did not work: a foreign coal basket scored lower
+                  against four Indonesian coal miners than palm oil did, and a domestic
+                  one labelled a nickel-and-gold book as coal. Both were dropped rather
+                  than shipped, so a resources book will often come back with nothing
+                  named even when its holder can see exactly what it is.
+                </p>
+                <p className="mt-2">
+                  Tested here:{" "}
+                  {(data.driver.tested ?? [])
+                    .map((t) => `${t.label}${t.available ? "" : " (no data)"}`)
+                    .join(", ")}. Measured on weekly moves, because at daily frequency the
+                  markets these settle in are hours apart and the signal washes out.
+                </p>
+              </Explainer>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>How closely it tracks each holding</CardTitle>

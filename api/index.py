@@ -889,7 +889,14 @@ def portfolio_context(body: PortfolioRequest):
         raise HTTPException(status_code=400, detail="Provide at least one holding.")
 
     market = body.market
-    symbol = resolved(body.candidate, market)
+    # THE MARKET FOLLOWS THE SYMBOL, NOT THE DROPDOWN, and this route needed it
+    # the moment it grew a benchmark. "ITMG.JK" left on the default US setting is
+    # one of the two ways the README tells you to reach an IDX listing; before
+    # this it resolved the right Indonesian company and then measured its shared
+    # direction against ^GSPC, reporting "0% of it is the S&P 500" for a book of
+    # Jakarta miners. Same bug `resolved_with_market` was written for, arriving
+    # in a route that used to have no benchmark to get wrong.
+    symbol, market = resolved_with_market(body.candidate, market)
     book = [s for s in dict.fromkeys(resolved(t, market) for t in raw) if s != symbol]
     if not book:
         raise HTTPException(
@@ -902,9 +909,10 @@ def portfolio_context(body: PortfolioRequest):
                    f"this list has {len(book)}. A correlation matrix that size is also "
                    f"more than anyone reads.")
 
-    result = portfolio.analyse(symbol, book, weights=_validated_weights(body.weights))
+    result = portfolio.analyse(symbol, book, weights=_validated_weights(body.weights),
+                               market_code=market)
     result["explain"] = explain.for_portfolio(result)
-    return private_ok({"candidate": symbol, "market": market.upper(), **result})
+    return private_ok({"candidate": symbol, "market": market, **result})
 
 
 # --------------------------------------------------------------------------- #

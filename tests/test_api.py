@@ -240,6 +240,33 @@ def test_every_lens_is_told_the_market_the_suffix_implies(client, monkeypatch):
     assert seen["valuation"] == "ID"
 
 
+def test_the_portfolio_route_also_takes_its_market_from_the_suffix(client, monkeypatch):
+    """The same bug, in the route that had no benchmark until it grew one.
+
+    `/api/portfolio` used to need no market code at all — a correlation matrix
+    over holdings has no index in it. Naming what those holdings share does: the
+    market is projected out first, and with the dropdown's value instead of the
+    symbol's, a book of Jakarta miners was measured against ^GSPC and the panel
+    read "0% of it is the S&P 500". True, and about the wrong index.
+
+    Caught in the browser rather than by a test, which is why this one exists.
+    """
+    seen = {}
+    monkeypatch.setattr(index.portfolio, "analyse",
+                        lambda candidate, holdings, **kw: seen.update(
+                            market=kw.get("market_code"), candidate=candidate)
+                        or {"usable": False, "reason": "stub"})
+
+    client.post("/api/portfolio",
+                json={"candidate": "ITMG.JK", "holdings": ["ADRO.JK"], "market": "US"})
+    assert seen["candidate"] == "ITMG.JK"
+    assert seen["market"] == "ID", "a typed .JK suffix must beat the dropdown"
+
+    client.post("/api/portfolio",
+                json={"candidate": "AAPL", "holdings": ["MSFT"], "market": "US"})
+    assert seen["market"] == "US", "and the ordinary case is untouched"
+
+
 def test_confluence_carries_the_pre_trade_block_even_when_legs_fail(client, monkeypatch):
     """The panel that names what could not be checked has to survive the case
     where nothing could be checked. A failed leg is its input, not its enemy."""

@@ -73,7 +73,7 @@ from typing import Optional, Sequence
 import numpy as np
 import pandas as pd
 
-from . import market_data, riskmodel
+from . import exposure, market_data, riskmodel
 
 # One year of daily returns. Not a free choice: it is the window whose
 # persistence was measured, so it is the only one whose stability this app can
@@ -196,19 +196,30 @@ def risk_contributions(matrix: pd.DataFrame, volatility: pd.Series,
 
 def analyse(candidate: str, holdings: Sequence[str],
             weights: Optional[dict] = None,
-            window: int = WINDOW_DAYS) -> dict:
+            window: int = WINDOW_DAYS,
+            market_code: str = "US") -> dict:
     """Where a candidate sits against a book, from one batched download.
 
     Price only, so it batches — a twenty-name portfolio is one upstream call,
     not twenty. The fundamentals lenses do not batch, which is why there is no
     quality or valuation dimension here and the panel says so.
+
+    THE REFERENCE SERIES RIDE ALONG IN THE SAME CALL. `exposure` needs a market
+    index and four futures to name what a book has in common; appending five
+    symbols to a download already being made costs one chunk rather than a
+    second round trip, and they are filtered back out before anything here
+    correlates holdings against each other.
     """
     symbols = list(dict.fromkeys([candidate, *holdings]))
+    references = exposure.reference_symbols(market_code)
     end = dt.date.today()
     # Calendar days, generously, so the window survives holidays and a market
     # that trades fewer sessions than the US one.
     start = end - dt.timedelta(days=int(window * 1.9) + 30)
-    frames = market_data.ohlcv_batch(symbols, start, end)
+    frames = market_data.ohlcv_batch(symbols + references, start, end)
+    reference_frames = {s: f for s, f in frames.items()
+                        if s in references and s not in symbols}
+    frames = {s: f for s, f in frames.items() if s in symbols}
 
     returns = daily_returns(frames, window=window)
     matrix, usable = _correlation_matrix(returns)
@@ -258,8 +269,25 @@ def analyse(candidate: str, holdings: Sequence[str],
         dtype="float64")
     contributions = risk_contributions(matrix, volatility, money)
 
+    # --- what the book has in common, named where it can be --------------
+    #
+    # ON THE FULL FETCHED WINDOW, NOT THE TRAILING 252 DAYS. Those are different
+    # questions and they want different samples. The correlation window is 252
+    # because that is the length whose PERSISTENCE was measured, and quoting a
+    # number from any other window would be quoting a stability this app has not
+    # established. Naming a shared direction makes no persistence claim at all —
+    # it describes what these names did — so it uses everything fetched, which
+    # is about seventy weeks against the fifty-two a one-year window would give.
+    driver = exposure.analyse(
+        daily_returns(frames, window=10 ** 6),
+        daily_returns(reference_frames, window=10 ** 6) if reference_frames
+        else pd.DataFrame(),
+        market_code=market_code,
+    )
+
     stability = load_stability()
     return {
+        "driver": driver,
         "usable": True,
         "candidate": candidate,
         "holdings": held,

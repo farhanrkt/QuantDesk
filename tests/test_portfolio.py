@@ -30,6 +30,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from _lib import exposure
 from _lib import explain as E
 from _lib import portfolio as P
 from _lib import riskmodel
@@ -298,3 +299,71 @@ def test_risk_contributions_refuse_rather_than_dividing_by_zero():
 def test_for_portfolio_returns_nothing_for_an_unusable_result():
     assert E.for_portfolio({"usable": False, "reason": "x"}) == {}
     assert E.for_portfolio({}) == {}
+
+
+# --------------------------------------------------------------------------- #
+# What the book has in common — the driver label
+# --------------------------------------------------------------------------- #
+def test_the_reference_series_ride_along_and_are_kept_out_of_the_correlations(monkeypatch):
+    """ONE FETCH, TWO PURPOSES, AND THE TWO MUST NOT MIX.
+
+    `exposure` needs an index and four futures, and appending them to a download
+    already being made is a chunk rather than a round trip. But a future is not
+    a holding: if it survived into the correlation matrix the panel would report
+    that the candidate tracks crude oil at 0.31 and count it toward how many
+    independent bets the book is.
+    """
+    requested: list = []
+
+    def spy(symbols_list, *a, **k):
+        requested.extend(symbols_list)
+        return _frames(CLONES)
+
+    monkeypatch.setattr(P.market_data, "ohlcv_batch", spy)
+    result = P.analyse("CAND", ["AAA", "BBB", "CCC"], market_code="ID")
+
+    for symbol in exposure.reference_symbols("ID"):
+        assert symbol in requested, "the references were asked for"
+    assert "^JKSE" not in (result["holdings"] or []), "and kept out of the book"
+    assert not any(p["ticker"].startswith("^") or "=" in p["ticker"]
+                   for p in result["pairs"]), "and out of the pairwise correlations"
+
+
+def test_a_failed_reference_fetch_reads_as_untested_not_as_no_driver(book):
+    """CONSTRAINT 3, AT THE SEAM WHERE IT IS EASIEST TO LOSE.
+
+    The stub supplies no reference series, which is the shape of a failed
+    upstream fetch. The shared direction is still measurable — it needs only the
+    holdings — so the panel keeps that figure. What it must NOT do is report
+    "nothing explained these holdings", because nothing was asked: a reference
+    that could not be read and a reference that was read and found absent are
+    different facts, and only the second is a finding.
+    """
+    result = book()
+    assert result["usable"] is True
+    driver = result["driver"]
+    assert driver["usable"] is True, "the shared direction needs no references"
+    assert driver["varianceShare"] is not None
+    assert driver["marketShare"] is None, "no index arrived, so no share is claimed"
+    assert driver["matches"] == []
+    assert all(t["available"] is False for t in driver["tested"])
+
+    explanation = E.for_portfolio(result)["sharedDriver"]
+    assert explanation["band"] == "unavailable", "not a finding — an unasked question"
+    assert explanation["tone"] == "none"
+    assert result["pairs"], "and the rest of the panel is unaffected"
+
+
+def test_the_driver_uses_the_whole_fetched_window_not_the_correlation_window():
+    """DIFFERENT QUESTIONS, DIFFERENT SAMPLES, and the reason is in `portfolio`.
+
+    252 days is the window whose PERSISTENCE was measured, so it is the only one
+    a correlation may be quoted from. Naming a shared direction makes no
+    persistence claim, so it uses everything fetched — about seventy weeks rather
+    than fifty-two, which is the difference between clearing `MIN_WEEKS` and not.
+    """
+    frames = _frames(CLONES, n=500)
+    weekly = exposure.to_weekly(P.daily_returns(frames, window=10 ** 6))
+    assert len(weekly) > 60, "the full window is well past the weekly floor"
+    assert len(exposure.to_weekly(P.daily_returns(frames))) < 60, (
+        "and the correlation window alone would be marginal")

@@ -888,6 +888,30 @@ export interface PortfolioResponse {
     portfolioVolatility?: number; rows?: PortfolioRiskRow[];
   };
   volatility?: Record<string, number>;
+  /**
+   * What the holdings have in common, once the local market is taken out.
+   * Never carries a vote: a beta has no bullish or bearish direction, so this
+   * never reaches the confluence rail. See `api/_lib/exposure.py`.
+   */
+  driver?: {
+    usable: boolean;
+    reason?: string;
+    holdings?: string[];
+    weeks?: number;
+    varianceShare?: number;
+    hasSharedDirection?: boolean;
+    loadings?: Record<string, number>;
+    marketShare?: number | null;
+    indexSymbol?: string;
+    /** Declaration order, never strength order. */
+    matches?: { key: string; label: string; symbol: string;
+                correlation: number; overlapWeeks: number; note: string }[];
+    tested?: { key: string; label: string; symbol: string; available: boolean;
+               correlation?: number; overlapWeeks?: number }[];
+    ambiguous?: boolean;
+    nameAt?: number;
+    minVarianceShare?: number;
+  };
   stability?: {
     measuredOn: string | null;
     headline: string | null;

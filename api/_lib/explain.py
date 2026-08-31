@@ -3852,6 +3852,129 @@ def _risk_share(value, ticker=None, weight=None, **_):
                 band, "low", evidence="moderate", value_text=_pct(value, 0))
 
 
+# ============================================================================ #
+# What a book has in common — `exposure.py`
+#
+# NEVER COLOURED, AND THE REASON IS THE SAME ONE `screendomain.py` GIVES.
+# Being 60% driven by the energy complex is not good or bad news about a
+# portfolio; it is a description of what is being held. A green tint would say
+# "diversified" and an amber one would say "concentrated", and this app has no
+# basis for either — the reader's own thesis decides which of those a shared
+# driver is, and a holder who bought four coal miners ON PURPOSE has a
+# concentrated book that is doing exactly what they wanted.
+#
+# The one thing that would deserve a colour — "you are concentrated and did not
+# know it" — is a claim about the reader's intent, which nothing here can see.
+# ============================================================================ #
+@metric("sharedDirection")
+def _shared_direction(value, market_share=None, weeks=None, holdings=None, **_):
+    label = "Shared direction"
+    what = ("How much of these holdings' week-to-week movement is one common thing "
+            "rather than each name going its own way, and how much of that common "
+            "thing is simply the local market.")
+    if not _known(value):
+        return unavailable(label, what,
+                           "needs at least three holdings with a shared history")
+
+    reading = f"{_pct(value, 0)} of the joint movement is one shared direction"
+    if _known(holdings):
+        reading += f" across {int(holdings)} holdings"
+    reading += "."
+
+    # THE MARKET SHARE IS THE PART THAT CHANGES WHAT A READER DOES. A book whose
+    # common movement is the index is diversified in the only sense measurable
+    # here; a book whose common movement is NOT the index has something else
+    # driving it, and that something is what the next figure tries to name.
+    if _known(market_share):
+        if market_share >= 0.50:
+            reading += (f" Most of it — {_pct(market_share, 0)} — is the market itself, "
+                        f"which is what a spread-out book looks like.")
+        elif market_share >= 0.20:
+            reading += (f" About {_pct(market_share, 0)} of it is the market; the rest is "
+                        f"something these names share and the index does not.")
+        else:
+            reading += (f" Only {_pct(market_share, 0)} of it is the market, so almost all "
+                        f"of what moves these together is specific to them rather than "
+                        f"to where they are listed.")
+    return make(
+        label=label, what=what, reading=reading,
+        action=CONTEXT_NOT_TRIGGER,
+        band="context", good_direction="none", evidence="moderate",
+        value_text=_pct(value, 0),
+    )
+
+
+@metric("sharedDriver")
+def _shared_driver(value, matches=None, tested=None, ambiguous=False,
+                   name_at=None, **_):
+    label = "What they have in common"
+    what = ("Whether the movement these holdings share, once the local market is taken "
+            "out, tracks anything that can be named. Tested against gold, energy, copper "
+            "and the dollar.")
+    rows = list(matches or [])
+    checked = [t for t in (tested or []) if t.get("available")]
+
+    if not checked:
+        return unavailable(label, what,
+                           "none of the reference series had enough overlapping history")
+
+    if ambiguous:
+        # A TIE IS A REFUSAL. Two references this close are not distinguishable
+        # at this sample size, and naming the larger one would present a
+        # precision the data does not have.
+        return make(
+            label=label, what=what,
+            reading=("Two of the tested series track this book's shared movement about "
+                     "equally well, which is not enough to tell them apart. Nothing is "
+                     "named rather than picking the larger by a margin this sample "
+                     "cannot resolve."),
+            action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+            evidence="weak", value_text=None,
+        )
+
+    if not rows:
+        # CONSTRAINT 3, IN THE PLACE IT IS EASIEST TO BREAK. An empty result here
+        # reads as "diversified" unless it is explicitly denied, and the denial
+        # has to name the real reason: the tested set is four traded contracts,
+        # and the thing actually driving a book may not be in it. It usually is
+        # not, for a book of Indonesian resource names — the peer-equity baskets
+        # that would have caught those were measured and did not work.
+        labels = [t["label"] for t in checked]
+        names = (labels[0] if len(labels) == 1
+                 else " and ".join([", ".join(labels[:-1]), labels[-1]]))
+        return make(
+            label=label, what=what,
+            reading=(f"Nothing tested explained what these holdings share. That is not "
+                     f"evidence they are diversified — only that {names} did not account "
+                     f"for it, and whatever does may simply not be on that list."),
+            action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+            evidence="weak", value_text=None,
+        )
+
+    # ONE MATCH IS THE COMMON CASE, so it gets its own phrasing. Building the
+    # sentence generically produced "tracks the energy complex — the energy
+    # complex at 0.54", which reads as a stutter and cost the reader the number.
+    if len(rows) == 1:
+        row = rows[0]
+        body = (f"tracks {row['label']}, at {_num(row['correlation'], 2)} on weekly "
+                f"moves with the local market already taken out")
+    else:
+        body = ("tracks "
+                + ", ".join(f"{r['label']} at {_num(r['correlation'], 2)}" for r in rows)
+                + ", on weekly moves with the local market already taken out")
+    reading = (f"What these holdings share {body}. A position in this book is partly a "
+               f"position on that.")
+    if _known(name_at):
+        reading += (f" Reported because it passed {_num(name_at, 2)}, a reading "
+                    f"threshold rather than a published one.")
+    return make(
+        label=label, what=what, reading=reading,
+        action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+        evidence="moderate",
+        value_text=_num(max(abs(row["correlation"]) for row in rows), 2),
+    )
+
+
 def for_portfolio(result: dict) -> dict:
     """Explanations for the portfolio panel.
 
@@ -3880,6 +4003,21 @@ def for_portfolio(result: dict) -> dict:
                         weight=row.get("weight"))
         if entry:
             out[f"riskShare.{row['ticker']}"] = entry
+
+    driver = result.get("driver") or {}
+    if driver.get("usable"):
+        entry = explain("sharedDirection", driver.get("varianceShare"),
+                        market_share=driver.get("marketShare"),
+                        weeks=driver.get("weeks"),
+                        holdings=len(driver.get("holdings") or []))
+        if entry:
+            out["sharedDirection"] = entry
+        entry = explain("sharedDriver", driver.get("varianceShare"),
+                        matches=driver.get("matches"), tested=driver.get("tested"),
+                        ambiguous=driver.get("ambiguous"),
+                        name_at=driver.get("nameAt"))
+        if entry:
+            out["sharedDriver"] = entry
     return out
 
 

@@ -126,6 +126,12 @@ SAMPLES: dict[str, tuple] = {
     "validationDomain": ("outside", {"name": "Period", "sample": "US filings, 1976-1996",
                                      "this_use": "2025 filings",
                                      "note": "29 years after the sample ends."}),
+    "sharedDirection": (0.54, {"market_share": 0.09, "weeks": 72, "holdings": 4}),
+    "sharedDriver": (0.54, {"matches": [{"key": "oil", "label": "the energy complex",
+                                         "correlation": 0.50, "overlapWeeks": 72}],
+                            "tested": [{"key": "oil", "label": "the energy complex",
+                                        "available": True, "correlation": 0.50}],
+                            "ambiguous": False, "name_at": 0.45}),
 }
 
 
@@ -177,10 +183,19 @@ def test_reading_quotes_the_actual_value(key):
 def test_missing_values_never_get_a_colour(key):
     """An absent number must never be rendered as good or bad news."""
     _value, ctx = SAMPLES[key]
-    if key in ("cusumEpisode", "maxDrawdownRecoveryDays", "divergenceState", "gapState"):
+    if key in ("cusumEpisode", "maxDrawdownRecoveryDays", "divergenceState", "gapState",
+               "sharedDriver"):
         # These READ their missing case rather than lacking data: "no regime
         # detected", "never recovered", "price and momentum agree", "no unfilled
         # gap" are findings, not gaps, so they are exempt by design.
+        #
+        # `sharedDriver` is the same shape and the most load-bearing of them.
+        # "Nothing tested explained what these holdings share" is the finding,
+        # and it is the one place constraint 3 is easiest to break — an empty
+        # result here reads as "diversified" unless the words deny it, which is
+        # exactly what that branch does. Its genuinely-absent case, where no
+        # reference had enough overlapping history to correlate at all, still
+        # returns `unavailable`, and `test_shared_driver_*` below pins both.
         return
     result = E.explain(key, None, **ctx)
     assert result["band"] == "unavailable"
