@@ -1406,9 +1406,73 @@ measuring exposure beats assuming it, and a hand-specified sector map would neve
 have tested it. That result holds only while UNTR is outside the basket.
 
 > Measured 31 August 2026 on 98 equities and 9 reference series, weekly W-FRI log
-> returns, 2017-09 to 2026-08. The single-name exposure reading is **not** shipped
-> and is gated on a stability study of its own — betas measured in one year
-> predicting the next — which this section does not yet report.
+> returns, 2017-09 to 2026-08.
+
+### The gate, and what it refused
+
+`measure_exposure_stability.py` is the study the single-name reading was held
+behind: do this year's betas describe next year's? Nine years, 475 weeks, nine
+52-week blocks, **eight transitions** across 157 names — comparable to the six
+the correlation study got, so the two can be read against each other.
+
+**The unconditional measurement mostly measures whether noise persists, and
+finding that out changed the answer.** Run across every name it asks whether
+AAPL's gold beta this year predicts AAPL's gold beta next year, and AAPL has no
+gold exposure, so both are estimation error and the honest answer is no — gold
+read **+0.03 across 157 names**. §11's correlation study never had this problem
+because every *pair* of stocks has a real correlation; not every stock has a real
+factor loading.
+
+So the measurement that decides conditions on a material loading **in the first
+block of each transition**, tested into the second. That uses no information from
+the future and it is the situation a panel is actually in: it prints a beta
+because it sees a loading now, and the question is whether the loading is still
+there next year. Both arms are stamped.
+
+| Factor | Where loaded | t | All names | Clears 0.25? |
+|---|---|---|---|---|
+| Gold | +0.21 | +2.1 | +0.02 | **no** |
+| Energy | +0.42 | +3.6 | +0.21 | yes |
+| Copper | +0.43 | +7.8 | +0.37 | yes |
+| The dollar | +0.34 | +2.9 | +0.26 | yes |
+
+The line was set at 0.25 before the numbers were seen, because choosing it
+afterwards would be choosing whether the feature ships. Three of four clear it,
+and **every one sits below the 0.50-0.65 at which pairwise correlations
+persist**. So a printed exposure beta is a weaker claim than a printed
+correlation and must carry its own number; gold may not be printed as a
+forward-looking figure at all.
+
+### The up/down gap does not persist, which is the clearest null here
+
+§16 above printed two betas and declined to interpret the divergence, pending
+this. Sign agreement between halves runs **49% to 76%**, and between the
+factor's rising and falling years **46% to 66%** — a coin flip on gold.
+
+The regime split was the point. A sample straddling one large one-directional
+move produces unstable asymmetry for mechanical reasons, and a half-split alone
+cannot tell that from the asymmetry not being real. Split by the factor's own up
+years and down years, it is not real. Two betas may be printed; the gap between
+them may not be interpreted.
+
+### Weekly confirmed at scale, having been chosen on five pairs
+
+Median absolute beta runs **1.2x to 3.5x** the daily estimate across every
+factor — the non-synchronous attenuation the design predicted — and daily and
+weekly disagree in *sign* on 1-10% of names. Gold is the worst of both at 3.5x
+and 10%, which is a second reason not to print it.
+
+### No stress story
+
+Explanatory power in the worst blocks moves by -0.02 to +0.03 against the rest,
+with no consistent direction. Whole blocks, never selected weeks — the third
+place in this repo the Forbes & Rigobon selection has had to be caught.
+
+> Measured 31 August 2026 by `scripts/measure_exposure_stability.py`; stamped in
+> `api/_lib/exposure_stability.json`. Fifteen names excluded for short history
+> and listed by name in the artifact rather than averaged in. Nothing consumes it
+> yet: it decides whether the single-name reading may be built and what it would
+> be allowed to say.
 
 ---
 

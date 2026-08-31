@@ -38,10 +38,14 @@ do.
 
 Most research tools give one opinion. This gives four that share no inputs, and then
 spends real effort establishing how much that agreement is actually worth — publishing the
-measurement whichever way it comes out. Three stamped artifacts already do this
+measurement whichever way it comes out. Five stamped artifacts already do this
 (`backtest_results.json`, `check_calibration.json`, `correlation_stability.json`,
-`lens_agreement.json`), including a backtest that reports its own ranking has **no
-detectable edge**.
+`lens_agreement.json`, `exposure_stability.json`), including a backtest that reports
+its own ranking has **no detectable edge** and a beta study that refuses one of the
+four factors it tested.
+
+*The count said "three" while listing four, from before `lens_agreement.json`
+existed. Corrected 31 August 2026 along with the fifth.*
 
 A neighbouring product could copy the four lenses. It could not truthfully copy
 "we measured whether our own signal works and published the null result".
@@ -115,7 +119,7 @@ These are durable product facts. Future work preserves them; none is a style pre
 - Measured artifacts, each stamped with its date, in `api/_lib/*.json`.
 - `docs/field-manual.html` — beginner's guide; its glossary is **generated** from
   `api/_lib/explain.py` and CI fails if a metric is added without regenerating.
-- Five network scripts in `scripts/` deliberately outside CI. Re-run after touching what
+- Six network scripts in `scripts/` deliberately outside CI. Re-run after touching what
   they measure; a stale stamped number is worse than none.
 
 ## Accessibility

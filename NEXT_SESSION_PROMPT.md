@@ -77,9 +77,9 @@ PRODUCT.md holds the full list. The four that get broken by accident:
    or ordered by strength.
 
 2. NO PREDICTIVE CLAIM THAT ISN'T MEASURED. Measure it offline and publish the
-   result INCLUDING nulls, or don't ship it. Four stamped artifacts do this:
+   result INCLUDING nulls, or don't ship it. Five stamped artifacts do this:
    backtest_results.json, check_calibration.json, correlation_stability.json,
-   lens_agreement.json.
+   lens_agreement.json, exposure_stability.json.
 
 3. ABSENCE OF A FLAG IS NEVER EVIDENCE OF QUALITY. An empty panel is not a clean
    bill of health and must say so in words.
@@ -92,12 +92,13 @@ PRODUCT.md holds the full list. The four that get broken by accident:
 
 WHERE TO BE CAREFUL
 ===================
-- scripts/ holds FIVE network scripts deliberately outside CI. Re-run
+- scripts/ holds SIX network scripts deliberately outside CI. Re-run
   calibrate_checks.py after touching a pre-trade check, backtest_ranking.py
   after ranking.py, measure_correlation_stability.py after the portfolio window,
-  and measure_lens_agreement.py after anything that changes what a lens
-  CONCLUDES (a verdict band, a tone, the family grouping). A stale stamped
-  number is worse than none.
+  measure_lens_agreement.py after anything that changes what a lens CONCLUDES
+  (a verdict band, a tone, the family grouping), and
+  measure_exposure_stability.py after a change to exposure.REFERENCES or to the
+  estimation window. A stale stamped number is worse than none.
 
 - `npm run check:frontend` now enforces 7 design rules by grep over source. Each
   one describes a bug that was actually in this codebase. If one fires on
