@@ -177,6 +177,27 @@ function FactorChart({ factor, rows, materialAt, highlight, yMax }: {
           Nothing in this list clears the floor on this one.
         </p>
       )}
+      {/*
+        THE CHART IS THE WHOLE CONTENT OF THIS TAB, so without this the tab is
+        empty to a screen reader — not degraded, empty. Every other chart in this
+        app supports a panel that also states its findings in prose; this one
+        replaced the prose.
+
+        An earlier version carried a visible "Above the floor: ..." caption and
+        the rebuild dropped it, which removed the text equivalent without anyone
+        noticing, because the names moved into SVG <text> that reads as a stream
+        of unlabelled tokens. This says the same thing in a sentence and stays
+        out of the visual layout.
+      */}
+      <p className="sr-only">
+        {factor.label}: {named === 0
+          ? "no name in this list clears the reporting floor."
+          : `${named} of ${points.length} names clear the reporting floor. ` +
+            points.filter((p) => p.material)
+                  .map((p) => `${p.ticker} moves ${num(p.x, 2)} times as hard, ` +
+                              `explaining ${pct(p.y, 0)} of its weekly movement`)
+                  .join("; ") + "."}
+      </p>
     </div>
   );
 }
