@@ -19,7 +19,8 @@ import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { TickerBar } from "@/components/TickerBar";
 import { ManualRescue } from "@/components/ValuationControls";
 import { ValuationPanel } from "@/components/ValuationPanel";
-import { Card } from "@/components/ui/card";
+import { Card, CardBody } from "@/components/ui/card";
+import { ApplyButton } from "@/components/ui/controls";
 import { DetailProvider, DetailToggle, useDetailLevel } from "@/components/ui/explain";
 import { HorizonProvider, useHoldingHorizon } from "@/components/ui/horizon";
 import { PanelSkeleton } from "@/components/ui/skeleton";
@@ -55,6 +56,48 @@ const TABS = [
   { id: "thesis", label: "Thesis", accent: "#A78BFA" },
   { id: "screen", label: "Scan & rank", accent: "#A78BFA" },
 ];
+
+/**
+ * A pointer from Trend to the one question this page cannot answer.
+ *
+ * WHY A SIGNPOST AND NOT THE READING ITSELF. What a set of holdings has in
+ * common is a property of the SET — it is measured from how several names move
+ * together, and one ticker does not have it. So the finding lives on the
+ * Portfolio tab, where the holdings are, and this says so rather than
+ * reproducing a number that would mean something different here.
+ *
+ * IT EXISTS BECAUSE THE FEATURE WAS UNFINDABLE. The driver label only draws
+ * once holdings have been pasted in, so a reader who had never opened the
+ * Portfolio tab had no way to learn it was there — the owner loaded the app
+ * after it shipped and saw nothing new at all. Discoverability was the whole
+ * defect and one line is the whole fix.
+ *
+ * ONE LINE, DELIBERATELY. The Trend tab is the one a copy pass cut from 2,294
+ * words to 1,552, and a permanent navigation card with a paragraph in it would
+ * put some of that straight back.
+ *
+ * IT SITS FIRST, AND THE FIRST ATTEMPT PUT IT LAST. The reasoning for last was
+ * that a signpost must not outrank a finding, which is right about hierarchy and
+ * wrong about this: measured in the browser at 1440px, the bottom of the Trend
+ * tab is 4,718px down a 4,947px page — 95% of the way through. A pointer nobody
+ * scrolls to is the same defect as no pointer, which is the defect this exists
+ * to fix. One line carrying no number and no verdict does not compete with the
+ * lens's reading for authority; it is a wayfinder, and a wayfinder belongs where
+ * the reader arrives.
+ */
+function PortfolioSignpost({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Card>
+      <CardBody className="flex flex-wrap items-center justify-between gap-3 py-4">
+        <p className="max-w-measure text-lead leading-snug text-chalk">
+          Holdings that each look fine on their own can be one bet.
+        </p>
+        <ApplyButton onClick={onOpen}>Portfolio fit</ApplyButton>
+      </CardBody>
+    </Card>
+  );
+}
+
 
 /** One wrapper so all three panels handle loading and failure identically. */
 function Panel<T>({
@@ -279,6 +322,9 @@ export default function Home() {
               </TabPanel>
               <TabPanel id="trend" active={tab}>
                 <div className="space-y-4">
+                  {/* First on the tab, not last — see PortfolioSignpost for the
+                      measurement that moved it. */}
+                  <PortfolioSignpost onOpen={() => setTab("portfolio")} />
                   <Panel state={technical}>
                     {(d) => (
                       <TechnicalPanel data={d} onApply={refineTechnical}
