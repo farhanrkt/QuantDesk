@@ -133,10 +133,15 @@ MIN_WEEKS_IN_BLOCK = 40
 # Same floor as the correlation study's MIN_NAMES and for the same reason.
 MIN_NAMES = 10
 
-# What counts as a name actually LOADING on a factor, rather than carrying a
-# beta that is estimation noise. Same screen the coverage work used: R-squared
-# at or above this, which at 52 weekly observations needs |t| around 1.6.
-MATERIAL_R2 = 0.05
+# What counts as a name actually LOADING on a factor, rather than carrying a beta
+# that is estimation noise.
+#
+# IMPORTED, NOT REDECLARED. `exposure.for_symbol` refuses to print a beta below
+# this, so the population measured here has to be the population printed from. A
+# second copy would drift and the panel would quote a stability figure measured
+# on names it does not print for — which is the shape of wrong that survives
+# review, because both numbers stay individually correct.
+MATERIAL_R2 = exposure.MATERIAL_R2
 
 # Fetch in chunks with a pause. yfinance throttles a caller that asks for two
 # hundred symbols in quick succession, and a throttled response is not an error

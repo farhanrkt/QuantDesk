@@ -6,17 +6,17 @@ import {
 } from "recharts";
 import type { TooltipProps } from "recharts";
 import { useState } from "react";
-import { Card, CardBody, CardHeader, CardTitle, Note, Stat } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Explainer, Note, Stat } from "@/components/ui/card";
 import { IndicatorGrid } from "@/components/IndicatorGrid";
 import { HorizonPanel } from "@/components/HorizonPanel";
 import { LongTermPanel } from "@/components/LongTermPanel";
 import { Tabs } from "@/components/ui/tabs";
-import { useDetail } from "@/components/ui/explain";
+import { ExplainedRow, useDetail } from "@/components/ui/explain";
 import { ApplyButton, DownloadButton, Field, NumberField } from "@/components/ui/controls";
 import type { TechnicalOptions } from "@/lib/api";
 import type { TechPoint, TechnicalResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
-import { TONE, cn, num, splitEmphasis } from "@/lib/utils";
+import { TONE, cn, num, pct, splitEmphasis } from "@/lib/utils";
 
 const TECH = "#5B8DEF";
 const FAST = "#F2C14E";
@@ -140,6 +140,89 @@ export function TechnicalPanel({
           the horizon each one speaks to.
         </p>
       )}
+
+      {/*
+        OUTSIDE THE HORIZON SWITCH, and the first attempt was inside it. This
+        card went in beside "Floors and ceilings", which lives in the `chart`
+        section — hidden whenever the default long-horizon view is showing, so
+        the reading rendered into a `display:none` container and measured 0px
+        tall. Caught by reading the element's own box, not by looking at the page.
+
+        It belongs here on the merits anyway: the beta is estimated over its own
+        fixed 52 weeks and does not change when the reader switches horizon or
+        chart range, so tying its visibility to one of those would imply a
+        relationship that is not there.
+      */}
+      {data.exposure?.usable && (
+        <Card>
+          <CardHeader>
+            <CardTitle>What this moves with</CardTitle>
+            <span className="font-mono text-micro text-ash">
+              {data.exposure.weeks} weeks
+            </span>
+          </CardHeader>
+          {/*
+            NEVER TONE-COLOURED. A stock that tracks copper is not thereby better
+            or worse than one that does not, and a NEGATIVE beta is not a bad
+            beta — a name that rises when the dollar falls is not failing at
+            anything. Python returns `context` for every figure here and this
+            file never picks a colour from a number's sign or size.
+          */}
+          <CardBody className="space-y-2">
+            {(data.exposure.factors ?? []).map((row) => (
+              <ExplainedRow key={row.key}
+                            label={row.label}
+                            value={`${num(row.beta, 2)}x`}
+                            explain={data.exposure?.explain?.[`factorExposure.${row.key}`]} />
+            ))}
+            {(data.exposure.factors ?? []).length === 0 && (
+              <p className="prose-col text-meta leading-relaxed">
+                None of the tested factors accounted for enough of this stock&apos;s
+                movement to report. That is not evidence it is unexposed — only that
+                these ones did not explain it.
+              </p>
+            )}
+            {(data.exposure.refused ?? []).length > 0 && (
+              // THE SUMMARY HAS TO COUNT WHAT IS ACTUALLY BELOW IT. A fixed
+              // "One factor was tested and is deliberately not shown" read
+              // correctly on a name where only gold was refused and wrongly on
+              // AAPL, where all four were — and a summary is the only part of a
+              // closed disclosure anyone sees, so it cannot be approximately true.
+              <Explainer summary={
+                (data.exposure.refused ?? []).some((r) => r.reason.includes("persistence"))
+                  ? (data.exposure.refused ?? []).length === 1
+                    ? "Gold was tested and is deliberately not shown"
+                    : `Gold is deliberately not shown, and ${(data.exposure.refused ?? []).length - 1} other${(data.exposure.refused ?? []).length === 2 ? "" : "s"} did not explain this name`
+                  : "Some factors were tested and did not explain this name"
+              }>
+                <p>
+                  A beta is only printed for factors whose own year-to-year stability
+                  was measured and survived. Gold did not: across nine years the names
+                  loading hardest on gold in one year were barely the same names the
+                  next, so a gold beta describes what happened rather than what is
+                  likely to keep happening.
+                </p>
+                <ul className="mt-2 space-y-1">
+                  {(data.exposure.refused ?? []).map((row) => (
+                    <li key={row.key} className="text-meta text-ash">
+                      <span className="text-body">{row.label}</span> — {row.reason}
+                    </li>
+                  ))}
+                </ul>
+                {data.exposure.measuredOn && (
+                  <p className="mt-2 text-micro text-faint">
+                    Persistence measured {data.exposure.measuredOn}; a beta is shown
+                    only above a rank correlation of {num(data.exposure.killAt ?? 0, 2)},
+                    and only where the factor accounts for at least{" "}
+                    {pct(data.exposure.materialAt ?? 0, 0)} of this stock&apos;s movement.
+                  </p>
+                )}
+              </Explainer>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
 
       {active === "long" && data.hasLongTerm && (
         <LongTermPanel data={data.longTerm} currency={data.currency} />

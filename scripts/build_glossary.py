@@ -84,6 +84,9 @@ _group("pretrade", "checkFiringRate")
 _group("provenance", "validationDomain manipulationPosterior")
 _group("portfolio", "holdingCorrelation effectiveHoldings riskShare "
                     "sharedDirection sharedDriver")
+# On the Trend tab rather than the portfolio one: it reads the price record,
+# which is the family that lens owns.
+_group("trend-ind", "factorExposure")
 
 # Values chosen to land inside SOME band of every ladder in the registry. An
 # interpreter is asked in turn until one returns a reading; the specific value

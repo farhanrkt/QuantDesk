@@ -89,11 +89,16 @@ sentence rather than leaving it to the reader.
 
 from __future__ import annotations
 
+import datetime as dt
+import json
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
 import pandas as pd
+
+from . import market_data
 
 # Below this many holdings there is no "shared direction" worth extracting: the
 # first component of two names is their average wearing a longer name.
@@ -109,6 +114,26 @@ MIN_WEEKS = 40
 # thing driving it, which is a finding rather than a failure. Measured range on
 # real books: 0.41 (US megacaps) to 0.78 (three Indonesian banks).
 MIN_VARIANCE_SHARE = 0.35
+
+# What counts as a name actually LOADING on a factor, rather than carrying a
+# beta that is estimation noise.
+#
+# ONE CONSTANT, TWO READERS, and that is the point. `for_symbol` refuses to print
+# a beta below this, and `scripts/measure_exposure_stability.py` imports it to
+# decide which names enter the persistence measurement. If they drifted apart the
+# panel would be quoting a stability figure measured on a different population
+# than the one it prints from, which is the shape of wrong that survives review.
+MATERIAL_R2 = 0.05
+
+# The window a single-name beta is estimated over.
+#
+# NOT A FREE CHOICE. It is the block length whose persistence was measured, so it
+# is the only window this app can quote a stability number for — exactly the
+# argument `portfolio.WINDOW_DAYS` makes for its own 252. A longer window would
+# give a more precise beta and no way to say whether it describes next year.
+ESTIMATION_WEEKS = 52
+
+STABILITY_PATH = Path(__file__).with_name("exposure_stability.json")
 
 # Correlation with the residual direction at which a reference is named.
 #
@@ -377,4 +402,180 @@ def analyse(holding_returns: pd.DataFrame, reference_returns: pd.DataFrame,
         "ambiguous": ambiguous,
         "nameAt": NAME_AT,
         "minVarianceShare": MIN_VARIANCE_SHARE,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# One name against the factors that survived the gate
+# --------------------------------------------------------------------------- #
+def load_stability(path: Path = STABILITY_PATH) -> Optional[dict]:
+    """The measured persistence of factor betas, or None if never measured.
+
+    Served from a stamped file for the same reason the ranking backtest and the
+    correlation stability are: it is a research finding about the method rather
+    than a per-user computation.
+    """
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) and payload.get("factors") else None
+
+
+def printable(stability: Optional[dict]) -> dict:
+    """Which factors cleared the gate, keyed by factor id, with their evidence.
+
+    READ FROM THE ARTIFACT, NOT HARDCODED, and that is the whole design of this
+    function. Gold failed the study at +0.21 against a 0.25 line and therefore
+    does not appear on screen. But it failed a MEASUREMENT, not a rule, so if the
+    study is re-run on more history and gold clears, it starts appearing without
+    anyone editing a list — and if energy stops clearing, it stops appearing the
+    same way.
+
+    A hardcoded exclusion would decay into folklore the moment the artifact moved
+    underneath it, which is the failure `universes.py` carries an as-of date to
+    avoid.
+
+    Returns `{}` when the study has never been run, which is the honest state: no
+    measurement, nothing printable.
+    """
+    if not stability:
+        return {}
+    kill_at = stability.get("killAt")
+    if kill_at is None:
+        return {}
+    out = {}
+    for key, block in (stability.get("factors") or {}).items():
+        found = ((block.get("all") or {}).get("persistenceWhereLoaded") or {})
+        if not found.get("usable"):
+            continue
+        rho = found.get("meanRankCorrelation")
+        if rho is None or rho < kill_at:
+            continue
+        out[key] = {"rankCorrelation": float(rho), "tStat": found.get("tStat"),
+                    "transitions": found.get("transitions")}
+    return out
+
+
+_SERIES_CACHE: dict[tuple[str, str], pd.Series] = {}
+
+
+def _weekly_returns(symbol: str, weeks: int) -> Optional[pd.Series]:
+    """Weekly log returns for one symbol, cached for the current day.
+
+    Fetched generously in calendar days and trimmed to `weeks`, so a market that
+    trades fewer sessions than the US one still fills the window.
+    """
+    key = (symbol.upper(), dt.date.today().isoformat())
+    cached = _SERIES_CACHE.get(key)
+    if cached is not None:
+        return cached.tail(weeks)
+
+    end = dt.date.today()
+    frame = market_data.ohlcv(symbol, start=end - dt.timedelta(days=int(weeks * 9)),
+                              end=end)
+    if frame is None or frame.empty:
+        return None
+    close = frame["Close"].astype("float64")
+    weekly = to_weekly(np.log(close / close.shift(1)).to_frame("r"))["r"].dropna()
+    if len(_SERIES_CACHE) > 128:
+        _SERIES_CACHE.clear()          # only ever hold the current day
+    _SERIES_CACHE[key] = weekly
+    return weekly.tail(weeks)
+
+
+def for_symbol(symbol: str, market_code: str = "US",
+               weeks: int = ESTIMATION_WEEKS) -> dict:
+    """What one stock moves with, among the factors whose betas survive a year.
+
+    THE RAW WEEKLY BETA, NOT A MARKET-ADJUSTED ONE, and that is a constraint
+    rather than a simplification. `measure_exposure_stability.py` measured the
+    persistence of the raw beta; reporting a residualised one here would quote a
+    stability figure for a quantity nobody measured. The market beta is a
+    separate number and `riskmodel.estimate_beta` already reports it.
+
+    THREE REFUSALS, ALL OF WHICH FIRE IN PRACTICE:
+
+      * a factor the study could not clear — gold, at +0.21 against a 0.25 line
+        set before the numbers were seen — is never printed, and is named on
+        screen as refused rather than quietly dropped;
+      * a factor this name does not materially load on is not printed either,
+        because the persistence figure was measured on names that DID load and
+        does not describe a beta estimated from noise;
+      * too little history is a refusal rather than a shorter window, since a
+        different window has no measured stability at all.
+
+    What it does NOT report is an upside and downside beta. The study found the
+    gap between them does not persist — sign agreement of 46% to 66% across the
+    factor's own rising and falling years, a coin flip on gold — and printing two
+    numbers a reader will inevitably compare, beside a note asking them not to,
+    is worse than printing neither.
+    """
+    market = (market_code or "US").upper()
+    stability = load_stability()
+    allowed = printable(stability)
+    considered = [r for r in REFERENCES if market in r.markets]
+
+    if not allowed:
+        return {"usable": False,
+                "reason": ("Factor betas have not been measured for persistence, so "
+                           "none may be reported as a forward-looking number."),
+                "refused": [{"key": r.key, "label": r.label, "reason": "never measured"}
+                            for r in considered],
+                "measuredOn": None}
+
+    own = _weekly_returns(symbol, weeks)
+    if own is None or len(own) < MIN_WEEKS:
+        return {"usable": False,
+                "reason": (f"Needs {MIN_WEEKS} weeks of price history before a factor "
+                           f"beta means anything; this listing has "
+                           f"{0 if own is None else len(own)}."),
+                "refused": [], "measuredOn": (stability or {}).get("measuredOn")}
+
+    rows, refused = [], []
+    for reference in considered:
+        evidence = allowed.get(reference.key)
+        if evidence is None:
+            refused.append({
+                "key": reference.key, "label": reference.label,
+                "reason": "did not survive the persistence study",
+            })
+            continue
+        series = _weekly_returns(reference.symbol, weeks)
+        if series is None:
+            refused.append({"key": reference.key, "label": reference.label,
+                            "reason": "no data for the factor series"})
+            continue
+        paired = pd.concat([own.rename("y"), series.rename("x")], axis=1).dropna()
+        if len(paired) < MIN_WEEKS:
+            refused.append({"key": reference.key, "label": reference.label,
+                            "reason": "too few overlapping weeks"})
+            continue
+        centred = paired["x"] - paired["x"].mean()
+        sxx = float((centred ** 2).sum())
+        if sxx <= 0:
+            continue
+        beta = float((centred * (paired["y"] - paired["y"].mean())).sum() / sxx)
+        r_squared = float(paired["y"].corr(paired["x"]) ** 2)
+        if not np.isfinite(beta) or not np.isfinite(r_squared):
+            continue
+        if r_squared < MATERIAL_R2:
+            refused.append({"key": reference.key, "label": reference.label,
+                            "reason": "no material loading on this name"})
+            continue
+        rows.append({"key": reference.key, "label": reference.label,
+                     "symbol": reference.symbol, "beta": beta,
+                     "rSquared": r_squared, "weeks": len(paired),
+                     "note": reference.note, **evidence})
+
+    return {
+        "usable": True,
+        "ticker": symbol,
+        "weeks": len(own),
+        # Declaration order, never strength order — see the module docstring.
+        "factors": rows,
+        "refused": refused,
+        "materialAt": MATERIAL_R2,
+        "measuredOn": (stability or {}).get("measuredOn"),
+        "killAt": (stability or {}).get("killAt"),
     }

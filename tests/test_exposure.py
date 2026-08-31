@@ -12,6 +12,8 @@ is a sentence a reader will act on.
 
 from __future__ import annotations
 
+import pathlib
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -222,3 +224,114 @@ def test_reference_symbols_cover_every_series_the_analysis_reads():
         for reference in exposure.REFERENCES:
             if market in reference.markets:
                 assert reference.symbol in needed
+
+
+# --------------------------------------------------------------------------- #
+# One name, and the gate the stability study put in front of it
+# --------------------------------------------------------------------------- #
+def _stability(**rho) -> dict:
+    """A planted stability artifact: factor id -> measured rank correlation."""
+    return {"measuredOn": "2026-08-31", "killAt": 0.25,
+            "factors": {key: {"all": {"persistenceWhereLoaded": {
+                "usable": True, "meanRankCorrelation": value,
+                "tStat": 3.0, "transitions": 8}}}
+                for key, value in rho.items()}}
+
+
+def test_a_factor_below_the_line_is_not_printable():
+    """THE GATE IS READ FROM THE ARTIFACT, NOT HARDCODED. Gold failed a
+    measurement, not a rule, so the exclusion has to move when the measurement
+    does — otherwise it decays into folklore the moment the study is re-run."""
+    allowed = exposure.printable(_stability(oil=0.42, copper=0.43, gold=0.21))
+    assert set(allowed) == {"oil", "copper"}
+    assert allowed["oil"]["rankCorrelation"] == pytest.approx(0.42)
+
+    # And it moves both ways: the same factor clears on a better measurement.
+    assert "gold" in exposure.printable(_stability(gold=0.31))
+
+
+def test_nothing_is_printable_without_a_study():
+    """No measurement is not the same as a measurement of zero, and the honest
+    state is that nothing may be printed as forward-looking."""
+    assert exposure.printable(None) == {}
+    assert exposure.printable({"factors": {}}) == {}
+
+
+def test_the_shipped_artifact_refuses_gold_and_allows_the_other_three():
+    """Against the REAL stamped file, so this fails if the study is re-run and
+    its conclusion moves without anyone noticing."""
+    allowed = exposure.printable(exposure.load_stability())
+    assert "gold" not in allowed, "gold read +0.21 against a 0.25 line"
+    assert {"oil", "copper", "dollar"} <= set(allowed)
+
+
+def _planted(monkeypatch, beta: float, noise_scale: float = 0.004) -> None:
+    """`market_data.ohlcv` returning a factor and a stock built on it."""
+    rng = np.random.default_rng(77)
+    factor = rng.normal(0.0, 0.02, 400)
+    own = beta * factor + rng.normal(0.0, noise_scale, 400)
+    index = pd.bdate_range("2024-01-01", periods=400)
+
+    def fake(symbol, **_):
+        source = factor if ("=" in symbol or symbol.startswith("^")) else own
+        close = 100.0 * np.exp(np.cumsum(source))
+        return pd.DataFrame({"Open": close, "High": close, "Low": close,
+                             "Close": close, "Volume": 1e6}, index=index)
+
+    monkeypatch.setattr(exposure.market_data, "ohlcv", fake)
+    exposure._SERIES_CACHE.clear()
+
+
+def test_the_beta_recovers_a_planted_one(monkeypatch):
+    """Planted ground truth: a stock built as 0.60x a factor plus small noise
+    must come back at 0.60, against arithmetic the test did not borrow from the
+    module."""
+    _planted(monkeypatch, beta=0.60)
+    monkeypatch.setattr(exposure, "load_stability",
+                        lambda *a, **k: _stability(oil=0.42, copper=0.43, dollar=0.34))
+    result = exposure.for_symbol("TEST", "US")
+
+    assert result["usable"]
+    by_key = {row["key"]: row for row in result["factors"]}
+    assert by_key["oil"]["beta"] == pytest.approx(0.60, abs=0.05)
+    # R-squared derived rather than eyeballed: with the factor at sigma 0.020 and
+    # the idiosyncratic term at 0.004, the share of variance the factor accounts
+    # for is b^2 s_f^2 / (b^2 s_f^2 + s_e^2) = 0.0144 / 0.0160 = 0.90.
+    expected = (0.60 ** 2 * 0.020 ** 2) / (0.60 ** 2 * 0.020 ** 2 + 0.004 ** 2)
+    assert by_key["oil"]["rSquared"] == pytest.approx(expected, abs=0.05)
+    assert by_key["oil"]["rankCorrelation"] == pytest.approx(0.42), (
+        "the printed beta carries the persistence that licensed it")
+
+
+def test_a_name_with_no_material_loading_is_refused_by_name(monkeypatch):
+    """CONSTRAINT 3 AGAIN. A factor that was tested and found absent must be
+    reported as refused with its reason, not dropped — an empty section reads as
+    'no exposure' and this one has to say which question was asked."""
+    _planted(monkeypatch, beta=0.0, noise_scale=0.02)
+    monkeypatch.setattr(exposure, "load_stability",
+                        lambda *a, **k: _stability(oil=0.42))
+    result = exposure.for_symbol("TEST", "US")
+
+    assert result["factors"] == []
+    reasons = {row["key"]: row["reason"] for row in result["refused"]}
+    assert reasons["oil"] == "no material loading on this name"
+    assert reasons["gold"] == "did not survive the persistence study"
+
+
+def test_the_estimation_window_is_the_one_whose_stability_was_measured():
+    """Not a free choice, and the same argument `portfolio.WINDOW_DAYS` makes.
+    A longer window would give a more precise beta and no way to say whether it
+    describes next year."""
+    assert exposure.ESTIMATION_WEEKS == 52
+    stamped = exposure.load_stability()
+    assert stamped["blockWeeks"] == exposure.ESTIMATION_WEEKS
+
+
+def test_the_material_screen_is_one_constant_shared_with_the_study():
+    """The population measured has to be the population printed from. Two copies
+    would drift and the panel would quote a stability figure measured on names it
+    does not print for — both numbers individually correct, the pairing wrong."""
+    source = (pathlib.Path(__file__).resolve().parents[1]
+              / "scripts" / "measure_exposure_stability.py").read_text()
+    assert "MATERIAL_R2 = exposure.MATERIAL_R2" in source
+    assert "MATERIAL_R2 = 0.05" not in source, "the study must not redeclare it"

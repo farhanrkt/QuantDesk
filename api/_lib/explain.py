@@ -3975,6 +3975,70 @@ def _shared_driver(value, matches=None, tested=None, ambiguous=False,
     )
 
 
+# ============================================================================ #
+# What one name moves with — `exposure.for_symbol`
+#
+# NEVER COLOURED, for the reason `screendomain.py` gives about provenance. A
+# stock that moves 0.6x with copper is not thereby better or worse than one that
+# does not; it describes what is being bought. And a NEGATIVE beta is not a bad
+# beta — a name that rises when the dollar falls is not failing at anything,
+# which is why `good_direction` here is "none" and the band never leaves
+# `context`.
+#
+# THE READING CARRIES ITS OWN PERSISTENCE FIGURE, which is unusual in this file
+# and deliberate. Every other metric here describes the present; this one is
+# printed because a study said it survives the year, and the number that licensed
+# it belongs in the same sentence rather than two clicks away. It is also the
+# number that shrinks the claim: 0.42 is real and is well short of the 0.50-0.65
+# at which correlations persist.
+# ============================================================================ #
+@metric("factorExposure")
+def _factor_exposure(value, label=None, r_squared=None, weeks=None,
+                     rank_correlation=None, **_):
+    name = label or "this factor"
+    heading = f"Moves with {name}"
+    what = (f"How hard this stock's weekly moves track {name}, and how much of them "
+            f"that accounts for. Measured over the window whose year-to-year "
+            f"stability was tested, so the figure beside it says how much of this "
+            f"reading tends to survive into the next year.")
+    if not _known(value):
+        return unavailable(heading, what, "no material loading on this name")
+
+    reading = f"{_num(value, 2)}x — a 1% move in {name} has gone with "
+    reading += f"{_num(abs(value), 2)}% here"
+    reading += ", in the opposite direction." if value < 0 else "."
+    if _known(r_squared):
+        reading += f" That accounts for {_pct(r_squared, 0)} of its week-to-week movement"
+        reading += f" over {int(weeks)} weeks." if _known(weeks) else "."
+    # THE HONEST QUALIFIER, and it is the point of shipping this at all. A beta
+    # printed without it invites being read as next year's number.
+    if _known(rank_correlation):
+        reading += (f" Across nine years the names loading hardest on {name} in one "
+                    f"year were largely the same the next, at a rank correlation of "
+                    f"{_num(rank_correlation, 2)} — real, and weaker than the 0.50 to "
+                    f"0.65 at which correlations persist.")
+    return make(
+        label=heading, what=what, reading=reading,
+        action=CONTEXT_NOT_TRIGGER,
+        band="context", good_direction="none", evidence="moderate",
+        value_text=f"{_num(value, 2)}x",
+    )
+
+
+def for_exposure(block: dict) -> dict:
+    """Explanations for the factor-exposure section of the Trend lens."""
+    out: dict = {}
+    if not block.get("usable"):
+        return out
+    for row in block.get("factors") or []:
+        entry = explain("factorExposure", row.get("beta"), label=row.get("label"),
+                        r_squared=row.get("rSquared"), weeks=row.get("weeks"),
+                        rank_correlation=row.get("rankCorrelation"))
+        if entry:
+            out[f"factorExposure.{row['key']}"] = entry
+    return out
+
+
 def for_portfolio(result: dict) -> dict:
     """Explanations for the portfolio panel.
 

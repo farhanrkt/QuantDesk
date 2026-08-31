@@ -32,6 +32,7 @@ import numpy as np
 import pandas as pd
 from scipy.signal import argrelextrema
 
+from . import exposure
 from . import explain as ex
 from . import indicators as ind
 from . import market_data
@@ -790,10 +791,20 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
         price=price,
     )
 
+    # ---------------- what this name moves with ----------------
+    # ITS OWN FIXED WINDOW, NOT THE CHART RANGE. A beta that changed when the
+    # reader changed the chart zoom would read as the exposure moving, and the
+    # only window this app can quote a stability figure for is the 52 weeks whose
+    # persistence was measured. Costs three day-cached factor fetches shared
+    # across every ticker in a session.
+    factor_exposure = exposure.for_symbol(ticker, market_code=market_code)
+    factor_exposure["explain"] = ex.for_exposure(factor_exposure)
+
     return {
         "ticker": ticker,
         "currency": currency,
         "range": range_key,
+        "exposure": factor_exposure,
         "bars": len(data),
         "hasSma200": bool(data["SMA_200"].notna().sum() > 0),
         "hasLongTerm": bool(enough),

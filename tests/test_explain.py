@@ -126,6 +126,8 @@ SAMPLES: dict[str, tuple] = {
     "validationDomain": ("outside", {"name": "Period", "sample": "US filings, 1976-1996",
                                      "this_use": "2025 filings",
                                      "note": "29 years after the sample ends."}),
+    "factorExposure": (0.62, {"label": "copper", "r_squared": 0.21, "weeks": 52,
+                              "rank_correlation": 0.43}),
     "sharedDirection": (0.54, {"market_share": 0.09, "weeks": 72, "holdings": 4}),
     "sharedDriver": (0.54, {"matches": [{"key": "oil", "label": "the energy complex",
                                          "correlation": 0.50, "overlapWeeks": 72}],

@@ -572,6 +572,28 @@ export interface DivergenceLeg {
 
 export interface TechnicalResponse {
   ticker: string; currency: string; range: string; bars: number; hasSma200: boolean;
+  /**
+   * What this name moves with, among the factors whose betas survived the
+   * persistence study. Estimated over its own fixed 52 weeks — the block length
+   * the study measured — so it does not change when the chart range does.
+   * Never carries a vote: a negative beta is not a bad beta.
+   */
+  exposure?: {
+    usable: boolean;
+    reason?: string;
+    weeks?: number;
+    /** Declaration order, never strength order. */
+    factors?: { key: string; label: string; symbol: string; beta: number;
+                rSquared: number; weeks: number; note: string;
+                rankCorrelation: number; tStat: number | null;
+                transitions: number }[];
+    /** Tested and declined, with why. An empty section is not "no exposure". */
+    refused?: { key: string; label: string; reason: string }[];
+    materialAt?: number;
+    measuredOn?: string | null;
+    killAt?: number | null;
+    explain?: ExplainMap;
+  };
   latest: { date: string; close: number; change: number; changePct: number;
             high: number; low: number; volume: number };
   summary: {
