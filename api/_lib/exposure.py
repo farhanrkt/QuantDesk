@@ -93,7 +93,7 @@ import datetime as dt
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 import numpy as np
 import pandas as pd
@@ -575,6 +575,119 @@ def for_symbol(symbol: str, market_code: str = "US",
         # Declaration order, never strength order — see the module docstring.
         "factors": rows,
         "refused": refused,
+        "materialAt": MATERIAL_R2,
+        "measuredOn": (stability or {}).get("measuredOn"),
+        "killAt": (stability or {}).get("killAt"),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# A whole universe at once
+# --------------------------------------------------------------------------- #
+def scan(symbols: Sequence[str], market_code: str = "US",
+         weeks: int = ESTIMATION_WEEKS) -> dict:
+    """Every name in a universe against every factor that survived the gate.
+
+    WHY THIS EXISTS AS ITS OWN TIER RATHER THAN A PER-TICKER READING. A single
+    beta is uninterpretable on its own — 0.57 against the energy complex is
+    either remarkable or ordinary depending on what the other forty names in the
+    index read, and a reader with no priors cannot tell which. That is the same
+    argument `peers.py` makes for percentiles, and it applies harder here because
+    a factor beta has no natural scale at all.
+
+    It is also the only shape in which the interesting finding is FINDABLE.
+    United Tractors files as Industrials, sells mining equipment, and loads on
+    energy about as hard as the coal miners do. Nobody types UNTR into a factor
+    screen to check; they see it sitting among the miners in a cross-section and
+    ask why. A per-ticker view can confirm an exposure somebody already suspected
+    and cannot surface one they did not.
+
+    PRICE ONLY, SO IT BATCHES — a forty-five name universe is one upstream call,
+    not forty-five. The fundamentals lenses do not batch, which is why there is
+    no sector label on these rows and the panel says so: a reader supplies the
+    "but that is an industrials company" themselves.
+
+    Returns every name that could be measured, including those whose loadings are
+    all below the material threshold. THEY ARE THE CONTROL GROUP: a scatter
+    showing only the names that loaded would make every universe look uniformly
+    exposed, which is the selection effect this app spends `screendomain.py`
+    avoiding in a neighbouring place.
+    """
+    market = (market_code or "US").upper()
+    stability = load_stability()
+    allowed = printable(stability)
+    considered = [r for r in REFERENCES if market in r.markets]
+
+    refused = [{"key": r.key, "label": r.label,
+                "reason": "did not survive the persistence study"}
+               for r in considered if r.key not in allowed]
+    factors = [r for r in considered if r.key in allowed]
+    if not factors:
+        return {"usable": False,
+                "reason": ("No factor has a measured persistence, so none may be "
+                           "screened on."),
+                "factors": [], "refused": refused, "rows": [],
+                "measuredOn": (stability or {}).get("measuredOn")}
+
+    wanted = list(dict.fromkeys([*symbols, *(r.symbol for r in factors)]))
+    end = dt.date.today()
+    frames = market_data.ohlcv_batch(
+        wanted, end - dt.timedelta(days=int(weeks * 9)), end)
+    if not frames:
+        return {"usable": False, "reason": "No price history came back for this list.",
+                "factors": [], "refused": refused, "rows": [],
+                "measuredOn": (stability or {}).get("measuredOn")}
+
+    closes = pd.DataFrame({s: f["Close"].astype("float64") for s, f in frames.items()})
+    weekly = to_weekly(np.log(closes.sort_index() / closes.sort_index().shift(1)))
+    weekly = weekly.tail(weeks)
+
+    rows, missing = [], []
+    for symbol in symbols:
+        if symbol not in weekly.columns:
+            missing.append(symbol)
+            continue
+        own = weekly[symbol].dropna()
+        if len(own) < MIN_WEEKS:
+            missing.append(symbol)
+            continue
+        loadings = {}
+        for reference in factors:
+            if reference.symbol not in weekly.columns:
+                continue
+            paired = pd.concat([own.rename("y"),
+                                weekly[reference.symbol].rename("x")],
+                               axis=1).dropna()
+            if len(paired) < MIN_WEEKS:
+                continue
+            centred = paired["x"] - paired["x"].mean()
+            sxx = float((centred ** 2).sum())
+            if sxx <= 0:
+                continue
+            beta = float((centred * (paired["y"] - paired["y"].mean())).sum() / sxx)
+            r_squared = float(paired["y"].corr(paired["x"]) ** 2)
+            if not (np.isfinite(beta) and np.isfinite(r_squared)):
+                continue
+            loadings[reference.key] = {
+                "beta": beta, "rSquared": r_squared,
+                "material": bool(r_squared >= MATERIAL_R2),
+                "weeks": len(paired),
+            }
+        if loadings:
+            rows.append({"ticker": symbol, "weeks": len(own), "loadings": loadings})
+
+    return {
+        "usable": bool(rows),
+        "reason": None if rows else "Nothing in this list had enough weekly history.",
+        # Declaration order, never strength order — see the module docstring.
+        "factors": [{"key": r.key, "label": r.label, "symbol": r.symbol,
+                     "note": r.note, **allowed[r.key]} for r in factors],
+        "refused": refused,
+        "rows": rows,
+        "missing": missing,
+        "scanned": len(rows),
+        "requested": len(list(symbols)),
+        "weeks": weeks,
         "materialAt": MATERIAL_R2,
         "measuredOn": (stability or {}).get("measuredOn"),
         "killAt": (stability or {}).get("killAt"),

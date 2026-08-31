@@ -335,3 +335,97 @@ def test_the_material_screen_is_one_constant_shared_with_the_study():
               / "scripts" / "measure_exposure_stability.py").read_text()
     assert "MATERIAL_R2 = exposure.MATERIAL_R2" in source
     assert "MATERIAL_R2 = 0.05" not in source, "the study must not redeclare it"
+
+
+# --------------------------------------------------------------------------- #
+# The cross-section
+# --------------------------------------------------------------------------- #
+def _scan_frames(monkeypatch, exposed: list, flat: list) -> None:
+    """A universe where `exposed` are built on the oil factor and `flat` are not."""
+    rng = np.random.default_rng(404)
+    factor = rng.normal(0.0, 0.02, 400)
+    index = pd.bdate_range("2024-01-01", periods=400)
+
+    def frame(source):
+        close = 100.0 * np.exp(np.cumsum(source))
+        return pd.DataFrame({"Open": close, "High": close, "Low": close,
+                             "Close": close, "Volume": 1e6}, index=index)
+
+    frames = {"CL=F": frame(factor), "HG=F": frame(rng.normal(0, 0.02, 400)),
+              "DX-Y.NYB": frame(rng.normal(0, 0.02, 400))}
+    for name in exposed:
+        frames[name] = frame(0.9 * factor + rng.normal(0, 0.005, 400))
+    for name in flat:
+        frames[name] = frame(rng.normal(0, 0.02, 400))
+    monkeypatch.setattr(exposure.market_data, "ohlcv_batch", lambda *a, **k: frames)
+    monkeypatch.setattr(exposure, "load_stability",
+                        lambda *a, **k: _stability(oil=0.42, copper=0.43, dollar=0.34))
+
+
+def test_the_scan_separates_the_exposed_from_the_rest(monkeypatch):
+    """Planted ground truth across a universe: two names built on the factor,
+    three built on nothing. The material flag has to split them."""
+    exposed, flat = ["AAA", "BBB"], ["CCC", "DDD", "EEE"]
+    _scan_frames(monkeypatch, exposed, flat)
+    result = exposure.scan(exposed + flat, "US")
+
+    assert result["usable"]
+    material = {r["ticker"] for r in result["rows"]
+                if r["loadings"]["oil"]["material"]}
+    assert material == set(exposed)
+    for row in result["rows"]:
+        if row["ticker"] in exposed:
+            assert row["loadings"]["oil"]["beta"] == pytest.approx(0.9, abs=0.08)
+
+
+def test_names_below_the_floor_stay_in_the_result(monkeypatch):
+    """THEY ARE THE CONTROL GROUP. A scan returning only the names that loaded
+    would make every universe look uniformly exposed — the reader could not see
+    that two of five is unusual because there would be no five."""
+    exposed, flat = ["AAA", "BBB"], ["CCC", "DDD", "EEE"]
+    _scan_frames(monkeypatch, exposed, flat)
+    result = exposure.scan(exposed + flat, "US")
+
+    assert {r["ticker"] for r in result["rows"]} == set(exposed + flat)
+    assert result["scanned"] == 5
+    quiet = [r for r in result["rows"] if not r["loadings"]["oil"]["material"]]
+    assert len(quiet) == 3, "and they are marked, not dropped"
+
+
+def test_the_scan_names_the_factor_it_refused(monkeypatch):
+    """Gold is absent from every chart because it failed a measurement. An absent
+    factor with no explanation reads as one nobody thought of."""
+    _scan_frames(monkeypatch, ["AAA"], ["BBB", "CCC"])
+    result = exposure.scan(["AAA", "BBB", "CCC"], "US")
+
+    assert [r["key"] for r in result["refused"]] == ["gold"]
+    assert "persistence" in result["refused"][0]["reason"]
+    assert "gold" not in {f["key"] for f in result["factors"]}
+
+
+def test_a_name_with_no_history_is_reported_missing_not_dropped(monkeypatch):
+    """A symbol that fetched nothing and a symbol that loaded on nothing are
+    different facts, and only the second belongs on the chart."""
+    _scan_frames(monkeypatch, ["AAA"], ["BBB"])
+    result = exposure.scan(["AAA", "BBB", "GHOST"], "US")
+
+    assert result["missing"] == ["GHOST"]
+    assert "GHOST" not in {r["ticker"] for r in result["rows"]}
+    assert result["requested"] == 3 and result["scanned"] == 2
+
+
+def test_the_scan_and_the_single_name_read_share_one_material_screen(monkeypatch):
+    """A name the scan calls material must be one `for_symbol` will print, or the
+    tab and the Trend line would disagree about the same stock on the same day."""
+    _scan_frames(monkeypatch, ["AAA"], ["BBB"])
+    monkeypatch.setattr(exposure.market_data, "ohlcv",
+                        lambda symbol, **k: exposure.market_data.ohlcv_batch([], None, None)[symbol])
+    exposure._SERIES_CACHE.clear()
+    scanned = exposure.scan(["AAA", "BBB"], "US")
+    by_ticker = {r["ticker"]: r for r in scanned["rows"]}
+    single = exposure.for_symbol("AAA", "US")
+
+    assert by_ticker["AAA"]["loadings"]["oil"]["material"] is True
+    assert "oil" in {row["key"] for row in single["factors"]}
+    assert single["factors"][0]["beta"] == pytest.approx(
+        by_ticker["AAA"]["loadings"]["oil"]["beta"], abs=1e-9)

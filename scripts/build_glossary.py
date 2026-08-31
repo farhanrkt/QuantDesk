@@ -87,6 +87,8 @@ _group("portfolio", "holdingCorrelation effectiveHoldings riskShare "
 # On the Trend tab rather than the portfolio one: it reads the price record,
 # which is the family that lens owns.
 _group("trend-ind", "factorExposure")
+# The cross-sectional tier, beside the other scan metrics.
+_group("rank", "factorBreadth")
 
 # Values chosen to land inside SOME band of every ladder in the registry. An
 # interpreter is asked in turn until one returns a reading; the specific value

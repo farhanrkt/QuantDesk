@@ -1017,3 +1017,40 @@ export interface RankValidation {
     minimumDetectableIc: number;
   }[];
 }
+
+
+/**
+ * A whole universe against the factors whose betas survived the persistence
+ * study. One beta is uninterpretable alone, so this tier returns the
+ * cross-section and lets the reader place a name in it.
+ */
+export interface ExposureLoading {
+  beta: number; rSquared: number; material: boolean; weeks: number;
+}
+
+export interface ExposureRow {
+  ticker: string; weeks: number;
+  loadings: Record<string, ExposureLoading>;
+}
+
+export interface ExposureScanResponse {
+  universe: { id: string | null; name: string; market: Market;
+              asOf: string | null; count: number };
+  usable: boolean;
+  reason?: string | null;
+  /** Declaration order, never strength order. */
+  factors: { key: string; label: string; symbol: string; note: string;
+             rankCorrelation: number; tStat: number | null;
+             transitions: number }[];
+  /** Tested and declined, with why — an absent factor is never silently absent. */
+  refused: { key: string; label: string; reason: string }[];
+  rows: ExposureRow[];
+  missing?: string[];
+  scanned?: number;
+  requested?: number;
+  weeks?: number;
+  materialAt?: number;
+  measuredOn?: string | null;
+  killAt?: number | null;
+  explain?: ExplainMap;
+}

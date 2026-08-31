@@ -128,6 +128,8 @@ SAMPLES: dict[str, tuple] = {
                                      "note": "29 years after the sample ends."}),
     "factorExposure": (0.62, {"label": "copper", "r_squared": 0.21, "weeks": 52,
                               "rank_correlation": 0.43}),
+    "factorBreadth": (0.24, {"label": "copper", "loaded": 11, "scanned": 46,
+                             "rank_correlation": 0.43}),
     "sharedDirection": (0.54, {"market_share": 0.09, "weeks": 72, "holdings": 4}),
     "sharedDriver": (0.54, {"matches": [{"key": "oil", "label": "the energy complex",
                                          "correlation": 0.50, "overlapWeeks": 72}],

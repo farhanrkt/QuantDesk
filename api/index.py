@@ -57,9 +57,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from _lib import (accumulation, eventstudy, explain, market_data, microstructure,
-                  news, portfolio, pretrade, quality, ranking, riskmodel, symbols,
-                  technical, universes, valuation)
+from _lib import (accumulation, eventstudy, explain, exposure, market_data,
+                  microstructure, news, portfolio, pretrade, quality, ranking,
+                  riskmodel, symbols, technical, universes, valuation)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -137,6 +137,11 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # One batch download of the whole book plus the candidate. Same shape of
     # cost as the ranking scan, same cap.
     "/api/portfolio": (3, 60),
+    # One batch download of a whole universe plus three factor series, then
+    # local arithmetic. Cheaper than the ranking scan — no indicators, no
+    # per-name signals — but the fan-out to the upstream is the same shape, so
+    # it takes the same cap rather than a looser one argued from being faster.
+    "/api/exposure": (3, 60),
     # Deepening runs the fundamentals lenses per name and does NOT batch, so
     # this is the amplifying half of the funnel and is capped hardest.
     "/api/rank/deepen": (2, 60),
@@ -257,6 +262,26 @@ def resolved(ticker: str, market: str) -> str:
         return symbols.resolve(ticker, market)
     except symbols.SymbolError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def parse_ticker_list(tickers: str, market: str) -> list[str]:
+    """A pasted universe, validated and resolved, deduplicated in typed order.
+
+    ONE IMPLEMENTATION, TWO CALLERS. The ranking tier and the exposure scan take
+    the identical input and must reject the identical things — the pattern has to
+    hold because each symbol is interpolated into a yfinance URL path, and the
+    resolution has to happen here because an unsuffixed IDX code is not inert
+    (see `symbols.py`, where BBCA valued a bank and charted an ETF). A second
+    copy would eventually accept something the first refuses.
+    """
+    raw = [t.strip() for t in tickers.replace("\n", ",").split(",") if t.strip()]
+    bad = [t for t in raw if not TICKER_RE.match(t)]
+    if bad:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                   f"{'...' if len(bad) > 5 else ''}.")
+    return list(dict.fromkeys(resolved(t, market) for t in raw))
 
 
 def resolved_with_market(ticker: str, market: str) -> tuple[str, str]:
@@ -606,14 +631,7 @@ def rank(
             raise HTTPException(
                 status_code=400,
                 detail="Provide either a `universe` id or a `tickers` list.")
-        raw = [t.strip() for t in tickers.replace("\n", ",").split(",") if t.strip()]
-        bad = [t for t in raw if not TICKER_RE.match(t)]
-        if bad:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                       f"{'...' if len(bad) > 5 else ''}.")
-        symbols_list = list(dict.fromkeys(resolved(t, market) for t in raw))
+        symbols_list = parse_ticker_list(tickers, market)
         market_code = market.upper()
         label = "Custom list"
         as_of = None
@@ -714,6 +732,64 @@ def peers(
         "benchmark": result.get("benchmark"),
         "explain": explain.for_peers(row, context, result["signals"],
                                      result.get("correlation")),
+    })
+
+
+@app.get("/api/exposure")
+def exposure_scan(
+    universe: Optional[str] = Query(
+        None, pattern="^[a-z0-9]{1,24}$",
+        description="A predefined universe id from /api/rank/universes."),
+    tickers: Optional[str] = Query(
+        None, min_length=1, max_length=4000,
+        description="Comma or newline separated symbols, used when `universe` is absent."),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+):
+    """What every name in a universe moves with, on the factors that persist.
+
+    A SCAN RATHER THAN A LOOKUP, and that is the point. One beta is
+    uninterpretable alone — 0.57 against the energy complex is remarkable or
+    ordinary depending on what the other forty names read — so this returns the
+    whole cross-section and lets the reader place a name in it. The same argument
+    `/api/peers` makes about percentiles, applied to a quantity with no natural
+    scale at all.
+
+    Only factors whose year-to-year persistence was measured and survived appear
+    here; the rest are named in `refused` with the reason rather than silently
+    absent. Gold is one of them, at a rank correlation of +0.21 against a 0.25
+    line set before the numbers were seen — see `exposure_stability.json`.
+
+    Price only, so it batches: one upstream call for a whole universe.
+    """
+    if universe:
+        entry = universes.get(universe)
+        if entry is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown universe '{universe}'. See /api/rank/universes.")
+        symbols_list, market_code = entry["tickers"], entry["market"]
+        label, as_of = entry["name"], entry["asOf"]
+    elif tickers:
+        symbols_list = parse_ticker_list(tickers, market)
+        market_code, label, as_of = market.upper(), "Your list", None
+    else:
+        raise HTTPException(status_code=400,
+                            detail="Pass either `universe` or `tickers`.")
+
+    if not symbols_list:
+        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+    if len(symbols_list) > RANK_MAX_UNIVERSE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This scans up to {RANK_MAX_UNIVERSE} names at a time; "
+                   f"this list has {len(symbols_list)}.")
+
+    result = exposure.scan(symbols_list, market_code=market_code)
+    return ok({
+        "universe": {"id": universe, "name": label, "market": market_code,
+                     "asOf": as_of, "count": len(symbols_list)},
+        **result,
+        "explain": explain.for_exposure_scan(result),
     })
 
 

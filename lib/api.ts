@@ -4,6 +4,7 @@ import { track } from "@vercel/analytics";
 import { useCallback, useRef, useState } from "react";
 import type {
   AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
+  ExposureScanResponse,
   Leg, ManualInputs, EventStudyResponse, Market, NewsResponse, QualityResponse,
   PeersResponse, PortfolioResponse, PreTrade, RankResponse, ScreenerResponse,
   Synthesis, TechnicalResponse,
@@ -482,6 +483,44 @@ export function useRanking() {
 
     setState({ status: "loading" });
     get<RankResponse>("/api/rank", {
+      universe: params.universe ?? undefined,
+      tickers: params.universe ? undefined : params.tickers,
+      market: params.market,
+    }, controller.signal)
+      .then((data) => { if (live()) setState({ status: "ready", data }); })
+      .catch((err) => {
+        if (isAbort(err) || !live()) return;
+        setState({ status: "error", failure: asFailure(err) });
+      });
+  }, []);
+
+  const reset = useCallback(() => {
+    inflight.current?.abort();
+    seq.current += 1;
+    setState({ status: "idle" });
+  }, []);
+
+  return { state, scan, reset };
+}
+
+export function useExposureScan() {
+  const [state, setState] = useState<Engine<ExposureScanResponse>>({ status: "idle" });
+  const seq = useRef(0);
+  const inflight = useRef<AbortController | null>(null);
+
+  const scan = useCallback((params: {
+    universe?: string | null; tickers?: string; market: Market;
+  }) => {
+    // Same supersede-rather-than-race guard as the ranking scan: two scans
+    // settling out of order would put one universe's points under another's axis.
+    inflight.current?.abort();
+    const controller = new AbortController();
+    inflight.current = controller;
+    const token = (seq.current += 1);
+    const live = () => seq.current === token;
+
+    setState({ status: "loading" });
+    get<ExposureScanResponse>("/api/exposure", {
       universe: params.universe ?? undefined,
       tickers: params.universe ? undefined : params.tickers,
       market: params.market,

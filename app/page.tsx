@@ -11,6 +11,7 @@ import { PeersPanel } from "@/components/PeersPanel";
 import { PortfolioPanel } from "@/components/PortfolioPanel";
 import { PreTradePanel } from "@/components/PreTradePanel";
 import { QualityPanel } from "@/components/QualityPanel";
+import { ExposurePanel } from "@/components/ExposurePanel";
 import { RankingPanel } from "@/components/RankingPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
 import { SynthesisPanel } from "@/components/SynthesisPanel";
@@ -26,7 +27,8 @@ import { HorizonProvider, useHoldingHorizon } from "@/components/ui/horizon";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import {
-  useEngines, useEventStudy, usePeers, usePortfolio, type RunOptions,
+  useEngines, useEventStudy, useExposureScan, usePeers, usePortfolio,
+  useUniverses, type RunOptions,
 } from "@/lib/api";
 import type { Engine, EngineFailure } from "@/lib/types";
 
@@ -50,6 +52,12 @@ const TABS = [
   // The fourth question this app can answer — how does it sit against what I
   // already own — and the only one that needs an input other than a ticker.
   { id: "portfolio", label: "Portfolio fit", accent: "#6FD0C0" },
+  // The cross-sectional half of the same question. Portfolio fit asks what YOUR
+  // holdings share; this asks what a whole index moves with, and needs no input
+  // beyond picking a list. Its own tab rather than a section inside Portfolio
+  // fit because it answers without being given anything, and burying a scan
+  // behind a form nobody fills in is how the first version of this went unread.
+  { id: "exposure", label: "What drives it", accent: "#D4763A" },
   // Last, because it is the only tab that asks the reader for something rather
   // than telling them something, and it is meant to be reached after the rest
   // has been read.
@@ -150,6 +158,13 @@ export default function Home() {
   const { state: peers, compare, reset: resetPeers } = usePeers();
   const { state: portfolio, compare: comparePortfolio,
           reset: resetPortfolio } = usePortfolio();
+  // The exposure tier keeps its own universe catalogue and scan state. It does
+  // NOT reset when the ticker changes, unlike every lens above: a cross-section
+  // of the IDX30 is still the cross-section of the IDX30 after someone types a
+  // different symbol, and throwing away a six-second scan because the header
+  // moved would be the panel forgetting something the reader did not.
+  const { state: universes } = useUniverses();
+  const { state: exposureScan, scan: scanExposure } = useExposureScan();
   // The ticker bar is controlled from here so the screener can drive it too.
   const [opts, setOpts] = useState<RunOptions>(INITIAL);
   // The last SUBMITTED symbol, which is not what is currently typed in the box.
@@ -394,6 +409,16 @@ export default function Home() {
                   onCompare={(holdings, weights) => comparePortfolio({
                     candidate: opts.ticker, market: opts.market, holdings, weights,
                   })}
+                />
+              </TabPanel>
+              <TabPanel id="exposure" active={tab}>
+                <ExposurePanel
+                  universeState={universes}
+                  market={opts.market}
+                  onMarketChange={(m) => setOpts((o) => ({ ...o, market: m }))}
+                  state={exposureScan}
+                  onScan={scanExposure}
+                  highlight={resolvedTicker}
                 />
               </TabPanel>
               <TabPanel id="screen" active={tab}>

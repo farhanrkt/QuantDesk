@@ -3992,6 +3992,40 @@ def _shared_driver(value, matches=None, tested=None, ambiguous=False,
 # number that shrinks the claim: 0.42 is real and is well short of the 0.50-0.65
 # at which correlations persist.
 # ============================================================================ #
+@metric("factorBreadth")
+def _factor_breadth(value, label=None, loaded=None, scanned=None,
+                    rank_correlation=None, **_):
+    name = label or "this factor"
+    heading = f"How many move with {name}"
+    what = (f"The share of the names scanned whose weekly moves {name} accounts for "
+            f"enough of to be worth reporting. It calibrates a single reading: one "
+            f"stock loading on {name} means something different in an index where "
+            f"three do than in one where thirty do.")
+    if not _known(value):
+        return unavailable(heading, what, "nothing in this list could be measured")
+    reading = f"{_pct(value, 0)}"
+    if _known(loaded) and _known(scanned):
+        reading += f" — {int(loaded)} of {int(scanned)} names"
+    reading += f" carry a material loading on {name}."
+    # WITHOUT THIS THE BREADTH READS AS A CONCLUSION. A factor that half an index
+    # loads on may be describing the market rather than a driver, and the reader
+    # has no way to tell that from the count alone.
+    if value >= 0.5:
+        reading += (" More than half the list, so this is closer to a description of "
+                    "the whole market here than of any one name in it.")
+    elif value <= 0.1:
+        reading += (" A small minority, so a name that does load on it is unusual "
+                    "within this list rather than typical of it.")
+    if _known(rank_correlation):
+        reading += (f" Betas on {name} persisted year to year at a rank correlation "
+                    f"of {_num(rank_correlation, 2)} over nine years.")
+    return make(
+        label=heading, what=what, reading=reading,
+        action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+        evidence="moderate", value_text=_pct(value, 0),
+    )
+
+
 @metric("factorExposure")
 def _factor_exposure(value, label=None, r_squared=None, weeks=None,
                      rank_correlation=None, **_):
@@ -4023,6 +4057,33 @@ def _factor_exposure(value, label=None, r_squared=None, weeks=None,
         band="context", good_direction="none", evidence="moderate",
         value_text=f"{_num(value, 2)}x",
     )
+
+
+def for_exposure_scan(result: dict) -> dict:
+    """The sentences a cross-sectional exposure scan needs, and no more.
+
+    Deliberately thin. The scatter carries the finding — position IS the reading
+    — and a paragraph restating what a reader can see is the overload
+    `PRODUCT.md` constraint 7 was revised to stop. What prose is still load
+    bearing is the part a chart cannot say: how many names were measured, what
+    the dotted line means, and that a factor is missing because it was refused
+    rather than because nobody thought of it.
+    """
+    out: dict = {}
+    if not result.get("usable"):
+        return out
+
+    rows = result.get("rows") or []
+    factors = result.get("factors") or []
+    for factor in factors:
+        loaded = [r for r in rows
+                  if (r["loadings"].get(factor["key"]) or {}).get("material")]
+        entry = explain("factorBreadth", len(loaded) / len(rows) if rows else None,
+                        label=factor["label"], loaded=len(loaded), scanned=len(rows),
+                        rank_correlation=factor.get("rankCorrelation"))
+        if entry:
+            out[f"factorBreadth.{factor['key']}"] = entry
+    return out
 
 
 def for_exposure(block: dict) -> dict:
