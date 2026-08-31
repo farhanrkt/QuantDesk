@@ -1468,11 +1468,29 @@ Explanatory power in the worst blocks moves by -0.02 to +0.03 against the rest,
 with no consistent direction. Whole blocks, never selected weeks — the third
 place in this repo the Forbes & Rigobon selection has had to be caught.
 
+### What shipped on the back of it
+
+The Trend tab now reports what a name moves with, for the three factors that
+cleared. **The gate is read from the artifact on every call, not hardcoded**:
+gold failed a measurement rather than a rule, so re-running the study on more
+history would start printing it without anyone editing a list, and a factor that
+stopped clearing would stop appearing the same way.
+
+**Newmont is the case that shows what the gate buys.** A gold miner, and the app
+declines to print its gold beta — while reporting copper at 1.09x and the dollar
+at -3.33x, which survive. The refusal is named on screen rather than dropped,
+because a section that quietly omitted gold would read as a gold miner having no
+gold exposure.
+
+The reading carries its own persistence figure in the same sentence, which is
+unusual and deliberate: the number that licensed the metric is also the number
+that shrinks it. What is **not** printed is an upside and a downside beta —
+printing two numbers a reader will inevitably compare, beside a note asking them
+not to, is worse than printing neither.
+
 > Measured 31 August 2026 by `scripts/measure_exposure_stability.py`; stamped in
 > `api/_lib/exposure_stability.json`. Fifteen names excluded for short history
-> and listed by name in the artifact rather than averaged in. Nothing consumes it
-> yet: it decides whether the single-name reading may be built and what it would
-> be allowed to say.
+> and listed by name in the artifact rather than averaged in.
 
 ---
 
