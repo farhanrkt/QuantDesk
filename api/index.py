@@ -30,6 +30,7 @@ GET /api/intrinsic-value            Engine 3 — INTRINSIC DCF/DDM + Monte Carlo
 GET /api/intrinsic-value/simulation Engine 3 — full Monte Carlo draw set as CSV
 GET /api/screener                   Engine 1 — multi-ticker watchlist scan
 GET /api/quality                    Engine 4 — Piotroski / Altman / Beneish
+GET /api/expectations               Engine 5 — the analyst estimate record
 GET /api/event-study                abnormal returns after each anomaly
 GET /api/news                       contextual catalyst headlines
 GET /api/confluence                 every lens at once, in ONE invocation
@@ -57,9 +58,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from _lib import (accumulation, eventstudy, explain, exposure, market_data,
-                  microstructure, news, portfolio, pretrade, quality, ranking,
-                  riskmodel, symbols, technical, universes, valuation)
+from _lib import (accumulation, eventstudy, expectations, explain, exposure,
+                  market_data, microstructure, news, portfolio, pretrade, quality,
+                  ranking, revisionmomentum, riskmodel, symbols, technical,
+                  universes, valuation)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -339,7 +341,7 @@ def health():
     return ok({
         "status": "ok",
         "engines": ["isolation-forest", "technical-analysis", "intrinsic-value",
-                    "quality"],
+                    "quality", "expectations"],
         "extras": ["screener", "news", "simulation-csv", "event-study"],
     })
 
@@ -1215,6 +1217,62 @@ def quality_scores(
     return ok({"ticker": symbol, **quality_payload(symbol)})
 
 
+def expectations_payload(symbol: str) -> dict:
+    """The estimate record for one symbol, with its own explanations.
+
+    A SYMBOL THAT DOES NOT EXIST IS A 404, NOT A REFUSAL — the same distinction
+    `quality_payload` draws, and it matters more here. This lens has an
+    `applicable: false` state that fires on real, listed, tradeable companies
+    that simply nobody covers, and it is the most common outcome on smaller
+    listings. If a typo'd ticker also came back as "not covered", the refusal
+    would stop meaning anything.
+
+    The market reaches the measurement rather than the engine. Nothing in
+    `expectations.analyze` depends on which exchange this is; what does depend
+    on it is which population the revision study was measured over, and analyst
+    coverage differs enough between the two markets that a blended figure would
+    describe neither.
+    """
+    # EXISTENCE IS DECIDED BY THE COMPANY FETCH, NOT BY THIS LENS'S OWN DATA,
+    # and it has to be. An estimate record comes back empty for a symbol that
+    # does not exist AND for a real listing nobody covers — the two are
+    # indistinguishable from anything in `market_data.estimates`. Reusing the
+    # check `quality_payload` uses is what keeps a typo'd ticker from rendering
+    # as the designed refusal and hollowing it out.
+    #
+    # It costs at most one extra fetch on the route that matters, and usually
+    # none. The confluence legs run CONCURRENTLY, so this is not a case of the
+    # valuation and quality legs having already paid — all three can miss the
+    # cache in the same instant. What saves it is the per-symbol lock inside
+    # `market_data.company`: the second and third callers wait on the first and
+    # re-check, so the three legs share one fetch rather than making three.
+    if not valuation.fetch_company(symbol).get("ok"):
+        raise HTTPException(
+            status_code=404,
+            detail=f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+        )
+    payload = expectations.analyze(market_data.estimates(symbol), symbol=symbol)
+    measured = revisionmomentum.for_panel(symbols.market_of(symbol))
+    payload["measurement"] = measured
+    payload["explain"] = explain.for_expectations(payload, measured)
+    return payload
+
+
+@app.get("/api/expectations")
+def expectations_route(
+    ticker: str = Query(..., pattern=TICKER_PATTERN),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+):
+    """What the analysts covering this listing predict, and which way they moved.
+
+    Returns `applicable: false` for a listing nobody covers rather than a zero:
+    an absent consensus and a steady one are opposite findings and must not
+    render alike.
+    """
+    symbol, market = resolved_with_market(ticker, market)
+    return ok({"ticker": symbol, **expectations_payload(symbol)})
+
+
 # --------------------------------------------------------------------------- #
 # Signal validation — does the anomaly flag predict anything?
 # --------------------------------------------------------------------------- #
@@ -1310,7 +1368,7 @@ async def confluence(
 ):
     """Every lens for one ticker, in ONE invocation.
 
-    Four separate client fetches meant four serverless cold starts, each paying
+    Five separate client fetches would mean five serverless cold starts, each paying
     the numpy + pandas + scipy + scikit-learn import, and each re-resolving the
     same symbol. This runs all of it concurrently in threads against a single
     resolved symbol.
@@ -1325,7 +1383,7 @@ async def confluence(
     history still returns its anomaly and technical panels, and a valuation
     data gap still arrives as the structured `manualRequired` payload.
 
-    Carries a `synthesis` block: what the four lenses add up to, in sentences.
+    Carries a `synthesis` block: what the five lenses add up to, in sentences.
     It is a DESCRIPTION and never a recommendation — see `explain.for_synthesis`
     for why a single buy/hold/sell score is refused permanently.
 
@@ -1358,6 +1416,11 @@ async def confluence(
         )),
         leg("valuation", lambda: valuation_payload(symbol, market_code=market.upper())),
         leg("quality", lambda: quality_payload(symbol)),
+        # THE FIFTH LENS, and the only leg reading a body of data neither of the
+        # other four touches. It runs concurrently with them like everything
+        # else here; its own fetch is day-cached separately from `company`, so a
+        # confluence run pays for it once and the standalone route reuses it.
+        leg("expectations", lambda: expectations_payload(symbol)),
         leg("news", lambda: {"ticker": symbol,
                              "items": news.fetch_news(symbol, limit=news_limit)}),
     )
@@ -1370,7 +1433,7 @@ async def confluence(
     return ok({"ticker": symbol, **legs,
                # The market reaches the synthesis for the same reason it reaches
                # `pretrade.assess`, and is taken from the RESOLVED symbol for the
-               # same reason too: the measured agreement between the two families
+               # same reason too: the measured agreement between the families
                # was taken on a different population in each market, and a bare
                # code with the wrong market selected would quote the wrong one.
                "synthesis": explain.for_synthesis(

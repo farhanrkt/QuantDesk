@@ -399,6 +399,68 @@ def _deep_drawdown_history(payload: dict) -> dict:
         band="bad", value_text=f"{worst * 100:.0f}%")
 
 
+def _consensus_being_cut(payload: dict) -> dict:
+    """The people closest to this company are lowering their forecasts.
+
+    THE ONLY CHECK ON THIS PANEL THAT READS THE ESTIMATE RECORD, and the only
+    one whose underlying number is about the future rather than the past. Every
+    other condition here is a fact about what has already happened — a balance
+    sheet, a drawdown, an accrual pattern. This one is a fact about what the
+    people who follow the company think is about to.
+
+    That makes it the most useful condition here and the one most easily
+    over-read, so the bar is the lens's own directional verdict rather than
+    anything computed fresh. If the Expectations lens declined to call a
+    direction — nobody covering, nobody moving, or too few moves to tell — this
+    check declines too, and says which of those it was. A cut called from two
+    analysts out of twenty is exactly the false alarm the whole panel is built
+    against.
+    """
+    expectations = _leg(payload, "expectations")
+    if expectations is None:
+        return cannot("the Expectations lens did not run for this company")
+    if not expectations.get("applicable"):
+        analysts = expectations.get("analysts") or 0
+        return cannot(f"only {analysts} analyst" + ("" if analysts == 1 else "s")
+                      + " publishes estimates for this listing, so there is no "
+                        "consensus to read")
+
+    verdict = expectations.get("verdict")
+    breadth = _sub(expectations, "breadth")
+    if verdict == "QUIET":
+        return cannot("analysts cover this company but none of them has moved a "
+                      "number in the last month")
+    if verdict == "THIN":
+        return cannot(f"only {breadth.get('moves')} analysts moved, which is too few "
+                      f"to read a direction from")
+    if verdict != "FALLING":
+        return quiet()
+
+    up, down = breadth.get("up"), breadth.get("down")
+    drift = _sub(_sub(expectations, "drift"), "annual90")
+    size = ""
+    if drift.get("state") == "moved" and _known(drift.get("change")):
+        # THE DIRECTION IS READ OFF THE NUMBER, NOT ASSUMED FROM THE VERDICT.
+        # The first draft wrote "down {abs(change)}%" because the check only
+        # fires when breadth is FALLING — but breadth counts ANALYSTS and drift
+        # measures the LEVEL, and the two can disagree: a majority trimming
+        # their numbers while one house raises a large one leaves more cuts than
+        # raises and a level that rose. That sentence would then have printed
+        # "the forecast itself is down 4%" about a forecast that went up.
+        change = drift["change"]
+        way = "down" if change < 0 else "up"
+        size = (f" The forecast level itself is {way} {abs(change) * 100:.0f}% over "
+                f"ninety days.")
+    return fires(
+        f"{down} of the analysts covering this company cut their estimate in the last "
+        f"month against {up} who raised it.{size} Every other condition on this panel "
+        f"reads what has already happened; this one reads what the people closest to "
+        f"the company now expect, and it is the reading a valuation built on last "
+        f"year's filings cannot contain.",
+        band="caution",
+        value_text=f"{down} cuts / {up} raises")
+
+
 # --------------------------------------------------------------------------- #
 # The registry
 # --------------------------------------------------------------------------- #
@@ -534,6 +596,29 @@ CHECKS: list[dict] = [
                    "single decision this number exists for; it says nothing about what "
                    "happens next."),
         "fn": _deep_drawdown_history,
+    },
+    {
+        "id": "consensusBeingCut",
+        "label": "The published forecasts are being cut",
+        "family": "estimates",
+        "where": "Expectations tab",
+        # MODERATE, AND THE MEASUREMENT IS WHY IT IS NOT STRONGER. Estimate
+        # revision momentum is among the better documented effects in the
+        # literature, but this app's own study of it — one 60-day window,
+        # `revision_momentum.json` — came back indistinguishable from zero. A
+        # published effect this repo could not reproduce does not get to be
+        # called strong here.
+        "evidence": "moderate",
+        "what": ("How many of the analysts publishing a forecast for this company cut "
+                 "their number in the last month against how many raised it. It is the "
+                 "only condition on this panel drawn from the estimate record rather "
+                 "than from the price history or the filings."),
+        "action": ("Find out what they know. A falling consensus beside a cheap "
+                   "valuation is the standard shape of a value trap — the filings the "
+                   "valuation reads are older than the forecasts being cut. It is a "
+                   "direction of travel, not a verdict, and the panel reports how often "
+                   "it fires."),
+        "fn": _consensus_being_cut,
     },
 ]
 

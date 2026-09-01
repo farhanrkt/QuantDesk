@@ -11,6 +11,7 @@ import { PeersPanel } from "@/components/PeersPanel";
 import { PortfolioPanel } from "@/components/PortfolioPanel";
 import { PreTradePanel } from "@/components/PreTradePanel";
 import { QualityPanel } from "@/components/QualityPanel";
+import { ExpectationsPanel } from "@/components/ExpectationsPanel";
 import { ExposurePanel } from "@/components/ExposurePanel";
 import { RankingPanel } from "@/components/RankingPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
@@ -49,6 +50,12 @@ const TABS = [
   { id: "trend", label: "What the price did", accent: "#6B9BFF" },
   { id: "value", label: "What it is worth", accent: "#E8B44C" },
   { id: "quality", label: "Are the numbers real", accent: "#C9A227" },
+  // The fifth lens, and the only one reading a body of data neither the price
+  // history nor the filings can supply. Sits directly after Quality because the
+  // two are the pair a reader most needs to hold against each other: the
+  // accounting screens ask whether last year's filings can be believed, and
+  // this asks what the people forecasting from them now expect.
+  { id: "expectations", label: "What others expect", accent: "#E07AC0" },
   // The fourth question this app can answer — how does it sit against what I
   // already own — and the only one that needs an input other than a ticker.
   { id: "portfolio", label: "Portfolio fit", accent: "#6FD0C0" },
@@ -151,7 +158,7 @@ function Panel<T>({
 
 export default function Home() {
   const {
-    anomaly, technical, valuation, quality, news, synthesis, preTrade,
+    anomaly, technical, valuation, quality, expectations, news, synthesis, preTrade,
     run, refineValuation, refineTechnical, csvUrl,
   } = useEngines();
   const { state: eventStudy, validate, reset: resetEventStudy } = useEventStudy();
@@ -245,7 +252,7 @@ export default function Home() {
           <div className="min-w-0">
             <h1 className="font-mono tracking-[0.16em]">QUANTDESK</h1>
             <p className="mt-1.5 text-base text-ash">
-              Four models read the same stock from different data — and say where they
+              Five models read the same stock from different data — and say where they
               disagree.{" "}
               <a href="/docs/field-manual.html"
                  className="text-tech underline decoration-tech/40 hover:decoration-tech">
@@ -295,7 +302,7 @@ export default function Home() {
         <div className="space-y-6">
           <ConfluenceRail ticker={resolvedTicker} anomaly={anomaly}
                           technical={technical} valuation={valuation}
-                          quality={quality} />
+                          quality={quality} expectations={expectations} />
 
           {/* The frame everything below is read through: what this length of
               ownership has historically been like. Above the synthesis because
@@ -305,13 +312,13 @@ export default function Home() {
           <HoldingHorizonBar state={technical} horizon={horizon} onHorizon={setHorizon} />
 
           {/* Reads the assembled payload, so it can only appear once every leg
-              has settled. That is the right coupling: a summary of four lenses
+              has settled. That is the right coupling: a summary of five lenses
               that renders before three of them have answered would be
               describing a picture that does not exist yet. */}
           {synthesis && <SynthesisPanel data={synthesis} />}
 
           {/* AFTER the synthesis, deliberately. The synthesis describes what the
-              four lenses reported; this names what would argue against acting on
+              five lenses reported; this names what would argue against acting on
               it. A reader should meet the description before the objections to
               it, which is the same ordering the synthesis uses internally when
               it puts its blind spots above its next steps.
@@ -388,6 +395,15 @@ export default function Home() {
               </TabPanel>
               <TabPanel id="quality" active={tab}>
                 <Panel state={quality}>{(d) => <QualityPanel data={d} />}</Panel>
+              </TabPanel>
+              {/* NOT wrapped in `Panel`. Every other lens has one failure mode
+                  worth rendering — the engine ran or it did not. This one has
+                  three, and the panel itself has to tell them apart: the fetch
+                  failed, nobody covers this listing, or the consensus is real
+                  and simply has not moved. A generic error wrapper would render
+                  the second as the first and hollow out the refusal. */}
+              <TabPanel id="expectations" active={tab}>
+                <ExpectationsPanel state={expectations} />
               </TabPanel>
               {/* THE SNAPSHOT IS ASSEMBLED HERE, FROM WHAT IS ON SCREEN. A
                   thesis is frozen against the numbers the reader was actually

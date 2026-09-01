@@ -77,7 +77,7 @@ const EVIDENCE_DOT: Record<string, string> = {
  * WHY THIS IS A RANKING AND NOT A SCREEN. The old screener answered "which of
  * these twenty names tripped an anomaly detector?" — a filter, returning
  * whoever happened to cross a line. A ranking answers "of these hundred, which
- * few are worth opening four lenses on?", which is the question the second tier
+ * few are worth opening five lenses on?", which is the question the second tier
  * actually exists to serve. Everything gets a position; nothing is silently
  * dropped for being unremarkable.
  *
@@ -228,7 +228,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
           <Explainer summary="A shortlist, not a verdict — and 90 means “ahead of these peers”, not “going up”">
             Every name in the list is scored against the others on seven measures built from
             price and volume, then ordered. The job is to pick the three or four worth opening
-            the four lenses on.
+            the five lenses on.
             {" "}Every figure is a position <em>within this scan</em>: a name at 90 beat 90% of
             the others here today. It is not a forecast, and none of these measures knows
             anything about the business.
@@ -520,7 +520,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               <div className="space-y-2 px-5 pt-4">
                 <p className="prose-col text-meta leading-relaxed text-ash">
                   Click a row&apos;s arrow to see how it earned its score, or the ticker to load
-                  it into all four lenses.
+                  it into all five lenses.
                 </p>
                 <Explainer summary="What the 0–100 numbers mean, and why the score is a judgement">
                   Every number is a rank within this scan: 0 is last, 100 is first. The score

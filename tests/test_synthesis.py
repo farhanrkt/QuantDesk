@@ -59,6 +59,25 @@ def quality(verdict="SOUND", applicable=True, beneish="clean", altman="safe", sc
                 "altman": {"band": altman}, "beneish": {"band": beneish}})
 
 
+def expectations(verdict="MIXED", applicable=True, up=5, down=4, moves=9,
+                 analysts=20, growth=None, drift_change=None):
+    if not applicable:
+        return leg({"applicable": False, "analysts": analysts})
+    return leg({
+        "applicable": True, "analysts": analysts, "verdict": verdict,
+        "headline": "planted",
+        "breadth": {"available": True, "up": up, "down": down, "moves": moves,
+                    "diffusion": (up - down) / moves if moves else None,
+                    "state": verdict.lower()},
+        "drift": {"annual90": {"available": True, "days": 90,
+                               "state": "moved" if drift_change else "flat",
+                               "change": drift_change if drift_change else 0.001}},
+        "consensusGrowth": ({"available": True, "nextYear": growth,
+                             "horizon": "one fiscal year"}
+                            if growth is not None else {"available": False}),
+    })
+
+
 def build(measured=None, **kw):
     """The synthesis, with NO agreement measurement unless a test supplies one.
 
@@ -69,7 +88,7 @@ def build(measured=None, **kw):
     own tests below, with a planted measurement.
     """
     payload = {"anomaly": flow(), "technical": trend(), "valuation": value(),
-               "quality": quality()}
+               "quality": quality(), "expectations": expectations()}
     payload.update(kw)
     return E.for_synthesis(payload, agreement_measurement=measured)
 
@@ -120,11 +139,12 @@ def test_the_caveat_is_always_present_and_says_it_is_not_advice():
 # --------------------------------------------------------------------------- #
 # Agreement is counted in SOURCES, not panels
 # --------------------------------------------------------------------------- #
-def test_four_agreeing_lenses_report_two_independent_sources():
+def test_five_agreeing_lenses_report_three_independent_sources():
     s = build(technical=trend(tone="bull"), valuation=value(verdict="UNDERVALUED"),
-              quality=quality(verdict="SOUND"), anomaly=flow(recent=3, bias="Accumulation"))
-    assert s["agreement"]["lensesReading"] == 4
-    assert s["agreement"]["independentSources"] == 2, "four panels are not four opinions"
+              quality=quality(verdict="SOUND"), anomaly=flow(recent=3, bias="Accumulation"),
+              expectations=expectations(verdict="RISING", up=9, down=2, moves=11))
+    assert s["agreement"]["lensesReading"] == 5
+    assert s["agreement"]["independentSources"] == 3, "five panels are not five opinions"
     assert s["agreement"]["tone"] == "good"
     # With no measurement in hand the warrant is stated as an assumption and
     # says so. The three measured branches are asserted below.
@@ -145,9 +165,18 @@ def test_four_agreeing_lenses_report_two_independent_sources():
 # --------------------------------------------------------------------------- #
 def measured(kappa: float, excludes_zero: bool, n: int = 141) -> dict:
     """A stamped agreement measurement in the shape `_warrant` reads."""
+    governing = {"a": "price and volume", "b": "the filings",
+                 "kappa": kappa, "n": n, "observed": 0.44, "chance": 0.41,
+                 "excludesZero": excludes_zero, "usable": True}
     return {"measuredOn": "2026-08-29", "scope": "the Dow 30 and the Nasdaq-100",
-            "families": {"kappa": kappa, "n": n, "observed": 0.44, "chance": 0.41,
-                         "excludesZero": excludes_zero, "usable": True},
+            "families": governing,
+            # Three pairs now, of which `families` is the most redundant. The
+            # warrant speaks about that one and names it.
+            "familyPairs": [governing,
+                            {**governing, "a": "price and volume",
+                             "b": "the estimate record", "kappa": kappa - 0.05},
+                            {**governing, "a": "the filings",
+                             "b": "the estimate record", "kappa": kappa - 0.02}],
             "pairs": [], "lenses": {"available": False},
             "reading": "a planted measurement"}
 
@@ -155,14 +184,19 @@ def measured(kappa: float, excludes_zero: bool, n: int = 141) -> dict:
 def agreeing(**kw):
     return build(technical=trend(tone="bull"), valuation=value(verdict="UNDERVALUED"),
                  quality=quality(verdict="SOUND"),
-                 anomaly=flow(recent=3, bias="Accumulation"), **kw)
+                 anomaly=flow(recent=3, bias="Accumulation"),
+                 expectations=expectations(verdict="RISING", up=9, down=2, moves=11),
+                 **kw)
 
 
 def test_a_null_agreement_measurement_earns_the_claim_rather_than_assuming_it():
     s = agreeing(measured=measured(0.03, excludes_zero=False))
     text = s["agreement"]["text"]
     assert "measured rather than assumed" in text
-    assert "two facts and not one counted twice" in text
+    # "separate facts" rather than "two facts": with three families the warrant
+    # names the most redundant PAIR and speaks about the set, so a hardcoded
+    # "two" would have been wrong the moment a third family arrived.
+    assert "separate facts and not one counted twice" in text
     assert "141 names in the Dow 30 and the Nasdaq-100" in text
     assert s["agreement"]["measured"]["families"]["kappa"] == 0.03
 
@@ -316,8 +350,8 @@ def test_a_bank_gets_a_refusal_and_a_stated_loss_of_evidence():
     assert reading["tone"] == "none"
     assert "refusal" in reading["sentence"]
     assert any("accounting screen" in b["title"] for b in s["blindSpots"])
-    # A refused lens must not be counted as a reading.
-    assert s["agreement"]["lensesReading"] == 3
+    # A refused lens must not be counted as a reading. Four of five remain.
+    assert s["agreement"]["lensesReading"] == 4
 
 
 # --------------------------------------------------------------------------- #
@@ -355,3 +389,154 @@ def test_nothing_usable_says_so_plainly():
     s = E.for_synthesis({}, agreement_measurement=None)
     assert "no lens" in s["headline"].lower()
     assert s["agreement"]["independentSources"] == 0
+
+
+# --------------------------------------------------------------------------- #
+# Three families — the generalisation §18 required
+#
+# `_agreement` read `families["price"]` and `families["filings"]` by name, so a
+# third family would have raised a KeyError on the busiest route in the app —
+# or, worse, been "fixed" by dropping the third from the sentence while
+# `independentSources` went on counting it. These hold the generalisation.
+# --------------------------------------------------------------------------- #
+def test_two_of_three_agreeing_is_not_reported_as_all_three():
+    """A materially weaker claim than unanimity, and it must read as one."""
+    s = build(anomaly=flow(recent=3, bias="Accumulation"), technical=trend(tone="bull"),
+              valuation=value(verdict="UNDERVALUED"), quality=quality(verdict="SOUND"),
+              expectations=expectations(verdict="MIXED"),
+              measured=measured(0.03, excludes_zero=False))
+    text = s["agreement"]["text"]
+    assert s["agreement"]["independentSources"] == 3
+    assert "2 of the 3 bodies of data" in text
+    assert "All three" not in text
+
+
+def test_all_three_agreeing_says_all_three():
+    s = agreeing(measured=measured(0.03, excludes_zero=False))
+    assert "All three bodies of data" in s["agreement"]["text"]
+    assert s["agreement"]["tone"] == "good"
+
+
+def test_a_disagreement_names_every_family_on_each_side():
+    """With three families the two sides are lists, not a pair of nouns."""
+    s = build(anomaly=flow(recent=3, bias="Accumulation"), technical=trend(tone="bull"),
+              valuation=value(verdict="OVERVALUED"), quality=quality(verdict="CONCERNS"),
+              expectations=expectations(verdict="FALLING", up=1, down=9, moves=10))
+    text = s["agreement"]["text"]
+    assert s["agreement"]["tone"] == "warn"
+    assert "price and volume" in text
+    assert "the filings" in text and "the estimate record" in text
+    assert "disagreement is the finding" in text
+
+
+def test_every_family_neutral_is_its_own_reported_state():
+    s = build(anomaly=flow(), technical=trend(tone="neutral"),
+              valuation=value(verdict="FAIRLY VALUED"), quality=quality(verdict="NEUTRAL"),
+              expectations=expectations(verdict="MIXED"))
+    assert s["agreement"]["tone"] == "neutral"
+    assert "every one of them came out neutral" in s["agreement"]["text"]
+
+
+def test_the_warrant_names_the_governing_pair():
+    """With three pairs, "the two" is ambiguous — the sentence has to say which."""
+    s = agreeing(measured=measured(0.30, excludes_zero=True))
+    text = s["agreement"]["text"]
+    assert "price and volume" in text and "the filings" in text
+    assert "worth less than two independent readings" in text
+
+
+def test_an_uncovered_listing_does_not_vote_and_leaves_two_sources():
+    """The refusal is not a neutral vote. It removes the family entirely."""
+    s = build(expectations=expectations(applicable=False, analysts=1))
+    reading = next(r for r in s["readings"] if r["lens"] == "Expectations")
+    assert reading["tone"] == "none"
+    assert reading["vote"] == 0
+    assert s["agreement"]["independentSources"] == 2
+
+
+def test_a_quiet_estimate_record_is_a_reading_that_votes_zero():
+    """Opposite finding from the refusal above, and it must not render alike."""
+    s = build(expectations=expectations(verdict="QUIET", up=0, down=0, moves=0))
+    reading = next(r for r in s["readings"] if r["lens"] == "Expectations")
+    assert reading["tone"] == "neutral"
+    assert reading["vote"] == 0
+    # It still counts as a source, because the lens genuinely read something.
+    assert s["agreement"]["independentSources"] == 3
+    assert any("nothing to add" in b["title"] for b in s["blindSpots"])
+
+
+def test_an_uncovered_listing_is_named_as_a_blind_spot():
+    s = build(expectations=expectations(applicable=False, analysts=0))
+    assert any("Nobody publishes estimates" in b["title"] for b in s["blindSpots"])
+
+
+# --------------------------------------------------------------------------- #
+# The tensions the fifth lens makes possible
+# --------------------------------------------------------------------------- #
+def test_cheap_with_falling_forecasts_is_named_as_the_trap_shape():
+    """The gap the four lenses could not see: a DCF reads last year's filings,
+    and the consensus is the more current record."""
+    s = build(valuation=value(verdict="UNDERVALUED"),
+              expectations=expectations(verdict="FALLING", up=1, down=9, moves=10))
+    titles = [t["title"] for t in s["tensions"]]
+    assert "Cheap, and the forecasts are still coming down" in titles
+
+
+def test_expensive_with_rising_forecasts_refuses_to_settle_which_is_right():
+    s = build(valuation=value(verdict="OVERVALUED"),
+              expectations=expectations(verdict="RISING", up=9, down=1, moves=10))
+    tension = next(t for t in s["tensions"]
+                   if t["title"] == "Expensive, with the forecasts being raised")
+    assert "cannot tell you which" in tension["text"]
+
+
+def test_flagged_accounts_with_rising_forecasts_says_they_are_not_independent():
+    """Analysts forecast FROM the statements the screens are questioning."""
+    s = build(quality=quality(verdict="CONCERNS", beneish="flagged"),
+              expectations=expectations(verdict="RISING", up=9, down=1, moves=10))
+    tension = next(t for t in s["tensions"]
+                   if t["title"] == "The accounts are flagged, the forecasts are not")
+    assert "not two" in tension["text"]
+
+
+def test_the_implied_growth_gap_is_named_only_when_it_is_large():
+    """The comparison crosses horizons — five forecast years against one fiscal
+    year — so a few points could be nothing but that mismatch."""
+    wide = build(valuation=leg({"verdict": "OVERVALUED", "engine": "DCF",
+                                "monteCarlo": {"p50Label": "$80", "upside": -0.2,
+                                               "probUndervalued": 0.2},
+                                "baseCase": {"terminalShare": 0.4,
+                                             "impliedGrowth": 0.25}}),
+                 expectations=expectations(growth=0.05))
+    assert any("needs more growth than anyone forecasts" in t["title"]
+               for t in wide["tensions"])
+
+    narrow = build(valuation=leg({"verdict": "OVERVALUED", "engine": "DCF",
+                                  "monteCarlo": {"p50Label": "$80", "upside": -0.2,
+                                                 "probUndervalued": 0.2},
+                                  "baseCase": {"terminalShare": 0.4,
+                                               "impliedGrowth": 0.09}}),
+                   expectations=expectations(growth=0.05))
+    assert not any("needs more growth than anyone forecasts" in t["title"]
+                   for t in narrow["tensions"])
+
+
+def test_the_growth_gap_states_that_the_horizons_differ():
+    """Stretching a one-year consensus silently to five would be the worse error."""
+    s = build(valuation=leg({"verdict": "OVERVALUED", "engine": "DCF",
+                             "monteCarlo": {"p50Label": "$80", "upside": -0.2,
+                                            "probUndervalued": 0.2},
+                             "baseCase": {"terminalShare": 0.4, "impliedGrowth": 0.25}}),
+              expectations=expectations(growth=0.05))
+    tension = next(t for t in s["tensions"]
+                   if "needs more growth" in t["title"])
+    assert "horizons are not the same" in tension["text"]
+    assert "not a verdict" in tension["text"]
+
+
+@pytest.mark.parametrize("verdict", ["RISING", "FALLING", "MIXED", "QUIET", "THIN"])
+def test_no_expectations_verdict_ever_produces_an_instruction(verdict):
+    s = build(expectations=expectations(verdict=verdict))
+    text = all_text(s)
+    for banned in ("you should buy", "you should sell", "we recommend", "strong buy"):
+        assert banned not in text

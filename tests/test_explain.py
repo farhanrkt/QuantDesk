@@ -136,6 +136,17 @@ SAMPLES: dict[str, tuple] = {
                             "tested": [{"key": "oil", "label": "the energy complex",
                                         "available": True, "correlation": 0.50}],
                             "ambiguous": False, "name_at": 0.45}),
+    # The fifth lens. Only `revisionBreadth` has a direction; the other five are
+    # `context` by design and `test_context_metrics_have_no_direction` is what
+    # holds them there.
+    "revisionBreadth": (0.55, {"up": 11, "down": 3, "moves": 14,
+                               "state": "rising", "evidence": "weak"}),
+    "revisionDrift": (-0.08, {"days": 90, "state": "moved"}),
+    "earningsSurprise": (0.043, {"beats": 3, "misses": 1, "reported": 4}),
+    "targetDispersion": (0.57, {"universeMedian": 0.54,
+                                "scope": "the Dow and the Nasdaq-100"}),
+    "consensusGrowth": (0.08, {}),
+    "analystCoverage": (22, {"minimum": 3}),
 }
 
 

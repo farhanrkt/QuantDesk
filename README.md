@@ -50,15 +50,21 @@ worth more than any one of them shouting.
 independent. Flow and Trend are both computed from the same price-and-volume series, so the
 app collapses them into one vote rather than counting four.
 
-**And that caveat is now measured, not asserted.** Across 168 names in four index universes,
-the price record and the filings reach the same verdict about as often as chance puts them
-there — **κ = +0.03, on an interval that straddles zero** — so agreement between them really
-is two facts rather than one counted twice. The surprise was the other half: Flow and Trend,
-the pair grouped together *because* they read the same series, agree at κ = +0.03 too, and
-the four lenses together carry **3.7 lenses' worth of independent information** rather than
-the two the count collapses them to. The grouping was left alone anyway, and the panel says
-why: a vote that correlates with nothing is what an independent reading and an uninformative
-one both look like, and the Flow lens's own event study already returns nulls.
+**And that caveat is measured, not asserted — which is how it came to be qualified.**
+A fifth lens shipped on 1 September 2026, reading a third record: what the analysts covering
+a company forecast. The re-run measured all three family pairs across 165 names, and the
+result was not the one anyone was watching for.
+
+The predicted risk was that the estimate record would duplicate the filings, since analysts
+forecast *from* the filings. It does not — that pair is the cleanest in the table
+(κ = −0.06). The pair that fails is the estimate record against **price and volume**:
+**κ = +0.11, on an interval excluding zero**, in both markets independently. So the rail
+now says out loud that those two together are worth *less* than two independent readings.
+
+Nobody made it say that. The branch that takes the claim away was written before the number
+was known, and all three branches ship. The five lenses still carry **4.48 lenses' worth of
+independent information** — better than the four-lens version — and the price/filings pair
+the app was built on is still clean at κ = −0.02.
 
 ---
 
@@ -96,7 +102,7 @@ market dropdown to IDX. Crypto takes a pair like `BTC-USD`.
 
 ---
 
-## The four lenses
+## The five lenses
 
 Each one answers a different question. For each, here's what it asks, how it answers, and —
 just as importantly — what it *can't* tell you.
@@ -251,10 +257,75 @@ fitted under, a flag is about 11% likely to be real.
 
 ---
 
+### Expectations — "What does everyone else already expect?"
+
+**Why a fifth.** The other four all describe the past or a model built from it. None of them
+reads what is already priced in — which is the difference between two companies they cannot
+tell apart: *cheap on a DCF, sound on the screens, consensus rising* and *cheap on a DCF,
+sound on the screens, consensus cut for a year*. The second is the shape of a value trap, and
+the record that separates them is one no other lens fetches.
+
+**How.** The analyst estimate record: how many of the analysts covering the company raised
+their forecast this month against how many cut it, how far the forecast itself has moved over
+ninety days, the last four quarters of reported-against-expected, the consensus growth rate,
+and how far apart the published price targets are.
+
+**One vote, and four figures that deliberately don't have one.** Only the revision count
+votes. The drift shares its direction with the count and would be the same fact twice; the
+surprise record has no direction *of the company's* — a firm that beats four quarters running
+while its consensus is cut all year is a deteriorating business that manages expectations
+well, and the beats are the mechanism rather than the counter-evidence; disagreement between
+analysts is not bullish or bearish; and a widely covered company is not a better company.
+
+**Why the count and not the forecast level.** The level is the obvious choice and it is the
+wrong one. Yahoo labels the period *relatively* — `0y` means "the current fiscal year" — so
+once a year the label rolls onto a different year and the level jumps for reasons that have
+nothing to do with a revision. Nothing marks where that happened and a 12% jump looks
+identical either way. A count of analysts carries no level and cannot be corrupted by a
+relabelling.
+
+**The one figure it refuses to print: the mean price target.** It is fetched. It is the only
+number this app could show that is simultaneously a point forecast of a price, unattached to
+any method, and published by people with a commercial relationship to the company being
+forecast. "Mean target 3,700" beside a price of 3,380 states a 9% expected return that
+nothing supports. The **spread** is shown instead — disagreement survives the objection that
+the level doesn't. Against a measured frame, too: the median listing spans 54% of its own
+mean, so "spans 57%" reads as ordinary rather than alarming.
+
+**Has it ever worked? Measured, and no.** Across 164 names over one 60-day window, the
+direction of estimate revisions had **no detectable relationship** with what the price did
+next (ρ = −0.01, interval [−0.15, +0.14]). The panel says so, and grades its own evidence
+*weak*.
+
+That null is honest rather than convenient, and one extra measurement is what makes it
+meaningful. The voting quantity — the revision count — has no history anywhere in the source,
+so the forward test had to use the forecast *level* as a stand-in. If the two didn't move
+together the null would be about the wrong quantity. They do: ρ = +0.53, interval excluding
+zero. The proxy tracks the vote, so the null is a null about the thing that votes.
+
+**The limit, stated as loudly as the result.** It is *one window*. Every name shares the same
+sixty days, so 164 names is worth far fewer than 164 independent observations. Returns are
+demeaned within each market first and the statistic is a rank correlation, which removes most
+of that but not all. A real study needs many non-overlapping windows over years, which means
+storing the revision table daily from here on — a data-collection project, not an analysis.
+
+**What it can't tell you.** Whether the analysts are any good. This lens reads what they
+currently forecast; it does not check whether they have been right before. And for a listing
+nobody covers — the normal state for smaller names — it returns an explicit refusal rather
+than a zero, and says in words that a gap in coverage is not a clean bill of health.
+
+**Where it is strongest is where the fourth lens goes silent.** Quality refuses banks and
+insurers outright, and Indonesian large caps are heavily banks. On BBRI.JK, where half the
+filings-side evidence is refused by design, the estimate record comes back complete: 22
+analysts, a full revision trail, four quarters of surprise. Coverage runs 99% in the US and
+96% on the IDX, against 94%/80% for Value and 94%/85% for Quality.
+
+---
+
 ## Three more tools
 
 **Scan & rank.** The breadth half of a two-tier workflow: rank a whole universe, then open
-the four lenses on the few names worth it.
+the five lenses on the few names worth it.
 
 *Tier one* batch-downloads up to 250 symbols in a handful of upstream calls — the Nasdaq-100
 ranks in about six seconds — and scores every name on seven price-and-volume signals:
@@ -346,38 +417,49 @@ not *no edge*. Survivorship, costs and sample size are stated alongside.
 Measured offline by `scripts/backtest_ranking.py` and stamped with its date. Re-run it after
 changing anything in `ranking.py`.
 
-**Do the four lenses actually say different things?** The app's loudest claim is not that any
-lens is right — it is that four lenses rest on **two independent bodies of data**, so agreement
-between those two is not one fact counted twice. The rail prints a count built on that claim on
-every run, and until now nothing had checked it.
+**Do the five lenses actually say different things?** The app's loudest claim is not that any
+lens is right — it is that five lenses rest on **three independent bodies of data**, so agreement
+between them is not one fact counted several times. The rail prints a count built on that claim
+on every run.
 
-The check is Cohen's κ between the two families' actual verdicts across 168 names in four index
-universes, because raw agreement is uninterpretable: a lens calling 70% of companies cheap and
-one calling 70% sound land on the same label **58% of the time while sharing nothing at all**.
-Chance-corrected, price and filings come out at **κ = +0.03 (US +0.05, IDX +0.09)**, on
-intervals that straddle zero in all three. **The claim survives** — measured now, not asserted,
-and the sentence on the panel is written from whichever way the number came out.
+The check is Cohen's κ between each pair of families' actual verdicts across 165 names in four
+index universes, because raw agreement is uninterpretable: a lens calling 70% of companies cheap
+and one calling 70% sound land on the same label **58% of the time while sharing nothing at
+all**. Chance-corrected:
+
+| Family pair | κ | |
+|---|---|---|
+| price and volume · the filings | −0.02 | straddles zero |
+| the filings · the estimate record | −0.06 | straddles zero |
+| **price and volume · the estimate record** | **+0.11** | **excludes zero** |
+
+**The claim is qualified rather than clean**, and the panel reports the *most redundant* pair
+rather than an average — because a reader counting three sources is over-counting exactly as
+much as the worst pair is redundant. See §18.
 
 The unexpected half: **Flow and Trend, the pair the app collapses into one vote precisely
-because they read the same price series, agree at κ = +0.03 as well.** The four together carry
-3.7 lenses' worth of independent information rather than the two they are counted as. The
-grouping was left alone regardless, and the panel says why — a vote uncorrelated with everything
-is what an independent reading and an uninformative one both look like, and the Flow lens's own
-event study returns nulls. Two pairs came out *negatively* correlated; one of those (a rising
-price making a DCF look expensive) explains itself, and the other is recorded without an
-explanation.
+because they read the same price series, agree at κ = +0.09 — barely more than any other
+pair.** The five together carry 4.48 lenses' worth of independent information rather than the
+three they are counted as. The grouping was left alone regardless, and the panel says why — a
+vote uncorrelated with everything is what an independent reading and an uninformative one both
+look like, and the Flow lens's own event study returns nulls.
+
+Several pairs come out *negatively* correlated. **Value · Expectations at κ = −0.18** is the
+largest and explains itself in the same way Trend · Value does: a stock whose consensus is
+rising has usually risen, which makes it less likely to sit below a DCF's range. An artefact of
+what the two measure, recorded rather than explained away.
 
 Measured offline by `scripts/measure_lens_agreement.py`, which pushes every name through the
-same four production engines a real request uses. Re-run it after changing what any lens
+same five production engines a real request uses. Re-run it after changing what any lens
 concludes.
 
-**Pre-trade checks.** Nine conditions that would give a careful buyer pause, drawn entirely
-from figures the four lenses already computed — so the panel costs no extra fetch and every
+**Pre-trade checks.** Ten conditions that would give a careful buyer pause, drawn entirely
+from figures the five lenses already computed — so the panel costs no extra fetch and every
 line can be traced to the tab that owns it.
 
 The new part is not the conditions, it is the **firing rate** beside each one, measured
 offline across the four index universes by `scripts/calibrate_checks.py` and stamped with its
-date. Without it, nine conditions read as nine independent alarms; with it, the panel can say
+date. Without it, ten conditions read as ten independent alarms; with it, the panel can say
 which are rare enough to mean something here. Three rules follow, and all three are enforced
 rather than intended: a check with no measured rate is **withheld entirely**, a check that
 fires on more than a third of the universe is **demoted from a flag to a stated base
@@ -431,7 +513,8 @@ where a constant was invented, it got replaced by an estimator.
 | Reporting raw screener hits | **Benjamini-Hochberg (1995)** | Scanning many names produces hits by construction |
 | `returns[returns < 0].std()` for Sortino | **The published root-mean-square shortfall** | They are different statistics. The old one ran 0.85x on ordinary returns, 1.44x where losses are rare and large, and exactly zero when every loss is the same size — where Sortino came back as 4.7e14. See RESEARCH_ROADMAP §13 |
 | A journal that tells you whether you were right | **One that shows what you wrote, and what has moved** | Grading its own entries would be a backtest of one, on a self-selected sample, with no control for the theses never written down. Movement is reported as movement |
-| Asserting that four lenses are two independent readings | **Cohen's κ between the families' actual verdicts** | Two lenses with skewed habits agree most of the time while sharing nothing: one that calls 70% of companies cheap and one that calls 70% sound land on the same label 58% of the time by construction. Chance-corrected, the price record and the filings come out at κ = +0.03 across 168 names — so the cross-check is earned. The same run found the pair the app declares REDUNDANT agrees no more than that |
+| Asserting that five lenses are three independent readings | **Cohen's κ between every pair of families' actual verdicts** | Two lenses with skewed habits agree most of the time while sharing nothing: one that calls 70% of companies cheap and one that calls 70% sound land on the same label 58% of the time by construction. Chance-corrected across 165 names, price·filings comes out at κ = −0.02 and filings·estimates at −0.06, but **price·estimates at +0.11 on an interval excluding zero** — so the claim is qualified rather than earned, and the rail says so. The panel reports the most redundant pair, never an average |
+| Trusting that estimate revisions predict returns because the literature says so | **A forward rank correlation on the one window the source can supply** | ρ = −0.01 across 164 names, interval [−0.15, +0.14]. No detectable relationship. A second measurement confirms the null is about the right quantity: the level drift the test could measure tracks the revision count that actually votes at ρ = +0.53. The lens still votes — it describes a real record — but grades its own evidence *weak* |
 | Sizing on a correlation because it seems reasonable | **Measuring whether correlations persist first** | One year's pairwise correlations rank-correlate 0.50-0.65 with the next year's across four universes, where the ranking's information coefficient was indistinguishable from zero. That gap is the whole licence for the portfolio panel, and a test fails if a re-measurement removes it |
 | A bare screen flag | **Bayes on the screen's published error rates** | A screen that catches most manipulators on a population where manipulation is rare still produces mostly false alarms. The prevalence decides the answer and nobody can measure it, so it is a control — and the conclusion holds across every value the literature supports |
 | An accounting score with no provenance | **The published sample, on the axes that can be checked** | Piotroski was fitted on US value stocks in 1976-1996, Altman on 1960s manufacturers, Beneish on 1980s SEC cases. Every use today is outside all three, which is provenance rather than a defect — so it is stated, never coloured, and never counted into a fit score |
@@ -462,6 +545,10 @@ api/
               technical.py      Indicators and narrative readout
               valuation.py      DCF / DDM / residual income
               quality.py        Piotroski, Altman, Beneish
+              expectations.py   The analyst estimate record — revisions,
+                                surprises, consensus growth, target spread
+              revisionmomentum.py  Whether the revision signal has ever led the
+                                price. It has not, on the one window measurable
               accumulation.py   CUSUM regime detection
               microstructure.py Spread, illiquidity, volatility
               riskmodel.py      Beta estimation and shrinkage
@@ -475,7 +562,7 @@ api/
                                 the sample it was validated on
               portfolio.py      The candidate against a book of holdings —
                                 correlation, independence, risk against money
-              lensagreement.py  How much the four lenses actually agree, once
+              lensagreement.py  How much the five lenses actually agree, once
                                 each one's own habits are accounted for
               posterior.py      What a flag is worth once you account for how
                                 rare the thing it screens for is
@@ -493,9 +580,13 @@ scripts/
                       Do correlations persist? The measurement that
                       licenses the portfolio panel to inform position size
   measure_lens_agreement.py
-                      Do the four lenses actually carry separate
+                      Do the five lenses actually carry separate
                       information? The measurement behind the rail's
-                      "two independent sources"
+                      "three independent sources" — and the one that
+                      qualified it
+  measure_revision_momentum.py
+                      Has the estimate-revision signal ever led the
+                      price? Published as the null it came back as
 tests/        1,100 offline tests
 ```
 
@@ -523,11 +614,12 @@ Interactive docs at `/api/docs`.
 
 | Endpoint | What it returns |
 |---|---|
-| `GET /api/confluence` | **All four lenses in one call, plus the synthesis and the pre-trade checks** — what the UI actually uses |
+| `GET /api/confluence` | **All five lenses in one call, plus the synthesis and the pre-trade checks** — what the UI actually uses |
 | `GET /api/isolation-forest` | Flow: anomalies, accumulation regimes, liquidity profile |
 | `GET /api/technical-analysis` | Trend: indicators, levels, signals, narrative |
 | `GET /api/intrinsic-value` | Value: DCF / DDM / RI with Monte Carlo percentiles |
 | `GET /api/quality` | Quality: F-Score, Z''-score, M-Score |
+| `GET /api/expectations` | Expectations: analyst revisions, surprise record, consensus growth |
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
 | `GET /api/rank/universes` | The predefined lists, each with its as-of date |
@@ -599,13 +691,21 @@ the panel prints with confidence.
 .venv/bin/python scripts/calibrate_checks.py
 ```
 
-The rail's claim that four lenses are two independent readings is measured the same way, and
+The rail's claim that five lenses are three independent readings is measured the same way, and
 re-run on the same terms: after anything that changes what a lens CONCLUDES — a verdict band,
-a tone, the family grouping itself. It costs a full pass through all four production engines
+a tone, the family grouping itself. It costs a full pass through all five production engines
 for every name in four universes, which is why it is a script rather than a request.
 
 ```bash
 .venv/bin/python scripts/measure_lens_agreement.py
+```
+
+The fifth lens's own signal is measured separately, and re-run after any change to what
+`expectations.revision_breadth` or `revision_drift` computes. It is much cheaper — one
+estimates fetch per name plus a single batched price download:
+
+```bash
+.venv/bin/python scripts/measure_revision_momentum.py
 ```
 
 The field manual's glossary is generated, so regenerate it after touching the explanation
@@ -636,7 +736,7 @@ that did not require relaxing anything:
   zero references to `document.cookie`, `localStorage` or `sessionStorage`. That is what
   keeps this app free of a consent banner.
 - **One aggregate event, and not the ticker.** A run reports the market (`US`/`ID`) and how
-  many of the four lenses succeeded. *Which* companies someone looks up is behavioural data
+  many of the five lenses succeeded. *Which* companies someone looks up is behavioural data
   about an individual — a watchlist is one of the more revealing things a person can tell
   you — and this app has no business collecting it.
 

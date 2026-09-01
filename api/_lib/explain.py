@@ -2612,6 +2612,302 @@ def for_valuation(payload: dict) -> dict:
     return {k: v for k, v in out.items() if v is not None}
 
 
+# ============================================================================ #
+# The estimate record — Engine 5
+#
+# EVERY INTERPRETER HERE IS EITHER A DIRECTION OR A DESCRIPTION, NEVER BOTH.
+# Only `revisionBreadth` earns a good/bad band, because only it decides the
+# lens's vote. The drift shares that direction and is therefore banded
+# `context`; the surprise record and the target dispersion have no direction to
+# have. Colouring any of the three would be the same fact rendered as several,
+# which is exactly what the confluence rail's family grouping exists to stop —
+# arriving inside one panel instead of across four.
+# ============================================================================ #
+@metric("revisionBreadth")
+def _revision_breadth(value, **ctx):
+    label = "Estimate revisions, last 30 days"
+    what = ("Of the analysts who publish a forecast for this company, how many raised "
+            "their number this month against how many cut it — scaled so it reads the "
+            "same on a company followed by five and one followed by fifty.")
+    up, down = ctx.get("up"), ctx.get("down")
+    moves, state = ctx.get("moves"), ctx.get("state")
+    evidence = ctx.get("evidence") or "weak"
+
+    if state == "quiet":
+        return make(
+            label=label, what=what,
+            reading=("Nobody moved. Analysts cover this company and not one of them "
+                     "changed a forecast in the last month, which is a settled "
+                     "consensus rather than a missing reading."),
+            action=("Nothing to act on. A quiet estimate record is not agreement that "
+                    "the price is right; it is the absence of an argument either way."),
+            band="fair", good_direction="high", evidence=evidence,
+            value_text="no revisions",
+        )
+    if state == "thin":
+        return make(
+            label=label, what=what,
+            reading=(f"Only {moves} analyst" + ("" if moves == 1 else "s")
+                     + " moved, so the direction is one or two opinions rather than the "
+                       "consensus shifting. No direction is read from it."),
+            action=("Wait for more of the coverage to move before treating this as a "
+                    "signal about the company."),
+            band="fair", good_direction="high", evidence=evidence,
+            value_text=f"{moves} moved",
+        )
+    if not _known(value):
+        return unavailable(label, what, "no revision table came back for this listing")
+
+    band = _ladder(value, ((-0.25, "poor"), (0.25, "fair"), (None, "good")))
+    if band == "good":
+        reading = (f"{up} of the analysts covering this company raised their estimate "
+                   f"this month and {down} cut it. The consensus is being marked up.")
+        action = ("Check what changed. A rising consensus is a fact about forecasts, "
+                  "not about results — the Value tab is where you find out whether the "
+                  "price has already moved further than the forecast did.")
+    elif band == "poor":
+        reading = (f"{up} raised and {down} cut. The consensus is being marked down, "
+                   f"which is the reading most often missing from a page that "
+                   f"otherwise reads only the past.")
+        action = ("Worth resolving before anything else on this page. A cheap valuation "
+                  "built on filings that the people closest to the company are "
+                  "currently revising downward is the standard shape of a value trap.")
+    else:
+        reading = (f"{up} raised and {down} cut — close enough to even that no "
+                   f"direction is claimed.")
+        action = CONTEXT_NOT_TRIGGER
+    return make(label=label, what=what, reading=reading, action=action, band=band,
+                good_direction="high", evidence=evidence,
+                value_text=f"{up} up / {down} down")
+
+
+@metric("revisionDrift")
+def _revision_drift(value, **ctx):
+    label = "How far the estimate moved"
+    what = ("The change in the actual forecast number for this fiscal year over the "
+            "last ninety days, as a share of where it started.")
+    days = ctx.get("days", 90)
+
+    if ctx.get("state") == "swung":
+        return make(
+            label=label, what=what,
+            reading=("The consensus crossed between a profit and a loss over these "
+                     f"{days} days. No percentage is given because it would divide by "
+                     "a number that passed through zero — and the crossing is the "
+                     "bigger fact anyway."),
+            action=("Read this as a change of forecast rather than a revision of one, "
+                    "and go and find out what caused it."),
+            band="context", good_direction="none", evidence="weak",
+            value_text="profit/loss crossing",
+        )
+    if not _known(value):
+        return unavailable(label, what, "the estimate level for one of the two dates "
+                                        "is missing")
+
+    # CONTEXT, NEVER A COLOUR. This shares its direction with `revisionBreadth`
+    # above, which already votes on it. A green number here beside a green
+    # verdict there is one finding rendered twice, and a reader counts it twice.
+    return make(
+        label=label, what=what,
+        reading=(f"The forecast has moved {_signed_pct(value, 1)} in {days} days. "
+                 f"Size, not direction — the direction is the revision count above, "
+                 f"and this is the same fact measured a second way rather than a "
+                 f"second fact."),
+        action=("Useful for weighing the verdict above, not for a decision of its own. "
+                "A clear direction on a tiny move is a smaller finding than the same "
+                "direction on a large one."),
+        band="context", good_direction="none", evidence="weak",
+        value_text=_signed_pct(value, 1),
+    )
+
+
+@metric("earningsSurprise")
+def _earnings_surprise(value, **ctx):
+    label = "Reported against expected"
+    what = ("How this company's last few quarterly results landed against what the "
+            "analysts had asked for, as a share of the estimate.")
+    beats = ctx.get("beats")
+    reported = ctx.get("reported")
+    if not _known(value) or reported is None:
+        return unavailable(label, what, "fewer than two reported quarters came back")
+
+    record = f"{beats} of {reported} quarters came in above the estimate"
+    # NO DIRECTION, AND THE READING SAYS WHY. A beat is a fact about two numbers
+    # and its sign is not the company's: a firm that beats every quarter while
+    # its consensus is cut all year is a deteriorating business that manages
+    # expectations well, and the beats are the mechanism rather than the
+    # counter-evidence. Banded `context` so it can never outvote the revision.
+    return make(
+        label=label, what=what,
+        reading=(f"{record}, with a median surprise of {_signed_pct(value, 1)}. "
+                 f"Deliberately uncoloured: a beat is a statement about the forecast "
+                 f"as much as about the result, and a company that beats every quarter "
+                 f"while its estimates are cut all year is being marked down, not up."),
+        action=("Read it against the revision direction above rather than on its own. "
+                "The two together say whether the results are outrunning the forecasts "
+                "or the forecasts are outrunning the results."),
+        band="context", good_direction="none", evidence="weak",
+        value_text=f"{beats}/{reported} above",
+    )
+
+
+@metric("targetDispersion")
+def _target_dispersion(value, **ctx):
+    label = "How far apart the price targets are"
+    what = ("The gap between the highest and lowest published price target for this "
+            "company, as a share of their average — a measure of how much the "
+            "analysts disagree, not of what they think.")
+    if not _known(value):
+        return unavailable(label, what, "no published targets came back for this listing")
+
+    median = ctx.get("universeMedian")
+    scope = ctx.get("scope")
+    # THE FRAME GOES IN THE FIRST SENTENCE, not the second. Guided mode renders
+    # only the first sentence of a reading, and "the targets span 57%" without a
+    # comparison is exactly the unreadable absolute figure the peer block was
+    # built to fix. The number and what it should be read against are one fact.
+    if _known(median) and scope:
+        opening = (f"The published targets span {_pct(value, 0)} of their own average, "
+                   f"against a median of {_pct(median, 0)} across {scope} — "
+                   f"{'wider' if value > median else 'narrower'} than most.")
+    else:
+        # NO BAND WITHOUT A FRAME. Nothing in this app has measured what a normal
+        # spread looks like on this population, so nothing here says whether this
+        # one is large. `pretrade` refuses an uncalibrated check for the same reason.
+        opening = (f"The published targets span {_pct(value, 0)} of their own average, "
+                   f"and nothing here says whether that is a lot: the spread across a "
+                   f"universe has not been measured, so there is no frame for it.")
+
+    return make(
+        label=label, what=what,
+        reading=(f"{opening} The average target itself is deliberately not shown — it is "
+                 f"a point forecast of a price with no stated method behind it, and this "
+                 f"app does not print those."),
+        action=CONTEXT_NOT_TRIGGER,
+        band="context", good_direction="none", evidence="weak",
+        value_text=_pct(value, 0),
+    )
+
+
+@metric("consensusGrowth")
+def _consensus_growth(value, **ctx):
+    label = "Growth the analysts forecast"
+    what = ("What the analysts covering this company expect its earnings to do over "
+            "the next fiscal year.")
+    if not _known(value):
+        return unavailable(label, what, "no next-year growth estimate came back")
+
+    # NO COMPARISON AGAINST THE REVERSE DCF IS DRAWN HERE, and the first draft's
+    # attempt to is instructive: it read an `impliedGrowth` key off the
+    # expectations payload, which has never carried one. The figure lives on the
+    # valuation leg, and this explanation cannot see it.
+    #
+    # The comparison is real and it ships — in `_tensions`, which is handed the
+    # whole confluence payload and can see both legs at once. Drawing it here
+    # from a key that is always absent produced a branch that silently never
+    # fired, which is worse than not having it.
+
+    # CONTEXT. High forecast growth is not good news about a holding — it is the
+    # bar the business has to clear, and a price that already reflects it is
+    # exactly as demanding as one that does not. Same rule as `impliedGrowth`.
+    return make(
+        label=label, what=what,
+        reading=(f"The consensus is {_pct(value, 1)} earnings growth next year — the bar "
+                 f"the business has to clear, which is why it is uncoloured: a high "
+                 f"forecast is not better news for a holder."),
+        action=("Compare it with the growth assumption on the Value tab, which is "
+                "editable, and with the price-implied rate the synthesis quotes against "
+                "it. If they disagree, the valuation is answering a different question "
+                "from the one the market is pricing."),
+        band="context", good_direction="none", evidence="weak",
+        value_text=_pct(value, 1),
+    )
+
+
+@metric("analystCoverage")
+def _analyst_coverage(value, **ctx):
+    label = "Analysts publishing estimates"
+    what = ("How many analysts publish a forecast for this company — the size of the "
+            "consensus every other number on this panel is drawn from.")
+    minimum = ctx.get("minimum", 3)
+    if not _known(value) or value <= 0:
+        return unavailable(label, what, "no analyst publishes estimates for this listing")
+
+    count = int(value)
+    if count < minimum:
+        reading = (f"{count} analyst" + ("" if count == 1 else "s")
+                   + f" — below the {minimum} this lens needs, so it declines to report "
+                     f"a direction. That is a coverage gap, not a clean reading.")
+    else:
+        # THE FIRST SENTENCE HAS TO CARRY THE POINT. "39 analysts." restates the
+        # figure directly above it and tells a reader nothing; Guided mode shows
+        # only this sentence, so what the count is FOR belongs inside it.
+        reading = (f"{count} analysts, so every figure on this panel rests on that many "
+                   f"opinions — thin coverage moves them all further on one person's "
+                   f"revision.")
+
+    # NEVER COLOURED. A widely covered company is not a better company — coverage
+    # tracks size and index membership, and `screendomain.py` makes the opposite
+    # point about the same variable, that the accounting screens were fitted on
+    # names with NO analyst following.
+    return make(
+        label=label, what=what, reading=reading,
+        action=("Weigh everything else on this panel against it. Three analysts moving "
+                "on a company followed by five is most of the coverage; the same three "
+                "out of fifty is not."),
+        band="context", good_direction="none", evidence="weak",
+        value_text=f"{count}",
+    )
+
+
+def for_expectations(payload: dict, measured: Optional[dict] = None) -> dict:
+    """Explanations for the estimate record and the measurement behind its vote.
+
+    `measured` is `revisionmomentum.for_panel(market)`. It supplies two things
+    the engine cannot know: the EVIDENCE GRADE for the revision reading, which
+    is the honest answer to "how much should I trust this", and the universe
+    median that gives the target spread a frame. Both are absent when the
+    measurement has never been run, and the interpreters above render that
+    honestly rather than falling back to a flattering default.
+    """
+    if not payload.get("applicable"):
+        # The refusal carries ONE explanation and no metrics. Emitting the usual
+        # grid with every entry `unavailable` would render a panel full of
+        # greyed-out numbers, which reads as "we tried and could not" rather
+        # than "there is nothing here to try on".
+        return {"analystCoverage": explain("analystCoverage", payload.get("analysts"),
+                                           minimum=payload.get("minAnalysts"))}
+
+    breadth = payload.get("breadth") or {}
+    drift = (payload.get("drift") or {}).get("annual90") or {}
+    surprise = payload.get("surprise") or {}
+    dispersion = payload.get("dispersion") or {}
+    growth = payload.get("consensusGrowth") or {}
+    frame = (measured or {}).get("dispersion") or {}
+
+    out = {
+        "analystCoverage": explain("analystCoverage", payload.get("analysts"),
+                                   minimum=payload.get("minAnalysts")),
+        "revisionBreadth": explain("revisionBreadth", breadth.get("diffusion"),
+                                   up=breadth.get("up"), down=breadth.get("down"),
+                                   moves=breadth.get("moves"), state=breadth.get("state"),
+                                   evidence=(measured or {}).get("evidence")),
+        "revisionDrift": explain("revisionDrift", drift.get("change"),
+                                 days=drift.get("days"), state=drift.get("state")),
+        "targetDispersion": explain("targetDispersion", dispersion.get("spread"),
+                                    universeMedian=frame.get("median"),
+                                    scope=(measured or {}).get("scope")),
+        "consensusGrowth": explain("consensusGrowth", growth.get("nextYear")),
+    }
+    if surprise.get("available"):
+        out["earningsSurprise"] = explain(
+            "earningsSurprise", surprise.get("medianSurprise"),
+            beats=surprise.get("beats"), misses=surprise.get("misses"),
+            reported=surprise.get("reported"))
+    return {k: v for k, v in out.items() if v is not None}
+
+
+
 def for_flow(payload: dict, currency: str = "") -> dict:
     """Explanations for the liquidity block and the anomaly statistics."""
     liquidity = payload.get("liquidity") or {}
@@ -2849,7 +3145,7 @@ def _composite(value, coverage=None, available=None, total=None, **_):
                     f"little history and were left out rather than filled in with a guess.")
     return make(label, what, reading,
                 "A ranking is a shortlist, not a verdict. Its job is to decide which few names "
-                "are worth opening the four lenses on.",
+                "are worth opening the five lenses on.",
                 band, "high", evidence="moderate", value_text=f"{value:.0f}")
 
 
@@ -2978,20 +3274,21 @@ def for_ranking_row(row: dict) -> dict:
 
 
 # ============================================================================ #
-# The synthesis — what all four lenses add up to
+# The synthesis — what all five lenses add up to
 #
 # WHY THIS IS PROSE AND NOT A SCORE, WHICH IS THE WHOLE POINT
 # -----------------------------------------------------------
 # The obvious feature request is a single BUY / HOLD / SELL, or a 0-100
 # conviction number. It is refused deliberately and permanently.
 #
-# The app spends real effort establishing that its four lenses are not four
-# independent opinions (two read price, two read filings), that a seven-column
+# The app spends real effort establishing that its five lenses are not five
+# independent opinions (two read price, two read filings, one reads the estimate
+# record), that a seven-column
 # ranking carries about 3.4 signals' worth of information, that a DCF is
 # typically 60-80% perpetuity guess, and that several readings are graded weak.
 # A single composite number discards every one of those findings, and it does it
 # in the one field everybody would read. The moment it exists, nobody opens the
-# four lenses again.
+# five lenses again.
 #
 # So this returns SENTENCES. It says what the lenses agree on, it names the
 # places they disagree, it states what this app cannot tell you about THIS
@@ -3011,19 +3308,44 @@ def for_ranking_row(row: dict) -> dict:
 # server round trip. This one exists for the PROSE — it never recomputes the
 # rail's vote arithmetic, so the two cannot disagree about a tally.
 SYNTHESIS_FAMILY = {"flow": "price", "trend": "price",
-                    "value": "filings", "quality": "filings"}
+                    "value": "filings", "quality": "filings",
+                    "expectations": "estimates"}
 
 # The GROUPING above stays a declared assumption — nothing measures which data a
 # lens reads, and nothing could. What is now measured is its CONSEQUENCE: how
-# often the two families' verdicts actually coincide once each family's own
-# habits are accounted for. `lensagreement` holds that measurement and
-# `_warrant` below is where it either earns this app's central claim or takes it
-# away. See §15 of RESEARCH_ROADMAP.md.
-FAMILY_LABEL = {"price": "price and volume", "filings": "the filings"}
+# often the families' verdicts actually coincide once each family's own habits
+# are accounted for. `lensagreement` holds that measurement and `_warrant` below
+# is where it either earns this app's central claim or takes it away. See §15
+# and §18 of RESEARCH_ROADMAP.md.
+#
+# THE THIRD FAMILY IS THE ONE TO DISTRUST. Analysts read the filings, so the
+# estimate record is downstream of the same statements the Value and Quality
+# lenses read. If any pair here turns out to be redundant it is that one, and
+# §18 measures all three pairs rather than only the original.
+FAMILY_LABEL = {"price": "price and volume", "filings": "the filings",
+                "estimates": "the estimate record"}
+
+# Reading order, so a sentence naming several families names them the same way
+# every time. Price first because it is the record that exists for every
+# listing; the estimate record last because it is the one most often absent.
+FAMILY_ORDER = ("price", "filings", "estimates")
 
 # Verbatim from the app's own framing. A DCF whose terminal value is more than
 # this share of the answer is mostly a statement about the perpetuity.
 TERMINAL_SHARE_WARN = 0.60
+
+# How far the price-implied growth rate has to sit ABOVE the published consensus
+# before the gap is worth a sentence. Deliberately wider than
+# `pretrade.IMPLIED_GROWTH_GAP`, which compares the implied rate against this
+# app's OWN assumption over the same five years and can therefore afford a
+# tighter line.
+#
+# This comparison crosses horizons — five forecast years against one fiscal
+# year — and a gap of a few points could be nothing but that mismatch. Ten
+# points a year is large enough that no reasonable reading of the horizon
+# difference accounts for it, which is the only threshold this comparison can
+# honestly support. It is a prompt to go and look, never a flag.
+IMPLIED_VS_CONSENSUS = 0.10
 
 
 def _plain(text: Optional[str]) -> str:
@@ -3189,15 +3511,110 @@ def _read_quality(data: dict) -> Optional[dict]:
         tone, 1 if tone == "good" else -1 if tone == "bad" else 0)
 
 
+def _read_expectations(data: dict) -> Optional[dict]:
+    """The estimate record's verdict, in the synthesis's own voice.
+
+    THE REFUSAL AND THE QUIET READING ARE DIFFERENT, and keeping them apart is
+    most of this function. `applicable: false` means nobody covers this listing
+    and the lens declined; QUIET means analysts cover it and none of them has
+    moved. Those are opposite findings that would render as the same blank chip
+    if either were allowed to collapse into the other, and the second is a
+    genuine reading that votes zero while the first does not vote at all.
+    """
+    if not data.get("applicable"):
+        analysts = data.get("analysts")
+        if analysts:
+            plural = "" if analysts == 1 else "s"
+            who = f"Only {analysts} analyst{plural} publishes"
+        else:
+            who = "No analyst publishes"
+        return _reading(
+            "Expectations", "expectations", "Not covered",
+            f"{who} estimates for this listing, so there is no consensus to read. That "
+            f"is a gap in coverage, not a clean bill of health — nothing here says the "
+            f"estimates are steady, only that there are none.",
+            "none", 0)
+
+    breadth = data.get("breadth") or {}
+    verdict = data.get("verdict") or "MIXED"
+    analysts = data.get("analysts")
+    up, down, moves = breadth.get("up"), breadth.get("down"), breadth.get("moves")
+
+    if verdict == "QUIET":
+        return _reading(
+            "Expectations", "expectations", "Quiet",
+            f"{analysts} analysts cover this company and none of them has changed a "
+            f"number in the last month. A settled consensus is a reading, not a "
+            f"missing one — though it also means this lens has nothing to add right now.",
+            "neutral", 0)
+
+    if verdict == "THIN":
+        return _reading(
+            "Expectations", "expectations", "Too few moves",
+            f"Only {moves} of the {analysts} analysts covering this company moved their "
+            f"number in the last month, so the direction is one or two people's opinion "
+            f"rather than the consensus shifting. No direction is claimed from it.",
+            "neutral", 0)
+
+    if verdict == "MIXED":
+        return _reading(
+            "Expectations", "expectations", "Mixed",
+            f"{up} of the analysts covering this company raised their estimate in the "
+            f"last month and {down} cut it — close enough to even that no direction is "
+            f"claimed. A divided consensus is a real reading, not a missing one.",
+            "neutral", 0)
+
+    if verdict != "RISING" and verdict != "FALLING":
+        # UNREADABLE, or any verdict a later change adds. NEVER fall through to
+        # the directional branch below: the first draft of this function did,
+        # and a MIXED verdict — five analysts up against four — came out of it
+        # as "Falling" with a vote of -1, which is a fabricated bear case on the
+        # most evenly split reading the lens can produce. Caught by
+        # `test_every_family_neutral_is_its_own_reported_state`.
+        return _reading(
+            "Expectations", "expectations", "No reading",
+            "No revision record came back for this listing, so this lens has nothing "
+            "to report. That is missing data rather than a settled consensus.",
+            "none", 0)
+
+    # A directional reading. The DRIFT sentence is appended only when it exists
+    # and is not flat, because "and the level barely moved" beside a clear
+    # breadth verdict reads as a contradiction rather than as the magnitude it is.
+    tail = ""
+    drift = (data.get("drift") or {}).get("annual90") or {}
+    if drift.get("available") and drift.get("state") == "moved":
+        tail = (f" The number itself has moved {_signed_pct(drift['change'], 1)} over "
+                f"ninety days.")
+    elif drift.get("available") and drift.get("state") == "swung":
+        tail = (" Over ninety days the consensus has crossed between a profit and a "
+                "loss, which is a change of forecast rather than a revision of one.")
+
+    word = "raising" if verdict == "RISING" else "cutting"
+    return _reading(
+        "Expectations", "expectations",
+        "Rising" if verdict == "RISING" else "Falling",
+        f"{up} of the analysts covering this company raised their estimate in the last "
+        f"month and {down} cut it, so the consensus is {word}.{tail} An estimate is an "
+        f"opinion about the future, not a measurement of the past.",
+        "good" if verdict == "RISING" else "bad",
+        1 if verdict == "RISING" else -1)
+
+
 def _family_votes(readings: Sequence[dict]) -> dict:
     """One vote per BODY OF DATA, not one per panel.
 
-    Four lenses over two datasets are not four opinions. A family whose members
-    disagree votes zero and is recorded as split, because two readings of one
-    dataset pointing opposite ways is itself a finding worth a sentence.
+    Five lenses over three datasets are not five opinions. A family whose
+    members disagree votes zero and is recorded as split, because two readings
+    of one dataset pointing opposite ways is itself a finding worth a sentence.
+
+    A family with exactly one member — which the estimate record always is —
+    still passes through the same collapse rather than skipping it. Its vote is
+    its single member's vote either way, and routing it identically means the
+    day a second expectations-family lens is added, nothing here has to change
+    for the split logic to start applying to it.
     """
     out: dict = {}
-    for family in ("price", "filings"):
+    for family in FAMILY_ORDER:
         members = [r for r in readings if r["family"] == family and r["tone"] != "none"]
         if not members:
             continue
@@ -3209,8 +3626,8 @@ def _family_votes(readings: Sequence[dict]) -> dict:
 
 
 def _warrant(measured: Optional[dict]) -> str:
-    """WHY agreement between the two families is worth anything — the clause
-    that carries this app's central claim, written from the measurement.
+    """WHY agreement between the families is worth anything — the clause that
+    carries this app's central claim, written from the measurement.
 
     Until §15 this was an assertion: "the price record and the filings share no
     inputs — so agreement between them is not one fact counted twice." Nothing
@@ -3226,27 +3643,51 @@ def _warrant(measured: Optional[dict]) -> str:
         # Never measured, or measured on too few names. Back to the stated
         # assumption, said as an assumption — which is what the confluence rail
         # has always admitted in smaller type.
-        return ("because the price record and the filings read different data — though "
-                "how far their verdicts actually overlap is a stated assumption here "
-                "rather than something this app has measured")
+        return ("because the price record, the filings and the estimate record read "
+                "different data — though how far their verdicts actually overlap is a "
+                "stated assumption here rather than something this app has measured")
 
+    # THE GOVERNING PAIR IS THE MOST REDUNDANT ONE, not an average over the
+    # pairs. With three families the claim "agreement is not one fact counted
+    # twice" is only as good as its weakest link: if any two of the three are
+    # largely predictable from each other, a reader counting three agreeing
+    # sources is over-counting, however independent the other pairs look. An
+    # average would let two clean pairs bury one redundant one.
     families = measured["families"]
+    pairs = measured.get("familyPairs") or [families]
     kappa, n = families["kappa"], families["n"]
     where = f"across {n} names in {measured['scope']}"
+    among = (f" — the closest-matching of the {len(pairs)} pairs"
+             if len(pairs) > 1 else "")
+    names = f"{families.get('a', 'the first')} and {families.get('b', 'the second')}"
 
     if not families.get("excludesZero"):
-        return (f"and that is measured rather than assumed: {where}, the two reach the "
-                f"same verdict no more often than their own separate habits already "
-                f"put them there (κ = {kappa:+.2f}), so agreement between them really "
-                f"is two facts and not one counted twice")
+        return (f"and that is measured rather than assumed: {where}, no two of them "
+                f"reach the same verdict more often than their own separate habits "
+                f"already put them there ({names} come closest, at κ = {kappa:+.2f}), "
+                f"so agreement between them really is separate facts and not one "
+                f"counted twice")
     if kappa > 0:
-        return (f"with one measured qualification: {where}, the two agree rather more "
-                f"often than chance alone would produce (κ = {kappa:+.2f}), so the "
-                f"second reading is partly predictable from the first and this is "
-                f"worth less than two independent readings")
-    return (f"with one measured oddity: {where}, the two agree LESS often than chance "
+        return (f"with one measured qualification: {where}, {names} agree rather more "
+                f"often than chance alone would produce (κ = {kappa:+.2f}{among}), so "
+                f"that second reading is partly predictable from the first and the two "
+                f"together are worth less than two independent readings")
+    return (f"with one measured oddity: {where}, {names} agree LESS often than chance "
             f"alone would produce (κ = {kappa:+.2f}), which is a finding in its own "
             f"right rather than reassurance about either of them")
+
+
+def _join(labels: Sequence[str]) -> str:
+    """"a", "a and b", "a, b and c" — the way a sentence would name them."""
+    labels = list(labels)
+    if not labels:
+        return ""
+    if len(labels) == 1:
+        return labels[0]
+    return ", ".join(labels[:-1]) + f" and {labels[-1]}"
+
+
+_COUNT_WORD = {2: "Both", 3: "All three", 4: "All four", 5: "All five"}
 
 
 def _agreement(readings: Sequence[dict], families: dict,
@@ -3266,28 +3707,59 @@ def _agreement(readings: Sequence[dict], families: dict,
             f"this app exists to avoid."),
             "tone": "warn", "independentSources": 1, "lensesReading": reading_count}
 
-    price, filings = families["price"]["vote"], families["filings"]["vote"]
+    # GENERALISED OVER THE FAMILY COUNT, and that is not tidiness. This function
+    # read `families["price"]` and `families["filings"]` by name, so the day a
+    # third family arrived it would have raised a KeyError on the busiest route
+    # in the app — or, worse, been "fixed" by dropping the third from the
+    # sentence while `independentSources` went on counting it. See §18.
+    ordered = [f for f in FAMILY_ORDER if f in families]
+    up = [f for f in ordered if families[f]["vote"] > 0]
+    down = [f for f in ordered if families[f]["vote"] < 0]
+    flat = [f for f in ordered if families[f]["vote"] == 0]
     base = {"independentSources": len(families), "lensesReading": reading_count}
+    total = len(ordered)
 
-    if price and price == filings:
-        direction = "the same constructive direction" if price > 0 else "the same negative direction"
-        return {**base, "tone": "good" if price > 0 else "bad", "text": (
-            f"Both bodies of data point in {direction}. That is the strongest thing this "
-            f"app can say, {_warrant(measured)}.")}
-
-    if price and filings and price != filings:
-        up = "price and volume" if price > 0 else "the filings"
-        down = "the filings" if price > 0 else "price and volume"
+    if up and down:
         return {**base, "tone": "warn", "text": (
-            f"They disagree: {up} read constructively while {down} do not. The "
-            f"disagreement is the finding, and this page cannot settle which side is "
-            f"right.")}
+            f"They disagree: {_join([FAMILY_LABEL[f] for f in up])} read "
+            f"constructively while {_join([FAMILY_LABEL[f] for f in down])} do not. "
+            f"The disagreement is the finding, and this page cannot settle which side "
+            f"is right.")}
 
-    active = "price and volume" if price else "the filings"
-    quiet = "the filings" if price else "price and volume"
-    return {**base, "tone": "neutral", "text": (
-        f"Only {active} has a directional view; {quiet} come out neutral. A single "
-        f"leaning reading is a weaker claim than agreement between two.")}
+    directional = up or down
+    if not directional:
+        return {**base, "tone": "neutral", "text": (
+            f"None of the {total} bodies of data has a directional view — every one of "
+            f"them came out neutral. That is a real reading rather than a missing one, "
+            f"and it is the least often useful thing this page can report.")}
+
+    if len(directional) == 1:
+        return {**base, "tone": "neutral", "text": (
+            f"Only {FAMILY_LABEL[directional[0]]} has a directional view; the "
+            f"{'other' if len(flat) == 1 else 'others'} came out neutral. A single "
+            f"leaning reading is a weaker claim than agreement between two.")}
+
+    # Two or more agree, and nothing points the other way.
+    constructive = bool(up)
+    direction = ("the same constructive direction" if constructive
+                 else "the same negative direction")
+    if flat:
+        # WORTH ITS OWN SENTENCE. "Two of three agree and the third is neutral"
+        # is a materially weaker claim than "all three agree", and collapsing
+        # the two would quietly upgrade it.
+        # "with the other neutral" rather than "and the other came out neutral":
+        # `_warrant` begins with its own "and that is measured…" / "with one
+        # measured qualification…", and two conjunctions in a row read as a
+        # run-on. The clause has to hand over cleanly to whichever warrant
+        # branch fires.
+        lead = (f"{len(directional)} of the {total} bodies of data point in "
+                f"{direction}, with the {'other' if len(flat) == 1 else 'others'} "
+                f"neutral")
+    else:
+        lead = (f"{_COUNT_WORD.get(total, f'All {total}')} bodies of data point in "
+                f"{direction}. That is the strongest thing this app can say")
+    return {**base, "tone": "good" if constructive else "bad",
+            "text": f"{lead}, {_warrant(measured)}."}
 
 
 def _tensions(readings: dict, payload: dict, families: dict) -> list[dict]:
@@ -3316,6 +3788,64 @@ def _tensions(readings: dict, payload: dict, families: dict) -> list[dict]:
             "Quality is good and the valuation says expensive. That is a different "
             "problem from a weak business — the risk is the price paid, not the company. "
             "The growth assumption is the lever worth testing here.")})
+
+    # --- The estimate record against the other two families --------------- #
+    expectations = readings.get("expectations")
+
+    if value and expectations and value["vote"] > 0 and expectations["vote"] < 0:
+        out.append({"title": "Cheap, and the forecasts are still coming down", "text": (
+            "The model says the price is below what the cash flows support, and the "
+            "analysts covering it have been cutting their numbers. The valuation reads "
+            "last year's filings; the estimate record is the more current of the two and "
+            "it is moving the other way. This is the shape a value trap has before the "
+            "filings show it — cheap against a forecast that is still being revised "
+            "down.")})
+
+    if value and expectations and value["vote"] < 0 and expectations["vote"] > 0:
+        out.append({"title": "Expensive, with the forecasts being raised", "text": (
+            "The model says the price has run past what the cash flows justify, and the "
+            "analysts are raising their estimates. One of two things is happening and "
+            "this page cannot tell you which: the valuation's growth assumption is "
+            "behind the business, or the price and the consensus are climbing together "
+            "for the same reason and neither is independent evidence for the other.")})
+
+    if quality and expectations and quality["vote"] < 0 and expectations["vote"] > 0:
+        out.append({"title": "The accounts are flagged, the forecasts are not", "text": (
+            "The accounting screens raise a flag on the filings while the analysts "
+            "covering the company are raising their numbers. Analysts forecast from the "
+            "same statements the screens are questioning, so this is not two "
+            "independent readings — it is one dataset being read by two parties, only "
+            "one of whom is testing whether it is honest.")})
+
+    # THE FIRST EXTERNAL CHECK ON THE VALUATION THIS APP HAS EVER CARRIED.
+    #
+    # `valuation.py` computes an implied growth rate — what the CURRENT PRICE
+    # would need the business to deliver — and until the estimate record existed
+    # the only figure it could be held against was the app's own default
+    # assumption, which came from the same module. Both sides of that comparison
+    # were this app talking to itself.
+    #
+    # The horizons genuinely differ and the sentence says so rather than hiding
+    # it: the implied rate is over the DCF's five forecast years, the consensus
+    # is one fiscal year, and Yahoo's long-term growth row is null on every
+    # listing tested. A one-year number stretched silently to five would be a
+    # worse error than the mismatch stated plainly.
+    valuation_leg = _leg(payload, "valuation")
+    expectations_leg = _leg(payload, "expectations")
+    if valuation_leg and expectations_leg and expectations_leg.get("applicable"):
+        implied = (valuation_leg.get("baseCase") or {}).get("impliedGrowth")
+        consensus = (expectations_leg.get("consensusGrowth") or {})
+        forecast = consensus.get("nextYear") if consensus.get("available") else None
+        if _known(implied) and _known(forecast) and implied - forecast >= IMPLIED_VS_CONSENSUS:
+            out.append({"title": "The price needs more growth than anyone forecasts",
+                        "text": (
+                f"Holding today's price up needs about {_pct(implied, 0)} growth a year "
+                f"across the model's five forecast years. The analysts covering this "
+                f"company forecast {_pct(forecast, 0)} for the next one. The two "
+                f"horizons are not the same and the gap is not a verdict — but this is "
+                f"the only figure on this page that checks the valuation against "
+                f"somebody outside this app, and it is worth knowing which way it "
+                f"points.")})
 
     for family, info in families.items():
         if info.get("split"):
@@ -3377,8 +3907,22 @@ def _blind_spots(payload: dict, readings: dict) -> list[dict]:
                 "estimator's own noise as a cost would overstate what this stock actually "
                 "charges to trade.")})
 
+    expectations = _leg(payload, "expectations")
+    if expectations and not expectations.get("applicable"):
+        out.append({"title": "Nobody publishes estimates for this listing", "text": (
+            "The expectations lens is absent here rather than quiet — there is no "
+            "consensus to read, so nothing on this page says what the rest of the "
+            "market expects. This is the normal state for smaller listings and it is "
+            "where the estimate record stops being available at all.")})
+    elif expectations and expectations.get("verdict") == "QUIET":
+        out.append({"title": "The estimate record has nothing to add", "text": (
+            "Analysts cover this company and none of them has moved a number in the "
+            "last month. That is a genuine reading rather than a gap, but it means the "
+            "cross-check is running on two directional families instead of three.")})
+
     for name, label in (("anomaly", "Flow"), ("technical", "Trend"),
-                        ("valuation", "Value"), ("quality", "Quality")):
+                        ("valuation", "Value"), ("quality", "Quality"),
+                        ("expectations", "Expectations")):
         leg = (payload or {}).get(name)
         if isinstance(leg, dict) and not leg.get("ok"):
             detail = leg.get("error")
@@ -3427,6 +3971,19 @@ def _next_checks(payload: dict, readings: dict) -> list[str]:
                        f"fall in this history would not force you out. That is the single "
                        f"decision the drawdown number exists for.")
 
+    expectations = _leg(payload, "expectations")
+    if expectations and expectations.get("applicable"):
+        surprise = expectations.get("surprise") or {}
+        if surprise.get("available") and surprise.get("misses", 0) > surprise.get("beats", 0):
+            out.append("On the Expectations tab, read the beat-and-miss record against "
+                       "the revision direction. A company that keeps missing while its "
+                       "estimates are still being raised is one where the forecasts have "
+                       "not caught up with the results yet.")
+        else:
+            out.append("On the Expectations tab, check how many analysts actually moved. "
+                       "A clear direction from three of twenty is a different fact from "
+                       "the same direction out of fifteen, and the panel reports both.")
+
     out.append("Run the event study on the Flow tab. It measures whether this ticker's "
                "anomaly flags have predicted anything at all, and a null result there is "
                "the most useful thing it can return.")
@@ -3444,7 +4001,7 @@ _LOAD_FROM_DISK = object()
 
 def for_synthesis(payload: dict, market: Optional[str] = None,
                   agreement_measurement=_LOAD_FROM_DISK) -> dict:
-    """Everything the four lenses add up to, in sentences.
+    """Everything the five lenses add up to, in sentences.
 
     `payload` is the `/api/confluence` response — each leg carrying its own
     `ok` flag — so this reads exactly the figures the panels render rather than
@@ -3453,7 +4010,7 @@ def for_synthesis(payload: dict, market: Optional[str] = None,
 
     `market` selects which population the agreement measurement describes, for
     the reason `pretrade` takes one: the filings lenses read on a very different
-    share of Indonesian names than US ones, so the two families' agreement is
+    share of Indonesian names than US ones, so the families' agreement is
     measured on a different population in each market and a blend describes
     neither.
     """
@@ -3466,7 +4023,8 @@ def for_synthesis(payload: dict, market: Optional[str] = None,
     if agreement_measurement is _LOAD_FROM_DISK:
         agreement_measurement = lensagreement.for_synthesis(market)
     readers = {"flow": ("anomaly", _read_flow), "trend": ("technical", _read_trend),
-               "value": ("valuation", _read_value), "quality": ("quality", _read_quality)}
+               "value": ("valuation", _read_value), "quality": ("quality", _read_quality),
+               "expectations": ("expectations", _read_expectations)}
 
     readings: dict = {}
     for key, (leg_name, fn) in readers.items():
@@ -3480,7 +4038,8 @@ def for_synthesis(payload: dict, market: Optional[str] = None,
         if result:
             readings[key] = result
 
-    ordered = [readings[k] for k in ("flow", "trend", "value", "quality") if k in readings]
+    ordered = [readings[k] for k in ("flow", "trend", "value", "quality", "expectations")
+               if k in readings]
     families = _family_votes(ordered)
     agreement = _agreement(ordered, families, agreement_measurement)
     # The measurement rides along beside the sentence it justifies, so the panel
@@ -3510,7 +4069,7 @@ def for_synthesis(payload: dict, market: Optional[str] = None,
         "blindSpots": _blind_spots(payload, readings),
         "nextChecks": _next_checks(payload, readings),
         "caveat": (
-            "This is a description of what the four lenses reported, not a recommendation. "
+            "This is a description of what the five lenses reported, not a recommendation. "
             "Every sentence restates a number computed elsewhere on this page — nothing "
             "here is a forecast, and no combination of these readings is a reason to buy "
             "or sell on its own."),

@@ -1234,6 +1234,13 @@ two actually reach the same verdict is not.
 
 ### DO NOT: a voting fifth lens is one easy commit from here
 
+> **The day came. See §18** — a fifth lens shipped on 1 September 2026, this section's
+> sequence was followed in the order it sets out, and the re-run took the independence
+> claim away rather than confirming it. Everything below is left exactly as written,
+> because it was right and because the next person needs the warning as much as this
+> one did. The numbers in §15 above are the FOUR-lens measurement and are superseded
+> by §18's.
+
 **The affordance that makes this measurement easy to invalidate is already in the
 code, and it looks like an invitation.** `ConfluenceRail.tsx` declares
 
@@ -1557,6 +1564,286 @@ Recorded so the next audit does not re-open them.
 
 ---
 
+## 18. A fifth lens, and the claim it cost
+
+**Added 1 September 2026.** The four lenses all read one of two records. Flow and Trend
+read price and volume; Value and Quality read the filings. Between them they answer what
+the market did, what the company reported, what the filings are worth, and whether they
+can be believed.
+
+None of them reads what is already **expected**. That gap is not academic — it is the
+difference between two companies the other four lenses cannot tell apart:
+
+    Cheap on a DCF, sound on the accounting screens, consensus rising.
+    Cheap on a DCF, sound on the accounting screens, consensus cut for a year.
+
+The four print the same four verdicts for both, because a discounted cash flow reads last
+year's statements and a Piotroski score reads the year before that. The second is the
+shape of a value trap, and the record that separates them is one no existing lens fetched.
+
+`_lib/expectations.py` is the fifth lens. It reads the analyst estimate record — a third
+body of data, with its own failure modes: it is an opinion rather than a measurement, it
+is revised, and the revisions are dated.
+
+### The sequence §15 said was not negotiable, followed in order
+
+§15 ends with a section headed **"DO NOT: a voting fifth lens is one easy commit from
+here"**, and it was right. `ConfluenceRail.tsx` declared `type Family = "price" |
+"filings"` with a docstring inviting the extension, and `agreementOf` already branched
+`total === 2 ? "Both" : "All"` against the day there was a third. A fifth lens carrying a
+vote and a new `Family` would have compiled, rendered a plausible headline, and silently
+invalidated every number in §15.
+
+That section also wrote down the only acceptable order: *re-run
+`measure_lens_agreement.py` with the third family included, publish the three pairwise
+kappas, and only then change the rail's headline.* That is the order this section
+happened in. The measurement is dated the day the lens shipped, not after.
+
+### What votes, and the four things that deliberately do not
+
+One vote, from one quantity: **revision breadth**, the share of covering analysts who
+raised their number against those who cut it. Everything else is supporting detail with
+no direction attached.
+
+| | votes | why not |
+|---|---|---|
+| revision breadth | **yes** | the direction of the consensus |
+| revision drift | no | shares its direction with breadth — the same fact counted twice |
+| surprise record | no | see below |
+| target dispersion | no | disagreement is not bullish or bearish |
+| analyst coverage | no | a widely covered company is not a better company |
+
+**The surprise record does not vote, and the reason is not caution.** A beat is a fact
+about the relationship between two numbers and its sign is not the company's. A firm that
+has beaten four quarters running while its consensus was cut all year is a deteriorating
+business that manages expectations well, and the beats are the *mechanism* of that rather
+than evidence against it. Voting on the surprise would let that company outvote its own
+estimate record.
+
+### Breadth votes because magnitude cannot survive a fiscal-year roll
+
+This is the hazard that decided which quantity carries the vote, and it is the reason the
+obvious choice is the wrong one.
+
+`eps_trend` is a **level** — the consensus now and as it stood 7, 30, 60 and 90 days ago.
+The period is labelled relatively (`0y` is "the current fiscal year"), so at some point
+every year the label rolls onto a different year and the level jumps for a reason that has
+nothing to do with a revision. Nothing in the payload marks it and this module cannot
+detect it: a 12% jump is what both a roll and a genuine re-rating look like.
+
+`eps_revisions` is a **count**. A count carries no level, so it cannot be corrupted by a
+relabelling — and it is the quantity the literature actually uses.
+
+So the count votes, the level is reported as magnitude with the hazard on the panel, and a
+sign change between two levels is reported as a sign change rather than a percentage. A
+consensus moving from a profit to a loss is not a 140% revision; it is a different
+forecast, and dividing by a number that crossed zero says nothing.
+
+### The forward test, and the null it returned
+
+The lens votes, so §2 applies: measured offline and published including nulls, or it does
+not ship. `scripts/measure_revision_momentum.py` is that measurement, and
+`revision_momentum.json` is the result.
+
+**The problem is that the voting quantity has no history.** Yahoo serves `eps_revisions`
+as a snapshot. There is no archive of it anywhere in the source, so the quantity that
+actually votes cannot be back-tested at all. What does have history is the estimate level:
+`eps_trend` carries four dated columns, which is a 90-day window available on every name
+today without any stored panel.
+
+So the study is two halves, and the second is what makes the first admissible:
+
+1. **The forward test.** Signal = how far the consensus level moved between 90 and 60 days
+   ago. Outcome = the market-adjusted return over the 60 days since. The signal is
+   complete before the outcome window opens.
+2. **The bridge.** Whether that level drift actually moves with the revision count. A
+   forward result on a proxy that does not track the vote is worth nothing.
+
+| Population | forward ρ | 95% interval | bridge ρ | 95% interval |
+|---|---|---|---|---|
+| All 164 names | **−0.01** | [−0.15, +0.14] | **+0.53** | [+0.39, +0.64] |
+| US (119) | **0.00** | [−0.18, +0.18] | +0.50 | [+0.33, +0.64] |
+| IDX (45) | +0.02 | [−0.27, +0.33] | +0.44 | [+0.14, +0.68] |
+
+**The forward test is a clean null.** Over this one window the direction of estimate
+revisions had no detectable relationship with what the price did next, in either market.
+The bridge, meanwhile, is strong and excludes zero everywhere — so the null is a null
+about the signal that votes, not an artefact of measuring the wrong thing. That is the
+whole reason the bridge was measured.
+
+The evidence grade the panel prints is therefore **weak**, and `_grade` is written so that
+a broken bridge would cap it at weak however clean the forward number looked.
+
+**The limit is severe and is on the panel, not in a footnote.** It is one window. Every
+name shares the same sixty days, so the returns are correlated through whatever the market
+did over them and 164 names is worth far fewer than 164 independent observations. Two
+partial defences: returns are cross-sectionally demeaned *within market* before anything is
+computed, and the statistic is a rank correlation rather than a slope. Neither is complete,
+and the payload says so in the `limit` field so a redesign cannot drop it.
+
+### The finding nobody was looking for: the redundancy is with PRICE, not the filings
+
+The module docstring predicted where this would go wrong, and it predicted wrong.
+`expectations.py` says so in as many words: *analysts read the filings, so if any pair of
+families turns out to be redundant, this is the pair.*
+
+It is not. Measured across 165 names:
+
+| Family pair | κ | 95% interval | |
+|---|---|---|---|
+| price and volume · the filings | −0.02 | [−0.11, +0.09] | straddles zero |
+| the filings · the estimate record | −0.06 | [−0.16, +0.05] | straddles zero |
+| **price and volume · the estimate record** | **+0.11** | **[+0.02, +0.19]** | **excludes zero** |
+
+The predicted redundancy — estimates against filings — is the *cleanest* pair in the
+table. The one that fails is estimates against **price**, and it fails in both markets
+independently (US +0.12 [+0.03, +0.21]; IDX +0.06, straddling zero on 44 names). The
+lens-level detail names the culprit: **Trend · Expectations at κ = +0.11, τb = +0.30**, the
+strongest positive ordinal relationship anywhere in the ten-pair table.
+
+That is not mysterious in hindsight — a consensus being marked up and a price that has been
+rising are both downstream of the same news, and the direction of causation is not
+identified here. But it was not the pair anyone was watching.
+
+**`Value · Expectations at κ = −0.18, τb = −0.24`** is the second-largest signed
+relationship, and it is mechanical in exactly the way Trend · Value was in §15: a stock
+whose consensus is rising has usually risen, which makes it less likely to sit below a
+discounted cash flow's range. An artefact of what the two measure, recorded rather than
+explained away.
+
+### What it cost: the app's loudest claim is now qualified
+
+`explain._warrant` has always had a branch that takes the independence claim away, and
+this is the run that fires it. The governing pair — the *most redundant* of the three, not
+an average — is price against estimates, its interval excludes zero, and the rail now says
+so:
+
+> ...with one measured qualification: across 165 names in [the four universes], price and
+> volume and the estimate record agree rather more often than chance alone would produce
+> (κ = +0.11 — the closest-matching of the 3 pairs), so that second reading is partly
+> predictable from the first and the two together are worth less than two independent
+> readings.
+
+The governing pair is the maximum rather than the mean on purpose. A reader counting three
+agreeing sources is over-counting exactly as much as the *worst* pair is redundant, and an
+average would let two clean pairs bury one that is not.
+
+The effective lens count is **4.48 of 5** on 137 complete cases (US 4.57 of 5 on 108) — so
+five panels really are close to five opinions, which is the one number in this section that
+came out better than the four-lens version.
+
+### Coverage, and the first lens that is stronger on IDX than the filings are
+
+`calibrate_checks.py` established that Yahoo's fundamentals coverage for smaller Indonesian
+listings is this project's biggest fragility. The estimate record does not share it:
+
+| Lens could read | US | IDX |
+|---|---|---|
+| Flow | 98% | 100% |
+| Trend | 99% | 100% |
+| Value | 94% | **80%** |
+| Quality | 94% | **85%** |
+| **Expectations** | **99%** | **96%** |
+
+This matters more than the headline number suggests, because of *where* it is available.
+The Quality lens refuses banks and insurers outright — Piotroski, Altman and Beneish were
+none of them built on financial firms — and Indonesian large caps are heavily banks. On
+BBRI.JK, where half the filings-side evidence is refused by design, the estimate record
+comes back complete: 22 analysts, a full revision trail, four quarters of surprise. The
+fifth lens is at its most useful exactly where the fourth declines to answer.
+
+### The tenth pre-trade check, and the market where it is withheld
+
+`consensusBeingCut` is the only condition on the pre-trade panel drawn from the estimate
+record, and the only one whose underlying number is about the future rather than the past.
+Every other check reads a balance sheet, a drawdown or an accrual pattern.
+
+`calibrate_checks.py` was re-run for it, and the two markets came out differently enough to
+be worth recording:
+
+| | evaluable | fires on | |
+|---|---|---|---|
+| US (Dow + Nasdaq-100) | 118 of 122 | **17.8%** | shown as a flag |
+| IDX (IDX30 + LQ45) | **29** of 46 | 34.5% | **withheld — below the sample floor** |
+
+The US rate is comfortably under `BASE_RATE_MAX`, so it renders as a genuine flag rather
+than being demoted to a base condition. On the IDX it is withheld entirely, because 29
+evaluable names is one short of `MIN_CALIBRATION_SAMPLE`. An Indonesian company therefore
+sees this condition listed under "withheld for want of a base rate" — which is the rule §7
+established doing exactly what it was built to do, one name from the boundary.
+
+**Two different coverage numbers are both true and should not be conflated.** The lens reads
+on 96% of IDX names; the *check* is evaluable on 63% of them. The gap is the QUIET and THIN
+verdicts: analysts cover the company but too few of them have moved for a direction to be
+read, so the check returns `unchecked` with the count in the reason rather than a quiet
+"did not fire". Seventeen of the 46 Indonesian names are in that state. A check that treated
+them as not-firing would have reported a firing rate against a denominator that included
+every company it could not actually test.
+
+### What it refuses
+
+**The mean price target is fetched and deliberately not published.** It is the only figure
+this app could show that is simultaneously a point forecast of a price, unattached to any
+stated method, and produced by people with a commercial relationship to the company being
+forecast. Rendering "mean target 3,700" beside a price of 3,380 states a 9% expected return
+that nothing on the page and nothing in the source supports. The **spread** is published
+instead, because disagreement survives the objection that the level does not.
+
+**A listing nobody covers gets `applicable: false`, not a zero** — the same refusal
+`quality.py` makes for a bank, and for a sharper reason. This lens has more uncovered
+listings ahead of it than any other, and "no cuts" and "nobody watching" occupy the same
+blank space on a screen. The empty state is louder than the populated one and says in words
+that it is a gap in coverage rather than a clean bill of health.
+
+**A quiet record is not a balanced one.** Analysts covering a name and none of them moving
+is `QUIET`, votes zero, and is reported as a settled consensus. An absent revision is not a
+neutral revision.
+
+**No band on the target spread.** The first draft carried one at 0.60, and on the four
+names it was tried against a 57% spread came out "narrow" and an 88% spread "wide" with
+nothing justifying the line between them. The frame is measured instead: the median listing
+spans **54%** of its own mean (US 53%, IDX 58%), and `explain._target_dispersion` quotes
+this listing against that. Same argument `ranking.py` makes for percentiles over scores.
+
+### A bug the tests found
+
+`_read_expectations` originally handled `QUIET` and `THIN` explicitly and let everything
+else fall through to the directional branch. `MIXED` — the most evenly split reading the
+lens can produce, five analysts up against four — came out of it as **"Falling", with a
+vote of −1**: a fabricated bear case on the one state that means "no direction". Caught by
+`test_every_family_neutral_is_its_own_reported_state`, which asserted that a payload with
+every family neutral reports itself that way and instead found one family voting. The
+function now returns explicitly for every verdict and never falls through.
+
+### What it does not claim
+
+**The family grouping is still a declared assumption.** Nothing measures which data a lens
+reads and nothing could. What is measured is the consequence, and this time the consequence
+took something away.
+
+**κ measures redundancy, not causation.** A +0.11 between price and estimates does not
+establish that analysts follow prices, that prices follow analysts, or that both follow
+news. What it bounds is the information claim the rail makes, which is whether the second
+reading adds anything to the first.
+
+**The forward null is not evidence that revisions do not predict returns.** It is one
+60-day window on 164 large caps. Chan, Jegadeesh & Lakonishok found the effect over
+decades and many windows; this study cannot contradict them and does not try to. What it
+establishes is narrower and is the only thing the panel says: *this app has not been able
+to show it, here.*
+
+**Nothing became a weight.** The evidence grade is read by the explanation that prints it
+and by nothing else, and no κ scales any verdict. A measured agreement multiplying a vote
+would be the composite score this app refuses to have, arriving through a statistic that
+sounds too technical to be a recommendation.
+
+> Chan, Jegadeesh & Lakonishok (1996), *Journal of Finance* 51(5). Bernard & Thomas
+> (1989), *Journal of Accounting Research* 27. Womack (1996), *Journal of Finance* 51(1).
+> Diether, Malloy & Scherbina (2002), *Journal of Finance* 57(5). Measured 1 September
+> 2026 by `scripts/measure_revision_momentum.py` and `scripts/measure_lens_agreement.py`;
+> stamped in `api/_lib/revision_momentum.json` and `api/_lib/lens_agreement.json`.
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
@@ -1565,6 +1852,9 @@ Recorded so the next audit does not re-open them.
 | Multi-factor cost of equity (Fama-French) | Factor returns are freely available for the US; constructing IDX factors is a project in itself |
 | Sensitivity grid (growth × discount rate) | Cheap, though not quite as cheap as this row used to claim: `pv_of_growing_stream` is vectorised over DRAWS, with growth, discount rate and terminal growth broadcast row-wise, so a grid means flattening a meshgrid into that axis rather than an outer product it already supports |
 | Peer / sector relative multiples | Needs a peer-set source beyond yfinance |
+| A real backtest of revision momentum | §18 ships one 60-day window because that is all the source can supply — `eps_revisions` is served as a snapshot with no archive anywhere. A genuine study needs many non-overlapping windows over years, which means storing the revision table daily from here on. That is a data-collection project with a lead time measured in quarters, not an analysis someone can run |
+| Post-earnings drift on the surprise record | `earnings_history` carries four dated quarters per name, so unlike the revision signal this one IS back-testable with the existing `eventstudy` machinery. Not done because the surprise deliberately does not vote (§18), so §2 does not compel it — but it is the cheapest measurement still on this list |
+| Long-term consensus growth against the reverse DCF | Yahoo's `LTG` row is null on every listing tested, US and Indonesian alike. §18 draws the comparison at one fiscal year and labels it as one year; the five-year figure that would match the DCF's horizon does not exist in this source |
 | IDX fundamentals curation | The durable moat, and the largest single effort |
 | Single-name exposure betas | §16 ships the portfolio half, which is descriptive. "This stock moves 0.7x as hard as its sector" invites forward use, so it is gated on a stability study — do this period's betas predict next period's — mirroring `measure_correlation_stability.py`. A four-year probe gives year-over-year rank correlations of +0.29 to +0.66, inside the band that licensed the portfolio feature, on three transitions where that study had six. Eight blocks are available; MBMA, NCKL and TAPG cannot supply them and must be excluded by name rather than quietly run on fewer |
 | Fundamental exposure — revenue against commodity prices | **Rejected on feasibility, not deferred.** `market_data` fetches annual statements only, five columns, and yfinance's quarterlies for these names return five or six with gaps — ADRO and PTBA are both missing 2025-09-30. Five irregular observations is not a weak estimate, it is not an estimate. Consequence: the reverse DCF's implied growth cannot be restated as an implied commodity path |

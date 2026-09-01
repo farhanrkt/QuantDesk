@@ -1,14 +1,14 @@
 """
 lensagreement.py
 ================
-How much the four lenses actually agree, corrected for how much they would
+How much the five lenses actually agree, corrected for how much they would
 agree knowing nothing.
 
 THE CLAIM THIS EXISTS TO TEST
 ------------------------------
 The confluence rail makes the single strongest statement in this app, on every
-run, in the largest type on the page: that four lenses rest on two independent
-bodies of data, and therefore that agreement between those two "is not one fact
+run, in the largest type on the page: that five lenses rest on three independent
+bodies of data, and therefore that agreement between them "is not one fact
 counted twice". `explain._agreement` says it in prose — "the price record and
 the filings share no inputs" — and `ConfluenceRail.agreementOf` does the
 arithmetic that headline speaks in.
@@ -18,15 +18,16 @@ grouping is a stated assumption about what shares a source, not a measured
 correlation; the ranking panel measures its own overlap because a scan gives it
 a cross-section to measure from, and a single ticker does not."*
 
-That is a predictive claim about the app's own output — that two of its votes
-carry separate information — and this repo's rule is that such a claim gets
+That is a predictive claim about the app's own output — that its votes carry
+separate information — and this repo's rule is that such a claim gets
 measured and published including nulls, or it does not ship. It shipped. This
 module is the measurement, and `scripts/measure_lens_agreement.py` is the run
 that supplies it.
 
 The cross-section the rail says it does not have is one a script can build. The
 lens votes exist already: `explain._read_flow / _read_trend / _read_value /
-_read_quality` each return a vote in {-1, 0, +1}, and `calibrate_checks.py`
+_read_quality / _read_expectations` each return a vote in {-1, 0, +1}, and
+`calibrate_checks.py`
 already proves a whole universe can be pushed through the production engines
 offline. Nothing here is a new opinion about a company; it is a measurement of
 what this app says about many of them.
@@ -55,8 +56,7 @@ WHAT KAPPA IDENTIFIES, AND WHAT IT DOES NOT
 Kappa measures REDUNDANCY, not causation, and the distinction decides what may
 honestly be said about the result.
 
-A high kappa between the price family and the filings family would NOT prove
-they share inputs. Two genuinely independent tests of a genuinely good company
+A high kappa between two families would NOT prove they share inputs. Two genuinely independent tests of a genuinely good company
 should agree, and that agreement would be informative rather than duplicated.
 Equally, a kappa near zero would not prove the two read different data — only
 that their conclusions coincide about as often as chance puts them together.
@@ -110,7 +110,7 @@ shrink the flow-trend sample for no reason.
 The EFFECTIVE LENS COUNT is a property of one matrix, and a correlation matrix
 assembled from different rows per cell is not guaranteed to be a correlation
 matrix at all — its eigenvalues can go negative and the participation ratio
-stops meaning anything. So that half uses COMPLETE CASES only, where all four
+stops meaning anything. So that half uses COMPLETE CASES only, where all five
 lenses read, which makes the matrix a Gram matrix of standardised columns and
 therefore positive semi-definite by construction. The complete-case count is
 reported beside it, because it is materially smaller than the pairwise ones and
@@ -129,10 +129,11 @@ PER MARKET, FOR THE REASON THE CHECK CALIBRATION FOUND
 wrong number for a company in either: Yahoo's fundamentals coverage for smaller
 Indonesian listings makes "scores built from incomplete data" fire on 16% of US
 large caps and 85% of Indonesian ones. The same fragility bites harder here,
-because a lens that cannot read does not vote — so the filings family is
-present on a different share of names in each market, and its agreement with
-the price family is measured on a different population. Blending them would
-report a redundancy neither market has.
+because a lens that cannot read does not vote — so each family is present on a
+different share of names in each market, and every pairwise agreement is
+measured on a different population. Blending them would report a redundancy
+neither market has. The estimate record is the exception that proves the point:
+it reads on 96% of Indonesian names where the filings lenses manage 80-85%.
 
 WHAT THIS IS NOT
 ----------------
@@ -183,13 +184,16 @@ MEASUREMENT_PATH = Path(__file__).with_name("lens_agreement.json")
 # rather than a bug to paper over. Same device as `pretrade._LOAD_FROM_DISK`.
 _LOAD_FROM_DISK = object()
 
-LENS_ORDER = ("flow", "trend", "value", "quality")
-LENS_LABEL = {"flow": "Flow", "trend": "Trend", "value": "Value", "quality": "Quality"}
+LENS_ORDER = ("flow", "trend", "value", "quality", "expectations")
+LENS_LABEL = {"flow": "Flow", "trend": "Trend", "value": "Value",
+              "quality": "Quality", "expectations": "Expectations"}
 
 # Which body of data each lens reads. The grouping under test, mirrored from
 # `explain.SYNTHESIS_FAMILY` rather than re-decided here — this module measures
 # the consequence of that grouping and must not quietly adopt a different one.
-FAMILY_LABEL = {"price": "price and volume", "filings": "the filings"}
+FAMILY_LABEL = {"price": "price and volume", "filings": "the filings",
+                "estimates": "the estimate record"}
+FAMILY_ORDER = ("price", "filings", "estimates")
 
 
 # --------------------------------------------------------------------------- #
@@ -410,12 +414,44 @@ def measure(votes: dict[str, Sequence],
             if entry is not None:
                 pairs.append(entry)
 
-    families = None
-    if family_votes and "price" in family_votes and "filings" in family_votes:
-        families = pair_agreement(FAMILY_LABEL["price"], FAMILY_LABEL["filings"],
-                                  family_votes["price"], family_votes["filings"])
+    # EVERY FAMILY PAIR, NOT ONLY THE ORIGINAL ONE. With two families there was
+    # exactly one comparison to make and it could be named directly. With three
+    # there are three, and the rail's claim — that agreement across families is
+    # not one fact counted twice — is only as strong as the MOST redundant pair.
+    # Publishing one of the three and calling it "the measurement" would let two
+    # clean pairs hide a third that fails.
+    family_pairs = []
+    present = [f for f in FAMILY_ORDER if family_votes and f in family_votes]
+    for i, first in enumerate(present):
+        for second in present[i + 1:]:
+            entry = pair_agreement(FAMILY_LABEL[first], FAMILY_LABEL[second],
+                                   family_votes[first], family_votes[second])
+            if entry is not None:
+                family_pairs.append({**entry, "keyA": first, "keyB": second})
 
-    return {"pairs": pairs, "families": families, "lenses": effective_lenses(votes)}
+    return {"pairs": pairs, "familyPairs": family_pairs,
+            "families": governing_pair(family_pairs),
+            "lenses": effective_lenses(votes)}
+
+
+def governing_pair(family_pairs: Sequence[dict]) -> Optional[dict]:
+    """The pair that most threatens the independence claim, or None.
+
+    THE HIGHEST KAPPA AMONG THE USABLE PAIRS, and deliberately not an average.
+    A reader counting three agreeing families is over-counting exactly as much
+    as the worst pair is redundant, so that pair is the one the warrant sentence
+    has to speak about. Averaging would let two independent pairs bury one that
+    is not.
+
+    Falls back to the first usable pair when no pair has a defined kappa, so
+    that "measured, and the sample could not resolve it" stays distinguishable
+    from "never measured" — the same distinction `cohens_kappa` returns None to
+    preserve.
+    """
+    usable = [p for p in family_pairs if p.get("usable") and p.get("kappa") is not None]
+    if usable:
+        return max(usable, key=lambda p: p["kappa"])
+    return family_pairs[0] if family_pairs else None
 
 
 # --------------------------------------------------------------------------- #
@@ -445,7 +481,7 @@ def _population(measurement: dict, market: Optional[str]) -> Optional[dict]:
     The market-specific reading wins wherever one exists, for the reason
     `pretrade._rate_for` prefers a market-specific firing rate: the filings
     lenses read on a very different share of Indonesian names than US ones, so
-    the two families' agreement is measured on different populations and a
+    the families' agreement is measured on different populations and a
     blend describes neither.
     """
     populations = measurement.get("populations") or {}
@@ -491,7 +527,11 @@ def _reading(families: dict, lenses: dict, pairs: Sequence[dict], scope: str) ->
         verdict = "rather more often than chance alone would produce"
     else:
         verdict = "less often than chance alone would produce"
-    return (f"Measured across {n} names in {scope}: the two agree {verdict} "
+    # NAMED, because with three families "the two" is ambiguous and the pair
+    # being reported is the most redundant one rather than a fixed pair. A
+    # reader has to be able to tell which comparison this number is about.
+    who = f"{families.get('a', 'the first')} and {families.get('b', 'the second')}"
+    return (f"Measured across {n} names in {scope}: {who} agree {verdict} "
             f"(κ = {kappa:+.2f}).")
 
 
@@ -523,8 +563,15 @@ def for_synthesis(market: Optional[str] = None,
     return {
         "measuredOn": measurement.get("measuredOn"),
         "scope": scope,
+        # The GOVERNING pair — the most redundant of the family pairs, which is
+        # the one the independence claim actually stands or falls on. See
+        # `governing_pair`.
         "families": families,
-        # The six lens pairs, so a reader can see whether the DECLARED grouping
+        # ALL of them, so the panel can show that the governing pair was chosen
+        # from a table rather than picked. Without this, a reader has no way to
+        # tell a single measured pair from the worst of three.
+        "familyPairs": population.get("familyPairs") or [families],
+        # The ten lens pairs, so a reader can see whether the DECLARED grouping
         # behaves the way it is declared to — flow and trend are supposed to be
         # the redundant pair, and this is where that would show up or fail to.
         "pairs": pairs,

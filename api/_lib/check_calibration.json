@@ -1,5 +1,5 @@
 {
-  "measuredOn": "2026-08-28",
+  "measuredOn": "2026-09-01",
   "years": 5,
   "universeIds": [
     "dow30",
@@ -232,18 +232,18 @@
       }
     },
     "impliedGrowthDemanding": {
-      "fired": 55,
-      "sampleSize": 128,
-      "couldNotRun": 40,
-      "firingRate": 0.4296875,
+      "fired": 57,
+      "sampleSize": 130,
+      "couldNotRun": 38,
+      "firingRate": 0.43846153846153846,
       "namesMeasured": 168,
       "classification": "base",
       "markets": {
         "US": {
-          "fired": 50,
-          "sampleSize": 95,
-          "couldNotRun": 27,
-          "firingRate": 0.5263157894736842,
+          "fired": 52,
+          "sampleSize": 97,
+          "couldNotRun": 25,
+          "firingRate": 0.5360824742268041,
           "classification": "base"
         },
         "ID": {
@@ -256,16 +256,16 @@
       },
       "universes": {
         "dow30": {
-          "fired": 14,
-          "sampleSize": 27,
-          "couldNotRun": 3,
-          "firingRate": 0.5185185185185185
+          "fired": 15,
+          "sampleSize": 28,
+          "couldNotRun": 2,
+          "firingRate": 0.5357142857142857
         },
         "nasdaq100": {
-          "fired": 39,
-          "sampleSize": 73,
-          "couldNotRun": 26,
-          "firingRate": 0.5342465753424658
+          "fired": 41,
+          "sampleSize": 75,
+          "couldNotRun": 24,
+          "firingRate": 0.5466666666666666
         },
         "idx30": {
           "fired": 4,
@@ -478,6 +478,56 @@
           "sampleSize": 45,
           "couldNotRun": 0,
           "firingRate": 0.6666666666666666
+        }
+      }
+    },
+    "consensusBeingCut": {
+      "fired": 31,
+      "sampleSize": 147,
+      "couldNotRun": 21,
+      "firingRate": 0.2108843537414966,
+      "namesMeasured": 168,
+      "classification": "flag",
+      "markets": {
+        "US": {
+          "fired": 21,
+          "sampleSize": 118,
+          "couldNotRun": 4,
+          "firingRate": 0.17796610169491525,
+          "classification": "flag"
+        },
+        "ID": {
+          "fired": 10,
+          "sampleSize": 29,
+          "couldNotRun": 17,
+          "firingRate": 0.3448275862068966,
+          "classification": "uncalibrated"
+        }
+      },
+      "universes": {
+        "dow30": {
+          "fired": 7,
+          "sampleSize": 30,
+          "couldNotRun": 0,
+          "firingRate": 0.23333333333333334
+        },
+        "nasdaq100": {
+          "fired": 14,
+          "sampleSize": 95,
+          "couldNotRun": 4,
+          "firingRate": 0.14736842105263157
+        },
+        "idx30": {
+          "fired": 9,
+          "sampleSize": 20,
+          "couldNotRun": 10,
+          "firingRate": 0.45
+        },
+        "lq45": {
+          "fired": 10,
+          "sampleSize": 29,
+          "couldNotRun": 16,
+          "firingRate": 0.3448275862068966
         }
       }
     }

@@ -81,9 +81,33 @@ def anomaly(resolved=True, inside=False, ratio=6.0):
                               "moveVsSpread": ratio}})
 
 
+def expectations(applicable=True, verdict="MIXED", up=5, down=4, moves=9,
+                 drift=None):
+    """The fifth leg, defaulting to a reading that is present and undirected.
+
+    MIXED rather than QUIET on purpose. A quiet estimate record makes
+    `_consensus_being_cut` return `unchecked`, which would put a `notChecked`
+    section on every payload in this suite — including the ones built to assert
+    that a clean payload has NO sections. The default has to be a leg that
+    genuinely ran and genuinely did not fire.
+    """
+    if not applicable:
+        return leg({"applicable": False, "analysts": 1,
+                    "verdict": "NOT_COVERED"})
+    return leg({
+        "applicable": True, "analysts": 20, "verdict": verdict,
+        "breadth": {"available": True, "up": up, "down": down, "moves": moves,
+                    "diffusion": (up - down) / moves if moves else None,
+                    "state": verdict.lower()},
+        "drift": {"annual90": drift or {"available": True, "state": "flat",
+                                        "change": 0.001, "days": 90}},
+    })
+
+
 def payload(**kw):
     base = {"quality": quality(), "valuation": valuation(),
-            "technical": technical(), "anomaly": anomaly()}
+            "technical": technical(), "anomaly": anomaly(),
+            "expectations": expectations()}
     base.update(kw)
     return base
 
@@ -495,7 +519,7 @@ def test_every_check_is_fully_declared():
     for check in P.CHECKS:
         for field in ("id", "label", "family", "where", "evidence", "what", "action", "fn"):
             assert check.get(field), f"{check.get('id')} is missing {field}"
-        assert check["family"] in ("price", "filings")
+        assert check["family"] in ("price", "filings", "estimates")
         assert check["evidence"] in E.EVIDENCE
         assert check["id"] not in ids, f"duplicate check id {check['id']}"
         ids.add(check["id"])
@@ -534,3 +558,69 @@ def test_the_shipped_calibration_covers_every_check_or_the_panel_says_so():
     for check in P.CHECKS:
         entry = shipped["checks"][check["id"]]
         assert set(entry.get("markets") or {}) >= {"US", "ID"}, check["id"]
+
+
+# --------------------------------------------------------------------------- #
+# The estimates-family check
+# --------------------------------------------------------------------------- #
+def test_the_consensus_check_fires_only_on_a_falling_verdict():
+    """The lens's own directional verdict is the bar. Nothing is recomputed."""
+    fired = assess(payload(expectations=expectations(verdict="FALLING", up=1,
+                                                     down=9, moves=10)))
+    assert "consensusBeingCut" in fired_ids(fired)
+    for verdict in ("RISING", "MIXED"):
+        result = assess(payload(expectations=expectations(verdict=verdict)))
+        assert "consensusBeingCut" not in fired_ids(result)
+
+
+@pytest.mark.parametrize(("verdict", "phrase"), [
+    ("QUIET", "none of them has moved"),
+    ("THIN", "too few"),
+])
+def test_a_lens_that_declined_a_direction_makes_the_check_unchecked(verdict, phrase):
+    """Not fired and not quiet — the third outcome, with which one it was.
+
+    A cut called from two analysts out of twenty is exactly the false alarm this
+    whole panel exists to avoid, so declining is the correct answer and it must
+    not read as "did not fire".
+    """
+    result = assess(payload(expectations=expectations(verdict=verdict, up=0,
+                                                      down=0, moves=0)))
+    unchecked = {n["id"]: n["reason"] for n in result["notChecked"]}
+    assert "consensusBeingCut" in unchecked
+    assert phrase in unchecked["consensusBeingCut"]
+
+
+def test_an_uncovered_listing_makes_the_check_unchecked_with_the_count():
+    result = assess(payload(expectations=expectations(applicable=False)))
+    unchecked = {n["id"]: n["reason"] for n in result["notChecked"]}
+    assert "no consensus to read" in unchecked["consensusBeingCut"]
+
+
+def test_the_drift_sentence_reads_its_direction_off_the_number():
+    """Breadth counts ANALYSTS and drift measures the LEVEL, and they can
+    disagree: a majority trimming while one house raises a large number leaves
+    more cuts than raises and a level that rose. The sentence must not assume
+    the verdict's direction — it printed "down 4%" about a forecast that went up.
+    """
+    rose = assess(payload(expectations=expectations(
+        verdict="FALLING", up=1, down=9, moves=10,
+        drift={"available": True, "state": "moved", "change": 0.04, "days": 90})))
+    reading = next(f for f in rose["flags"]
+                   if f["id"] == "consensusBeingCut")["explain"]["reading"]
+    assert "up 4%" in reading and "down 4%" not in reading
+
+    fell = assess(payload(expectations=expectations(
+        verdict="FALLING", up=1, down=9, moves=10,
+        drift={"available": True, "state": "moved", "change": -0.04, "days": 90})))
+    reading = next(f for f in fell["flags"]
+                   if f["id"] == "consensusBeingCut")["explain"]["reading"]
+    assert "down 4%" in reading
+
+
+def test_the_check_is_never_green_and_carries_no_aggregate():
+    result = assess(payload(expectations=expectations(verdict="FALLING", up=1,
+                                                      down=9, moves=10)))
+    entry = next(f for f in result["flags"] if f["id"] == "consensusBeingCut")
+    assert entry["explain"]["tone"] != "good"
+    assert not (set(entry) & AGGREGATE_KEYS)

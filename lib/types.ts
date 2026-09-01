@@ -274,6 +274,134 @@ export interface QualityResponse {
 }
 
 /* ------------------------------------------------------------------ */
+/* Engine 5 — the estimate record                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * How many analysts moved which way. `diffusion` is null in TWO different
+ * situations and they are not the same finding: `state: "quiet"` means analysts
+ * cover this company and none of them moved, `available: false` means no
+ * revision table came back at all. Never collapse them — the first is a real
+ * reading and the second is missing data.
+ */
+export interface RevisionBreadth {
+  available: boolean;
+  reason?: string;
+  window: string;
+  up: number | null;
+  down: number | null;
+  moves: number | null;
+  diffusion: number | null;
+  state: "rising" | "falling" | "mixed" | "quiet" | "thin" | null;
+  thin?: boolean;
+}
+
+/**
+ * How far the estimate LEVEL moved. `change` is deliberately null when the
+ * consensus crossed between a profit and a loss (`state: "swung"`) — a
+ * percentage there would divide by a number that passed through zero. Render
+ * the state, not the absence.
+ */
+export interface RevisionDrift {
+  available: boolean;
+  reason?: string;
+  days: number;
+  period?: string;
+  state?: "moved" | "flat" | "swung";
+  change: number | null;
+  current?: number;
+  before?: number;
+  direction?: "up" | "down";
+}
+
+export interface SurpriseQuarter {
+  quarter: string;
+  actual: number | null;
+  estimate: number | null;
+  surprise: number | null;
+}
+
+export interface SurpriseRecord {
+  available: boolean;
+  reason?: string;
+  quarters?: SurpriseQuarter[];
+  reported?: number;
+  beats?: number;
+  misses?: number;
+  inline?: number;
+  medianSurprise?: number;
+  latest?: SurpriseQuarter;
+}
+
+/**
+ * The measured half of this lens's own signal — and it came back a null.
+ *
+ * `forward` is the rank correlation between the revision the consensus made 90
+ * to 60 days ago and the market-adjusted return since. `bridge` is what makes
+ * that admissible: whether the level drift it measures actually tracks the
+ * revision COUNT the lens votes on, which has no history to test.
+ *
+ * There is deliberately no weight and no confidence multiplier. Nothing
+ * downstream consumes `evidence` except the explanation that reports it.
+ */
+export interface RevisionMeasurement {
+  measuredOn: string;
+  scope: string;
+  forward: {
+    label: string; n: number; rho: number;
+    low: number | null; high: number | null;
+    excludesZero: boolean; usable: boolean;
+  } | null;
+  bridge: {
+    label: string; n: number; rho: number;
+    low: number | null; high: number | null;
+    excludesZero: boolean; usable: boolean;
+  } | null;
+  dispersion: { n: number; median: number; p25: number; p75: number } | null;
+  evidence: "strong" | "moderate" | "weak" | "none";
+  reading: string;
+  window: { signalFrom: number; signalTo: number; outcome: number };
+  limit: string;
+}
+
+/**
+ * What the analysts covering this listing predict, and which way they moved.
+ *
+ * `applicable: false` is a REFUSAL — nobody publishes estimates for this
+ * listing — and it must never render like a clean reading. It is the most
+ * common outcome on smaller names, which is exactly why the distinction
+ * carries: an absent consensus and a steady one look identical as blank space.
+ */
+export interface ExpectationsResponse {
+  applicable: boolean;
+  analysts: number | null;
+  minAnalysts: number;
+  verdict: "RISING" | "FALLING" | "MIXED" | "QUIET" | "THIN" | "UNREADABLE" | "NOT_COVERED";
+  tone: string;
+  headline: string;
+  /** Present only on the refusal. Says an absent consensus is not good news. */
+  refusal?: string;
+  breadth?: RevisionBreadth;
+  breadth7d?: RevisionBreadth;
+  drift?: { annual90: RevisionDrift; annual30: RevisionDrift; forward90: RevisionDrift };
+  surprise?: SurpriseRecord;
+  consensusGrowth?: {
+    available: boolean; reason?: string;
+    nextYear?: number; horizon?: string; thisYear?: number | null;
+  };
+  /** The SPREAD only. The mean target is fetched and deliberately not served. */
+  dispersion?: {
+    available: boolean; reason?: string;
+    spread?: number; high?: number; low?: number;
+  };
+  periods?: { voting: string[]; reported: string[] };
+  limits?: string[];
+  /** Null when the offline study has never been run. */
+  measurement?: RevisionMeasurement | null;
+  explain?: ExplainMap;
+}
+
+/* ------------------------------------------------------------------ */
 /* Breadth tier — rank a universe, then deepen a shortlist            */
 /* ------------------------------------------------------------------ */
 
@@ -722,18 +850,18 @@ export type Leg<T> =
   | { ok: false; error: string | EngineFailure };
 
 /**
- * What the four lenses add up to, in sentences.
+ * What the five lenses add up to, in sentences.
  *
  * Deliberately has NO score field and never will. See `explain.for_synthesis`
  * for the reasoning: a single composite number discards every finding the app
- * works to establish (that four panels rest on two datasets, that a DCF is
+ * works to establish (that five panels rest on three datasets, that a DCF is
  * mostly a perpetuity guess, that several readings are graded weak) and it does
  * it in the one field everybody reads.
  */
 export interface SynthesisReading {
   lens: string;
-  key: "flow" | "trend" | "value" | "quality";
-  family: "price" | "filings";
+  key: "flow" | "trend" | "value" | "quality" | "expectations";
+  family: "price" | "filings" | "estimates";
   familyLabel: string;
   verdict: string;
   sentence: string;
@@ -772,7 +900,14 @@ export interface AgreementPair {
 export interface AgreementMeasurement {
   measuredOn: string;
   scope: string;
+  /**
+   * The GOVERNING family pair — the most redundant of them, which is the one
+   * the independence claim stands or falls on. Chosen in Python by
+   * `lensagreement.governing_pair`; never re-derive it here.
+   */
   families: AgreementPair;
+  /** All three family pairs, so the governing one reads as chosen not picked. */
+  familyPairs: AgreementPair[];
   pairs: AgreementPair[];
   lenses: {
     available: boolean;
@@ -821,7 +956,7 @@ export interface PreTradeCheck {
   classification: "flag" | "base";
   /** The panel that owns the underlying number, so it can be gone and checked. */
   where: string;
-  family: "price" | "filings";
+  family: "price" | "filings" | "estimates";
   firingRate: number;
   firingRateText: string;
   sampleSize: number;
@@ -952,6 +1087,7 @@ export interface ConfluenceResponse {
   technical: Leg<TechnicalResponse>;
   valuation: Leg<ValuationResponse>;
   quality: Leg<QualityResponse>;
+  expectations: Leg<ExpectationsResponse>;
   news: Leg<NewsResponse>;
   synthesis: Synthesis;
   preTrade: PreTrade;

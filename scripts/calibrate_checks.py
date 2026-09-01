@@ -77,6 +77,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "api"))
 
+from _lib import expectations as expectations_engine  # noqa: E402
 from _lib import indicators as ind  # noqa: E402
 from _lib import longterm as lt  # noqa: E402
 from _lib import market_data  # noqa: E402
@@ -155,6 +156,32 @@ def _filings_legs(symbol: str) -> dict:
     return legs
 
 
+def _estimates_legs(symbol: str) -> dict:
+    """The confluence leg an estimates-family check reads, for one symbol.
+
+    One fetch per symbol, like the filings half and for the same reason: the
+    analyst tables are scraped per listing and nothing batches them. It is the
+    cheaper of the two — one call rather than five — but it is still why this
+    script is a script.
+
+    NO `ok: False` BRANCH ON AN UNCOVERED LISTING. A company nobody follows
+    produces a perfectly good reading whose `applicable` is false, and the
+    predicate turns that into `unchecked` with the count in the reason. Failing
+    the leg here instead would report the same names as an ENGINE failure, and
+    `summarise` counts those identically — so the distinction would survive in
+    the payload and die in the calibration.
+    """
+    try:
+        record = market_data.estimates(symbol)
+    except Exception as exc:
+        return {"expectations": {"ok": False, "error": str(exc)}}
+    try:
+        return {"expectations": {"ok": True,
+                                 "data": expectations_engine.analyze(record, symbol=symbol)}}
+    except Exception as exc:
+        return {"expectations": {"ok": False, "error": str(exc)}}
+
+
 # OUTCOMES ARE KEYED BY SYMBOL, NOT COUNTED AS THEY ARRIVE, and that is not
 # bookkeeping fussiness. IDX30 is a SUBSET of LQ45: adding four universes' counts
 # together would weight every Indonesian large cap twice and quietly tilt every
@@ -187,6 +214,7 @@ def main() -> int:
     predicates = pretrade.predicates()
     price_ids = [c["id"] for c in pretrade.CHECKS if c["family"] == "price"]
     filings_ids = [c["id"] for c in pretrade.CHECKS if c["family"] == "filings"]
+    estimates_ids = [c["id"] for c in pretrade.CHECKS if c["family"] == "estimates"]
 
     end = dt.date.today()
     start = end - dt.timedelta(days=int(365.25 * args.years) + 30)
@@ -231,6 +259,19 @@ def main() -> int:
             if index % 10 == 0:
                 print(".", end="", flush=True)
         print(" done")
+
+        # --- estimates half: one fetch per symbol, cheaper than the filings one
+        if estimates_ids:
+            print(f"  estimate checks (one fetch per name, ~{len(symbols) * 2}s) ...",
+                  end="", flush=True)
+            for index, symbol in enumerate(symbols, start=1):
+                with contextlib.redirect_stdout(noise), contextlib.redirect_stderr(noise):
+                    legs = _estimates_legs(symbol)
+                for check_id in estimates_ids:
+                    states[check_id][symbol] = predicates[check_id](legs)["state"]
+                if index % 10 == 0:
+                    print(".", end="", flush=True)
+            print(" done")
 
         for check_id in sorted(states):
             summary = summarise(states[check_id])

@@ -590,3 +590,74 @@ def test_the_ranking_routes_are_rate_limited_more_tightly_than_the_default(clien
     assert RATE_LIMITS["/api/rank/deepen"][0] < RATE_LIMITS["/api/rank"][0], (
         "deepening does not batch, so it must be capped harder than ranking"
     )
+
+
+# --------------------------------------------------------------------------- #
+# Engine 5 — the estimate record
+# --------------------------------------------------------------------------- #
+def test_expectations_404s_on_a_symbol_that_does_not_exist(client, monkeypatch):
+    """The refusal and the failed lookup must not render alike.
+
+    This lens has an `applicable: false` state that fires on real, listed
+    companies nobody covers — the most common outcome on smaller names. If a
+    typo'd ticker came back as the same refusal, the refusal would stop meaning
+    anything, which is exactly the bug `quality_payload` was fixed for.
+    """
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda s: {"ok": False})
+    response = client.get("/api/expectations", params={"ticker": "NOTREAL"})
+    assert response.status_code == 404
+    assert "No company data came back" in response.json()["detail"]
+
+
+def test_expectations_serves_the_designed_refusal_with_a_200(client, monkeypatch):
+    """A real listing nobody covers is a reading, not an error."""
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda s: {"ok": True})
+    monkeypatch.setattr(index.market_data, "estimates", lambda s: {"analysts": 1.0})
+    response = client.get("/api/expectations", params={"ticker": "SMALLCAP"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["applicable"] is False
+    assert "not a clean bill of health" in body["refusal"]
+
+
+def test_the_expectations_measurement_follows_the_resolved_symbols_market(
+        client, monkeypatch):
+    """Analyst coverage differs sharply between the two markets, so the study is
+    measured on a different population in each. Taking the market from the
+    dropdown rather than the suffix would quote the wrong one."""
+    seen = {}
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda s: {"ok": True})
+    monkeypatch.setattr(index.market_data, "estimates", lambda s: {"analysts": 20.0})
+    monkeypatch.setattr(index.expectations, "analyze",
+                        lambda record, symbol=None: {"applicable": False,
+                                                     "analysts": 20})
+    monkeypatch.setattr(index.revisionmomentum, "for_panel",
+                        lambda market: seen.setdefault("market", market))
+
+    client.get("/api/expectations", params={"ticker": "BBRI.JK", "market": "US"})
+    assert seen["market"] == "ID"
+
+
+def test_a_failed_expectations_leg_does_not_sink_the_confluence_run(
+        client, monkeypatch):
+    """One leg must not be able to take the other four down with it."""
+    def boom(symbol):
+        raise RuntimeError("upstream refused")
+
+    monkeypatch.setattr(index, "expectations_payload", boom)
+    monkeypatch.setattr(index, "whale_payload",
+                        lambda symbol, **kw: {"stats": {}})
+    monkeypatch.setattr(index, "technical_payload",
+                        lambda symbol, **kw: {"summary": {}})
+    monkeypatch.setattr(index, "valuation_payload", lambda symbol, **kw: {})
+    monkeypatch.setattr(index, "quality_payload", lambda symbol: {"applicable": False})
+    monkeypatch.setattr(index.news, "fetch_news", lambda symbol, limit=5: [])
+
+    response = client.get("/api/confluence", params={"ticker": "AAPL"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["expectations"]["ok"] is False
+    assert "upstream refused" in body["expectations"]["error"]
+    # The other four still answered.
+    assert body["anomaly"]["ok"] is True
+    assert body["technical"]["ok"] is True

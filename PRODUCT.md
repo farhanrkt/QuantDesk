@@ -26,9 +26,10 @@ Full mode may not be degraded to serve the newcomer.
 
 ## Product Purpose
 
-Read one listed company through four models that use **different data** — order flow,
-price trend, intrinsic value, accounting quality — and show where they agree, where they
-disagree, and what none of them can tell you. Covers US and Indonesian (IDX) listings.
+Read one listed company through five models that use **different data** — order flow,
+price trend, intrinsic value, accounting quality, and what the analysts covering it
+forecast — and show where they agree, where they disagree, and what none of them can tell
+you. Covers US and Indonesian (IDX) listings.
 
 Success is a reader who finishes with a defensible view of what is and is not known about
 a company, including the gaps. It is explicitly **not** a reader who has been told what to
@@ -36,32 +37,37 @@ do.
 
 ## Positioning
 
-Most research tools give one opinion. This gives four that share no inputs, and then
-spends real effort establishing how much that agreement is actually worth — publishing the
-measurement whichever way it comes out. Five stamped artifacts already do this
+Most research tools give one opinion. This gives five drawn from three separate records,
+and then spends real effort establishing how much that agreement is actually worth —
+publishing the measurement whichever way it comes out. Six stamped artifacts do this
 (`backtest_results.json`, `check_calibration.json`, `correlation_stability.json`,
-`lens_agreement.json`, `exposure_stability.json`), including a backtest that reports
-its own ranking has **no detectable edge** and a beta study that refuses one of the
-four factors it tested.
+`lens_agreement.json`, `exposure_stability.json`, `revision_momentum.json`), including a
+backtest that reports its own ranking has **no detectable edge**, a beta study that refuses
+one of the four factors it tested, and a revision study that came back indistinguishable
+from zero.
 
-*The count said "three" while listing four, from before `lens_agreement.json`
-existed. Corrected 31 August 2026 along with the fifth.*
+The strongest evidence that this is real rather than positioning: on 1 September 2026 the
+three-family re-run **took the app's loudest claim away**. The estimate record agrees with
+the price record more often than chance (κ = +0.11, interval excluding zero), so the rail
+now says the two together are worth less than two independent readings. Nobody made it say
+that; the branch was written before the number was known, and all three branches ship.
 
-A neighbouring product could copy the four lenses. It could not truthfully copy
-"we measured whether our own signal works and published the null result".
+A neighbouring product could copy the five lenses. It could not truthfully copy "we
+measured whether our own signal works, published the null, and then published the
+measurement that cost us our own headline".
 
 ## Constraints
 
 These are durable product facts. Future work preserves them; none is a style preference.
 
 1. **No composite buy/hold/sell.** Not a number, letter, traffic light or sortable
-   "conviction" column. Guarded by `tests/test_synthesis.py` and `tests/test_pretrade.py`.
-   This is the direction any change toward "easier to interpret" will drift, and it is
-   permanently refused.
+   "conviction" column. Guarded by `tests/test_synthesis.py`, `tests/test_pretrade.py` and
+   `tests/test_expectations.py`. This is the direction any change toward "easier to
+   interpret" will drift, and it is permanently refused.
 
    *Confirmed boundary for v2 (29 Aug 2026):* per-lens status chips driven by the existing
-   `explain.tone` are permitted — four chips side by side, one word each. They are **never
-   summed, averaged, counted or ordered by strength**. Nothing may aggregate them.
+   `explain.tone` are permitted — now five chips side by side, one word each. They are
+   **never summed, averaged, counted or ordered by strength**. Nothing may aggregate them.
 
 2. **No predictive claim that isn't measured.** If a feature implies something predicts
    returns, it is measured offline and published including nulls, or it does not ship.
@@ -73,8 +79,14 @@ These are durable product facts. Future work preserves them; none is a style pre
    colour from the sign of a number. Six documented sign-based exceptions survive where
    Python has no interpretation to offer (a day's price change, the seasonality grid).
 
+   *A lens may also decline to have a direction at all.* Within the fifth lens only
+   revision breadth votes; the drift, the surprise record, the target spread and the
+   analyst count are banded `context` and never coloured. One lens, one vote — a panel
+   that coloured four of its own figures would be a composite inside a single tab.
+
 5. **Existing refusals stay.** `applicable: false` for financials on the accounting
-   screens; the candlestick firewall; the declined multi-bar chart patterns; the
+   screens; `applicable: false` for a listing no analyst covers; the withheld mean price
+   target; the candlestick firewall; the declined multi-bar chart patterns; the
    `unavailable` band.
 
 6. **One data module, one serverless function, no server state, a generated glossary,
@@ -106,9 +118,13 @@ These are durable product facts. Future work preserves them; none is a style pre
 
 ## Terminology
 
-- **Lens** — one of the four models (Flow, Trend, Value, Quality).
-- **Family** — the body of data a lens reads: *price and volume*, or *the filings*. Flow
-  and Trend are one family; Value and Quality are the other.
+- **Lens** — one of the five models (Flow, Trend, Value, Quality, Expectations).
+- **Family** — the body of data a lens reads: *price and volume*, *the filings*, or *the
+  estimate record*. Flow and Trend are one family; Value and Quality are the second;
+  Expectations is the third, on its own.
+- **Governing pair** — of the three family pairs, the most redundant one. It is what the
+  independence claim stands or falls on, and it is a maximum rather than an average
+  because an average would let two clean pairs bury one that fails.
 - **Tone** — the server's judgement on a figure: `good` / `bad` / `warn` / `neutral` /
   `none`. The only permitted input to colour.
 - **Guided / Full** — the two reading modes. Guided is the default.

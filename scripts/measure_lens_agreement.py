@@ -2,13 +2,13 @@
 """
 measure_lens_agreement.py
 =========================
-Measure how much the four lenses actually agree, and record the answer.
+Measure how much the five lenses actually agree, and record the answer.
 
 THE CLAIM BEING TESTED
 -----------------------
 The confluence rail says, on every run and in the largest type on the page,
-that four lenses rest on two independent bodies of data — and therefore that
-agreement between those two "is not one fact counted twice". Both the rail and
+that five lenses rest on three independent bodies of data — and therefore that
+agreement between them "is not one fact counted twice". Both the rail and
 `explain._agreement` then admit the grouping is "a stated assumption about what
 shares a source, not a measured correlation", with the reason given as: *"the
 ranking panel measures its own overlap because a scan gives it a cross-section
@@ -29,7 +29,7 @@ thing under measurement. This whole exercise is a measurement of what THIS APP
 says about many companies; a number measured from a lookalike of the app would
 answer a question nobody asked.
 
-So this imports `api/index.py` and calls the four payload builders `/api/
+So this imports `api/index.py` and calls the five payload builders `/api/
 confluence` itself calls, with the parameters the UI actually sends (`INITIAL`
 in `app/page.tsx`: a 2y anomaly window, a 5y chart range, threshold detection at
 -0.10). The votes then come out of `explain.for_synthesis`, and the family votes
@@ -39,8 +39,9 @@ ships.
 
 The cost is that nothing batches: two OHLCV fetches per symbol (the two lenses
 want different windows) plus one company fetch that the value and quality
-lenses share through `market_data.company`'s day cache. Four universes is a
-quarter of an hour or so against an endpoint with no SLA, which is exactly why
+lenses share through `market_data.company`'s day cache, plus one estimates fetch
+that only the fifth lens pays for. Four universes is twenty minutes or so
+against an endpoint with no SLA, which is exactly why
 this is a script, is outside CI, and writes a stamped file.
 
 Symbols are deduplicated before anything runs. IDX30 is a subset of LQ45 and
@@ -60,14 +61,15 @@ WHAT COMES OUT
 --------------
 `api/_lib/lens_agreement.json`, stamped with its date and the universes it was
 taken over, holding for each population — all names, and each market on its
-own — the six pairwise lens agreements, the one that matters (price family
-against filings family), and the effective number of independent lenses.
+own — the ten pairwise lens agreements, the three FAMILY pairs (of which the
+most redundant of them governs the app's independence claim), and the effective
+number of independent lenses.
 
 RE-RUN IT whenever a lens's VERDICT logic changes: `explain._read_flow`,
-`_read_trend`, `_read_value`, `_read_quality`, `_family_votes`, or anything
-upstream that moves a verdict band. A stale agreement number attached to
-changed votes is worse than none, because the panel prints it with a date that
-makes it look checked.
+`_read_trend`, `_read_value`, `_read_quality`, `_read_expectations`,
+`_family_votes`, or anything upstream that moves a verdict band. A stale
+agreement number attached to changed votes is worse than none, because the panel
+prints it with a date that makes it look checked.
 
 USAGE
     python scripts/measure_lens_agreement.py                # measure and write
@@ -111,7 +113,7 @@ SCORE_THRESHOLD = -0.10
 
 
 def _legs(symbol: str, market: str) -> dict:
-    """The four confluence legs for one symbol, each reporting its own failure.
+    """The five confluence legs for one symbol, each reporting its own failure.
 
     Mirrors the `leg()` helper inside `/api/confluence` rather than sharing it,
     because that one is an async closure over a FastAPI request. What matters is
@@ -128,6 +130,7 @@ def _legs(symbol: str, market: str) -> dict:
             symbol, range_key=CHART_RANGE, market_code=market),
         "valuation": lambda: api.valuation_payload(symbol, market_code=market),
         "quality": lambda: api.quality_payload(symbol),
+        "expectations": lambda: api.expectations_payload(symbol),
     }
     for name, build in builders.items():
         try:
@@ -163,7 +166,7 @@ def _votes(legs: dict) -> tuple[dict, dict]:
 
     families = explain._family_votes(readings)
     family_votes = {name: (families[name]["vote"] if name in families else None)
-                    for name in ("price", "filings")}
+                    for name in agreement.FAMILY_ORDER}
     return lens_votes, family_votes
 
 
@@ -182,7 +185,7 @@ def _population(rows: list[dict], label: str) -> dict:
     lens_votes = {lens: [row["lenses"][lens] for row in rows]
                   for lens in agreement.LENS_ORDER}
     family_votes = {name: [row["families"][name] for row in rows]
-                    for name in ("price", "filings")}
+                    for name in agreement.FAMILY_ORDER}
     coverage = {lens: sum(1 for vote in votes if vote is not None)
                 for lens, votes in lens_votes.items()}
     measured = agreement.measure(lens_votes, family_votes)
@@ -238,8 +241,8 @@ def main() -> int:
         return 1
 
     print(f"{len(symbols)} unique symbols across {len(covered)} universes.")
-    print("Every one runs all four production engines — roughly three upstream")
-    print(f"calls each, so expect about {len(symbols) * 4 // 60 + 1} minutes.\n")
+    print("Every one runs all five production engines — roughly four upstream")
+    print(f"calls each, so expect about {len(symbols) * 5 // 60 + 1} minutes.\n")
 
     noise = io.StringIO()
     rows: list[dict] = []
@@ -295,14 +298,24 @@ def main() -> int:
         print("  read at all: " + "  ".join(
             f"{agreement.LENS_LABEL[lens]} {count}/{total} ({count / total:.0%})"
             for lens, count in population["coverage"].items()))
-        families = population.get("families")
-        if families and families.get("usable"):
-            print(f"  price vs filings   κ = {families['kappa']:+.3f}  "
-                  f"[{families['low']:+.3f}, {families['high']:+.3f}]  "
-                  f"observed {families['observed']:.1%} vs chance "
-                  f"{families['chance']:.1%}  n = {families['n']}")
-        else:
-            print("  price vs filings   not usable on this population")
+        family_pairs = population.get("familyPairs") or []
+        governing = population.get("families") or {}
+        for pair in family_pairs:
+            # The GOVERNING pair is marked, because it is the one the app's
+            # warrant sentence speaks about and a table of three otherwise
+            # gives no clue which of them that is.
+            mark = ">" if (pair.get("a") == governing.get("a")
+                           and pair.get("b") == governing.get("b")) else " "
+            if pair.get("usable"):
+                print(f" {mark}{pair['a']:20}/{pair['b']:20} κ = {pair['kappa']:+.3f}  "
+                      f"[{pair['low']:+.3f}, {pair['high']:+.3f}]  "
+                      f"observed {pair['observed']:.1%} vs chance "
+                      f"{pair['chance']:.1%}  n = {pair['n']}")
+            else:
+                print(f" {mark}{pair['a']:20}/{pair['b']:20} not usable "
+                      f"(n = {pair['n']})")
+        if not family_pairs:
+            print("  no family pair was usable on this population")
         for pair in population.get("pairs") or []:
             mark = " " if pair["usable"] else "!"
             kappa = f"{pair['kappa']:+.3f}" if pair["kappa"] is not None else "  n/a"

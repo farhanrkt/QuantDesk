@@ -4,7 +4,7 @@ import { track } from "@vercel/analytics";
 import { useCallback, useRef, useState } from "react";
 import type {
   AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
-  ExposureScanResponse,
+  ExpectationsResponse, ExposureScanResponse,
   Leg, ManualInputs, EventStudyResponse, Market, NewsResponse, QualityResponse,
   PeersResponse, PortfolioResponse, PreTrade, RankResponse, ScreenerResponse,
   Synthesis, TechnicalResponse,
@@ -160,8 +160,9 @@ export function simulationCsvUrl(o: RunOptions, v: ValuationOptions) {
   return `/api/intrinsic-value/simulation?${queryString(valuationParams(o, v) as never)}`;
 }
 
-type Lens = "anomaly" | "technical" | "valuation" | "quality" | "news";
-const ALL_LENSES: Lens[] = ["anomaly", "technical", "valuation", "quality", "news"];
+type Lens = "anomaly" | "technical" | "valuation" | "quality" | "expectations" | "news";
+const ALL_LENSES: Lens[] = ["anomaly", "technical", "valuation", "quality",
+                            "expectations", "news"];
 
 /**
  * Guards against out-of-order settlement.
@@ -176,10 +177,11 @@ const ALL_LENSES: Lens[] = ["anomaly", "technical", "valuation", "quality", "new
  */
 function useLensGuard() {
   const seq = useRef<Record<Lens, number>>({
-    anomaly: 0, technical: 0, valuation: 0, quality: 0, news: 0,
+    anomaly: 0, technical: 0, valuation: 0, quality: 0, expectations: 0, news: 0,
   });
   const inflight = useRef<Record<Lens, AbortController | null>>({
-    anomaly: null, technical: null, valuation: null, quality: null, news: null,
+    anomaly: null, technical: null, valuation: null, quality: null,
+    expectations: null, news: null,
   });
 
   return useCallback((lenses: Lens[]) => {
@@ -200,9 +202,9 @@ function useLensGuard() {
 }
 
 /**
- * A full run is ONE request to /api/confluence, which runs all four lenses
- * concurrently in a single serverless invocation. Four separate fetches meant
- * four cold starts, each paying the numpy + pandas + scipy + scikit-learn
+ * A full run is ONE request to /api/confluence, which runs all five lenses
+ * concurrently in a single serverless invocation. Five separate fetches would
+ * mean five cold starts, each paying the numpy + pandas + scipy + scikit-learn
  * import and each re-resolving the same symbol.
  *
  * Failure is still scoped to a single card — each leg reports its own outcome,
@@ -218,6 +220,8 @@ export function useEngines() {
   const [technical, setTechnical] = useState<Engine<TechnicalResponse>>({ status: "idle" });
   const [valuation, setValuation] = useState<Engine<ValuationResponse>>({ status: "idle" });
   const [quality, setQuality] = useState<Engine<QualityResponse>>({ status: "idle" });
+  const [expectations, setExpectations] =
+    useState<Engine<ExpectationsResponse>>({ status: "idle" });
   const [news, setNews] = useState<Engine<NewsResponse>>({ status: "idle" });
   // The synthesis arrives with the confluence payload and is the only piece of
   // state here that is not per-lens: it is a statement ABOUT the four together,
@@ -298,6 +302,7 @@ export function useEngines() {
     setTechnical({ status: "loading" });
     setValuation({ status: "loading" });
     setQuality({ status: "loading" });
+    setExpectations({ status: "loading" });
     setNews({ status: "loading" });
     setSynthesis(null);
     setPreTrade(null);
@@ -314,6 +319,7 @@ export function useEngines() {
       if (current("technical")) setTechnical({ status: "error", failure });
       if (current("valuation")) setValuation({ status: "error", failure });
       if (current("quality")) setQuality({ status: "error", failure });
+      if (current("expectations")) setExpectations({ status: "error", failure });
       if (current("news")) setNews({ status: "error", failure });
       return;
     }
@@ -322,6 +328,7 @@ export function useEngines() {
     if (current("technical")) setTechnical(fromLeg(payload.technical));
     if (current("valuation")) setValuation(fromLeg(payload.valuation));
     if (current("quality")) setQuality(fromLeg(payload.quality));
+    if (current("expectations")) setExpectations(fromLeg(payload.expectations));
     if (current("news")) setNews(fromLeg(payload.news));
     if (current("anomaly")) setSynthesis(payload.synthesis ?? null);
     if (current("anomaly")) setPreTrade(payload.preTrade ?? null);
@@ -359,7 +366,7 @@ export function useEngines() {
   );
 
   return {
-    anomaly, technical, valuation, quality, news, synthesis, preTrade,
+    anomaly, technical, valuation, quality, expectations, news, synthesis, preTrade,
     run, refineValuation, refineTechnical, csvUrl,
     valuationOptions: lastValuation, technicalOptions: lastTechnical,
   };

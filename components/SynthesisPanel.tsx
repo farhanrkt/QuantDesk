@@ -6,7 +6,7 @@ import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
 import { cn, pct, signed } from "@/lib/utils";
 
 /**
- * What the four lenses add up to, in sentences.
+ * What the five lenses add up to, in sentences.
  *
  * THIS IS THE ANSWER TO "SO WHAT?", AND IT IS DELIBERATELY NOT A SCORE.
  * Every sentence here restates a figure computed elsewhere on the page; none of
@@ -17,7 +17,7 @@ import { cn, pct, signed } from "@/lib/utils";
  *
  * THE ORDER OF THE BLOCKS IS THE ARGUMENT. Readings first, because a summary
  * that hides its inputs is a verdict. Then the cross-check, because agreement
- * between two independent bodies of data is the product's whole claim. Then the
+ * between independent bodies of data is the product's whole claim. Then the
  * tensions and the blind spots — which are placed ABOVE the next steps on
  * purpose, so nobody reaches "what to do" without passing "what this cannot
  * tell you".
@@ -133,7 +133,12 @@ function Measured({ data }: { data: AgreementMeasurement }) {
           <ChevronRight aria-hidden
                         className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
           <span className="min-w-0">
-            How much do the two actually overlap? Measured:{" "}
+            {/* NAMED, because with three families "the two" is ambiguous and the
+                pair being quoted is the MOST REDUNDANT one rather than a fixed
+                pair — chosen in Python by `lensagreement.governing_pair`. A
+                reader has to be able to tell which comparison this κ is about. */}
+            {data.families.a} vs {data.families.b}: how much do they actually
+            overlap? Measured:{" "}
             <span className="num font-semibold text-chalk">
               κ = {signed(data.families.kappa)}
             </span>{" "}
@@ -262,7 +267,7 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
               conflict" on a company with no conflicts is a small lie. */}
           {(() => {
             const parts = [
-              agreement.measured && "how much the two overlap",
+              agreement.measured && "how much the families overlap",
               data.tensions.length > 0 && "where they conflict",
               data.blindSpots.length > 0 && "what none of them can see",
               "what to check next",
@@ -275,7 +280,7 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
         </summary>
 
         {agreement.measured && (
-          <Block icon={Scale} title="How much the two actually overlap" tone={agreement.tone}>
+          <Block icon={Scale} title="How much the families actually overlap" tone={agreement.tone}>
             <Measured data={agreement.measured} />
           </Block>
         )}

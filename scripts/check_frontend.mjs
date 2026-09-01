@@ -79,17 +79,19 @@ if (FORBIDDEN_IN_REQUESTS.test(requestLayer)) {
 // `explain.py` says so in a comment: the rail must render while legs are still
 // loading, so it cannot wait for the server's answer. Two copies of one rule is
 // the arrangement this codebase distrusts most, and the whole claim the app
-// makes — that four lenses are two independent sources — rests on them
+// makes — that five lenses are three independent sources — rests on them
 // agreeing. Compared here rather than assumed.
 const railSource = readFileSync(join(ROOT, "components/ConfluenceRail.tsx"), "utf8");
 const pySource = readFileSync(join(ROOT, "api/_lib/explain.py"), "utf8");
+const LENS_KEYS = "flow|trend|value|quality|expectations";
+const FAMILY_KEYS = "price|filings|estimates";
 const pyFamilies = Object.fromEntries(
-  [...pySource.matchAll(/"(flow|trend|value|quality)":\s*"(price|filings)"/g)]
+  [...pySource.matchAll(new RegExp(`"(${LENS_KEYS})":\\s*"(${FAMILY_KEYS})"`, "g"))]
     .map((m) => [m[1], m[2]]));
 const railFamilies = {};
 for (const block of railSource.split(/\n(?=function |const )/)) {
   const lens = block.match(/lens:\s*"(\w+)"/);
-  const family = block.match(/family:\s*"(price|filings)"/);
+  const family = block.match(new RegExp(`family:\\s*"(${FAMILY_KEYS})"`));
   if (lens && family) railFamilies[lens[1].toLowerCase()] = family[1];
 }
 for (const [lens, family] of Object.entries(pyFamilies)) {
@@ -100,10 +102,24 @@ for (const [lens, family] of Object.entries(pyFamilies)) {
     process.exit(1);
   }
 }
-if (Object.keys(railFamilies).length < 4) {
-  console.error("Could not read all four lens families out of ConfluenceRail.tsx; "
-                + "the drift check between it and explain.py is not running.");
+// THE COUNT IS ASSERTED AGAINST PYTHON, NOT AGAINST A LITERAL. This was `< 4`,
+// and a hardcoded count is exactly the check that goes stale the moment a lens
+// is added: a fifth lens with no rail entry would have left this passing on the
+// original four while the drift check silently stopped covering the new one.
+// The rail must now account for every lens `explain.py` classifies.
+const pyLensCount = Object.keys(pyFamilies).length;
+if (pyLensCount < 5) {
+  console.error(`Only found ${pyLensCount} lens families in explain.py; the drift `
+                + "check between it and ConfluenceRail.tsx is not running.");
   process.exit(1);
+}
+for (const lens of Object.keys(pyFamilies)) {
+  if (!railFamilies[lens]) {
+    console.error(`explain.py classifies "${lens}" but ConfluenceRail.tsx has no `
+                  + "reading for it. The rail's independence count would be taken "
+                  + "over fewer families than the synthesis uses.");
+    process.exit(1);
+  }
 }
 
 // --------------------------------------------------------------------------- //

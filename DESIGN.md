@@ -66,6 +66,7 @@ catastrophic.
 | `trend` | `#6B9BFF` |
 | `value` | `#E8B44C` |
 | `quality` | `#C9A227` |
+| `expectations` | `#E07AC0` |
 | `thesis` | `#A78BFA` |
 
 **Tone** — what the server concluded. Arrives from `explain.tone` and from
@@ -82,6 +83,14 @@ whole audit removing.
 Before v2 these overlapped: the flow lens's teal and the "accumulation" verdict
 were one token doing two jobs, so a lens name and a conclusion rendered
 identically and neither read as meaningful.
+
+**The identity hues carry the family.** Cool for the price record (teal, blue),
+warm for the filings (two golds), and the fifth lens is neither, because the
+estimate record is neither. It was drafted at `#C77DFF` and moved: that violet
+sat 35 RGB units from `thesis`, and with `thesis`, `screen` and `rank` already
+sharing `#A78BFA` the tab strip would have carried four purples, one of them a
+lens and three of them not. `#E07AC0` is 83 units away at the same contrast
+(6.6:1 on `panel`, against the 4.5 floor).
 
 **Strata and text.** Colour commits at region scale — a lens hue owns a tinted
 header field, not a 2px strip of trim.

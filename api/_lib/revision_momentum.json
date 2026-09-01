@@ -1,0 +1,126 @@
+{
+  "measuredOn": "2026-09-01",
+  "universeIds": [
+    "dow30",
+    "nasdaq100",
+    "idx30",
+    "lq45"
+  ],
+  "universes": [
+    "Dow Jones Industrial Average",
+    "Nasdaq-100",
+    "IDX30",
+    "IDX LQ45"
+  ],
+  "universeLabel": "the Dow Jones Industrial Average, the Nasdaq-100, the IDX30 and the IDX LQ45",
+  "namesMeasured": 168,
+  "namesFailed": 0,
+  "window": {
+    "signalFrom": 90,
+    "signalTo": 60,
+    "outcome": 60
+  },
+  "minSample": 30,
+  "bootstrapDraws": 2000,
+  "populations": {
+    "ALL": {
+      "label": "the Dow Jones Industrial Average, the Nasdaq-100, the IDX30 and the IDX LQ45",
+      "names": 168,
+      "coverage": {
+        "estimatesRead": 165,
+        "signalFormed": 164,
+        "outcomeAvailable": 166
+      },
+      "forward": {
+        "label": "estimate revision (90d->60d) against the next 60 days, market-adjusted",
+        "n": 164,
+        "rho": -0.007388643838460195,
+        "low": -0.15340131220735842,
+        "high": 0.1428286058056453,
+        "excludesZero": false,
+        "usable": true
+      },
+      "bridge": {
+        "label": "estimate level drift against analyst revision breadth, same date",
+        "n": 161,
+        "rho": 0.5253257722260974,
+        "low": 0.3892176350681184,
+        "high": 0.6416398136236375,
+        "excludesZero": true,
+        "usable": true
+      },
+      "dispersion": {
+        "n": 165,
+        "median": 0.5389429388774034,
+        "p25": 0.3990870531523505,
+        "p75": 0.7462686567164178
+      }
+    },
+    "ID": {
+      "label": "the IDX30 and the IDX LQ45",
+      "names": 46,
+      "coverage": {
+        "estimatesRead": 44,
+        "signalFormed": 45,
+        "outcomeAvailable": 46
+      },
+      "forward": {
+        "label": "estimate revision (90d->60d) against the next 60 days, market-adjusted",
+        "n": 45,
+        "rho": 0.0217257756078872,
+        "low": -0.265893083486056,
+        "high": 0.3297609890839678,
+        "excludesZero": false,
+        "usable": true
+      },
+      "bridge": {
+        "label": "estimate level drift against analyst revision breadth, same date",
+        "n": 42,
+        "rho": 0.44148243295211437,
+        "low": 0.13843359790202028,
+        "high": 0.684193384278054,
+        "excludesZero": true,
+        "usable": true
+      },
+      "dispersion": {
+        "n": 44,
+        "median": 0.5765134898646719,
+        "p25": 0.43583428730442003,
+        "p75": 0.6589025356808474
+      }
+    },
+    "US": {
+      "label": "the Dow Jones Industrial Average and the Nasdaq-100",
+      "names": 122,
+      "coverage": {
+        "estimatesRead": 121,
+        "signalFormed": 119,
+        "outcomeAvailable": 120
+      },
+      "forward": {
+        "label": "estimate revision (90d->60d) against the next 60 days, market-adjusted",
+        "n": 119,
+        "rho": -0.0009195898506046473,
+        "low": -0.1778881286756512,
+        "high": 0.18269941653464503,
+        "excludesZero": false,
+        "usable": true
+      },
+      "bridge": {
+        "label": "estimate level drift against analyst revision breadth, same date",
+        "n": 119,
+        "rho": 0.4949434965757272,
+        "low": 0.3313380933941478,
+        "high": 0.6404622664693475,
+        "excludesZero": true,
+        "usable": true
+      },
+      "dispersion": {
+        "n": 121,
+        "median": 0.534072774892598,
+        "p25": 0.38093736864228667,
+        "p75": 0.7462686567164178
+      }
+    }
+  }
+}

@@ -1,7 +1,8 @@
 "use client";
 
 import type {
-  AnomalyResponse, Engine, QualityResponse, TechnicalResponse, ValuationResponse,
+  AnomalyResponse, Engine, ExpectationsResponse, QualityResponse, TechnicalResponse,
+  ValuationResponse,
 } from "@/lib/types";
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
@@ -14,6 +15,7 @@ const TECH = "#5B8DEF";
 const DCF = "#E8B44C";
 const DDM = "#A78BFA";
 const QUAL = "#E8B44C";
+const EXPECT = "#E07AC0";
 const ASH = "#7A8CA0";
 
 /**
@@ -21,11 +23,12 @@ const ASH = "#7A8CA0";
  * built on, so it is part of the type rather than a lookup table off to one
  * side: adding a fifth lens forces you to say what it reads.
  */
-type Family = "price" | "filings";
+type Family = "price" | "filings" | "estimates";
 
 const FAMILY_LABEL: Record<Family, string> = {
   price: "price and volume",
   filings: "the filings",
+  estimates: "the estimate record",
 };
 
 interface Reading {
@@ -97,10 +100,10 @@ export function agreementOf(readings: Reading[]): Agreement {
   const bulls = votes.filter((v) => v > 0).length;
   const bears = votes.filter((v) => v < 0).length;
   const noun = total === 1 ? "reading" : "readings";
-  // "Both" only when there are exactly two. There are two families today, so
-  // `total` cannot exceed two — but the Family type is meant to be extended,
-  // and "Both independent readings" over three sources is the kind of wrong
-  // that survives review because it reads fluently.
+  // "Both" only when there are exactly two. This branch was written before a
+  // third family existed, against the day one did — and §18 was that day. With
+  // three sources reading it "Both independent readings constructive" is the
+  // kind of wrong that survives review because it reads fluently.
   const all = total === 2 ? "Both" : "All";
 
   let headline = "Mixed signals";
@@ -287,6 +290,55 @@ function readQuality(state: Engine<QualityResponse>): Reading {
 }
 
 /**
+ * THE VERDICT IS THE SERVER'S, AND THE TWO SILENT STATES ARE NOT THE SAME ONE.
+ *
+ * `applicable: false` means nobody publishes an estimate for this listing — the
+ * lens declined, it does not vote, and it must not read as reassurance. QUIET
+ * means analysts cover it and none of them moved, which is a real reading that
+ * votes zero. Rendering either as a bare dash would merge a refusal with a
+ * finding, and on this lens the refusal is the common case: analyst coverage is
+ * where smaller listings stop being followed at all.
+ */
+function readExpectations(state: Engine<ExpectationsResponse>): Reading {
+  const question = "What does everyone else expect?";
+  if (state.status !== "ready") return blank("Expectations", question, "estimates", state.status);
+  const d = state.data;
+
+  if (!d.applicable)
+    return {
+      lens: "Expectations", question, verdict: "n/a",
+      detail: d.refusal
+        ?? "No analyst publishes estimates for this listing, so there is no consensus "
+           + "to read. That is a coverage gap, not a clean bill of health.",
+      color: ASH, vote: 0, family: "estimates",
+    };
+
+  const b = d.breadth;
+  const counts = b && b.up != null && b.down != null
+    ? `${b.up} raised and ${b.down} cut in the last month. `
+    : "";
+  const verdict = d.verdict === "RISING" ? "Rising"
+    : d.verdict === "FALLING" ? "Falling"
+      : d.verdict === "QUIET" ? "Quiet"
+        : d.verdict === "THIN" ? "Too few moves" : "Mixed";
+  const color = d.verdict === "RISING" ? ACC : d.verdict === "FALLING" ? DIST : EXPECT;
+
+  return {
+    lens: "Expectations",
+    question,
+    verdict,
+    detail: `${counts}${d.headline}`,
+    color: d.verdict === "RISING" || d.verdict === "FALLING" ? color : ASH,
+    // ONLY A CLEAR DIRECTION VOTES. Quiet, thin and mixed are all real readings
+    // and all of them vote zero — the app has no way to tell a settled
+    // consensus from a divided one from a barely-observed one, and pretending
+    // otherwise is what the MIN_REVISIONS floor in Python exists to prevent.
+    vote: d.verdict === "RISING" ? 1 : d.verdict === "FALLING" ? -1 : 0,
+    family: "estimates",
+  };
+}
+
+/**
  * IDENTITY, NOT JUDGEMENT. Which lens is speaking is structural and always the
  * same colour; whether its reading is good or bad is `tone`, and the two are
  * never the same token. Before v2 the flow lens and the "accumulation" verdict
@@ -295,6 +347,7 @@ function readQuality(state: Engine<QualityResponse>): Reading {
  */
 const LENS_HUE: Record<string, string> = {
   Flow: "#2FBFA4", Trend: "#6B9BFF", Value: "#E8B44C", Quality: "#C9A227",
+  Expectations: "#E07AC0",
 };
 
 /** A vote is the SERVER's direction. This maps it to a tone and nothing else. */
@@ -309,7 +362,7 @@ const DOT: Record<string, string> = {
 /**
  * THE FOUR CHIPS. The one piece of at-a-glance this app allows itself.
  *
- * Four lenses, four words, four status dots, side by side. A reader takes the
+ * Five lenses, five words, five status dots, side by side. A reader takes the
  * shape of the answer in about a second — which is the entire request v2 was
  * built to satisfy — and the app still refuses to say what it adds up to.
  *
@@ -322,7 +375,7 @@ const DOT: Record<string, string> = {
  */
 function LensChips({ readings }: { readings: Reading[] }) {
   return (
-    <ul className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+    <ul className="grid grid-cols-2 gap-2 lg:grid-cols-5">
       {readings.map((r) => {
         const tone = voteTone(r);
         const hue = LENS_HUE[r.lens] ?? "#8496A9";
@@ -364,16 +417,18 @@ function LensChips({ readings }: { readings: Reading[] }) {
  * one of them alone, and §15 measured how much more.
  */
 export function ConfluenceRail({
-  ticker, anomaly, technical, valuation, quality,
+  ticker, anomaly, technical, valuation, quality, expectations,
 }: {
   ticker: string;
   anomaly: Engine<AnomalyResponse>;
   technical: Engine<TechnicalResponse>;
   valuation: Engine<ValuationResponse>;
   quality: Engine<QualityResponse>;
+  expectations: Engine<ExpectationsResponse>;
 }) {
   const readings = [readAnomaly(anomaly), readTechnical(technical),
-                    readValuation(valuation), readQuality(quality)];
+                    readValuation(valuation), readQuality(quality),
+                    readExpectations(expectations)];
   const agreement = agreementOf(readings);
   const pending = readings.filter((r) => r.pending).length;
   // THE CHIPS AND THE COLUMNS ARE THE SAME FOUR VERDICTS. Side by side on a
@@ -421,8 +476,9 @@ export function ConfluenceRail({
           RESEARCH_ROADMAP §6 and §15; what a reader needs beside the count is
           what the count counts. */}
       <p className="border-t border-rule px-5 py-2.5 text-meta text-ash">
-        Flow and Trend both read price and volume; Value and Quality both read the filings.
-        The count is of data sources, not panels.
+        Flow and Trend both read price and volume; Value and Quality both read the filings;
+        Expectations reads what the analysts covering it forecast. The count is of data
+        sources, not panels.
       </p>
 
       <button
@@ -442,7 +498,7 @@ export function ConfluenceRail({
 
       <div id="lens-detail"
            className={cn("divide-y divide-rule border-t border-rule",
-                         "sm:grid-cols-2 sm:divide-x lg:grid lg:grid-cols-4 lg:divide-y-0",
+                         "sm:grid-cols-2 sm:divide-x lg:grid lg:grid-cols-5 lg:divide-y-0",
                          showDetail ? "grid" : "hidden lg:grid")}>
         {readings.map((r) => {
           const hue = LENS_HUE[r.lens] ?? "#8496A9";

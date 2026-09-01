@@ -690,6 +690,133 @@ def _company_uncached(ticker: str) -> dict:
     return out
 
 
+# --------------------------------------------------------------------------- #
+# The estimate record, cached for the day
+#
+# THE THIRD BODY OF DATA, and the only one in this module that is neither the
+# price record nor the filings. Everything above is either what the market did
+# (`ohlcv`) or what the company reported (`company`). This is what the analysts
+# covering it currently predict, which is a separate record with a separate
+# failure mode: it is an opinion, it is revised, and the revisions are dated.
+#
+# WHY IT IS A SEPARATE FETCH FROM `company()` AND NOT A FIELD ON IT
+# ------------------------------------------------------------------
+# `company()` is on the critical path of two lenses and is already four or five
+# upstream calls deep. Five more scrapes attached to it would be paid by every
+# valuation and every quality run, including the ones that never look at an
+# estimate. This is its own day-cached fetch behind its own per-symbol lock, so
+# the expectations lens pays for it and nothing else does.
+# --------------------------------------------------------------------------- #
+_ESTIMATE_CACHE: dict[tuple[str, str], dict] = {}
+_ESTIMATE_GUARD = threading.Lock()
+_ESTIMATE_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+
+
+def _estimate_lock(key: tuple[str, str]) -> threading.Lock:
+    """Per-key lock, for the reason `_company_lock` has one: two callers race
+    only when they want the same symbol."""
+    with _ESTIMATE_GUARD:
+        if len(_ESTIMATE_LOCKS) > 256 and key not in _ESTIMATE_LOCKS:
+            _ESTIMATE_LOCKS.clear()
+        return _ESTIMATE_LOCKS.setdefault(key, threading.Lock())
+
+
+def _frame(tk, attr: str) -> pd.DataFrame:
+    """One of yfinance's analyst tables, or an empty frame.
+
+    Every one of these is a scrape of a rendered page and any of them can come
+    back as None, as a dict, or as an exception depending on what the upstream
+    served that minute. The caller wants one shape.
+    """
+    if tk is None:
+        return pd.DataFrame()
+    try:
+        value = getattr(tk, attr)
+    except Exception:
+        return pd.DataFrame()
+    return value if isinstance(value, pd.DataFrame) else pd.DataFrame()
+
+
+def estimates(ticker: str) -> dict:
+    """What the analysts covering this listing currently predict, day-cached.
+
+    Five scrapes, and each is optional — a listing nobody covers returns empty
+    frames rather than raising, and the engine above turns that into a stated
+    refusal rather than a zero.
+
+    THE COVERAGE COUNT IS THE GATE, and it is fetched from `info` rather than
+    inferred from the size of the revision table. A name with four analysts who
+    have not moved their numbers in six months produces an all-zero revision
+    table that is indistinguishable, by shape alone, from a name nobody covers
+    at all. Those are opposite findings: the first is a real and quiet estimate
+    record, the second is no record. Only the count separates them.
+    """
+    key = (ticker.upper(), dt.date.today().isoformat())
+
+    cached = _ESTIMATE_CACHE.get(key)
+    if cached is not None:
+        return dict(cached)
+
+    with _estimate_lock(key):
+        cached = _ESTIMATE_CACHE.get(key)
+        if cached is not None:
+            return dict(cached)
+
+        result = _estimates_uncached(ticker)
+        with _ESTIMATE_GUARD:
+            if len(_ESTIMATE_CACHE) > 128:
+                _ESTIMATE_CACHE.clear()
+            _ESTIMATE_CACHE[key] = result
+
+    return dict(result)
+
+
+def _estimates_uncached(ticker: str) -> dict:
+    try:
+        tk = yf.Ticker(ticker)
+    except Exception:
+        tk = None
+
+    info = {}
+    if tk is not None:
+        try:
+            info = tk.info or {}
+        except Exception:
+            info = {}
+
+    targets = {}
+    if tk is not None:
+        try:
+            raw = tk.analyst_price_targets
+            if isinstance(raw, dict):
+                targets = raw
+        except Exception:
+            targets = {}
+
+    return {
+        # THE NUMBER OF ANALYSTS, from two possible keys. Yahoo has served this
+        # under both spellings and the engine's whole applicability gate hangs
+        # off it, so a missing key must not read as "nobody covers this".
+        "analysts": _safe_float(info.get("numberOfAnalystOpinions"),
+                                _safe_float(info.get("numberOfAnalysts"))),
+        # Estimates as they stand now and as they stood 7, 30, 60 and 90 days
+        # ago, per period. The revision magnitude comes from here.
+        "eps_trend": _frame(tk, "eps_trend"),
+        # How many analysts moved which way, per period. The revision BREADTH
+        # comes from here, and it is the half that survives a fiscal-year roll —
+        # see `expectations.revision_breadth`.
+        "eps_revisions": _frame(tk, "eps_revisions"),
+        # Reported against expected, per quarter. The only part of this record
+        # with a realised outcome attached, which is what makes it the half that
+        # can be back-tested.
+        "earnings_history": _frame(tk, "earnings_history"),
+        "growth_estimates": _frame(tk, "growth_estimates"),
+        # High / low / mean / median. The DISPERSION is used; the mean is
+        # deliberately not — see `expectations.target_dispersion`.
+        "targets": targets,
+        "currency": (info.get("currency") or "").upper() or None,
+    }
+
 def last_close(symbol: str, period: str = "5d") -> Optional[float]:
     """The most recent close for a symbol, without the full OHLCV contract.
 

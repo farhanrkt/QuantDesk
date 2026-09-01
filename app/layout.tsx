@@ -30,7 +30,7 @@ const DIRECTION = `<!--
   chrome; mono kept for measured numerals only. Recognizable with all content removed by
   its four coloured lens fields and its sentence-case headings.
 
-  STORY: the reader sees four lenses land in different places, understands that the
+  STORY: the reader sees five lenses land in different places, understands that the
   disagreement IS the finding, and goes to the tab that owns it.
 
   FIRST VIEWPORT: ticker at 28px, four lens chips in a row underneath, then the

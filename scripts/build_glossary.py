@@ -77,6 +77,12 @@ _group("trend-swing", """
     riskReward stopDistance positionShare distanceToLevel vwapDistance
     squeezePercentile volumeRatio divergenceState gapState""")
 _group("quality", "piotroski altman beneish altmanComponent beneishIndex")
+# The fifth lens, and the only group reading neither the price record nor the
+# filings. Its own chip rather than folded into `value`: a reader filtering for
+# "what the analysts think" is asking a different question from "what is it
+# worth", and the whole point of the lens is that the two are separate sources.
+_group("expectations", "revisionBreadth revisionDrift earningsSurprise "
+                       "targetDispersion consensusGrowth analystCoverage")
 _group("flow", "spread moveVsSpread yangZhangVol amihud anomalyRate qValue cusumEpisode flowBias")
 _group("value", "upside probUndervalued terminalShare discountRate valuationSpread impliedGrowth")
 _group("rank", "compositeRank signalRank signalOverlap")

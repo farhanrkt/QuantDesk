@@ -381,7 +381,7 @@ def test_the_payload_carries_no_score_weight_or_rating():
     """
     report = LA.for_synthesis("US", measurement(
         {(1, 1): 49, (1, 0): 21, (0, 1): 21, (0, 0): 9}))
-    assert set(report) == {"measuredOn", "scope", "families", "pairs",
+    assert set(report) == {"measuredOn", "scope", "families", "familyPairs", "pairs",
                            "lenses", "reading"}
 
     def keys(node):
