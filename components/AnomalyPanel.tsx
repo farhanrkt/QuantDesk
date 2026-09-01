@@ -122,6 +122,16 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
           </div>
         </CardHeader>
         <CardBody>
+          {/*
+            THE MARKS ARE DECORATIVE; THE FINDING IS IN PROSE BESIDE THEM.
+            Recharts stamps `role="img"` on every scatter symbol, so this chart
+            alone put 1,464 unlabelled images into the accessibility tree — a
+            screen reader announcing "image" fourteen hundred times, which is
+            worse than announcing nothing. Hiding the rendering is right because
+            the panel already states what it found in words; what it must NOT do
+            is hide the finding, so the summary below stays out of this subtree.
+          */}
+          <div aria-hidden="true">
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="2 4" vertical={false} />
@@ -135,6 +145,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
               <Scatter dataKey="neu" fill={NEU} shape="circle" isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
+          </div>
 
           <div className="eyebrow mt-4 mb-1">On-balance volume</div>
           <ResponsiveContainer width="100%" height={90}>

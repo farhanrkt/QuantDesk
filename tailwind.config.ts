@@ -40,7 +40,14 @@ const config: Config = {
         chalk: "#E7EEF5",     // headings and figures
         body: "#C3CFDC",      // running prose. NOT ash — this is the fix.
         ash: "#8496A9",       // genuinely secondary: units, counts, captions
-        faint: "#63748A",     // furniture: table headers, disabled
+        // LIGHTENED FROM #63748A, 1 September 2026, because it is not furniture.
+        // The ladder called it that, but `.eyebrow` uses it for every field
+        // label in the app and the footer disclaimer is set in it — twenty-one
+        // sites, most of them text a reader has to read. At #63748A it cleared
+        // 3.48 to 4.11 against the four grounds, so it failed WCAG AA (4.5)
+        // everywhere it was used. #7387A0 clears 4.52 to 5.33 while staying a
+        // clear step below `ash` at 5.48 to 6.46, so the ladder is intact.
+        faint: "#7387A0",     // furniture AND small labels — must clear AA
 
         // --- tone: the server's judgement, never chrome --------------------
         acc: "#35C4A8",

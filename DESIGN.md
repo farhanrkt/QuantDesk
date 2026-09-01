@@ -195,8 +195,27 @@ Not a conformance claim — these are the things v2 actually fixed.
   paragraphs with a heading and a close button, opened by a click. A tooltip is a
   short non-interactive label.
 - **Contrast.** Eight sites used `text-ash` at 40–70% alpha, composited to
-  2.2–3.2:1. Gone with the ladder. Base palette clears AA: `ash` on `panel` is
-  4.82:1, `body` 8.9:1.
+  2.2–3.2:1. Gone with the ladder.
+
+  **The palette is now checked rather than asserted, and the assertion was
+  wrong.** This read "Base palette clears AA: `ash` on `panel` is 4.82:1, `body`
+  8.9:1". Both figures were understated — the real ones are 5.88 and 11.30 — and
+  more to the point, the token it did not quote was the one that failed.
+  `faint` was described here as furniture, but `.eyebrow` sets every field label
+  in it and the footer disclaimer is set in it too: twenty-one sites of real
+  text, at 3.48–4.11:1 against the four grounds. Lightened to `#7387A0`, which
+  clears 4.52–5.33 and stays a clear step below `ash`.
+
+  | on | `ink` | `panel` | `raised` | `sunken` |
+  |---|---|---|---|---|
+  | `chalk` | 16.77 | 15.27 | 14.22 | 16.21 |
+  | `body` | 12.41 | 11.30 | 10.52 | 11.99 |
+  | `ash` | 6.46 | 5.88 | 5.48 | 6.25 |
+  | `faint` | 5.33 | 4.85 | 4.52 | 5.15 |
+
+  Rule 8 in `check_frontend.mjs` recomputes this table from
+  `tailwind.config.ts` on every build, so the claim cannot drift from the
+  tokens again. Contrast is arithmetic on the config and needs no browser.
 - **iOS zoom.** Inputs are 16px below `sm`. Under that, iOS zooms on focus and
   does not zoom back.
 - **Browser surfaces** are themed: selection, caret, scrollbars, focus ring.
@@ -215,13 +234,40 @@ focus style, zero positive `tabindex`, zero dangling `aria-controls`, and all
 four roving groups at exactly one tab stop. Arrow keys and Home move both
 tablists and both radiogroups.
 
-**Not done:** nobody has listened to this with a screen reader. The keyboard
-contract is implemented and measured; how it *sounds* is untested.
+**Automated audit, 1 September 2026.** axe-core, all WCAG 2.0/2.1 A and AA
+rules, run against the live page in every one of the eight tabs with a ticker
+loaded: **zero violations**, 30-48 passes per tab. Two things it found and that
+are now fixed:
+
+- **1,464 unlabelled images on one tab.** Recharts stamps `role="img"` on every
+  scatter symbol, so the anomaly chart alone put that many into the
+  accessibility tree — a screen reader announcing "image" fourteen hundred
+  times, which is worse than announcing nothing. The rendering is now
+  `aria-hidden`; the panel already states its finding in prose, and that prose
+  stays outside the hidden subtree.
+- **The text palette did not clear AA**, covered above.
+
+To repeat it: `axe-core` is a devDependency; copy `node_modules/axe-core/
+axe.min.js` into `public/`, load it from the page (the CSP allows same-origin
+scripts), and call `axe.run`. Delete it afterwards — it is a 580 KB audit tool,
+not an asset.
+
+**One false positive worth naming**, because it cost three rounds of chasing.
+`getComputedStyle` through a CDP bridge can return a *stale* value for an
+element that has just changed state, and the submit button changes from
+`disabled:bg-rule` to `bg-tech` as soon as a ticker is typed. Both axe and a
+hand-rolled contrast walker read the stale colours and reported the primary
+action at 3.05:1. It renders blue at 7.25:1 — verified against the pixels in a
+screenshot, which is the only ground truth when the two disagree.
+
+**Still not done:** nobody has listened to this with a screen reader. The
+keyboard contract is implemented and measured, the automated rules pass, and how
+it *sounds* is still untested — an automated pass is a floor, not a substitute.
 
 ## The rules are enforced, not just written
 
-`npm run check:frontend` greps the UI source for seven of them, and each
-describes a bug that was really in this codebase:
+`npm run check:frontend` enforces eight of them, and each describes a bug
+that was really in this codebase:
 
 1. A heading wearing `.eyebrow` — the inverted hierarchy.
 2. Prose at `text-micro` (11px) — caught by `leading-relaxed`, which marks a
@@ -232,7 +278,12 @@ describes a bug that was really in this codebase:
 5. A `tablist` or `radiogroup` declared without `onKeyDown` and a roving
    `tabIndex`.
 6. A coloured side stripe (`border-l-2`).
-7. Sign-based tone colouring over a documented per-file budget.
+7. Sign-based tone colouring over a documented per-file budget — in a
+   Tailwind class OR an inline style, since the first version of the rule saw
+   only the former and was hiding two real sites in `LongTermPanel` and one in
+   `EventStudyPanel`.
+8. A text token that does not clear WCAG AA against every ground, recomputed
+   from `tailwind.config.ts` rather than trusted.
 
 Comments are stripped before the greps — rule 7 fired on its own explanation the
 first time it ran, because `LongTermPanel`'s docstring quotes the expression it

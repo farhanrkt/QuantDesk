@@ -258,13 +258,61 @@ for (const [file, src] of uiFiles) {
   }
 }
 
+// 8. THE TEXT PALETTE CLEARS WCAG AA ON EVERY GROUND.
+//
+//    DESIGN.md asserted "Base palette clears AA" and quoted two ratios. Both
+//    quoted numbers were wrong (understated), and the token it did NOT quote —
+//    `faint` — cleared only 3.48 to 4.11 while being used for every `.eyebrow`
+//    field label and the footer disclaimer. Twenty-one sites of real text below
+//    the 4.5 threshold, asserted as compliant in the design doc and checked by
+//    nothing.
+//
+//    Contrast is arithmetic on the config, so it does not need a browser. This
+//    reads the palette out of tailwind.config.ts and recomputes it, which means
+//    the claim can never drift from the tokens again.
+const CONFIG = readFileSync(join(ROOT, "tailwind.config.ts"), "utf8");
+const hexOf = (name) => {
+  const m = CONFIG.match(new RegExp(`\\b${name}:\\s*"(#[0-9A-Fa-f]{6})"`));
+  return m ? m[1] : null;
+};
+const srgb = (v) => (v / 255 <= 0.03928 ? v / 255 / 12.92
+                                        : Math.pow((v / 255 + 0.055) / 1.055, 2.4));
+const luminance = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return 0.2126 * srgb((n >> 16) & 255) + 0.7152 * srgb((n >> 8) & 255)
+       + 0.0722 * srgb(n & 255);
+};
+const contrast = (a, b) => {
+  const [x, y] = [luminance(a), luminance(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+const TEXT_TOKENS = ["chalk", "body", "ash", "faint"];
+const GROUNDS = ["ink", "panel", "raised", "sunken"];
+const AA = 4.5;
+for (const token of TEXT_TOKENS) {
+  const fg = hexOf(token);
+  if (!fg) { fail("tailwind.config.ts", `Text token \`${token}\` not found.`,
+                  "The palette check reads it out of the config by name."); continue; }
+  for (const ground of GROUNDS) {
+    const bg = hexOf(ground);
+    if (!bg) continue;
+    const ratio = contrast(fg, bg);
+    if (ratio < AA) {
+      fail("tailwind.config.ts",
+           `${token} on ${ground} is ${ratio.toFixed(2)}:1, below WCAG AA ${AA}.`,
+           "Every token in the text ladder is used for text somewhere. Lighten it, "
+           + "or stop using it for text and remove it from TEXT_TOKENS with the reason.");
+    }
+  }
+}
+
 if (designFailures.length) {
   console.error("\nDesign-system rules broken (see DESIGN.md):\n");
   console.error(designFailures.join("\n\n"));
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 7 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 8 checked across ${uiFiles.length} UI files`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));
