@@ -7,6 +7,8 @@ guard-rails rather than Yahoo's uptime.
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -238,6 +240,76 @@ def test_every_lens_is_told_the_market_the_suffix_implies(client, monkeypatch):
     assert seen["valuation"] == "US"
     client.get("/api/intrinsic-value", params={"ticker": "BBCA", "market": "ID"})
     assert seen["valuation"] == "ID"
+
+
+def test_a_feed_that_declares_entities_is_refused():
+    """BILLION LAUGHS, ON A PAYLOAD THIS APP FETCHES FROM THE INTERNET.
+
+    `xml.etree.ElementTree` resolves no EXTERNAL entities, so there is no XXE —
+    a `file:///etc/passwd` entity raises rather than reads. It does expand
+    INTERNAL ones, and this parser turned a sub-400-byte three-level nest into
+    300 bytes of output with the depth chosen by the sender; a deeper nest is
+    unbounded memory inside a serverless function.
+
+    A news feed has no reason to declare a doctype, so the declaration is
+    refused before parsing rather than bounded afterwards.
+    """
+    from _lib import news
+
+    laughs = (b'<?xml version="1.0"?><!DOCTYPE lolz [<!ENTITY lol "lol">'
+              b'<!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">]>'
+              b"<rss><item><title>&lol2;</title></item></rss>")
+    external = (b'<?xml version="1.0"?><!DOCTYPE d [<!ENTITY x SYSTEM "file:///etc/passwd">]>'
+                b"<rss><item><title>&x;</title></item></rss>")
+    import xml.etree.ElementTree as ET
+    for payload in (laughs, external):
+        with pytest.raises(ET.ParseError):
+            news._parse_feed(payload)
+
+    ordinary = (b"<rss><channel><item><title>Acme beats estimates - Reuters</title>"
+                b"<link>https://example.com/a</link></item></channel></rss>")
+    assert news._parse_feed(ordinary).find(".//title").text.startswith("Acme")
+
+
+def test_the_feed_read_is_bounded():
+    """`response.read()` with no argument lets the far end choose how much memory
+    this function allocates, and a timeout does not help — a slow drip inside the
+    timeout still fills it. The cap is roughly forty times the largest real feed."""
+    from _lib import news
+
+    assert news.MAX_FEED_BYTES == 1_048_576
+    source = pathlib.Path(news.__file__).read_text()
+    assert "response.read(MAX_FEED_BYTES + 1)" in source
+    assert "raw = response.read()" not in source, "an unbounded read must not return"
+
+
+def test_the_rate_limiter_reads_the_routed_path_not_the_reconstructed_url(client):
+    """A FORGED HOST HEADER USED TO TURN THE CAP OFF ENTIRELY.
+
+    Starlette rebuilds `request.url` from the Host header without validating it
+    against the RFC 3986 host grammar, so a Host carrying a slash moves the
+    authority boundary: `Host: x/api/health?q=` on a request for `/api/rank`
+    made `request.url.path` read `/api/health` while the router still dispatched
+    `/api/rank` off the raw scope path.
+
+    Measured against this app before the fix: with a normal Host the fourth call
+    to `/api/rank` returned 429; with the forged Host every call returned 200,
+    each running a full universe scan, and forging the path onto a RATE_EXEMPT
+    route skipped the limiter altogether. The per-endpoint cap is the whole of
+    the defence here, so a bypass of it is a bypass of everything.
+
+    This pins the middleware to `scope["path"]` — the value the router itself
+    uses — so the bucket can never disagree with the endpoint that executes.
+    """
+    import index as _index
+
+    source = pathlib.Path(_index.__file__).read_text()
+    limiter = source[source.index("async def rate_limit"):]
+    limiter = limiter[:limiter.index("return await call_next")]
+    assert 'request.scope.get("path")' in limiter, (
+        "the limiter must key on the raw ASGI path")
+    assert "path = request.url.path" not in limiter, (
+        "request.url.path is forgeable through the Host header")
 
 
 def test_the_portfolio_route_also_takes_its_market_from_the_suffix(client, monkeypatch):

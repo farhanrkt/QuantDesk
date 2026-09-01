@@ -205,7 +205,27 @@ async def rate_limit(request: Request, call_next):
     To make this global, keep the same shape and move `_RATE_HITS` to Vercel KV
     or Upstash — the only thing that changes is where the deque is read from.
     """
-    path = request.url.path
+    # THE RAW ASGI PATH, NEVER `request.url.path`.
+    #
+    # Starlette rebuilds `request.url` by concatenating scheme, Host header and
+    # path and re-parsing the result, and it does not validate the Host against
+    # the RFC 3986 grammar. A Host carrying a slash moves the authority boundary,
+    # so `Host: example.com/api/health?x=` on a request for `/api/rank` yields
+    # `request.url.path == "/api/health"` while ROUTING still dispatches to
+    # `/api/rank` off the raw scope path.
+    #
+    # That is a complete bypass of this middleware, demonstrated against this app
+    # before the fix: with a normal Host the fourth call to `/api/rank` returned
+    # 429; with the forged Host every call returned 200, each one running a full
+    # universe scan. Forging the path onto a RATE_EXEMPT route skipped the
+    # limiter altogether. The cap is the whole of the defence here — see the
+    # docstring above — so a bypass of it is a bypass of everything.
+    #
+    # `scope["path"]` is the value the router itself uses, so the bucket can
+    # never disagree with the endpoint that actually executes. This holds
+    # regardless of the Starlette version (CVE fixed in 1.3.0; FastAPI 0.115
+    # pins <0.42, so the library fix is not available without a major bump).
+    path = request.scope.get("path") or request.url.path
     if request.method == "OPTIONS" or path in RATE_EXEMPT:
         return await call_next(request)
 
