@@ -1501,6 +1501,62 @@ not to, is worse than printing neither.
 
 ---
 
+## 17. Every calculation, checked against something outside this repo
+
+A full correctness pass, 1 September 2026. The rule was that no estimator is
+verified against a second copy of its own arithmetic — each was checked against
+scipy, a textbook formula written in the harness, or a planted case whose answer
+is known by construction.
+
+**Exact to 1e-9 or better.** `ols_beta` and its standard error against
+`scipy.stats.linregress`; Vasicek and Blume against their closed forms; the
+participation ratio against identity, rigid and two-block matrices; Cohen's kappa
+against the marginal definition and Kendall tau-b against `scipy.stats.kendalltau`;
+risk contributions against w(Sw)/wSw summing to one; the market-removed exposure
+beta against scipy on residualised series; RSI, ATR, MACD, MFI, CCI, Williams %R
+and Bollinger against Wilder and Lane; the DCF stream, terminal value and DDM
+against discounting by hand, with `implied_growth` shown to invert
+`dcf_implied_price`; CAGR, drawdown, downside deviation, Sharpe, Sortino, Calmar,
+VaR, CVaR, skew and kurtosis against textbook formulas; Amihud including the 1e6
+convention and Yang-Zhang against its published `k`; the binomial p-value against
+`scipy.stats.binomtest` and Benjamini-Hochberg against the step-up procedure;
+Altman Z'' end to end with its bands; Beneish end to end, where an unchanged
+company scores exactly the sum of the coefficients.
+
+**Piotroski** was planted twice: a company built to pass all nine scores 9, one
+built to fail all nine scores 0, and a company missing seven inputs scores only
+what it could measure — no free points for absent data.
+
+**The detector.** Two controls settle §14's leakage claim. Every engineered
+feature is backward-looking: detonating the last forty days changes no earlier
+feature value. And walk-forward scoring is deterministic — the same frame twice
+gives identical scores — so the earlier days keep their scores exactly when the
+future changes. The three whole-window modes do move, which is the lookahead §14
+already documents.
+
+**Live end to end.** Every indicator and risk figure in a real AAPL payload
+reproduces from a fresh fetch of the same window.
+
+### Three things that look like bugs and are not
+
+Recorded so the next audit does not re-open them.
+
+- The **stochastic returns slow %K** — fast %K smoothed by three — which is why
+  it disagrees with Williams %R computed on the same window. Both are right.
+- **Downside deviation is already annualised**, so a Sortino reference must not
+  multiply by sqrt(252) a second time.
+- **`check_data_invariants.py` nulls `ttm_dividend` deliberately** to stress the
+  fallback path, so its "resolved vs paid" gap measures the degraded route rather
+  than the shipped one. The app resolves ADRO and AKRA correctly from actual
+  payments. What the gap does say is worth keeping: where Yahoo has no dividend
+  history, the fallback can be 3.5x out, and the DDM inherits that.
+
+> Verification harnesses are throwaway and deliberately not committed — a test
+> that reimplements the thing it checks belongs in the suite, and one that
+> imports scipy to check scipy proves nothing on the next run.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
