@@ -3998,9 +3998,10 @@ def _factor_breadth(value, label=None, loaded=None, scanned=None,
     name = label or "this factor"
     heading = f"How many move with {name}"
     what = (f"The share of the names scanned whose weekly moves {name} accounts for "
-            f"enough of to be worth reporting. It calibrates a single reading: one "
-            f"stock loading on {name} means something different in an index where "
-            f"three do than in one where thirty do.")
+            f"enough of to be worth reporting, once the local market is out of both. "
+            f"It calibrates a single reading: one stock loading on {name} means "
+            f"something different in an index where three do than in one where thirty "
+            f"do.")
     if not _known(value):
         return unavailable(heading, what, "nothing in this list could be measured")
     reading = f"{_pct(value, 0)}"
@@ -4016,9 +4017,8 @@ def _factor_breadth(value, label=None, loaded=None, scanned=None,
     elif value <= 0.1:
         reading += (" A small minority, so a name that does load on it is unusual "
                     "within this list rather than typical of it.")
-    if _known(rank_correlation):
-        reading += (f" Betas on {name} persisted year to year at a rank correlation "
-                    f"of {_num(rank_correlation, 2)} over nine years.")
+    reading += (" Measured over five years with the local market removed from both "
+                "sides, so it describes what these did rather than what they will do.")
     return make(
         label=heading, what=what, reading=reading,
         action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
@@ -4031,10 +4031,10 @@ def _factor_exposure(value, label=None, r_squared=None, weeks=None,
                      rank_correlation=None, **_):
     name = label or "this factor"
     heading = f"Moves with {name}"
-    what = (f"How hard this stock's weekly moves track {name}, and how much of them "
-            f"that accounts for. Measured over the window whose year-to-year "
-            f"stability was tested, so the figure beside it says how much of this "
-            f"reading tends to survive into the next year.")
+    what = (f"How hard this stock's weekly moves track {name} once the local market "
+            f"is taken out of both, and how much of the rest that accounts for. "
+            f"Removing the market first is what separates a real exposure from a "
+            f"stock and a commodity both drifting with the same index.")
     if not _known(value):
         return unavailable(heading, what, "no material loading on this name")
 
@@ -4046,11 +4046,15 @@ def _factor_exposure(value, label=None, r_squared=None, weeks=None,
         reading += f" over {int(weeks)} weeks." if _known(weeks) else "."
     # THE HONEST QUALIFIER, and it is the point of shipping this at all. A beta
     # printed without it invites being read as next year's number.
-    if _known(rank_correlation):
-        reading += (f" Across nine years the names loading hardest on {name} in one "
-                    f"year were largely the same the next, at a rank correlation of "
-                    f"{_num(rank_correlation, 2)} — real, and weaker than the 0.50 to "
-                    f"0.65 at which correlations persist.")
+    # IT IS HISTORY, AND THE SENTENCE HAS TO SAY SO. This figure carried a
+    # persistence number for one revision, which attached a measurement of raw
+    # one-year betas to a market-removed five-year one. The persistence of what
+    # is actually shown could not be measured at this data depth — nine years
+    # holds fewer than two non-overlapping five-year blocks — so no forward
+    # claim is made and the absence is stated rather than left to be assumed.
+    reading += (" This is what happened over five years, not a forecast: whether a "
+                "loading like this one persists could not be measured from the "
+                "history available.")
     return make(
         label=heading, what=what, reading=reading,
         action=CONTEXT_NOT_TRIGGER,
@@ -4079,8 +4083,7 @@ def for_exposure_scan(result: dict) -> dict:
         loaded = [r for r in rows
                   if (r["loadings"].get(factor["key"]) or {}).get("material")]
         entry = explain("factorBreadth", len(loaded) / len(rows) if rows else None,
-                        label=factor["label"], loaded=len(loaded), scanned=len(rows),
-                        rank_correlation=factor.get("rankCorrelation"))
+                        label=factor["label"], loaded=len(loaded), scanned=len(rows))
         if entry:
             out[f"factorBreadth.{factor['key']}"] = entry
     return out
@@ -4093,8 +4096,7 @@ def for_exposure(block: dict) -> dict:
         return out
     for row in block.get("factors") or []:
         entry = explain("factorExposure", row.get("beta"), label=row.get("label"),
-                        r_squared=row.get("rSquared"), weeks=row.get("weeks"),
-                        rank_correlation=row.get("rankCorrelation"))
+                        r_squared=row.get("rSquared"), weeks=row.get("weeks"))
         if entry:
             out[f"factorExposure.{row['key']}"] = entry
     return out

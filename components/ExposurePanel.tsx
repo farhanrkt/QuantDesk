@@ -324,36 +324,35 @@ export function ExposurePanel({
                 on the list — peer baskets of miners and plantations were built for this
                 and measured worse than the traded contracts, so they are not here.
               </Note>
-              {state.data.refused.length > 0 && (
-                <Explainer summary={
-                  state.data.refused.length === 1
-                    ? `${state.data.refused[0].label} was tested and is deliberately not shown`
-                    : "Some factors were tested and are deliberately not shown"
-                }>
-                  <p>
-                    A factor is only screened on if its own year-to-year stability was
-                    measured and survived. Across nine years the names loading hardest on
-                    gold in one year were barely the same names the next, so a gold beta
-                    describes what happened rather than what is likely to keep happening.
-                  </p>
-                  <ul className="mt-2 space-y-1">
-                    {state.data.refused.map((r) => (
-                      <li key={r.key} className="text-meta text-ash">
-                        <span className="text-body">{r.label}</span> — {r.reason}
-                      </li>
-                    ))}
-                  </ul>
-                  {state.data.measuredOn && (
-                    <p className="mt-2 text-micro text-faint">
-                      Persistence measured {state.data.measuredOn}; a factor is screened
-                      on only above a rank correlation of {num(state.data.killAt ?? 0, 2)}.
-                      Price and volume only — nothing here knows what these businesses do,
-                      which is why an industrials company sitting among the miners is a
-                      question for the reader rather than an answer.
-                    </p>
-                  )}
-                </Explainer>
-              )}
+              <Explainer summary="Five years, market removed, and no claim about the next five">
+                <p>
+                  Each name is measured against each factor over five years of weekly
+                  moves, with the local index taken out of BOTH sides first. That last
+                  part is what separates a real exposure from a stock and a commodity
+                  drifting with the same market — without it a packaged-food company
+                  reads as exposed to crude, which is what an earlier version of this
+                  chart reported.
+                </p>
+                <p className="mt-2">
+                  A point is filled once its loading clears three standard errors. The
+                  floor moves with the window: the same evidence needs an R-squared of
+                  about {num(state.data.materialAt ?? 0, 2)} here, and far more over a
+                  shorter one.
+                </p>
+                <p className="mt-2">
+                  These describe what happened. Whether a loading persists was measured
+                  and could not be established — nine years of history holds fewer than
+                  two independent five-year windows, and at one year too few names clear
+                  the bar in any single year to compare one year against the next.
+                  Nothing here is a forecast, and the study that says so is stamped in
+                  the repository rather than summarised away.
+                </p>
+                <p className="mt-2 text-micro text-faint">
+                  Price and volume only — nothing here knows what these businesses do,
+                  which is why an industrials company sitting among the miners is a
+                  question for the reader rather than an answer.
+                </p>
+              </Explainer>
               {(state.data.missing ?? []).length > 0 && (
                 <p className="text-meta leading-relaxed text-ash">
                   Not measured: {(state.data.missing ?? []).join(", ")} — too few weeks of

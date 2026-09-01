@@ -216,8 +216,8 @@ export function TechnicalPanel({
                       </div>
                     </div>
                     <p className="mt-1 text-meta leading-relaxed text-ash">
-                      explains {pct(row.rSquared, 0)} of its weekly moves · these betas
-                      held year to year at {num(row.rankCorrelation, 2)}
+                      explains {pct(row.rSquared, 0)} of what is left of its weekly moves
+                      once the market is out · over {row.weeks} weeks
                     </p>
                   </div>
                 );
@@ -237,34 +237,27 @@ export function TechnicalPanel({
               // AAPL, where all four were — and a summary is the only part of a
               // closed disclosure anyone sees, so it cannot be approximately true.
               <Explainer summary={
-                (data.exposure.refused ?? []).some((r) => r.reason.includes("persistence"))
-                  ? (data.exposure.refused ?? []).length === 1
-                    ? "Gold was tested and is deliberately not shown"
-                    : `Gold is deliberately not shown, and ${(data.exposure.refused ?? []).length - 1} other${(data.exposure.refused ?? []).length === 2 ? "" : "s"} did not explain this name`
-                  : "Some factors were tested and did not explain this name"
+                `${(data.exposure.refused ?? []).length} tested factor${
+                  (data.exposure.refused ?? []).length === 1 ? "" : "s"} did not explain this name`
               }>
                 <p>
-                  A beta is only printed for factors whose own year-to-year stability
-                  was measured and survived. Gold did not: across nine years the names
-                  loading hardest on gold in one year were barely the same names the
-                  next, so a gold beta describes what happened rather than what is
-                  likely to keep happening.
+                  Every factor is tested on every name. One is listed here when it did
+                  not account for enough of this stock&apos;s movement, once the local
+                  market is taken out of both sides, to be worth a number — which is not
+                  evidence the stock is unexposed to it.
                 </p>
                 <ul className="mt-2 space-y-1">
-                  {(data.exposure.refused ?? []).map((row) => (
-                    <li key={row.key} className="text-meta text-ash">
-                      <span className="text-body">{row.label}</span> — {row.reason}
+                  {(data.exposure?.refused ?? []).map((r) => (
+                    <li key={r.key} className="text-meta text-ash">
+                      <span className="text-body">{r.label}</span> — {r.reason}
                     </li>
                   ))}
                 </ul>
-                {data.exposure.measuredOn && (
-                  <p className="mt-2 text-micro text-faint">
-                    Persistence measured {data.exposure.measuredOn}; a beta is shown
-                    only above a rank correlation of {num(data.exposure.killAt ?? 0, 2)},
-                    and only where the factor accounts for at least{" "}
-                    {pct(data.exposure.materialAt ?? 0, 0)} of this stock&apos;s movement.
-                  </p>
-                )}
+                <p className="mt-2 text-meta leading-relaxed text-ash">
+                  Estimated over five years of weekly moves. Whether a loading like this
+                  persists into the next five could not be measured from the history
+                  available, so nothing here is offered as a forecast.
+                </p>
               </Explainer>
             )}
           </CardBody>

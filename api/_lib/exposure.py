@@ -115,23 +115,41 @@ MIN_WEEKS = 40
 # real books: 0.41 (US megacaps) to 0.78 (three Indonesian banks).
 MIN_VARIANCE_SHARE = 0.35
 
-# What counts as a name actually LOADING on a factor, rather than carrying a
-# beta that is estimation noise.
+# What counts as a name actually LOADING on a factor, rather than carrying a beta
+# that is estimation noise.
 #
-# ONE CONSTANT, TWO READERS, and that is the point. `for_symbol` refuses to print
-# a beta below this, and `scripts/measure_exposure_stability.py` imports it to
-# decide which names enter the persistence measurement. If they drifted apart the
-# panel would be quoting a stability figure measured on a different population
-# than the one it prints from, which is the shape of wrong that survives review.
-MATERIAL_R2 = 0.05
+# A T-STATISTIC, NOT AN R-SQUARED, AND THE FIRST VERSION GOT THIS WRONG IN A WAY
+# THAT MADE THE WHOLE FEATURE USELESS. It shipped `MATERIAL_R2 = 0.05` shared
+# between the panel and the persistence study, with a comment congratulating
+# itself that one constant with two readers could not drift. The two readers have
+# different SAMPLE SIZES, which is precisely when a shared R-squared threshold is
+# the wrong thing to share: 0.05 is |t| = 5.0 across the study's 469 weekly
+# observations and |t| = 1.6 across the panel's 52. The panel was screening at
+# p = 0.11 and calling the survivors findings.
+#
+# Measured on the IDX30 the day this was fixed: the old floor passed ten of
+# thirty names on energy — a poultry producer, a pharmaceutical company and a
+# packaged-food company among them — where two clear a real test. The chart was
+# drawing noise and labelling it.
+#
+# A t-statistic is the thing that transfers between sample sizes, so that is what
+# is shared. Each caller converts it to whatever R-squared its own window implies.
+MATERIAL_T = 3.0
 
-# The window a single-name beta is estimated over.
+# The window a beta is estimated over.
 #
-# NOT A FREE CHOICE. It is the block length whose persistence was measured, so it
-# is the only window this app can quote a stability number for — exactly the
-# argument `portfolio.WINDOW_DAYS` makes for its own 252. A longer window would
-# give a more precise beta and no way to say whether it describes next year.
-ESTIMATION_WEEKS = 52
+# FIVE YEARS, AND THE STABILITY STUDY IS THE ARGUMENT FOR IT RATHER THAN AGAINST.
+# This was 52 weeks because that is the block length whose persistence was
+# measured, which sounded principled and produced betas too noisy to report: at
+# 52 observations a loading needs R-squared above 0.15 to clear |t| = 3, and
+# almost nothing in the IDX30 does.
+#
+# What the study actually found is that a one-year beta carries only 0.21 to 0.43
+# of itself into the next year. The response to "one year of data gives an
+# unstable estimate" is more data, not less. What this costs is stated on the
+# panel: the persistence figure was measured on one-year betas and describes the
+# lower bound of a five-year one's stability, not its own.
+ESTIMATION_WEEKS = 260
 
 STABILITY_PATH = Path(__file__).with_name("exposure_stability.json")
 
@@ -294,6 +312,24 @@ def shared_direction(weekly: pd.DataFrame) -> Optional[dict]:
     }
 
 
+def material_r2(observations: int, t: float = MATERIAL_T) -> float:
+    """The R-squared that clears `t` at this many observations.
+
+    The screen is a t-statistic; this is how each caller spends it on its own
+    window. At 52 weeks it asks for 0.15, at 260 for 0.03 — the same evidential
+    bar, which a fixed R-squared emphatically is not.
+    """
+    dof = max(1, observations - 2)
+    return float(t * t / (t * t + dof))
+
+
+def t_stat(r_squared: float, observations: int) -> float:
+    """The t-statistic a simple regression's R-squared implies."""
+    dof = max(1, observations - 2)
+    r_squared = min(max(float(r_squared), 0.0), 0.999999)
+    return float(np.sqrt(r_squared * dof / (1.0 - r_squared)))
+
+
 def _residualise(target: pd.Series, against: pd.Series) -> Optional[pd.Series]:
     """`target` with the part explained by `against` projected out."""
     paired = pd.concat([target.rename("y"), against.rename("x")], axis=1).dropna()
@@ -422,39 +458,41 @@ def load_stability(path: Path = STABILITY_PATH) -> Optional[dict]:
     return payload if isinstance(payload, dict) and payload.get("factors") else None
 
 
-def printable(stability: Optional[dict]) -> dict:
-    """Which factors cleared the gate, keyed by factor id, with their evidence.
+def persistence_context(stability: Optional[dict]) -> dict:
+    """What the stability study can and cannot say about the betas shown here.
 
-    READ FROM THE ARTIFACT, NOT HARDCODED, and that is the whole design of this
-    function. Gold failed the study at +0.21 against a 0.25 line and therefore
-    does not appear on screen. But it failed a MEASUREMENT, not a rule, so if the
-    study is re-run on more history and gold clears, it starts appearing without
-    anyone editing a list — and if energy stops clearing, it stops appearing the
-    same way.
+    IT IS CONTEXT, NOT A GATE, AND IT USED TO BE A GATE. An earlier version
+    filtered factors by their measured persistence and refused gold at +0.21
+    against a 0.25 line. That was defensible while the panel reported the same
+    quantity the study measured — raw one-year betas. It no longer does: the
+    panel reports a five-year beta with the local market removed, because the
+    one-year raw version was too noisy to be worth printing.
 
-    A hardcoded exclusion would decay into folklore the moment the artifact moved
-    underneath it, which is the failure `universes.py` carries an as-of date to
-    avoid.
+    THE PERSISTENCE OF WHAT IS NOW SHOWN CANNOT BE MEASURED AT THIS DATA DEPTH,
+    and pretending otherwise would be the error this whole feature keeps making
+    in new places. Nine years holds fewer than two non-overlapping five-year
+    blocks, and re-running the study on market-removed one-year betas produced
+    too few qualifying names per block to rank-correlate anything. Both are
+    stated rather than papered over.
 
-    Returns `{}` when the study has never been run, which is the honest state: no
-    measurement, nothing printable.
+    So nothing here is offered as a forecast. The panel reports what a stock did
+    over five years, which needs no gate — the same standing as the portfolio
+    driver label, and the same reason it ships ungated. What the study DID
+    establish, about a different quantity, is reported as exactly that.
     """
     if not stability:
-        return {}
-    kill_at = stability.get("killAt")
-    if kill_at is None:
-        return {}
-    out = {}
-    for key, block in (stability.get("factors") or {}).items():
-        found = ((block.get("all") or {}).get("persistenceWhereLoaded") or {})
-        if not found.get("usable"):
-            continue
-        rho = found.get("meanRankCorrelation")
-        if rho is None or rho < kill_at:
-            continue
-        out[key] = {"rankCorrelation": float(rho), "tStat": found.get("tStat"),
-                    "transitions": found.get("transitions")}
-    return out
+        return {"measured": False}
+    return {
+        "measured": True,
+        "measuredOn": stability.get("measuredOn"),
+        "blockWeeks": stability.get("blockWeeks"),
+        # Raw one-year betas: the quantity the study could measure.
+        "rawOneYear": {
+            key: (((block.get("all") or {}).get("persistenceAllNames") or {})
+                  .get("meanRankCorrelation"))
+            for key, block in (stability.get("factors") or {}).items()
+        },
+    }
 
 
 _SERIES_CACHE: dict[tuple[str, str], pd.Series] = {}
@@ -482,6 +520,46 @@ def _weekly_returns(symbol: str, weeks: int) -> Optional[pd.Series]:
         _SERIES_CACHE.clear()          # only ever hold the current day
     _SERIES_CACHE[key] = weekly
     return weekly.tail(weeks)
+
+
+def _fit(own: pd.Series, factor: pd.Series,
+         index_returns: Optional[pd.Series]) -> Optional[dict]:
+    """One name against one factor, with the local market taken out of BOTH.
+
+    BOTH SIDES OR NEITHER. The portfolio panel removes the index before naming
+    anything and calls it the whole design; the single-name and scan tiers
+    shipped without it and reported that a packaged-food company was exposed to
+    crude. It was not — it and crude were both moving with the Jakarta Composite,
+    and a raw beta cannot tell that from an exposure.
+
+    Stripping only the stock would be worse than stripping neither: it would
+    compare a market-free series against one that still carries the market, and
+    the surviving common factor fights the signal instead of adding to it.
+    """
+    frame = pd.concat([own.rename("y"), factor.rename("x")], axis=1).dropna()
+    if len(frame) < MIN_WEEKS:
+        return None
+    y, x = frame["y"], frame["x"]
+    if index_returns is not None:
+        stripped_y = _residualise(y, index_returns)
+        stripped_x = _residualise(x, index_returns)
+        if stripped_y is not None and stripped_x is not None:
+            pair = pd.concat([stripped_y.rename("y"), stripped_x.rename("x")],
+                             axis=1).dropna()
+            if len(pair) >= MIN_WEEKS:
+                y, x = pair["y"], pair["x"]
+    centred = x - x.mean()
+    sxx = float((centred ** 2).sum())
+    if sxx <= 0:
+        return None
+    beta = float((centred * (y - y.mean())).sum() / sxx)
+    correlation = y.corr(x)
+    if not np.isfinite(beta) or correlation is None or not np.isfinite(correlation):
+        return None
+    r_squared = float(correlation ** 2)
+    return {"beta": beta, "rSquared": r_squared, "weeks": len(y),
+            "tStat": t_stat(r_squared, len(y)) * (1.0 if beta >= 0 else -1.0),
+            "marketRemoved": index_returns is not None}
 
 
 def for_symbol(symbol: str, market_code: str = "US",
@@ -513,17 +591,10 @@ def for_symbol(symbol: str, market_code: str = "US",
     """
     market = (market_code or "US").upper()
     stability = load_stability()
-    allowed = printable(stability)
+    context = persistence_context(stability)
     considered = [r for r in REFERENCES if market in r.markets]
 
-    if not allowed:
-        return {"usable": False,
-                "reason": ("Factor betas have not been measured for persistence, so "
-                           "none may be reported as a forward-looking number."),
-                "refused": [{"key": r.key, "label": r.label, "reason": "never measured"}
-                            for r in considered],
-                "measuredOn": None}
-
+    index_returns = _weekly_returns(LOCAL_INDEX.get(market, LOCAL_INDEX["US"]), weeks)
     own = _weekly_returns(symbol, weeks)
     if own is None or len(own) < MIN_WEEKS:
         return {"usable": False,
@@ -534,39 +605,22 @@ def for_symbol(symbol: str, market_code: str = "US",
 
     rows, refused = [], []
     for reference in considered:
-        evidence = allowed.get(reference.key)
-        if evidence is None:
-            refused.append({
-                "key": reference.key, "label": reference.label,
-                "reason": "did not survive the persistence study",
-            })
-            continue
         series = _weekly_returns(reference.symbol, weeks)
         if series is None:
             refused.append({"key": reference.key, "label": reference.label,
                             "reason": "no data for the factor series"})
             continue
-        paired = pd.concat([own.rename("y"), series.rename("x")], axis=1).dropna()
-        if len(paired) < MIN_WEEKS:
+        fitted = _fit(own, series, index_returns)
+        if fitted is None:
             refused.append({"key": reference.key, "label": reference.label,
                             "reason": "too few overlapping weeks"})
             continue
-        centred = paired["x"] - paired["x"].mean()
-        sxx = float((centred ** 2).sum())
-        if sxx <= 0:
-            continue
-        beta = float((centred * (paired["y"] - paired["y"].mean())).sum() / sxx)
-        r_squared = float(paired["y"].corr(paired["x"]) ** 2)
-        if not np.isfinite(beta) or not np.isfinite(r_squared):
-            continue
-        if r_squared < MATERIAL_R2:
+        if abs(fitted["tStat"]) < MATERIAL_T:
             refused.append({"key": reference.key, "label": reference.label,
                             "reason": "no material loading on this name"})
             continue
         rows.append({"key": reference.key, "label": reference.label,
-                     "symbol": reference.symbol, "beta": beta,
-                     "rSquared": r_squared, "weeks": len(paired),
-                     "note": reference.note, **evidence})
+                     "symbol": reference.symbol, "note": reference.note, **fitted})
 
     return {
         "usable": True,
@@ -575,9 +629,9 @@ def for_symbol(symbol: str, market_code: str = "US",
         # Declaration order, never strength order — see the module docstring.
         "factors": rows,
         "refused": refused,
-        "materialAt": MATERIAL_R2,
-        "measuredOn": (stability or {}).get("measuredOn"),
-        "killAt": (stability or {}).get("killAt"),
+        "materialAt": material_r2(len(own)),
+        "materialT": MATERIAL_T,
+        "persistence": context,
     }
 
 
@@ -615,21 +669,12 @@ def scan(symbols: Sequence[str], market_code: str = "US",
     """
     market = (market_code or "US").upper()
     stability = load_stability()
-    allowed = printable(stability)
-    considered = [r for r in REFERENCES if market in r.markets]
+    context = persistence_context(stability)
+    factors = [r for r in REFERENCES if market in r.markets]
+    refused: list = []
 
-    refused = [{"key": r.key, "label": r.label,
-                "reason": "did not survive the persistence study"}
-               for r in considered if r.key not in allowed]
-    factors = [r for r in considered if r.key in allowed]
-    if not factors:
-        return {"usable": False,
-                "reason": ("No factor has a measured persistence, so none may be "
-                           "screened on."),
-                "factors": [], "refused": refused, "rows": [],
-                "measuredOn": (stability or {}).get("measuredOn")}
-
-    wanted = list(dict.fromkeys([*symbols, *(r.symbol for r in factors)]))
+    wanted = list(dict.fromkeys([*symbols, *(r.symbol for r in factors),
+                                 LOCAL_INDEX.get(market, LOCAL_INDEX["US"])]))
     end = dt.date.today()
     frames = market_data.ohlcv_batch(
         wanted, end - dt.timedelta(days=int(weeks * 9)), end)
@@ -641,6 +686,9 @@ def scan(symbols: Sequence[str], market_code: str = "US",
     closes = pd.DataFrame({s: f["Close"].astype("float64") for s, f in frames.items()})
     weekly = to_weekly(np.log(closes.sort_index() / closes.sort_index().shift(1)))
     weekly = weekly.tail(weeks)
+
+    index_symbol = LOCAL_INDEX.get(market, LOCAL_INDEX["US"])
+    index_returns = weekly[index_symbol] if index_symbol in weekly.columns else None
 
     rows, missing = [], []
     for symbol in symbols:
@@ -655,23 +703,15 @@ def scan(symbols: Sequence[str], market_code: str = "US",
         for reference in factors:
             if reference.symbol not in weekly.columns:
                 continue
-            paired = pd.concat([own.rename("y"),
-                                weekly[reference.symbol].rename("x")],
-                               axis=1).dropna()
-            if len(paired) < MIN_WEEKS:
-                continue
-            centred = paired["x"] - paired["x"].mean()
-            sxx = float((centred ** 2).sum())
-            if sxx <= 0:
-                continue
-            beta = float((centred * (paired["y"] - paired["y"].mean())).sum() / sxx)
-            r_squared = float(paired["y"].corr(paired["x"]) ** 2)
-            if not (np.isfinite(beta) and np.isfinite(r_squared)):
+            # THE SAME `_fit` THE SINGLE-NAME READ USES, market removed from both
+            # sides. Two copies of this arithmetic would eventually disagree about
+            # the same stock on the same day, which is the one thing a tab and a
+            # panel showing the same number may not do.
+            fitted = _fit(own, weekly[reference.symbol], index_returns)
+            if fitted is None:
                 continue
             loadings[reference.key] = {
-                "beta": beta, "rSquared": r_squared,
-                "material": bool(r_squared >= MATERIAL_R2),
-                "weeks": len(paired),
+                **fitted, "material": bool(abs(fitted["tStat"]) >= MATERIAL_T),
             }
         if loadings:
             rows.append({"ticker": symbol, "weeks": len(own), "loadings": loadings})
@@ -681,14 +721,15 @@ def scan(symbols: Sequence[str], market_code: str = "US",
         "reason": None if rows else "Nothing in this list had enough weekly history.",
         # Declaration order, never strength order — see the module docstring.
         "factors": [{"key": r.key, "label": r.label, "symbol": r.symbol,
-                     "note": r.note, **allowed[r.key]} for r in factors],
+                     "note": r.note} for r in factors],
         "refused": refused,
         "rows": rows,
         "missing": missing,
         "scanned": len(rows),
         "requested": len(list(symbols)),
         "weeks": weeks,
-        "materialAt": MATERIAL_R2,
-        "measuredOn": (stability or {}).get("measuredOn"),
-        "killAt": (stability or {}).get("killAt"),
+        "materialAt": material_r2(weeks),
+        "materialT": MATERIAL_T,
+        "indexSymbol": index_symbol,
+        "persistence": context,
     }

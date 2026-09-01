@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from _lib import explain as E
 from _lib import exposure
 
 DAYS = 500
@@ -238,42 +239,58 @@ def _stability(**rho) -> dict:
                 for key, value in rho.items()}}
 
 
-def test_a_factor_below_the_line_is_not_printable():
-    """THE GATE IS READ FROM THE ARTIFACT, NOT HARDCODED. Gold failed a
-    measurement, not a rule, so the exclusion has to move when the measurement
-    does — otherwise it decays into folklore the moment the study is re-run."""
-    allowed = exposure.printable(_stability(oil=0.42, copper=0.43, gold=0.21))
-    assert set(allowed) == {"oil", "copper"}
-    assert allowed["oil"]["rankCorrelation"] == pytest.approx(0.42)
+def test_persistence_is_reported_as_context_and_never_as_a_gate():
+    """IT USED TO BE A GATE, AND THE GATE WAS MEASURING A DIFFERENT QUANTITY.
 
-    # And it moves both ways: the same factor clears on a better measurement.
-    assert "gold" in exposure.printable(_stability(gold=0.31))
-
-
-def test_nothing_is_printable_without_a_study():
-    """No measurement is not the same as a measurement of zero, and the honest
-    state is that nothing may be printed as forward-looking."""
-    assert exposure.printable(None) == {}
-    assert exposure.printable({"factors": {}}) == {}
+    Factors were filtered by measured persistence and gold was refused at +0.21
+    against a 0.25 line. That held while the panel showed the same thing the
+    study measured — raw one-year betas. It now shows a five-year beta with the
+    market removed, whose persistence cannot be measured from nine years of
+    history at all, so the study is reported as what it is rather than used to
+    admit or refuse anything.
+    """
+    context = exposure.persistence_context(_stability(oil=0.42, gold=0.21))
+    assert context["measured"] is True
+    assert "gold" in context["rawOneYear"], "reported, not filtered"
+    assert exposure.persistence_context(None) == {"measured": False}
+    assert not hasattr(exposure, "printable"), "the gate must not come back"
 
 
-def test_the_shipped_artifact_refuses_gold_and_allows_the_other_three():
-    """Against the REAL stamped file, so this fails if the study is re-run and
-    its conclusion moves without anyone noticing."""
-    allowed = exposure.printable(exposure.load_stability())
-    assert "gold" not in allowed, "gold read +0.21 against a 0.25 line"
-    assert {"oil", "copper", "dollar"} <= set(allowed)
+def test_the_reading_says_it_is_history_rather_than_a_forecast():
+    """The claim shrank when the quantity changed, and the words have to follow.
+    Without this the panel prints a five-year beta in the tone of a prediction
+    nothing measured."""
+    reading = E.explain("factorExposure", 0.62, label="copper",
+                        r_squared=0.21, weeks=260)["reading"]
+    assert "not a forecast" in reading
+    assert "could not be measured" in reading
 
 
 def _planted(monkeypatch, beta: float, noise_scale: float = 0.004) -> None:
-    """`market_data.ohlcv` returning a factor and a stock built on it."""
+    """A factor, an INDEPENDENT market, and a stock built on the factor.
+
+    THE MARKET HAS TO BE ITS OWN SERIES. An earlier fixture returned the factor
+    for anything starting with `^`, so the index and the factor were the same
+    thing — and once the engine started removing the market from both sides, that
+    removed the entire planted relationship. The fixture was asserting against a
+    world where "the market" and "the exposure" are indistinguishable, which is
+    exactly the confusion the market removal exists to resolve.
+    """
     rng = np.random.default_rng(77)
-    factor = rng.normal(0.0, 0.02, 400)
-    own = beta * factor + rng.normal(0.0, noise_scale, 400)
-    index = pd.bdate_range("2024-01-01", periods=400)
+    factor = rng.normal(0.0, 0.02, 1400)
+    market = rng.normal(0.0, 0.011, 1400)
+    own = beta * factor + rng.normal(0.0, noise_scale, 1400)
+    index = pd.bdate_range("2020-01-01", periods=1400)
+
+    # KEYED ON THE ACTUAL SYMBOL SET, not on a substring. Testing for "=" looked
+    # like it caught every factor and misses DX-Y.NYB, which has no equals sign —
+    # so the dollar series silently became the stock itself and read as a perfect
+    # loading. The fixture was manufacturing the finding it was meant to refute.
+    factor_symbols = {r.symbol for r in exposure.REFERENCES}
 
     def fake(symbol, **_):
-        source = factor if ("=" in symbol or symbol.startswith("^")) else own
+        source = (market if symbol.startswith("^")
+                  else factor if symbol in factor_symbols else own)
         close = 100.0 * np.exp(np.cumsum(source))
         return pd.DataFrame({"Open": close, "High": close, "Low": close,
                              "Close": close, "Volume": 1e6}, index=index)
@@ -287,8 +304,6 @@ def test_the_beta_recovers_a_planted_one(monkeypatch):
     must come back at 0.60, against arithmetic the test did not borrow from the
     module."""
     _planted(monkeypatch, beta=0.60)
-    monkeypatch.setattr(exposure, "load_stability",
-                        lambda *a, **k: _stability(oil=0.42, copper=0.43, dollar=0.34))
     result = exposure.for_symbol("TEST", "US")
 
     assert result["usable"]
@@ -299,8 +314,8 @@ def test_the_beta_recovers_a_planted_one(monkeypatch):
     # for is b^2 s_f^2 / (b^2 s_f^2 + s_e^2) = 0.0144 / 0.0160 = 0.90.
     expected = (0.60 ** 2 * 0.020 ** 2) / (0.60 ** 2 * 0.020 ** 2 + 0.004 ** 2)
     assert by_key["oil"]["rSquared"] == pytest.approx(expected, abs=0.05)
-    assert by_key["oil"]["rankCorrelation"] == pytest.approx(0.42), (
-        "the printed beta carries the persistence that licensed it")
+    assert by_key["oil"]["marketRemoved"] is True, (
+        "the market comes out of both sides before anything is reported")
 
 
 def test_a_name_with_no_material_loading_is_refused_by_name(monkeypatch):
@@ -308,33 +323,51 @@ def test_a_name_with_no_material_loading_is_refused_by_name(monkeypatch):
     reported as refused with its reason, not dropped — an empty section reads as
     'no exposure' and this one has to say which question was asked."""
     _planted(monkeypatch, beta=0.0, noise_scale=0.02)
-    monkeypatch.setattr(exposure, "load_stability",
-                        lambda *a, **k: _stability(oil=0.42))
     result = exposure.for_symbol("TEST", "US")
 
     assert result["factors"] == []
     reasons = {row["key"]: row["reason"] for row in result["refused"]}
     assert reasons["oil"] == "no material loading on this name"
-    assert reasons["gold"] == "did not survive the persistence study"
+    assert set(reasons) == {"gold", "oil", "copper", "dollar"}, (
+        "every factor tested and found absent is named, none silently dropped")
 
 
-def test_the_estimation_window_is_the_one_whose_stability_was_measured():
-    """Not a free choice, and the same argument `portfolio.WINDOW_DAYS` makes.
-    A longer window would give a more precise beta and no way to say whether it
-    describes next year."""
-    assert exposure.ESTIMATION_WEEKS == 52
+def test_the_estimation_window_is_five_years_not_one():
+    """52 weeks sounded principled — it matched the study's block length — and
+    produced betas too noisy to report: at 52 observations a loading needs
+    R-squared above 0.15 to clear |t| = 3, and almost nothing in the IDX30 does.
+    Measured on the day this changed, the old settings passed ten of thirty names
+    on energy including a poultry producer and a pharmaceutical company.
+    """
+    assert exposure.ESTIMATION_WEEKS == 260
     stamped = exposure.load_stability()
-    assert stamped["blockWeeks"] == exposure.ESTIMATION_WEEKS
+    assert exposure.ESTIMATION_WEEKS > stamped["blockWeeks"], (
+        "and it is deliberately longer than what the study could measure")
 
 
-def test_the_material_screen_is_one_constant_shared_with_the_study():
-    """The population measured has to be the population printed from. Two copies
-    would drift and the panel would quote a stability figure measured on names it
-    does not print for — both numbers individually correct, the pairing wrong."""
+def test_the_screen_shares_a_t_statistic_and_not_an_r_squared():
+    """THE BUG THIS REPLACED, PINNED. An earlier version shared `MATERIAL_R2`
+    between the panel and the study so the two "could not drift" — but they
+    measure over different window lengths, and a fixed R-squared is a different
+    evidential bar at each. 0.05 is |t| = 5.0 over the study's 469 observations
+    and |t| = 1.6 over the panel's 52, so the panel screened at p = 0.11 and
+    called the survivors findings.
+
+    A t-statistic is what transfers between sample sizes. Each window converts it
+    to its own R-squared, and those numbers are SUPPOSED to differ.
+    """
+    assert exposure.material_r2(52) == pytest.approx(0.153, abs=0.005)
+    assert exposure.material_r2(469) == pytest.approx(0.019, abs=0.005)
+    assert exposure.material_r2(52) > exposure.material_r2(469), (
+        "a shorter window must demand a LARGER R-squared for the same evidence")
+
     source = (pathlib.Path(__file__).resolve().parents[1]
               / "scripts" / "measure_exposure_stability.py").read_text()
-    assert "MATERIAL_R2 = exposure.MATERIAL_R2" in source
-    assert "MATERIAL_R2 = 0.05" not in source, "the study must not redeclare it"
+    assert "exposure.material_r2(BLOCK_WEEKS)" in source
+    # The comment above it is allowed to NAME the old constant while explaining
+    # why it went; what must not come back is an assignment from it.
+    assert "= exposure.MATERIAL_R2" not in source, "the fixed-R2 share must not return"
+    assert not hasattr(exposure, "MATERIAL_R2"), "and the constant itself is gone"
 
 
 # --------------------------------------------------------------------------- #
@@ -352,7 +385,11 @@ def _scan_frames(monkeypatch, exposed: list, flat: list) -> None:
                              "Close": close, "Volume": 1e6}, index=index)
 
     frames = {"CL=F": frame(factor), "HG=F": frame(rng.normal(0, 0.02, 400)),
-              "DX-Y.NYB": frame(rng.normal(0, 0.02, 400))}
+              "GC=F": frame(rng.normal(0, 0.02, 400)),
+              "DX-Y.NYB": frame(rng.normal(0, 0.02, 400)),
+              # An independent market, for the same reason `_planted` needs one.
+              "^GSPC": frame(rng.normal(0, 0.011, 400)),
+              "^JKSE": frame(rng.normal(0, 0.011, 400))}
     for name in exposed:
         frames[name] = frame(0.9 * factor + rng.normal(0, 0.005, 400))
     for name in flat:
@@ -392,15 +429,20 @@ def test_names_below_the_floor_stay_in_the_result(monkeypatch):
     assert len(quiet) == 3, "and they are marked, not dropped"
 
 
-def test_the_scan_names_the_factor_it_refused(monkeypatch):
-    """Gold is absent from every chart because it failed a measurement. An absent
-    factor with no explanation reads as one nobody thought of."""
+def test_every_factor_is_offered_now_that_none_is_gated(monkeypatch):
+    """The persistence gate is gone, so a factor is present unless its DATA is.
+
+    Gold used to be refused for failing a study that measured raw one-year betas
+    — a different quantity from the five-year market-removed one shown here. Over
+    five years with the market out, gold picks out exactly the two Indonesian
+    gold miners, which is the result that made keeping it out indefensible.
+    """
     _scan_frames(monkeypatch, ["AAA"], ["BBB", "CCC"])
     result = exposure.scan(["AAA", "BBB", "CCC"], "US")
 
-    assert [r["key"] for r in result["refused"]] == ["gold"]
-    assert "persistence" in result["refused"][0]["reason"]
-    assert "gold" not in {f["key"] for f in result["factors"]}
+    assert {f["key"] for f in result["factors"]} == {"gold", "oil", "copper", "dollar"}
+    assert result["refused"] == []
+    assert result["persistence"]["measured"] is True, "reported, not used to filter"
 
 
 def test_a_name_with_no_history_is_reported_missing_not_dropped(monkeypatch):
@@ -418,8 +460,8 @@ def test_the_scan_and_the_single_name_read_share_one_material_screen(monkeypatch
     """A name the scan calls material must be one `for_symbol` will print, or the
     tab and the Trend line would disagree about the same stock on the same day."""
     _scan_frames(monkeypatch, ["AAA"], ["BBB"])
-    monkeypatch.setattr(exposure.market_data, "ohlcv",
-                        lambda symbol, **k: exposure.market_data.ohlcv_batch([], None, None)[symbol])
+    batch = exposure.market_data.ohlcv_batch([], None, None)
+    monkeypatch.setattr(exposure.market_data, "ohlcv", lambda symbol, **k: batch[symbol])
     exposure._SERIES_CACHE.clear()
     scanned = exposure.scan(["AAA", "BBB"], "US")
     by_ticker = {r["ticker"]: r for r in scanned["rows"]}

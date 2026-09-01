@@ -584,14 +584,16 @@ export interface TechnicalResponse {
     weeks?: number;
     /** Declaration order, never strength order. */
     factors?: { key: string; label: string; symbol: string; beta: number;
-                rSquared: number; weeks: number; note: string;
-                rankCorrelation: number; tStat: number | null;
-                transitions: number }[];
+                rSquared: number; tStat: number; weeks: number; note: string;
+                marketRemoved: boolean }[];
     /** Tested and declined, with why. An empty section is not "no exposure". */
     refused?: { key: string; label: string; reason: string }[];
     materialAt?: number;
-    measuredOn?: string | null;
-    killAt?: number | null;
+    materialT?: number;
+    /** What the stability study can and cannot say — context, never a gate. */
+    persistence?: { measured: boolean; measuredOn?: string | null;
+                    blockWeeks?: number;
+                    rawOneYear?: Record<string, number | null> };
     explain?: ExplainMap;
   };
   latest: { date: string; close: number; change: number; changePct: number;
@@ -1025,7 +1027,8 @@ export interface RankValidation {
  * cross-section and lets the reader place a name in it.
  */
 export interface ExposureLoading {
-  beta: number; rSquared: number; material: boolean; weeks: number;
+  beta: number; rSquared: number; tStat: number; material: boolean;
+  weeks: number; marketRemoved: boolean;
 }
 
 export interface ExposureRow {
@@ -1039,9 +1042,7 @@ export interface ExposureScanResponse {
   usable: boolean;
   reason?: string | null;
   /** Declaration order, never strength order. */
-  factors: { key: string; label: string; symbol: string; note: string;
-             rankCorrelation: number; tStat: number | null;
-             transitions: number }[];
+  factors: { key: string; label: string; symbol: string; note: string }[];
   /** Tested and declined, with why — an absent factor is never silently absent. */
   refused: { key: string; label: string; reason: string }[];
   rows: ExposureRow[];
@@ -1050,7 +1051,10 @@ export interface ExposureScanResponse {
   requested?: number;
   weeks?: number;
   materialAt?: number;
-  measuredOn?: string | null;
-  killAt?: number | null;
+  materialT?: number;
+  indexSymbol?: string;
+  persistence?: { measured: boolean; measuredOn?: string | null;
+                  blockWeeks?: number;
+                  rawOneYear?: Record<string, number | null> };
   explain?: ExplainMap;
 }

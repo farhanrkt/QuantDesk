@@ -1429,19 +1429,26 @@ the future and it is the situation a panel is actually in: it prints a beta
 because it sees a loading now, and the question is whether the loading is still
 there next year. Both arms are stamped.
 
-| Factor | Where loaded | t | All names | Clears 0.25? |
-|---|---|---|---|---|
-| Gold | +0.21 | +2.1 | +0.02 | **no** |
-| Energy | +0.42 | +3.6 | +0.21 | yes |
-| Copper | +0.43 | +7.8 | +0.37 | yes |
-| The dollar | +0.34 | +2.9 | +0.26 | yes |
+**Superseded 1 September 2026, and the correction is the interesting part.**
+The first run screened names with a fixed R-squared of 0.05 shared with the
+panel, and measured RAW betas. Both were wrong in the same way: an R-squared is
+a different evidential bar at every sample size — 0.05 is |t| = 5.0 over 469
+weekly observations and |t| = 1.6 over 52 — and the panel does not report raw
+betas, it removes the local market from both sides first.
 
-The line was set at 0.25 before the numbers were seen, because choosing it
-afterwards would be choosing whether the feature ships. Three of four clear it,
-and **every one sits below the 0.50-0.65 at which pairwise correlations
-persist**. So a printed exposure beta is a weaker claim than a printed
-correlation and must carry its own number; gold may not be printed as a
-forward-looking figure at all.
+Re-run on what the panel actually shows, **persistence cannot be measured at
+all**: with the market removed and a real significance screen, fewer than ten
+names per 52-week block carry a loading, which is too few to rank-correlate one
+year against the next. Nine years also holds fewer than two independent
+five-year windows, which is the window the panel now uses.
+
+So the stamped headline is a null: *exposure beta persistence could not be
+measured, so nothing in this app may print a forward-looking factor beta.* The
+panel prints none. What it shows is five years of history, labelled as history,
+which needs no gate for the same reason the portfolio driver label needed none.
+
+The measurement that gated nothing still earned its place: it is why the feature
+does not claim a forecast.
 
 ### The up/down gap does not persist, which is the clearest null here
 

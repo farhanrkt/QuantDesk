@@ -133,15 +133,19 @@ MIN_WEEKS_IN_BLOCK = 40
 # Same floor as the correlation study's MIN_NAMES and for the same reason.
 MIN_NAMES = 10
 
-# What counts as a name actually LOADING on a factor, rather than carrying a beta
-# that is estimation noise.
+# What counts as a name actually LOADING on a factor here.
 #
-# IMPORTED, NOT REDECLARED. `exposure.for_symbol` refuses to print a beta below
-# this, so the population measured here has to be the population printed from. A
-# second copy would drift and the panel would quote a stability figure measured
-# on names it does not print for — which is the shape of wrong that survives
-# review, because both numbers stay individually correct.
-MATERIAL_R2 = exposure.MATERIAL_R2
+# THE T-STATISTIC IS SHARED, THE R-SQUARED IS NOT, and the difference is the bug
+# this replaced. An earlier version imported `exposure.MATERIAL_R2` so the two
+# could not drift — but the panel and this script measure over different window
+# lengths, and a fixed R-squared means a different evidential bar at each. 0.05
+# is |t| = 1.6 over a 52-week window and |t| = 5.0 over 469 weeks: the same
+# number, screening at p = 0.11 in one place and p < 0.001 in the other. Sharing
+# it guaranteed the two agreed on a figure while disagreeing about its meaning.
+#
+# `exposure.material_r2` converts the shared t into whatever R-squared THIS
+# window implies, which is the thing that actually transfers.
+MATERIAL_R2 = exposure.material_r2(BLOCK_WEEKS)
 
 # Fetch in chunks with a pause. yfinance throttles a caller that asks for two
 # hundred symbols in quick succession, and a throttled response is not an error
@@ -167,6 +171,46 @@ def _blocks(returns: pd.DataFrame, size: int = BLOCK_WEEKS) -> list:
     """Consecutive non-overlapping windows, most recent last, whole ones only."""
     out = [returns.iloc[i:i + size] for i in range(0, len(returns) - size + 1, size)]
     return [b for b in out if len(b) == size]
+
+
+def _residual(series: pd.Series, index_returns: pd.Series) -> pd.Series:
+    """`series` with its own market projected out."""
+    paired = pd.concat([series.rename("y"), index_returns.rename("x")],
+                       axis=1).dropna()
+    if len(paired) < MIN_WEEKS_IN_BLOCK:
+        return series
+    design = np.column_stack([np.ones(len(paired)), paired["x"].to_numpy("float64")])
+    try:
+        coefficients, *_ = np.linalg.lstsq(design, paired["y"].to_numpy("float64"),
+                                           rcond=None)
+    except np.linalg.LinAlgError:
+        return series
+    return pd.Series(paired["y"].to_numpy("float64") - design @ coefficients,
+                     index=paired.index)
+
+
+def market_free(weekly: pd.DataFrame, markets: dict, indices: dict) -> pd.DataFrame:
+    """Every column with its OWN market removed, names and factors alike.
+
+    MEASURED ON WHAT SHIPS, and an earlier version was not. `exposure._fit`
+    removes the local index from both sides before it reports a beta; this script
+    regressed the raw series, so the stamped persistence described a quantity the
+    panel does not display. That is the same class of error as sharing a fixed
+    R-squared across two window lengths — a number correct in isolation, attached
+    to the wrong thing.
+
+    Each name is stripped against its own market, and each factor is stripped
+    once per market, because a factor residualised against the Jakarta Composite
+    is not the series an American name should be measured against.
+    """
+    out = {}
+    for column in weekly.columns:
+        market = markets.get(column)
+        if market is None or market not in indices:
+            continue
+        index_returns = weekly[indices[market]]
+        out[column] = _residual(weekly[column], index_returns)
+    return pd.DataFrame(out)
 
 
 def _beta(y: pd.Series, x: pd.Series) -> float:
@@ -574,8 +618,22 @@ def main() -> int:
         print("\nNothing measurable. Nothing written.")
         return 1
 
-    weekly = _weekly(frames)
-    factor_weekly = _weekly(factor_frames)
+    weekly_raw = _weekly(frames)
+    factor_weekly_raw = _weekly(factor_frames)
+
+    # THE MARKET COMES OUT OF BOTH SIDES, because that is what `exposure._fit`
+    # reports. Names take their own market; each factor is stripped once per
+    # market and the per-market copy is used against the names of that market.
+    indices = {"US": exposure.LOCAL_INDEX["US"], "ID": exposure.LOCAL_INDEX["ID"]}
+    joined = pd.concat([weekly_raw, factor_weekly_raw], axis=1)
+    joined = joined.loc[:, ~joined.columns.duplicated(keep="first")]
+    name_market = {n: ("ID" if n in idx_names else "US") for n in weekly_raw.columns}
+    weekly = market_free(joined, name_market, indices)
+    factor_weekly = {
+        market: market_free(
+            joined, {c: market for c in factor_weekly_raw.columns}, indices)
+        for market in ("US", "ID")
+    }
     closes = pd.DataFrame({s: f["Close"].astype("float64") for s, f in frames.items()})
     daily = np.log(closes.sort_index() / closes.sort_index().shift(1))
     factor_closes = pd.DataFrame({s: f["Close"].astype("float64")
@@ -604,14 +662,23 @@ def main() -> int:
     results: dict = {}
     for reference in exposure.REFERENCES:
         symbol = reference.symbol
-        if symbol not in factor_weekly.columns:
+        if symbol not in factor_weekly["ID"].columns:
             print(f"  {reference.label}: no data")
             continue
-        series = factor_weekly[symbol]
+        # A tier is single-market except "all" and the resource splits; those
+        # take the ID copy, since the resource names are Indonesian and the
+        # mixed tier is dominated by whichever market has more names in it.
+        def factor_for(tier_name: str, sym: str = symbol) -> pd.Series:
+            # `sym` bound as a default: closing over the loop variable would make
+            # every tier read the last factor's series once the loop moved on.
+            market = "US" if tier_name.startswith("US") else "ID"
+            return factor_weekly[market][sym]
+
+        series = factor_weekly["ID"][symbol]
         print(f"  {reference.label} ({symbol})")
         block: dict = {}
         for tier, members in tiers.items():
-            table, fits = _beta_table(weekly, series, members)
+            table, fits = _beta_table(weekly, factor_for(tier), members)
             unconditional = persistence(table)
             loaded = persistence(table, r_squared=fits)
             block[tier] = {"names": len(members),
@@ -631,8 +698,12 @@ def main() -> int:
 
         block["stress"] = stress(weekly, series, tiers["all"])
         block["asymmetry"] = asymmetry(weekly, series, tiers["all"])
+        # RAW, deliberately: this compares SAMPLING intervals, and removing the
+        # market from a daily and a weekly series alike would change both halves
+        # of the comparison without changing what it answers.
         block["frequency"] = frequency(
-            daily, factor_daily[symbol], weekly, series, tiers["all"])
+            daily, factor_daily[symbol], weekly_raw, factor_weekly_raw[symbol],
+            tiers["all"])
         if block["stress"]["usable"]:
             s = block["stress"]
             print(f"    {'stress':20} worst blocks R2 {s['worstBlocksRSquared']:.3f} "
