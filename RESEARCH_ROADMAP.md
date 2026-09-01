@@ -1415,22 +1415,22 @@ behind: do this year's betas describe next year's? Nine years, 475 weeks, nine
 52-week blocks, **eight transitions** across 157 names — comparable to the six
 the correlation study got, so the two can be read against each other.
 
-**The unconditional measurement mostly measures whether noise persists, and
-finding that out changed the answer.** Run across every name it asks whether
-AAPL's gold beta this year predicts AAPL's gold beta next year, and AAPL has no
-gold exposure, so both are estimation error and the honest answer is no — gold
-read **+0.03 across 157 names**. §11's correlation study never had this problem
-because every *pair* of stocks has a real correlation; not every stock has a real
-factor loading.
+**Measuring across every name mostly measures whether noise persists.** It asks
+whether AAPL's gold beta this year predicts AAPL's gold beta next year, and AAPL
+has no gold exposure, so both are estimation error and the honest answer is no.
+§11's correlation study never had this problem because every *pair* of stocks has
+a real correlation; not every stock has a real factor loading. So the arm that
+would decide anything conditions on a material loading **in the first block of
+each transition**, tested into the second — no information from the future, and
+the situation a panel is actually in.
 
-So the measurement that decides conditions on a material loading **in the first
-block of each transition**, tested into the second. That uses no information from
-the future and it is the situation a panel is actually in: it prints a beta
-because it sees a loading now, and the question is whether the loading is still
-there next year. Both arms are stamped.
+*Every figure below is from the run stamped 1 September 2026. An earlier run,
+described next, produced different numbers and is superseded.* Across all names
+the four factors read **+0.07 gold, +0.20 energy, +0.13 copper, +0.08 dollar**;
+conditioned on a loading, none of them is measurable at all.
 
-**Superseded 1 September 2026, and the correction is the interesting part.**
-The first run screened names with a fixed R-squared of 0.05 shared with the
+**What the first run got wrong, and it is the interesting part.**
+It screened names with a fixed R-squared of 0.05 shared with the
 panel, and measured RAW betas. Both were wrong in the same way: an R-squared is
 a different evidential bar at every sample size — 0.05 is |t| = 5.0 over 469
 weekly observations and |t| = 1.6 over 52 — and the panel does not report raw

@@ -354,7 +354,7 @@ every run, and until now nothing had checked it.
 The check is Cohen's κ between the two families' actual verdicts across 168 names in four index
 universes, because raw agreement is uninterpretable: a lens calling 70% of companies cheap and
 one calling 70% sound land on the same label **58% of the time while sharing nothing at all**.
-Chance-corrected, price and filings come out at **κ = +0.03 (US +0.05, IDX +0.10)**, on
+Chance-corrected, price and filings come out at **κ = +0.03 (US +0.05, IDX +0.09)**, on
 intervals that straddle zero in all three. **The claim survives** — measured now, not asserted,
 and the sentence on the panel is written from whichever way the number came out.
 

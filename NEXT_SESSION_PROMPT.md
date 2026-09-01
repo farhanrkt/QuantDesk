@@ -43,7 +43,7 @@ re-deriving the reasoning.
   §15     THE CLAIM THE APP MAKES LOUDEST, MEASURED. The confluence rail asserts
           four lenses rest on two INDEPENDENT bodies of data. Nothing had
           checked it. Cohen's kappa between the two families' verdicts across
-          168 names in four universes: κ = +0.03 (US +0.05, IDX +0.10), every
+          168 names in four universes: κ = +0.03 (US +0.05, IDX +0.09), every
           interval straddling zero — so the claim is earned. The surprise was
           that Flow and Trend, the pair collapsed into ONE vote because they
           read the same series, also agree at κ = +0.03. The grouping was left
