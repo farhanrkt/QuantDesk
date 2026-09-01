@@ -1763,14 +1763,26 @@ be worth recording:
 
 | | evaluable | fires on | |
 |---|---|---|---|
-| US (Dow + Nasdaq-100) | 118 of 122 | **17.8%** | shown as a flag |
-| IDX (IDX30 + LQ45) | **29** of 46 | 34.5% | **withheld — below the sample floor** |
+| US (Dow + Nasdaq-100) | 118 of 122 | **17.8%** | market rate used |
+| IDX (IDX30 + LQ45) | **29** of 46 | 34.5% | **unusable — one name short of the floor** |
+| Combined | 147 of 168 | **21.1%** | the fallback the IDX uses |
 
 The US rate is comfortably under `BASE_RATE_MAX`, so it renders as a genuine flag rather
-than being demoted to a base condition. On the IDX it is withheld entirely, because 29
-evaluable names is one short of `MIN_CALIBRATION_SAMPLE`. An Indonesian company therefore
-sees this condition listed under "withheld for want of a base rate" — which is the rule §7
-established doing exactly what it was built to do, one name from the boundary.
+than being demoted to a base condition.
+
+The IDX rate is *not* usable: 29 evaluable names is one short of
+`MIN_CALIBRATION_SAMPLE`. **The check is not withheld, though** — `_rate_for` falls back
+to the combined rate, so an Indonesian company sees the flag quoted against the four
+universes together: *"Fires on 21% of four index universes, measured across 147 companies;
+a further 21 could not be tested at all."* That is the designed behaviour and the sentence
+names the group it is a percentage of, which is the whole contract `scope` exists to keep.
+
+**This paragraph originally claimed the check was withheld on the IDX.** It was written
+from the calibration script's own summary line, which reports per-market usability and
+says nothing about the fallback. Running an Indonesian ticker through the assembled panel
+is what showed the flag rendering. A doc that contradicts the code is worse than no doc,
+and the failure mode is worth recording: the summary of a measurement is not the same
+artifact as the behaviour it feeds.
 
 **Two different coverage numbers are both true and should not be conflated.** The lens reads
 on 96% of IDX names; the *check* is evaluable on 63% of them. The gap is the QUIET and THIN
