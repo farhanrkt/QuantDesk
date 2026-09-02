@@ -1568,6 +1568,7 @@ Recorded so the next audit does not re-open them.
 | IDX fundamentals curation | The durable moat, and the largest single effort |
 | Single-name exposure betas | §16 ships the portfolio half, which is descriptive. "This stock moves 0.7x as hard as its sector" invites forward use, so it is gated on a stability study — do this period's betas predict next period's — mirroring `measure_correlation_stability.py`. A four-year probe gives year-over-year rank correlations of +0.29 to +0.66, inside the band that licensed the portfolio feature, on three transitions where that study had six. Eight blocks are available; MBMA, NCKL and TAPG cannot supply them and must be excluded by name rather than quietly run on fewer |
 | Fundamental exposure — revenue against commodity prices | **Rejected on feasibility, not deferred.** `market_data` fetches annual statements only, five columns, and yfinance's quarterlies for these names return five or six with gaps — ADRO and PTBA are both missing 2025-09-30. Five irregular observations is not a weak estimate, it is not an estimate. Consequence: the reverse DCF's implied growth cannot be restated as an implied commodity path |
+| Headline sentiment as a volatility feature | **Gated, and the gate is data.** Not the shipped reading rejected below, but the narrower question of whether headline tone adds anything to a price-only volatility baseline out-of-sample. `news.py` is a five-item live RSS feed with no date range, so there is no history to measure on and nothing starts until there is. Protocol, scope limit and the ways it may not ship are below |
 
 **Corrected while writing this:** README quoted the price-implied growth rate moving across
 "24% to 42%" over a range of discount rates, in a sentence that read as something the app
@@ -1577,8 +1578,115 @@ sentence now says what the panel actually does, which is to state the conditiona
 at the editable input.
 
 **Explicitly rejected:** calendar effects (January, Halloween) — precisely where the
-multiple-testing critique bites hardest; headline sentiment — Loughran-McDonald is the right
-lexicon but Tetlock's results used full article text, and LM does not cover Indonesian.
+multiple-testing critique bites hardest; headline sentiment **as a reading on the page** —
+Loughran-McDonald is the right lexicon but Tetlock's results used full article text, and LM
+does not cover Indonesian.
+
+That rejection is unchanged and nothing below softens it. What it never addressed is a
+narrower question with a different answer available — whether headline tone carries anything
+measurable about *volatility* over a baseline built from price alone. The section below
+records what would have to be true before that could be asked, so the idea arrives with its
+gate attached rather than as a feature request.
+
+## Not started: headline sentiment, and the measurement that would reopen it
+
+**Nothing in this section has been measured.** Every numbered section above records work that
+ran; this one records a protocol and the reason it has not started, and it is here rather than
+as §18 because this document's header promises that a numbered section is in the codebase.
+
+**The question, stated narrowly enough to be answerable.** Not "does sentiment predict the
+stock". Does a daily aggregate of headline tone improve an out-of-sample forecast of realised
+volatility, *over a baseline built from price alone* — where the baseline is not a strawman.
+
+**Why volatility and not direction.** Direction is where this app already has its null: the
+composite ranking's information coefficient was indistinguishable from zero across 24 tests
+(§11), and `backtest_results.json` publishes it. Volatility is genuinely more forecastable than
+returns, and that cuts the other way from how it is usually pitched — it makes a positive
+result *cheap*, and therefore easy to overstate. A model that beats no baseline at forecasting
+volatility has discovered that volatility clusters, which was known in 1982.
+
+**So the benchmark is HAR-RV, and this is the whole methodological point.** Corsi's
+heterogeneous autoregressive model regresses realised volatility on its own daily, weekly and
+monthly averages. It is three ordinary-least-squares terms, it needs nothing this repo does not
+already compute, and it is the standard against which volatility forecasts are reported. The
+only publishable quantity is the **incremental out-of-sample R² of sentiment over HAR-RV**, per
+market, with an interval. Not accuracy, not a hit rate, not a classification of "high" versus
+"low" volatility — a threshold on a continuous target is a free parameter, and §7 is a section
+about what happens when a flag is quoted without the base rate underneath it.
+
+If the increment does not exclude zero, **that is the result and it ships as one.** This is the
+sixth artifact or it is nothing; there is no version of this that ships as a feature on the
+strength of an unpublished measurement.
+
+### Three blockers, in the order they bite
+
+**1. There is no history to measure on.** `news.py` fetches Google News RSS with `MAX_ITEMS = 5`
+and no date parameter — it returns what is current, not what was said. Nothing in this repo, and
+no free ticker-level source, supplies the dated 2018–2024 headline archive the measurement
+needs. **This is the gate.** It is not a difficulty to work around while building; everything
+below is contingent on it, and an aggregate built from whatever the live feed happens to return
+would be a measurement of last week wearing a backtest's name.
+
+**2. FinBERT cannot run in the deployment, which settles the shape rather than killing it.**
+`requirements.txt` is numpy, pandas, scipy, scikit-learn and yfinance; FinBERT needs torch and
+transformers, against Vercel's 250 MB unzipped function limit and the single `api/index.py` at
+`maxDuration: 60`. `PRODUCT.md` constraint 6 is one data module and one serverless function.
+This is not fatal — scoring belongs offline in `scripts/`, outside CI, exactly like the five
+measurements that already work this way — but it does decide the answer to a question worth
+settling early: whatever comes of this is **a stamped artifact, never per-request inference**.
+
+**3. It is English-only, on a two-market app.** §15 already had to report lens coverage per
+market because a blended figure would have described neither. The same gap bites harder here:
+FinBERT is trained on English financial text, and `news.py` already localises its query to
+Indonesian for `.JK` symbols. A model that returns neutral on Indonesian headlines is not
+observing calm, it is failing to read — **and at the point of use those two are the same
+number**. That is `PRODUCT.md` constraint 3, absence rendered as evidence, in a new place. So
+the scope limit is not negotiable and is not a footnote: **US names only, stated on the
+artifact**, reported per market like every other figure in this document.
+
+### Pre-registered, because this particular result is easy to launder
+
+The decision rule — horizon, split dates, statistic, and the interval that counts as clearing —
+is fixed in the script's docstring **before the first run**, and the split is chronological.
+The reason is specific rather than ceremonial: daily sentiment aggregation has an unusual number
+of free parameters. The lookback window, the decay, whether neutral headlines are dropped or
+counted, how weekend items are attributed to Monday, whether the score is a mean or a
+net-positive share. Each is a fork, and searching them for a positive increment is precisely the
+multiple-testing failure that the calendar-effects row above refuses by name. Recording the rule
+first is what makes a null here worth publishing.
+
+On model choice: an LSTM over five years of one ticker's daily bars is roughly 1,250 rows, which
+is not a deep-learning sample. Gradient boosting with SHAP attributions is the defensible option
+and has the side benefit of fitting `PRODUCT.md` constraint 7 — a figure that can say what drove
+it. Whatever is fitted gets the walk-forward treatment §14 gave the Isolation Forest, because
+that section exists because the default mode could see the future.
+
+### What may not ship, whatever it finds
+
+- **It never votes.** §15's DO NOT is unconditional: a new panel that carries a `vote` and a new
+  `Family` would compile and silently invalidate the measured kappa. A sentiment reading has no
+  bullish or bearish direction worth adding to `_family_votes`.
+- **It is never coloured from the sign of a score.** Constraint 4, and the same rule §8 applies
+  to provenance and §15 to kappa. Red and green markers on extreme sentiment days is the exact
+  pattern being refused.
+- **No gauge, no composite, no "tomorrow's volatility" needle.** Constraint 1, guarded by
+  `test_synthesis.py` and `test_pretrade.py`.
+- **The news panel stays display-only** until this clears, and `news.py`'s trust boundary is
+  unchanged either way: third-party text is data to display, never instructions to act on.
+
+### What a null would be worth
+
+Five artifacts already report measurements of this app's own claims, one of them saying the
+ranking has no detectable edge. The positioning in `PRODUCT.md` rests on that: a neighbouring
+product could copy the four lenses and could not truthfully copy the null results. **A sixth
+null is worth more to this document than a sixth feature**, and on the prior evidence a null is
+the likely outcome — Tetlock's effect came from full article text, and headlines are the part
+that survived the summarising.
+
+> Corsi (2009), *Journal of Financial Econometrics* 7(2), 174-196. Engle (1982),
+> *Econometrica* 50(4). Tetlock (2007), *Journal of Finance* 62(3), 1139-1168. Loughran &
+> McDonald (2011), *Journal of Finance* 66(1), 35-65. Araci (2019), arXiv:1908.10063.
+> **No artifact is stamped against this section, because nothing has been run.**
 
 ---
 

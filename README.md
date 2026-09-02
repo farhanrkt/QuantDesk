@@ -711,7 +711,10 @@ daily approximation would be a different number wearing the name. Multi-bar char
 (head and shoulders, flags, wedges) are named and declined rather than matched with fixed
 thresholds that would fire on noise. Calendar effects
 (January, Halloween) are where the multiple-testing critique bites hardest. Headline
-sentiment would need full article text and a lexicon that covers Indonesian.
+sentiment would need full article text and a lexicon that covers Indonesian; whether headline
+*tone* adds anything to a price-only volatility forecast is a narrower question, gated on a
+dated headline archive that no free source supplies — see RESEARCH_ROADMAP, "Not started:
+headline sentiment".
 
 **No state.** No accounts, no saved watchlists, no persistence on any server. The reading mode,
 the holding horizon, the holdings list and the thesis journal live in your own browser's storage
