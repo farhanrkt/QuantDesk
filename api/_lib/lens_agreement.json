@@ -1,0 +1,372 @@
+{
+  "measuredOn": "2026-08-29",
+  "universeIds": [
+    "dow30",
+    "nasdaq100",
+    "idx30",
+    "lq45"
+  ],
+  "universes": [
+    "Dow Jones Industrial Average",
+    "Nasdaq-100",
+    "IDX30",
+    "IDX LQ45"
+  ],
+  "universeLabel": "the Dow Jones Industrial Average, the Nasdaq-100, the IDX30 and the IDX LQ45",
+  "namesMeasured": 168,
+  "namesFailed": 0,
+  "anomalyPeriod": "2y",
+  "chartRange": "5y",
+  "minPairSample": 30,
+  "bootstrapDraws": 2000,
+  "populations": {
+    "ALL": {
+      "label": "the Dow Jones Industrial Average, the Nasdaq-100, the IDX30 and the IDX LQ45",
+      "names": 168,
+      "coverage": {
+        "flow": 166,
+        "trend": 167,
+        "value": 152,
+        "quality": 154
+      },
+      "pairs": [
+        {
+          "a": "Flow",
+          "b": "Trend",
+          "n": 166,
+          "observed": 0.39759036144578314,
+          "chance": 0.3761794164610248,
+          "kappa": 0.03432228039557884,
+          "tauB": -0.022503128339762656,
+          "low": -0.031870540394353636,
+          "high": 0.10067630271713823,
+          "excludesZero": false,
+          "usable": true
+        },
+        {
+          "a": "Flow",
+          "b": "Value",
+          "n": 151,
+          "observed": 0.1456953642384106,
+          "chance": 0.14284461207841762,
+          "kappa": 0.0033258288988947927,
+          "tauB": 0.06856550993833002,
+          "low": -0.04066590895769997,
+          "high": 0.04700705307361343,
+          "excludesZero": false,
+          "usable": true
+        },
+        {
+          "a": "Flow",
+          "b": "Quality",
+          "n": 153,
+          "observed": 0.37254901960784315,
+          "chance": 0.4297919603571276,
+          "kappa": -0.10038957147138143,
+          "tauB": -0.24118885854679845,
+          "low": -0.17268578070846458,
+          "high": -0.0284529341500995,
+          "excludesZero": true,
+          "usable": true
+        },
+        {
+          "a": "Trend",
+          "b": "Value",
+          "n": 152,
+          "observed": 0.2236842105263158,
+          "chance": 0.3172177977839335,
+          "kappa": -0.13698890649762277,
+          "tauB": -0.18176167898264736,
+          "low": -0.22453247911484578,
+          "high": -0.03897168545779228,
+          "excludesZero": true,
+          "usable": true
+        },
+        {
+          "a": "Trend",
+          "b": "Quality",
+          "n": 154,
+          "observed": 0.2987012987012987,
+          "chance": 0.33272895935233593,
+          "kappa": -0.050995260663507055,
+          "tauB": 0.00026490493078618077,
+          "low": -0.1516957517889444,
+          "high": 0.05981805306423693,
+          "excludesZero": false,
+          "usable": true
+        },
+        {
+          "a": "Value",
+          "b": "Quality",
+          "n": 139,
+          "observed": 0.28776978417266186,
+          "chance": 0.27803943895243516,
+          "kappa": 0.013477668650082448,
+          "tauB": -0.029360559000165376,
+          "low": -0.0761994802152793,
+          "high": 0.10071519261007159,
+          "excludesZero": false,
+          "usable": true
+        }
+      ],
+      "families": {
+        "a": "price and volume",
+        "b": "the filings",
+        "n": 167,
+        "observed": 0.3532934131736527,
+        "chance": 0.33142099035462014,
+        "kappa": 0.03271479137616643,
+        "tauB": -0.09628263776535421,
+        "low": -0.06835484423344883,
+        "high": 0.14289920434376965,
+        "excludesZero": false,
+        "usable": true
+      },
+      "lenses": {
+        "available": true,
+        "lenses": [
+          "Flow",
+          "Trend",
+          "Value",
+          "Quality"
+        ],
+        "measuredLenses": 4,
+        "effectiveLenses": 3.7192651371979824,
+        "completeCases": 138,
+        "droppedForNoVariation": []
+      }
+    },
+    "ID": {
+      "label": "the IDX30 and the IDX LQ45",
+      "names": 46,
+      "coverage": {
+        "flow": 46,
+        "trend": 46,
+        "value": 37,
+        "quality": 39
+      },
+      "pairs": [
+        {
+          "a": "Flow",
+          "b": "Trend",
+          "n": 46,
+          "observed": 0.2608695652173913,
+          "chance": 0.274102079395085,
+          "kappa": -0.01822916666666661,
+          "tauB": 0.036530061198177845,
+          "low": -0.07227670288894783,
+          "high": 0.016970458830923924,
+          "excludesZero": false,
+          "usable": true
+        },
+        {
+          "a": "Flow",
+          "b": "Value",
+          "n": 37,
+          "observed": 0.13513513513513514,
+          "chance": 0.11468224981738495,
+          "kappa": 0.02310231023102311,
+          "tauB": 0.14934573132646872,
+          "low": 0.0,
+          "high": 0.06498194945848375,
+          "excludesZero": false,
+          "usable": true
+        },
+        {
+          "a": "Flow",
+          "b": "Quality",
+          "n": 39,
+          "observed": 0.2564102564102564,
+          "chance": 0.2925706771860618,
+          "kappa": -0.05111524163568773,
+          "tauB": -0.21245960746705617,
+          "low": -0.15473422866630648,
+          "high": 0.0,
+          "excludesZero": false,
+          "usable": true
+        },
+        {
+          "a": "Trend",
+          "b": "Value",
+          "n": 37,
+          "observed": 0.21621621621621623,
+          "chance": 0.21183345507669835,
+          "kappa": 0.0055607043558850615,
+          "tauB": 0.16031433955497773,
+          "low": -0.10038164738956401,
+          "high": 0.12083204952373773,
+          "excludesZero": false,
+          "usable": true
+        },
+        {
+          "a": "Trend",
+          "b": "Quality",
+          "n": 39,
+          "observed": 0.3076923076923077,
+          "chance": 0.27416173570019725,
+          "kappa": 0.046195652173913054,
+          "tauB": 0.19480949291550695,
+          "low": -0.11946094429939075,
+          "high": 0.2225048143422681,
+          "excludesZero": false,
+          "usable": true
+        },
+        {
+          "a": "Value",
+          "b": "Quality",
+          "n": 30,
+          "observed": 0.43333333333333335,
+          "chance": 0.5033333333333333,
+          "kappa": -0.14093959731543612,
+          "tauB": -0.2125443174379571,
+          "low": -0.2878787878787877,
+          "high": 0.011631326949384365,
+          "excludesZero": false,
+          "usable": true
+        }
+      ],
+      "families": {
+        "a": "price and volume",
+        "b": "the filings",
+        "n": 46,
+        "observed": 0.32608695652173914,
+        "chance": 0.2556710775047259,
+        "kappa": 0.09460317460317462,
+        "tauB": 0.18487663685078795,
+        "low": -0.05344598586722759,
+        "high": 0.24950680768632427,
+        "excludesZero": false,
+        "usable": true
+      },
+      "lenses": {
+        "available": true,
+        "lenses": [
+          "Flow",
+          "Trend",
+          "Value",
+          "Quality"
+        ],
+        "measuredLenses": 4,
+        "effectiveLenses": 3.5898081732974143,
+        "completeCases": 30,
+        "droppedForNoVariation": []
+      }
+    },
+    "US": {
+      "label": "the Dow Jones Industrial Average and the Nasdaq-100",
+      "names": 122,
+      "coverage": {
+        "flow": 120,
+        "trend": 121,
+        "value": 115,
+        "quality": 115
+      },
+      "pairs": [
+        {
+          "a": "Flow",
+          "b": "Trend",
+          "n": 120,
+          "observed": 0.45,
+          "chance": 0.40944444444444444,
+          "kappa": 0.0686735653809972,
+          "tauB": -0.03167324322159319,
+          "low": -0.01896380680862611,
+          "high": 0.1703868771278242,
+          "excludesZero": false,
+          "usable": true
+        },
+        {
+          "a": "Flow",
+          "b": "Value",
+          "n": 114,
+          "observed": 0.14912280701754385,
+          "chance": 0.1484302862419206,
+          "kappa": 0.0008132285172133292,
+          "tauB": 0.08760361956325743,
+          "low": -0.05343144376732659,
+          "high": 0.05478673145156225,
+          "excludesZero": false,
+          "usable": true
+        },
+        {
+          "a": "Flow",
+          "b": "Quality",
+          "n": 114,
+          "observed": 0.41228070175438597,
+          "chance": 0.46698984302862423,
+          "kappa": -0.1026418362927675,
+          "tauB": -0.2594334416134527,
+          "low": -0.19452149837012625,
+          "high": -0.0076207544207169756,
+          "excludesZero": true,
+          "usable": true
+        },
+        {
+          "a": "Trend",
+          "b": "Value",
+          "n": 115,
+          "observed": 0.22608695652173913,
+          "chance": 0.2966351606805293,
+          "kappa": -0.10030101053536875,
+          "tauB": -0.1386126713183511,
+          "low": -0.2035589069736103,
+          "high": -0.0008594382618393809,
+          "excludesZero": true,
+          "usable": true
+        },
+        {
+          "a": "Trend",
+          "b": "Quality",
+          "n": 115,
+          "observed": 0.2956521739130435,
+          "chance": 0.35901701323251417,
+          "kappa": -0.09885572726200302,
+          "tauB": -0.05581392670841627,
+          "low": -0.21843062765750831,
+          "high": 0.023889081776252794,
+          "excludesZero": false,
+          "usable": true
+        },
+        {
+          "a": "Value",
+          "b": "Quality",
+          "n": 109,
+          "observed": 0.24770642201834864,
+          "chance": 0.23827960609376317,
+          "kappa": 0.012375690607734802,
+          "tauB": -0.058269007476298706,
+          "low": -0.0727286668711411,
+          "high": 0.10205008172707833,
+          "excludesZero": false,
+          "usable": true
+        }
+      ],
+      "families": {
+        "a": "price and volume",
+        "b": "the filings",
+        "n": 121,
+        "observed": 0.36363636363636365,
+        "chance": 0.3281879653029165,
+        "kappa": 0.052765351769011766,
+        "tauB": -0.10085434486219438,
+        "low": -0.075796845702934,
+        "high": 0.16492862532294225,
+        "excludesZero": false,
+        "usable": true
+      },
+      "lenses": {
+        "available": true,
+        "lenses": [
+          "Flow",
+          "Trend",
+          "Value",
+          "Quality"
+        ],
+        "measuredLenses": 4,
+        "effectiveLenses": 3.736162720094709,
+        "completeCases": 108,
+        "droppedForNoVariation": []
+      }
+    }
+  }
+}

@@ -21,18 +21,18 @@ export default function Error({
           <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
           <div className="min-w-0 flex-1">
             <div className="eyebrow mb-2 text-dist">Something broke while rendering</div>
-            <p className="text-sm leading-relaxed text-chalk/80">
+            <p className="text-base leading-relaxed text-body">
               The desk hit an unexpected error. Your last query was not saved, so retrying is
               safe — no engine result is lost by starting again.
             </p>
             {error.digest && (
-              <p className="num mt-3 text-[0.7rem] text-ash">Reference: {error.digest}</p>
+              <p className="num mt-3 text-micro text-ash">Reference: {error.digest}</p>
             )}
             <div className="mt-5 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={reset}
-                className="h-9 rounded border border-tech/50 bg-tech/10 px-4 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-chalk transition-colors hover:bg-tech/20"
+                className="h-9 rounded border border-tech/50 bg-tech/10 px-4 font-mono text-micro uppercase tracking-[0.14em] text-chalk transition-colors hover:bg-tech/20"
               >
                 Try again
               </button>
@@ -43,7 +43,7 @@ export default function Error({
               {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
               <a
                 href="/"
-                className="inline-flex h-9 items-center rounded border border-rule px-4 font-mono text-[0.65rem] uppercase tracking-[0.14em] text-ash transition-colors hover:border-tech/50 hover:text-chalk"
+                className="inline-flex h-9 items-center rounded border border-rule px-4 font-mono text-micro uppercase tracking-[0.14em] text-ash transition-colors hover:border-tech/50 hover:text-chalk"
               >
                 Back to the desk
               </a>

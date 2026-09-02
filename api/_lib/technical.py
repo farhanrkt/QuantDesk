@@ -32,6 +32,7 @@ import numpy as np
 import pandas as pd
 from scipy.signal import argrelextrema
 
+from . import exposure
 from . import explain as ex
 from . import indicators as ind
 from . import market_data
@@ -128,7 +129,10 @@ def fetch_data(ticker: str, start: dt.date, end: dt.date) -> pd.DataFrame:
     `analyze` below branches on `.empty` and every caller of this function has
     always done so.
     """
-    frame = market_data.ohlcv(ticker, start=start, end=end)
+    # OPT-OUT 3 OF 4. The reader's own ticker — see `market_data`'s module
+    # docstring. This lens reads a suspended listing and reports what it
+    # last did, which is the question a reader asks about a halted name.
+    frame = market_data.ohlcv(ticker, start=start, end=end, allow_stale=True)
     return frame if frame is not None else pd.DataFrame()
 
 
@@ -787,10 +791,20 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
         price=price,
     )
 
+    # ---------------- what this name moves with ----------------
+    # ITS OWN FIXED WINDOW, NOT THE CHART RANGE. A beta that changed when the
+    # reader changed the chart zoom would read as the exposure moving, and the
+    # only window this app can quote a stability figure for is the 52 weeks whose
+    # persistence was measured. Costs three day-cached factor fetches shared
+    # across every ticker in a session.
+    factor_exposure = exposure.for_symbol(ticker, market_code=market_code)
+    factor_exposure["explain"] = ex.for_exposure(factor_exposure)
+
     return {
         "ticker": ticker,
         "currency": currency,
         "range": range_key,
+        "exposure": factor_exposure,
         "bars": len(data),
         "hasSma200": bool(data["SMA_200"].notna().sum() > 0),
         "hasLongTerm": bool(enough),

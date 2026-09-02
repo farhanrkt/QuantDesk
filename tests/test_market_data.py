@@ -308,6 +308,152 @@ def test_the_quote_endpoint_still_backfills_when_there_are_no_bars(monkeypatch):
     assert data["price_as_of"] is None
 
 
+# ============================================================================ #
+# Freshness — the MTF=F class of failure
+# ============================================================================ #
+def _bars(last: str, n: int = 60, step: str = "B") -> pd.DataFrame:
+    """A clean frame of `n` bars ending on `last`. Passes every other check."""
+    index = pd.date_range(end=pd.Timestamp(last), periods=n, freq=step)
+    return pd.DataFrame(
+        {"Open": 100.0, "High": 101.0, "Low": 99.0, "Close": 100.0, "Volume": 1e6},
+        index=index)
+
+
+class _PeriodTicker:
+    """`yf.Ticker` whose `.history(period=...)` returns one planted frame."""
+
+    def __init__(self, frame):
+        self._frame = frame
+
+    def __call__(self, symbol):
+        return self
+
+    def history(self, period, auto_adjust=True):
+        return self._frame
+
+    def __getattr__(self, name):
+        return pd.DataFrame()
+
+
+def test_a_stale_series_is_refused_even_though_every_bar_is_clean(monkeypatch):
+    """THE PLANTED VERSION OF THE BUG THAT MOTIVATED THIS.
+
+    `MTF=F`, the Newcastle coal future, returns 834 immaculate bars and last
+    printed on 2025-12-26. Nothing raised, nothing logged, nothing marked it —
+    `normalise` only drops a TRAILING row with no close, and every row here has
+    one. A regression run against it reports a confident beta on data that stops
+    eight months back, which is the silent-wrong-number failure this repo keeps
+    finding in new places.
+
+    Planted at eight months rather than eight days on purpose: the check must
+    catch the real magnitude, not just a boundary.
+    """
+    stale = _bars(last=(dt.date.today() - dt.timedelta(days=248)).isoformat())
+    monkeypatch.setattr(MD.yf, "Ticker", _PeriodTicker(stale))
+
+    assert MD.normalise(stale) is not None, "every bar is individually clean"
+    assert MD.ohlcv("MTF=F", period="2y") is None, "and the series is still unusable"
+
+
+def test_a_current_series_is_not_refused(monkeypatch):
+    """The other half of the same check, because a gate that rejects everything
+    passes the test above for the wrong reason."""
+    fresh = _bars(last=dt.date.today().isoformat())
+    monkeypatch.setattr(MD.yf, "Ticker", _PeriodTicker(fresh))
+    assert MD.ohlcv("AAA", period="2y") is not None
+
+
+def test_a_deliberate_historical_window_is_never_stale(monkeypatch):
+    """STALENESS IS JUDGED AGAINST THE WINDOW ASKED FOR, NOT AGAINST TODAY.
+
+    This is what makes the check safe to switch on by default. A backtest that
+    asks for 2021 is supposed to come back ending in 2021, and a rule measured
+    against today would reject every historical fetch in `scripts/` — turning a
+    guard against silence into a guard against the repo's own research.
+    """
+    frames = {"AAA": _bars(last="2021-12-31", n=300)}
+    monkeypatch.setattr(MD.yf, "download", _Stub(frames))
+    out = MD.ohlcv_batch(["AAA"], dt.date(2021, 1, 1), dt.date(2021, 12, 31))
+    assert set(out) == {"AAA"}, "asked through 2021, ended in 2021, nothing wrong"
+
+
+def test_a_holding_that_stopped_midway_leaves_the_batch(monkeypatch):
+    """The portfolio bug, which is where this mattered most and caught nothing.
+
+    A name delisted six months ago still clears `portfolio.MIN_OVERLAP` inside a
+    252-day window, so it was contributing a pairwise correlation computed
+    against a price that had stopped moving — and the panel counted it toward how
+    many independent bets a book really is.
+    """
+    today = dt.date.today()
+    frames = {"LIVE": _bars(last=today.isoformat(), n=300),
+              "HALTED": _bars(last=(today - dt.timedelta(days=190)).isoformat(), n=300)}
+    monkeypatch.setattr(MD.yf, "download", _Stub(frames))
+    out = MD.ohlcv_batch(["LIVE", "HALTED"], today - dt.timedelta(days=400), today)
+    assert set(out) == {"LIVE"}, "the halted name is absent, as a missing one would be"
+
+
+def test_the_readers_own_ticker_degrades_instead_of_failing(monkeypatch):
+    """THE OPT-OUT, AND WHY IT EXISTS. Suspensions are common on the IDX.
+
+    A halted listing has a last print that is old and still the fact the reader
+    came for. Under a gate with no exemption the page would fail on exactly the
+    names where someone most needs to see what happened, so the four
+    primary-ticker paths opt out by name and the as-of date carries the caveat
+    instead.
+    """
+    old = (dt.date.today() - dt.timedelta(days=120))
+    bars = _bars(last=old.isoformat(), n=30)
+    # `_bars` snaps to business days, so read the date off the frame rather than
+    # off the arithmetic — a Sunday would make the two differ by two days.
+    last_session = bars.index[-1].strftime("%Y-%m-%d")
+
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.fast_info = _FakeFastInfo()
+            self.info = {}
+            self.dividends = None
+
+        def history(self, period, auto_adjust=True):
+            return bars
+
+        def __getattr__(self, name):
+            return pd.DataFrame()
+
+    monkeypatch.setattr(MD.yf, "Ticker", FakeTicker)
+    data = MD._company_uncached("SUSPENDED.JK")
+
+    assert data["price"] == pytest.approx(100.0), "the last known close, not a failure"
+    assert data["price_source"] == "last daily close"
+    assert data["price_as_of"] == last_session, "and the reader is told when"
+
+
+def test_the_threshold_follows_the_series_own_cadence():
+    """Counted in SESSIONS, converted using the frame's own spacing.
+
+    A weekly series is three weeks old after three bars; a daily one is three
+    days old. One calendar-day threshold cannot describe both, and the
+    alternative is an exchange holiday calendar this module has no business
+    carrying. Read off the series instead: the 90th percentile of its own gaps.
+    """
+    daily = _bars(last=dt.date.today().isoformat(), n=60, step="B")
+    weekly = _bars(last=dt.date.today().isoformat(), n=60, step="W-FRI")
+    assert MD._typical_gap_days(daily.index) == pytest.approx(3.0), "the weekend"
+    assert MD._typical_gap_days(weekly.index) == pytest.approx(7.0)
+
+    # Twenty days old: stale for a daily series, ordinary for a weekly one.
+    twenty = (dt.date.today() - dt.timedelta(days=20)).isoformat()
+    assert MD.is_stale(_bars(last=twenty, n=60, step="B")) is True
+    assert MD.is_stale(_bars(last=twenty, n=60, step="W-FRI")) is False
+
+
+def test_an_absent_frame_is_not_a_stale_one():
+    """Two different failures, and callers already branch on the first. Reporting
+    None as 'stale' would put a second meaning on a return value that has one."""
+    assert MD.is_stale(None) is False
+    assert MD.is_stale(pd.DataFrame()) is False
+
+
 def test_batch_download_returns_one_frame_per_symbol(monkeypatch):
     frames = {"AAA": path(steady(n=300)), "BBB": path(steady(n=300, seed=9))}
     stub = _Stub(frames)
@@ -392,8 +538,18 @@ def test_duplicate_symbols_are_requested_once(monkeypatch):
 
 
 def test_scan_names_the_symbols_it_could_not_rank(monkeypatch):
-    """A count is unactionable; a typo and a delisting look different."""
-    frames = {"AAA": path(steady(n=400)), "BBB": path(steady(n=400, seed=2))}
+    """A count is unactionable; a typo and a delisting look different.
+
+    THE FIXTURE HAS TO END NEAR TODAY, and it did not used to. `ranking.scan`
+    fetches a window ending now, while `path()` defaults to a 2023 start, so
+    these frames stopped two years before the window that asked for them. That
+    was invisible until `ohlcv_batch` started refusing stale series and this test
+    reported nothing ranked — which is the correct answer for data that old, and
+    the reason the fixture moved rather than the check.
+    """
+    recent = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=400)[0]
+    frames = {"AAA": path(steady(n=400), start=recent),
+              "BBB": path(steady(n=400, seed=2), start=recent)}
     monkeypatch.setattr(MD.yf, "download", _Stub(frames))
 
     result = R.scan(["AAA", "BBB", "GHOST"], market_code="US")
@@ -459,6 +615,43 @@ def test_normalise_enforces_the_contract_every_engine_relies_on():
     assert out["Volume"].iloc[5] == 0.0, "no trades IS zero volume"
     assert (out["Close"] > 0).all()
     assert out.index.is_monotonic_increasing
+
+
+def test_an_unsettled_trailing_session_is_dropped_not_invented():
+    """Yahoo publishes the current session with a volume and no prices.
+
+    Under `auto_adjust=True` the whole OHLC row comes back NaN, because the
+    adjustment factor is derived from the close. Forward-filling it fabricated a
+    bar: on 2026-08-28 AAPL arrived carrying the previous session's OHLC and
+    that day's volume, so the app showed a 0.00% change and a "last daily close"
+    of $314.58 for a session it had no close for, and every rolling indicator
+    ran over a duplicated bar.
+    """
+    frame = _bar_frame()
+    last = frame.index[-1]
+    frame.loc[last, ["Open", "High", "Low", "Close"]] = np.nan
+    frame.loc[last, "Volume"] = 38_500_185          # a real volume, no prices
+
+    out = MD.normalise(frame)
+    assert last not in out.index, "a session with no close of its own is not a bar"
+    assert len(out) == len(frame) - 1
+    assert out["Close"].iloc[-1] == frame["Close"].iloc[-2], "the real last close survives"
+
+
+def test_an_interior_gap_still_forward_fills():
+    """Truncating the tail must not cost the fill its actual job."""
+    frame = _bar_frame()
+    frame.iloc[3, frame.columns.get_loc("Close")] = np.nan
+
+    out = MD.normalise(frame)
+    assert len(out) == len(frame), "an interior gap is a reporting artefact, not a missing day"
+    assert out["Close"].iloc[3] == out["Close"].iloc[2]
+
+
+def test_normalise_returns_none_when_no_session_ever_closed():
+    frame = _bar_frame()
+    frame[["Open", "High", "Low", "Close"]] = np.nan
+    assert MD.normalise(frame) is None
 
 
 @pytest.mark.parametrize("frame", [

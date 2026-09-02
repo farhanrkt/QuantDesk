@@ -102,6 +102,50 @@ class BetaEstimate:
         }
 
 
+def effective_independent(matrix) -> Optional[float]:
+    """How many genuinely independent things a correlation matrix describes.
+
+        effective N = (sum of eigenvalues)^2 / sum(eigenvalues^2)
+
+    The participation ratio. It equals the column count when everything is
+    independent and collapses toward 1 as the columns become redundant, so it
+    answers a question a count cannot: seven ranking signals that correlate at
+    0.98 are one signal wearing seven labels, and nine holdings that all track
+    the same index are close to one position.
+
+    ONE IMPLEMENTATION, TWO CALLERS, and that is why it lives here rather than
+    inside either. `ranking.signal_correlation` uses it to say how many opinions
+    a composite is really averaging; `portfolio.py` uses the identical
+    arithmetic to say how many independent bets a set of holdings really is. A
+    second copy would eventually disagree with the first about what redundancy
+    means, in an app whose whole argument is that agreement between correlated
+    measures is worth less than it looks.
+    """
+    try:
+        values = np.asarray(matrix, dtype="float64")
+    except (TypeError, ValueError):
+        return None
+    # A NON-FINITE ENTRY MUST BE REFUSED HERE, NOT FILTERED LATER. `eigvalsh`
+    # reads only one triangle, so a matrix with NaN on the diagonal returns
+    # perfectly finite eigenvalues computed from the half it happened to look
+    # at — a plausible number from an unusable matrix, which is the failure
+    # shape this codebase keeps finding. Caught by a test that fed it exactly
+    # that.
+    if values.ndim != 2 or values.shape[0] != values.shape[1] or values.size == 0:
+        return None
+    if not np.all(np.isfinite(values)):
+        return None
+    try:
+        eigenvalues = np.linalg.eigvalsh(values)
+    except np.linalg.LinAlgError:
+        return None
+    eigenvalues = np.clip(eigenvalues[np.isfinite(eigenvalues)], 0.0, None)
+    denominator = float(np.sum(eigenvalues ** 2))
+    if denominator <= 0:
+        return None
+    return float(np.sum(eigenvalues) ** 2 / denominator)
+
+
 def _finite(value) -> Optional[float]:
     try:
         out = float(value)
@@ -221,7 +265,12 @@ def estimate_beta_for_symbol(symbol: str, market_code: str = "US", period: str =
     key = (symbol.upper(), period, dt.date.today().isoformat())
     history = _HISTORY_CACHE.get(key)
     if history is None:
-        history = market_data.ohlcv(symbol, period=period)
+        # OPT-OUT 2 OF 4, and the same reason as the other three: this is the
+        # reader's own ticker. A stale beta is a real cost, but it is carried by
+        # a stated window and a reported R-squared, whereas refusing here would
+        # send a suspended name down the Blume fallback with a note blaming the
+        # INDEX for a gap in the stock's own history.
+        history = market_data.ohlcv(symbol, period=period, allow_stale=True)
         if history is None:
             return estimate_beta(pd.DataFrame(), market_code, period, fallback_beta)
         if len(_HISTORY_CACHE) > 256:

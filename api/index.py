@@ -55,10 +55,11 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
-from _lib import (accumulation, eventstudy, explain, market_data, microstructure,
-                  news, quality, ranking, riskmodel, symbols, technical,
-                  universes, valuation)
+from _lib import (accumulation, eventstudy, explain, exposure, market_data,
+                  microstructure, news, portfolio, pretrade, quality, ranking,
+                  riskmodel, symbols, technical, universes, valuation)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -82,10 +83,13 @@ def _allowed_origins() -> list[str]:
     return [] if os.environ.get("VERCEL_ENV") == "production" else ["*"]
 
 
+# POST is permitted for exactly one route. `/api/portfolio` takes a body rather
+# than a query string so that a reader's holdings never enter a URL — see the
+# route itself. Everything else in this app is still a plain GET.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins(),
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -130,6 +134,14 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # Runs the identical universe scan and keeps one row of it, so it carries
     # the identical cost and the identical cap.
     "/api/peers": (3, 60),
+    # One batch download of the whole book plus the candidate. Same shape of
+    # cost as the ranking scan, same cap.
+    "/api/portfolio": (3, 60),
+    # One batch download of a whole universe plus three factor series, then
+    # local arithmetic. Cheaper than the ranking scan — no indicators, no
+    # per-name signals — but the fan-out to the upstream is the same shape, so
+    # it takes the same cap rather than a looser one argued from being faster.
+    "/api/exposure": (3, 60),
     # Deepening runs the fundamentals lenses per name and does NOT batch, so
     # this is the amplifying half of the funnel and is capped hardest.
     "/api/rank/deepen": (2, 60),
@@ -193,7 +205,27 @@ async def rate_limit(request: Request, call_next):
     To make this global, keep the same shape and move `_RATE_HITS` to Vercel KV
     or Upstash — the only thing that changes is where the deque is read from.
     """
-    path = request.url.path
+    # THE RAW ASGI PATH, NEVER `request.url.path`.
+    #
+    # Starlette rebuilds `request.url` by concatenating scheme, Host header and
+    # path and re-parsing the result, and it does not validate the Host against
+    # the RFC 3986 grammar. A Host carrying a slash moves the authority boundary,
+    # so `Host: example.com/api/health?x=` on a request for `/api/rank` yields
+    # `request.url.path == "/api/health"` while ROUTING still dispatches to
+    # `/api/rank` off the raw scope path.
+    #
+    # That is a complete bypass of this middleware, demonstrated against this app
+    # before the fix: with a normal Host the fourth call to `/api/rank` returned
+    # 429; with the forged Host every call returned 200, each one running a full
+    # universe scan. Forging the path onto a RATE_EXEMPT route skipped the
+    # limiter altogether. The cap is the whole of the defence here — see the
+    # docstring above — so a bypass of it is a bypass of everything.
+    #
+    # `scope["path"]` is the value the router itself uses, so the bucket can
+    # never disagree with the endpoint that actually executes. This holds
+    # regardless of the Starlette version (CVE fixed in 1.3.0; FastAPI 0.115
+    # pins <0.42, so the library fix is not available without a major bump).
+    path = request.scope.get("path") or request.url.path
     if request.method == "OPTIONS" or path in RATE_EXEMPT:
         return await call_next(request)
 
@@ -228,11 +260,63 @@ def ok(payload: dict) -> JSONResponse:
     return JSONResponse(content=clean(payload), headers={"Cache-Control": CACHE})
 
 
+def private_ok(payload: dict) -> JSONResponse:
+    """A response that no cache anywhere may keep a copy of.
+
+    THE ONLY ROUTE IN THIS APP WHOSE INPUT IS PERSONAL. Every other request says
+    "tell me about this company"; the portfolio route says "here is what I own",
+    which is a different kind of fact about the person asking.
+
+    A POST response is already uncacheable by default, so this is belt and
+    braces — and it is kept because "uncacheable by default" is a property of
+    the method that a future refactor could quietly change, while an explicit
+    `no-store` says what is intended. It also stops a browser applying heuristic
+    freshness to a body that describes somebody's portfolio.
+    """
+    return JSONResponse(content=clean(payload),
+                        headers={"Cache-Control": "no-store"})
+
+
 def resolved(ticker: str, market: str) -> str:
     try:
         return symbols.resolve(ticker, market)
     except symbols.SymbolError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def parse_ticker_list(tickers: str, market: str) -> list[str]:
+    """A pasted universe, validated and resolved, deduplicated in typed order.
+
+    ONE IMPLEMENTATION, TWO CALLERS. The ranking tier and the exposure scan take
+    the identical input and must reject the identical things — the pattern has to
+    hold because each symbol is interpolated into a yfinance URL path, and the
+    resolution has to happen here because an unsuffixed IDX code is not inert
+    (see `symbols.py`, where BBCA valued a bank and charted an ETF). A second
+    copy would eventually accept something the first refuses.
+    """
+    raw = [t.strip() for t in tickers.replace("\n", ",").split(",") if t.strip()]
+    bad = [t for t in raw if not TICKER_RE.match(t)]
+    if bad:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                   f"{'...' if len(bad) > 5 else ''}.")
+    return list(dict.fromkeys(resolved(t, market) for t in raw))
+
+
+def resolved_with_market(ticker: str, market: str) -> tuple[str, str]:
+    """The symbol to fetch AND the market whose conventions describe it.
+
+    Every single-ticker route wants both, and wanting only the first is the bug
+    this returns a pair to prevent: the routes used to resolve the symbol from
+    the typed suffix and then keep the dropdown's market code, so "ITMG.JK" on
+    the default US setting fetched the Indonesian company and then priced it in
+    dollars off a US risk-free rate against ^GSPC. Reassigning `market` at the
+    point of resolution fixes currency, ERP, tax, benchmark index and screen
+    domain together, because all of them read that one variable downstream.
+    """
+    symbol = resolved(ticker, market)
+    return symbol, symbols.market_of(symbol)
 
 
 def csv_response(frame, filename: str) -> StreamingResponse:
@@ -400,7 +484,7 @@ def isolation_forest(
                     "0 disables the benign-noise filter.",
     ),
 ):
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     return ok(whale_payload(symbol, period, mode, contamination, mad_k,
                             score_threshold, recent_days, min_turnover))
 
@@ -567,14 +651,7 @@ def rank(
             raise HTTPException(
                 status_code=400,
                 detail="Provide either a `universe` id or a `tickers` list.")
-        raw = [t.strip() for t in tickers.replace("\n", ",").split(",") if t.strip()]
-        bad = [t for t in raw if not TICKER_RE.match(t)]
-        if bad:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                       f"{'...' if len(bad) > 5 else ''}.")
-        symbols_list = list(dict.fromkeys(resolved(t, market) for t in raw))
+        symbols_list = parse_ticker_list(tickers, market)
         market_code = market.upper()
         label = "Custom list"
         as_of = None
@@ -632,7 +709,7 @@ def peers(
     explanation layer produces. Change the group and the same company moves,
     which is the one thing a percentile must never let a reader forget.
     """
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     candidates = universes.containing(symbol)
 
     if universe:
@@ -675,6 +752,64 @@ def peers(
         "benchmark": result.get("benchmark"),
         "explain": explain.for_peers(row, context, result["signals"],
                                      result.get("correlation")),
+    })
+
+
+@app.get("/api/exposure")
+def exposure_scan(
+    universe: Optional[str] = Query(
+        None, pattern="^[a-z0-9]{1,24}$",
+        description="A predefined universe id from /api/rank/universes."),
+    tickers: Optional[str] = Query(
+        None, min_length=1, max_length=4000,
+        description="Comma or newline separated symbols, used when `universe` is absent."),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+):
+    """What every name in a universe moves with, on the factors that persist.
+
+    A SCAN RATHER THAN A LOOKUP, and that is the point. One beta is
+    uninterpretable alone — 0.57 against the energy complex is remarkable or
+    ordinary depending on what the other forty names read — so this returns the
+    whole cross-section and lets the reader place a name in it. The same argument
+    `/api/peers` makes about percentiles, applied to a quantity with no natural
+    scale at all.
+
+    Only factors whose year-to-year persistence was measured and survived appear
+    here; the rest are named in `refused` with the reason rather than silently
+    absent. Gold is one of them, at a rank correlation of +0.21 against a 0.25
+    line set before the numbers were seen — see `exposure_stability.json`.
+
+    Price only, so it batches: one upstream call for a whole universe.
+    """
+    if universe:
+        entry = universes.get(universe)
+        if entry is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown universe '{universe}'. See /api/rank/universes.")
+        symbols_list, market_code = entry["tickers"], entry["market"]
+        label, as_of = entry["name"], entry["asOf"]
+    elif tickers:
+        symbols_list = parse_ticker_list(tickers, market)
+        market_code, label, as_of = market.upper(), "Your list", None
+    else:
+        raise HTTPException(status_code=400,
+                            detail="Pass either `universe` or `tickers`.")
+
+    if not symbols_list:
+        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+    if len(symbols_list) > RANK_MAX_UNIVERSE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This scans up to {RANK_MAX_UNIVERSE} names at a time; "
+                   f"this list has {len(symbols_list)}.")
+
+    result = exposure.scan(symbols_list, market_code=market_code)
+    return ok({
+        "universe": {"id": universe, "name": label, "market": market_code,
+                     "asOf": as_of, "count": len(symbols_list)},
+        **result,
+        "explain": explain.for_exposure_scan(result),
     })
 
 
@@ -755,6 +890,128 @@ def _deepen_valuation(symbol: str, market: str) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Portfolio context — where a candidate sits against what is already owned
+#
+# THE ONE POST IN THIS APP, AND THE REASON IS THE INPUT RATHER THAN THE SIZE.
+# Everything else here answers "tell me about this company", and a company name
+# in a URL is not a fact about anybody. A holdings list is. URLs are logged by
+# every hop that handles them — the platform's access log, any proxy, the
+# browser's own history — and none of that is reachable by a `Cache-Control`
+# header or by anything else this code can set. A request body is not logged by
+# default anywhere in that chain.
+#
+# The cost is real and worth naming: this app's stated shape was that everything
+# the UI does is a plain GET, and that is now "everything except one route". The
+# CORS allowlist gains POST, and a preflight now happens on this one call. That
+# is a smaller price than putting somebody's portfolio in a log file.
+#
+# NO STATE EITHER. The holdings arrive, are used and are forgotten; nothing is
+# stored, because there is nowhere to store it.
+# --------------------------------------------------------------------------- #
+PORTFOLIO_MAX_HOLDINGS = 40
+
+
+class PortfolioRequest(BaseModel):
+    """The body of the one POST.
+
+    VALIDATED AS STRICTLY AS THE QUERY PARAMETERS IT REPLACED. Moving off the
+    query string moves the input out of the logs, not out of reach — the ticker
+    pattern still has to hold, because `candidate` is interpolated into a
+    yfinance URL path, and the caps still have to hold, because one request here
+    fans out to a batch download.
+    """
+    candidate: str = Field(..., pattern=TICKER_PATTERN)
+    holdings: list[str] = Field(..., min_length=1, max_length=200)
+    market: str = Field("US", pattern="^(US|ID|us|id)$")
+    # Self-describing rather than positional. A parallel list aligned to
+    # `holdings` would silently attach the wrong weight to the wrong name the
+    # first time a symbol was dropped for thin history — a plausible wrong
+    # answer rather than an error, which is the failure mode this codebase keeps
+    # finding.
+    weights: dict[str, float] = Field(default_factory=dict)
+
+
+def _validated_weights(raw: dict) -> dict:
+    """Ticker → weight, with the same rules the tickers themselves get."""
+    out: dict = {}
+    for ticker, value in (raw or {}).items():
+        symbol = str(ticker).strip().upper()
+        if not TICKER_RE.match(symbol):
+            raise HTTPException(status_code=400,
+                                detail=f"Not a valid ticker symbol in weights: {symbol!r}.")
+        try:
+            weight = float(value)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Weight for {symbol} must be a number.") from exc
+        if not (weight > 0) or not math.isfinite(weight):
+            raise HTTPException(status_code=400,
+                                detail=f"Weight for {symbol} must be above zero.")
+        out[symbol] = weight
+    return out
+
+
+@app.post("/api/portfolio")
+def portfolio_context(body: PortfolioRequest):
+    """Where a candidate sits against a book of holdings.
+
+    Answers the question no single-ticker page can: is this the fourth copy of a
+    bet already held? Correlation against each holding, how many INDEPENDENT
+    positions the book really amounts to before and after, and what share of the
+    portfolio's risk each name carries against its share of the money.
+
+    It informs position size, which every other measured thing in this app
+    refuses to do, and it is allowed to because the underlying claim was
+    measured first: pairwise correlations persist year to year at rank
+    correlations of 0.50-0.65 across four universes, where the composite
+    ranking's information coefficient was indistinguishable from zero. See
+    `scripts/measure_correlation_stability.py` and the caveat it also found —
+    correlations run about 0.06 higher in the worst quarters, so an ordinary
+    year's reading is a floor.
+
+    A POST, alone in this app, because the input is a fact about the reader
+    rather than about a company and URLs are logged by every hop that handles
+    them. Nothing is stored either — see the note above the route.
+    """
+    raw = [t.strip() for t in body.holdings if t and t.strip()]
+    bad = [t for t in raw if not TICKER_RE.match(t)]
+    if bad:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                   f"{'...' if len(bad) > 5 else ''}.")
+    if not raw:
+        raise HTTPException(status_code=400, detail="Provide at least one holding.")
+
+    market = body.market
+    # THE MARKET FOLLOWS THE SYMBOL, NOT THE DROPDOWN, and this route needed it
+    # the moment it grew a benchmark. "ITMG.JK" left on the default US setting is
+    # one of the two ways the README tells you to reach an IDX listing; before
+    # this it resolved the right Indonesian company and then measured its shared
+    # direction against ^GSPC, reporting "0% of it is the S&P 500" for a book of
+    # Jakarta miners. Same bug `resolved_with_market` was written for, arriving
+    # in a route that used to have no benchmark to get wrong.
+    symbol, market = resolved_with_market(body.candidate, market)
+    book = [s for s in dict.fromkeys(resolved(t, market) for t in raw) if s != symbol]
+    if not book:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide at least one holding other than the candidate itself.")
+    if len(book) > PORTFOLIO_MAX_HOLDINGS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"This compares up to {PORTFOLIO_MAX_HOLDINGS} holdings at a time; "
+                   f"this list has {len(book)}. A correlation matrix that size is also "
+                   f"more than anyone reads.")
+
+    result = portfolio.analyse(symbol, book, weights=_validated_weights(body.weights),
+                               market_code=market)
+    result["explain"] = explain.for_portfolio(result)
+    return private_ok({"candidate": symbol, "market": market, **result})
+
+
+# --------------------------------------------------------------------------- #
 # Engine 2 — Technical analysis
 # --------------------------------------------------------------------------- #
 def technical_payload(symbol: str, range_key: str = "1y", sr_window: int = 10,
@@ -778,7 +1035,7 @@ def technical_analysis(
     sr_window: int = Query(10, ge=3, le=40),
     sr_levels: int = Query(6, ge=2, le=12),
 ):
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     return ok(technical_payload(symbol, range, sr_window, sr_levels, market.upper()))
 
 
@@ -858,7 +1115,7 @@ def intrinsic_value(
     manual_price: Optional[float] = Query(None, gt=0.0),
     manual_payout: Optional[float] = Query(None, ge=0.0, le=1.0),
 ):
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     return ok(valuation_payload(symbol, **_valuation_kwargs(
         market, engine, growth, terminal, rate, n_sims, sd_growth, sd_rate,
         sd_terminal, seed, fcf_basis, dps_basis, manual_base, manual_net_debt,
@@ -892,7 +1149,7 @@ def intrinsic_value_simulation(
     The run is seeded, so this reproduces exactly the distribution the JSON
     endpoint summarised for the same query string.
     """
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     payload = valuation_payload(symbol, with_simulation=True, **_valuation_kwargs(
         market, engine, growth, terminal, rate, n_sims, sd_growth, sd_rate,
         sd_terminal, seed, fcf_basis, dps_basis, manual_base, manual_net_debt,
@@ -924,7 +1181,22 @@ def quality_payload(symbol: str) -> dict:
             status_code=404,
             detail=f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
         )
-    payload = quality.analyze(company)
+    # The symbol reaches the lens only so the validation-domain block can say
+    # whether THIS use sits inside each screen's published sample. No score
+    # depends on it.
+    #
+    # THE MARKET COMES FROM THE RESOLVED SYMBOL, NOT FROM THE QUERY PARAMETER.
+    # Asking "is this an Indonesian listing?" is a question about the security,
+    # and reading the dropdown for it told a reader that TLKM.JK was a US
+    # listing — the class of silent mismatch `symbols.py` exists to prevent.
+    #
+    # This lens got the rule first and the others have since been brought in
+    # line: the conventions to VALUE with follow the listing too, because the
+    # alternative was ITMG.JK priced in dollars off a US risk-free rate. The
+    # routes now hand every lens a market derived the same way — see
+    # `resolved_with_market` — so this call and its neighbours cannot diverge.
+    payload = quality.analyze(company, symbol=symbol,
+                              market_code=symbols.market_of(symbol))
     payload["explain"] = explain.for_quality(payload)
     return payload
 
@@ -939,7 +1211,7 @@ def quality_scores(
     Returns `applicable: false` for banks and insurers rather than a number:
     none of the three models was built on financial firms and none transfers.
     """
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     return ok({"ticker": symbol, **quality_payload(symbol)})
 
 
@@ -962,7 +1234,7 @@ def event_study(
     say anything. Walk-forward mode is not offered here — it would cost minutes
     and the market-model estimation already excludes look-ahead.
     """
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     config = AnalysisConfig(period=period, detection_mode=mode,
                             score_threshold=score_threshold)
     try:
@@ -1013,7 +1285,7 @@ def ticker_news(
     limit: int = Query(5, ge=1, le=10),
 ):
     """Third-party headlines. Display-only context — never an instruction source."""
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
     return ok({"ticker": symbol, "items": news.fetch_news(symbol, limit=limit)})
 
 
@@ -1056,8 +1328,15 @@ async def confluence(
     Carries a `synthesis` block: what the four lenses add up to, in sentences.
     It is a DESCRIPTION and never a recommendation — see `explain.for_synthesis`
     for why a single buy/hold/sell score is refused permanently.
+
+    Carries a `preTrade` block too: the conditions that would give a careful
+    buyer pause, each with the measured share of a universe it fires on. Like
+    the synthesis it reads the ASSEMBLED payload rather than running anything,
+    so it costs no extra fetch and cannot drift from the figures the panels
+    render. See `_lib/pretrade.py` for why an uncalibrated check is withheld and
+    why a common one is demoted from a flag to a base condition.
     """
-    symbol = resolved(ticker, market)
+    symbol, market = resolved_with_market(ticker, market)
 
     async def leg(name, fn):
         try:
@@ -1088,4 +1367,18 @@ async def confluence(
     # must quote the figures the panels actually render, and a parallel
     # computation would eventually drift from them. A failed leg becomes a
     # stated blind spot inside it rather than an exception.
-    return ok({"ticker": symbol, **legs, "synthesis": explain.for_synthesis(legs)})
+    return ok({"ticker": symbol, **legs,
+               # The market reaches the synthesis for the same reason it reaches
+               # `pretrade.assess`, and is taken from the RESOLVED symbol for the
+               # same reason too: the measured agreement between the two families
+               # was taken on a different population in each market, and a bare
+               # code with the wrong market selected would quote the wrong one.
+               "synthesis": explain.for_synthesis(
+                   legs, market=symbols.market_of(symbol)),
+               # The market decides which population the firing rates describe.
+               # Taken from the RESOLVED symbol rather than the query parameter,
+               # for the same reason every engine downstream of `symbols.resolve`
+               # takes it from there: the suffix is what actually determines the
+               # listing, and a bare code with the wrong market selected would
+               # otherwise be scored against the wrong universe.
+               "preTrade": pretrade.assess(legs, market=symbols.market_of(symbol))})

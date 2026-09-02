@@ -48,6 +48,8 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from . import posterior as posterior_lib
+from . import screendomain
 from .valuation import _get_row, _safe_float
 
 # Sectors and industry keywords the three models were never fitted on.
@@ -132,11 +134,17 @@ def piotroski_f_score(income, balance, cashflow) -> dict:
            f"{roa_prior:.1%} -> {roa_now:.1%}"
            if np.isfinite(roa_now) and np.isfinite(roa_prior) else "unavailable")
 
+    # THE DETAIL REPORTS THE TWO FIGURES, not the conclusion. It used to read
+    # "earnings backed by cash rather than accruals" whatever the test did, so a
+    # company that failed — AAPL FY2025, cash flow 30.9% of assets against a
+    # 31.2% ROA — rendered a red cross beside a sentence asserting the opposite.
+    # Every other signal here prints what it measured; this one now does too.
     cfo_over_assets = _ratio(cfo_now, assets_now)
     record("Cash flow exceeds accounting profit",
            cfo_over_assets > roa_now
            if np.isfinite(cfo_over_assets) and np.isfinite(roa_now) else None,
-           "earnings backed by cash rather than accruals")
+           f"cash {cfo_over_assets:.1%} vs profit {roa_now:.1%}"
+           if np.isfinite(cfo_over_assets) and np.isfinite(roa_now) else "unavailable")
 
     # --- leverage, liquidity, source of funds ---
     ltd_now, ltd_prior = _at(balance, "long_term_debt", 0), _at(balance, "long_term_debt", 1)
@@ -160,7 +168,8 @@ def piotroski_f_score(income, balance, cashflow) -> dict:
     record("No dilution",
            shares_now <= shares_prior * 1.001
            if np.isfinite(shares_now) and np.isfinite(shares_prior) else None,
-           "share count did not rise" if np.isfinite(shares_now) else "unavailable")
+           f"{shares_prior / 1e6:,.0f}M -> {shares_now / 1e6:,.0f}M shares"
+           if np.isfinite(shares_now) and np.isfinite(shares_prior) else "unavailable")
 
     # --- operating efficiency ---
     revenue_now, revenue_prior = _at(income, "revenue", 0), _at(income, "revenue", 1)
@@ -369,11 +378,22 @@ def beneish_m_score(income, balance, cashflow) -> dict:
 # --------------------------------------------------------------------------- #
 # Orchestration
 # --------------------------------------------------------------------------- #
-def analyze(company: dict) -> dict:
+def analyze(company: dict, symbol: Optional[str] = None,
+            market_code: Optional[str] = None,
+            manipulation_prior: Optional[float] = None) -> dict:
     """The whole quality lens for one company.
 
     `company` is the dict `valuation.fetch_company` already returns, so this
     costs no additional network calls — the statements have been fetched.
+
+    `symbol` and `market_code` are used only by the validation-domain block,
+    which reports whether THIS use sits inside the sample each screen was fitted
+    on. Both are optional: without them the affected dimensions report "unknown"
+    rather than guessing, which is the same contract every other missing input
+    gets here.
+
+    `manipulation_prior` selects which prevalence the Beneish posterior is
+    computed at. It changes no score — only what a flag is reported to be worth.
     """
     sector = company.get("sector") or ""
     industry = company.get("industry") or ""
@@ -384,6 +404,13 @@ def analyze(company: dict) -> dict:
     if is_financial(sector, industry):
         return {
             "applicable": False,
+            # WHY the refusal, as a value rather than a sentence. There are two
+            # ways this lens declines and they are not the same thing: one is a
+            # designed refusal (the models do not transfer to a bank), the other
+            # is missing data. Callers that need to say something specific about
+            # one of them had to sniff the prose for a keyword, which breaks the
+            # first time the prose is reworded.
+            "cause": "financial",
             "reason": (
                 "Piotroski, Altman and Beneish were all built on non-financial "
                 "firms and none of them transfers to a bank or insurer: there is "
@@ -402,6 +429,7 @@ def analyze(company: dict) -> dict:
     if not have_statements:
         return {
             "applicable": False,
+            "cause": "no-statements",
             "reason": "No financial statements came back for this listing.",
             "sector": sector or None, "industry": industry or None,
             "piotroski": None, "altman": None, "beneish": None,
@@ -440,4 +468,19 @@ def analyze(company: dict) -> dict:
         "piotroski": piotroski,
         "altman": altman,
         "beneish": beneish,
+        # WHAT A BENEISH FLAG IS ACTUALLY WORTH. The band decides the branch,
+        # so this can never disagree with the score printed beside it. See
+        # `_lib/posterior.py` for why the prior is the feature and why both the
+        # flagged and clean branches are framed as a shift rather than a level.
+        "manipulationPosterior": posterior_lib.for_beneish(
+            beneish.get("band"), prior=manipulation_prior,
+            indices_available=beneish.get("indicesAvailable"),
+            indices_total=beneish.get("indicesTotal", 8)),
+        # WHERE THESE NUMBERS CAME FROM, beside the numbers themselves.
+        # Applicability is already enforced above and is a different question:
+        # this one is whether a screen that DOES apply is being asked about a
+        # company like the ones it was fitted on. It is never a colour and never
+        # a verdict — see `_lib/screendomain.py`.
+        "domains": screendomain.assess(company, symbol=symbol,
+                                       market_code=market_code),
     }

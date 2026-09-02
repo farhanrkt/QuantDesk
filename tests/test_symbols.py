@@ -63,3 +63,39 @@ def test_bare_idx_codes_are_not_inert_on_yahoo():
     for code in ("ASII", "MAIN", "LIFE"):
         assert symbols.resolve(code, "ID") == f"{code}.JK"
         assert symbols.resolve(code, "US") == code
+
+
+# --------------------------------------------------------------------------- #
+# The conventions must follow the symbol, not the dropdown.
+#
+# `resolve` already let a typed suffix beat the dropdown, so "ITMG.JK" on the
+# default US setting fetched the right Indonesian company — and then priced it
+# as an American one, because the market code handed to the engines was still
+# the dropdown's. Rupiah printed with a dollar sign, the cost of equity took the
+# US 10-year and a 5.5% ERP, and beta was regressed against ^GSPC. Measured on
+# ITMG.JK: fair value Rp 98,000 against the correct Rp 67,525.
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("ticker", "dropdown", "expected"),
+    [
+        ("ITMG.JK", "US", "ID"),   # THE BUG: typed suffix, dropdown left alone
+        ("BBCA.JK", "US", "ID"),   # the README's first documented IDX path
+        ("bbca.jk", "us", "ID"),   # case-insensitive on both inputs
+        ("BBCA", "ID", "ID"),      # the README's second path, still correct
+        ("BBCA.JK", "ID", "ID"),   # agreeing inputs stay agreed
+        ("AAPL", "US", "US"),      # the ordinary case is untouched
+        ("BRK.B", "US", "US"),     # a class-share dot is not an exchange suffix
+        ("BTC-USD", "US", "US"),   # crypto pair
+        ("AAPL", "", "US"),        # blank dropdown falls back to US
+    ],
+)
+def test_market_for_follows_the_typed_suffix(ticker, dropdown, expected):
+    assert symbols.market_for(ticker, dropdown) == expected
+
+
+def test_market_for_agrees_with_market_of_resolve():
+    """It is defined as that composition; pin it so it cannot drift apart."""
+    for ticker in ("ITMG.JK", "BBCA", "AAPL", "BRK.B", "BTC-USD"):
+        for dropdown in ("US", "ID"):
+            assert symbols.market_for(ticker, dropdown) == \
+                symbols.market_of(symbols.resolve(ticker, dropdown))

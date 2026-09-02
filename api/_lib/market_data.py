@@ -42,6 +42,26 @@ THREE THINGS IT BUYS BEYOND TIDINESS
    tool and disqualifying the moment anyone depends on it. Swapping to a
    licensed feed is now a one-file change instead of a rewrite.
 
+FRESHNESS IS PART OF THE CONTRACT, AND IT DID NOT USED TO BE
+------------------------------------------------------------
+`normalise` already drops a trailing row that never carried a close. It had no
+opinion about how OLD the last surviving row is, and that gap is a live bug with
+a name: `MTF=F`, the Newcastle coal future, returns 834 immaculate bars through
+this module and last printed on 2025-12-26. Nothing anywhere raised, logged or
+marked it. A regression run against it today would report a confident coal beta
+computed on data that stops eight months back.
+
+That is the same shape as the AAPL forward-fill in `normalise`'s docstring — a
+plausible number from a frame that should not have been served — and it is worse
+in one respect: the forward-filled bar was wrong by one session, and this is
+wrong by a year with no upper bound.
+
+So a series whose last bar is far older than the window the caller asked for now
+fails the way a MISSING series already does, and every caller inherits that
+without changing. Four call sites opt out BY NAME, each because it is reading the
+reader's own ticker, where a stale last price is still the relevant fact — a
+suspended listing must degrade to a stamped as-of date, not to an error page.
+
 WHAT IT DELIBERATELY DOES NOT DO
 --------------------------------
 It does not interpret. No indicator, no score, no judgement — it fetches,
@@ -68,6 +88,22 @@ except ImportError as exc:  # pragma: no cover
 from . import symbols
 
 OHLCV = ("Open", "High", "Low", "Close", "Volume")
+
+# How many of the symbol's OWN sessions may pass before its last bar stops
+# describing the window that was asked for.
+#
+# COUNTED IN SESSIONS, NOT CALENDAR DAYS, and converted using the frame's own
+# observed spacing — because the alternative needs an exchange holiday calendar
+# this module has no business carrying. The IDX closes for the best part of a
+# week around Idul Fitri and the US does not; one calendar-day threshold either
+# trips on Jakarta every year or is too loose to catch anything.
+STALE_AFTER_SESSIONS = 5
+
+# The floor under that conversion. Five sessions at a typical three-day weekend
+# gap is fifteen days, but a short or irregular frame can estimate its own
+# spacing badly, and being too permissive here costs nothing — the failure this
+# guards against is eight months stale, not eight days.
+STALE_FLOOR_DAYS = 12
 
 # One batch request covers this many symbols. Chunking bounds the blast radius:
 # an error takes out fifty names rather than the whole scan, and each response
@@ -101,9 +137,17 @@ def normalise(frame: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
       double-counts a day in every rolling window;
     * a column can arrive as object dtype, where arithmetic quietly produces
       objects rather than raising;
-    * a missing OHLC value forward-fills, because a gap in the middle of a bar
-      is a reporting artefact rather than a real price of zero — while Volume
-      fills with 0, because no trades IS zero volume;
+    * a missing OHLC value forward-fills IN THE INTERIOR ONLY, because a gap in
+      the middle of a series is a reporting artefact rather than a real price of
+      zero — while Volume fills with 0, because no trades IS zero volume;
+    * a TRAILING row that never carried a close is dropped rather than filled.
+      Yahoo publishes the current session with a volume and no prices, and under
+      `auto_adjust=True` the whole OHLC row arrives as NaN because the
+      adjustment factor is derived from the close. Forward-filling it invented a
+      bar: on 2026-08-28 AAPL was served with the previous session's OHLC and
+      that day's volume, so the app printed a 0.00% change and a "last daily
+      close" of $314.58 dated to a session it had no close for, and every
+      indicator rolled over a duplicated bar;
     * a non-positive close breaks every log and ratio downstream.
 
     Returns None rather than an empty frame when nothing survives, so callers
@@ -144,6 +188,15 @@ def normalise(frame: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
     if "Volume" not in out.columns:
         out["Volume"] = 0.0
 
+    # TRUNCATE BEFORE FILLING, so the fill can only ever repair an interior gap.
+    # Trailing rows with no close of their own are sessions that have not
+    # settled, and carrying the previous day's prices forward onto them reports
+    # a bar that did not happen — see the docstring for the day this cost.
+    closed = out.index[out["Close"].notna()]
+    if len(closed) == 0:
+        return None
+    out = out.loc[:closed[-1]]
+
     out[["Open", "High", "Low", "Close"]] = out[["Open", "High", "Low", "Close"]].ffill()
     out["Volume"] = out["Volume"].fillna(0.0)
     out = out.dropna(subset=["Open", "High", "Low", "Close"])
@@ -152,9 +205,54 @@ def normalise(frame: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
     return out if not out.empty else None
 
 
+def _typical_gap_days(index: pd.DatetimeIndex) -> float:
+    """Calendar days between consecutive bars, at the 90th percentile.
+
+    Read off the SERIES ITSELF rather than assumed, which is what makes one
+    threshold work for a daily equity, a five-day-week future and a series that
+    only prints twice a week. For an ordinary listing this lands on 3 — the
+    Friday-to-Monday gap — so five sessions becomes fifteen calendar days.
+
+    The 90th percentile rather than the median because the median of a daily
+    series is 1, and a threshold built on it would call every Monday stale.
+    """
+    if index is None or len(index) < 3:
+        return float(STALE_FLOOR_DAYS)
+    gaps = pd.Series(index[-60:]).diff().dt.days.dropna()
+    gaps = gaps[gaps > 0]
+    if gaps.empty:
+        return float(STALE_FLOOR_DAYS)
+    return max(1.0, float(np.percentile(gaps, 90)))
+
+
+def is_stale(frame: Optional[pd.DataFrame], asked_through: Optional[dt.date] = None,
+             sessions: int = STALE_AFTER_SESSIONS) -> bool:
+    """Whether a frame's last bar is too old for the window it was fetched for.
+
+    MEASURED AGAINST WHAT THE CALLER ASKED FOR, NOT AGAINST TODAY, and that
+    distinction is the whole reason this is safe to switch on by default. A
+    historical fetch ending in 2021 is supposed to end in 2021; judging it
+    against today would reject every backtest window in the repo. `asked_through`
+    is the `end` the caller passed, or today when they asked for a period.
+    """
+    if frame is None or frame.empty:
+        return False                      # absent is a different failure
+    through = asked_through or dt.date.today()
+    last = frame.index[-1]
+    try:
+        age = (pd.Timestamp(through).normalize() - pd.Timestamp(last).normalize()).days
+    except (TypeError, ValueError):
+        return False
+    if age <= 0:
+        return False
+    limit = max(float(STALE_FLOOR_DAYS), sessions * _typical_gap_days(frame.index))
+    return age > limit
+
+
 def ohlcv(symbol: str, *, period: Optional[str] = None,
           start: Optional[dt.date] = None, end: Optional[dt.date] = None,
-          auto_adjust: bool = True) -> Optional[pd.DataFrame]:
+          auto_adjust: bool = True,
+          allow_stale: bool = False) -> Optional[pd.DataFrame]:
     """Daily history for one symbol, normalised. None when nothing came back.
 
     Takes either a `period` ("2y") or a `start`/`end` pair, because the two
@@ -162,6 +260,14 @@ def ohlcv(symbol: str, *, period: Optional[str] = None,
     in look-back windows and the technical lens in explicit ranges. `end` is
     inclusive here — yfinance treats it as exclusive, and every caller that
     forgot cost itself the most recent bar.
+
+    `allow_stale=True` OPTS OUT OF THE FRESHNESS CHECK and is the right answer
+    for exactly one thing: the reader's own ticker. A suspended IDX listing has
+    a last print that is old and still the fact they came for, so those paths
+    degrade to a stamped as-of date instead of failing. Everything else — a
+    benchmark index, a factor series, a peer basket constituent — is a number
+    this app quotes without the reader ever naming it, and a stale one of those
+    is indistinguishable from a live one on screen. See the module docstring.
     """
     ticker = (symbol or "").strip().upper()
     if not ticker:
@@ -178,7 +284,12 @@ def ohlcv(symbol: str, *, period: Optional[str] = None,
             )
     except Exception:
         return None
-    return normalise(raw)
+    frame = normalise(raw)
+    # Judged against the END OF THE REQUESTED WINDOW, so a deliberate historical
+    # fetch is never rejected for ending where it was told to.
+    if frame is not None and not allow_stale and is_stale(frame, end):
+        return None
+    return frame
 
 
 def ohlcv_batch(symbols_list: Sequence[str], start: dt.date, end: dt.date,
@@ -189,6 +300,13 @@ def ohlcv_batch(symbols_list: Sequence[str], start: dt.date, end: dt.date,
     round trip each; this costs one per chunk. A symbol that fails to fetch is
     simply absent from the result — a scan should not abort because one name was
     delisted last week.
+
+    A symbol that STOPPED PRINTING partway through the window is absent for the
+    same reason, and there is no opt-out here: nothing batches the reader's own
+    ticker. This is where it mattered most and where nothing caught it — a
+    holding delisted six months ago still clears `portfolio.MIN_OVERLAP` inside a
+    252-day window, so it was contributing a correlation computed against a
+    price that had stopped moving.
     """
     frames: dict[str, pd.DataFrame] = {}
     unique = list(dict.fromkeys(s.strip().upper() for s in symbols_list if s and s.strip()))
@@ -220,11 +338,11 @@ def ohlcv_batch(symbols_list: Sequence[str], start: dt.date, end: dt.date,
                 if symbol not in present:
                     continue
                 cleaned = normalise(raw[symbol])
-                if cleaned is not None:
+                if cleaned is not None and not is_stale(cleaned, end):
                     frames[symbol] = cleaned
         elif len(chunk) == 1:
             cleaned = normalise(raw)
-            if cleaned is not None:
+            if cleaned is not None and not is_stale(cleaned, end):
                 frames[chunk[0]] = cleaned
     return frames
 
@@ -466,7 +584,11 @@ def _company_uncached(ticker: str) -> dict:
     # is the official close, the right anchor for a valuation regardless.
     price_source = "quote endpoint (fast_info)" if np.isfinite(price) else None
     price_as_of = None
-    bars = ohlcv(ticker, period="5d")
+    # OPT-OUT 1 OF 4. This is the reader's own ticker. A suspended IDX listing
+    # must degrade to a stamped as-of date rather than failing the whole page,
+    # and `price_as_of` below is what carries that. Refusing here would take the
+    # last known price away from exactly the reader who most needs to see it.
+    bars = ohlcv(ticker, period="5d", allow_stale=True)
     if bars is not None and len(bars):
         bar_close = _safe_float(bars["Close"].iloc[-1])
         if np.isfinite(bar_close) and bar_close > 0:

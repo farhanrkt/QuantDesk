@@ -4,8 +4,10 @@ import { track } from "@vercel/analytics";
 import { useCallback, useRef, useState } from "react";
 import type {
   AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
+  ExposureScanResponse,
   Leg, ManualInputs, EventStudyResponse, Market, NewsResponse, QualityResponse,
-  PeersResponse, RankResponse, ScreenerResponse, Synthesis, TechnicalResponse,
+  PeersResponse, PortfolioResponse, PreTrade, RankResponse, ScreenerResponse,
+  Synthesis, TechnicalResponse,
   UniversesResponse,
   ValuationResponse,
 } from "./types";
@@ -33,12 +35,7 @@ export function queryString(params: Record<string, string | number | boolean | n
  * old `no-store` was a REQUEST directive, which shared caches are specified to
  * honour — it was suppressing the very edge cache the API asks for.
  */
-async function get<T>(
-  path: string,
-  params: Record<string, unknown>,
-  signal?: AbortSignal,
-): Promise<T> {
-  const res = await fetch(`${path}?${queryString(params as never)}`, { signal });
+async function unwrap<T>(res: Response): Promise<T> {
   if (!res.ok) {
     let failure: EngineFailure = { message: `Request failed (${res.status})` };
     try {
@@ -51,6 +48,41 @@ async function get<T>(
     throw failure;
   }
   return res.json() as Promise<T>;
+}
+
+async function get<T>(
+  path: string,
+  params: Record<string, unknown>,
+  signal?: AbortSignal,
+): Promise<T> {
+  return unwrap<T>(await fetch(`${path}?${queryString(params as never)}`, { signal }));
+}
+
+/**
+ * The one POST in this app, and the reason is the INPUT rather than the size.
+ *
+ * Every other request here asks about a company, and a company name in a URL is
+ * not a fact about anybody. A holdings list is — and URLs are logged by every
+ * hop that handles them: the platform's access log, any proxy in between, the
+ * browser's own history. None of that is reachable by a response header. A body
+ * is not logged by default anywhere in that chain.
+ *
+ * The cost is honest and small: this app's stated shape was that everything the
+ * UI does is a plain GET, and it is now "everything except one route", which
+ * also means one CORS preflight on that call. Cheaper than putting somebody's
+ * portfolio in a log file.
+ */
+async function post<T>(
+  path: string,
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  return unwrap<T>(await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  }));
 }
 
 const asFailure = (err: unknown): EngineFailure =>
@@ -192,6 +224,13 @@ export function useEngines() {
   // so a partial re-run of one lens deliberately clears it rather than leaving
   // a summary standing that describes figures no longer on screen.
   const [synthesis, setSynthesis] = useState<Synthesis | null>(null);
+  // The pre-trade panel is cleared and restored on exactly the same rule, and
+  // for a sharper version of the same reason: it reads the assembled payload,
+  // so leaving it up beside a re-run lens would show conditions evaluated
+  // against figures that are no longer the ones on screen. On this panel that
+  // is worse than a stale summary — a flag nobody can reproduce from the page
+  // is the one thing it must never print.
+  const [preTrade, setPreTrade] = useState<PreTrade | null>(null);
 
   // The last options each engine ran with, so a partial re-run can reuse them.
   const lastRun = useRef<RunOptions | null>(null);
@@ -220,6 +259,7 @@ export function useEngines() {
     // lens supersedes some of them, so it is dropped rather than left standing
     // beside numbers it no longer describes.
     setSynthesis(null);
+    setPreTrade(null);
     return settle(
       get<TechnicalResponse>("/api/technical-analysis", {
         ticker: o.ticker, market: o.market, range: o.range,
@@ -235,6 +275,7 @@ export function useEngines() {
     const { signal, current } = claim(["valuation"]);
     setValuation({ status: "loading" });
     setSynthesis(null);          // see runTechnical
+    setPreTrade(null);
     return settle(
       get<ValuationResponse>("/api/intrinsic-value", valuationParams(o, v), signal),
       setValuation,
@@ -259,6 +300,7 @@ export function useEngines() {
     setQuality({ status: "loading" });
     setNews({ status: "loading" });
     setSynthesis(null);
+    setPreTrade(null);
 
     let payload: ConfluenceResponse;
     try {
@@ -282,6 +324,7 @@ export function useEngines() {
     if (current("quality")) setQuality(fromLeg(payload.quality));
     if (current("news")) setNews(fromLeg(payload.news));
     if (current("anomaly")) setSynthesis(payload.synthesis ?? null);
+    if (current("anomaly")) setPreTrade(payload.preTrade ?? null);
 
     // ONE AGGREGATE EVENT, AND DELIBERATELY NOT THE TICKER.
     //
@@ -316,7 +359,7 @@ export function useEngines() {
   );
 
   return {
-    anomaly, technical, valuation, quality, news, synthesis,
+    anomaly, technical, valuation, quality, news, synthesis, preTrade,
     run, refineValuation, refineTechnical, csvUrl,
     valuationOptions: lastValuation, technicalOptions: lastTechnical,
   };
@@ -460,6 +503,44 @@ export function useRanking() {
   return { state, scan, reset };
 }
 
+export function useExposureScan() {
+  const [state, setState] = useState<Engine<ExposureScanResponse>>({ status: "idle" });
+  const seq = useRef(0);
+  const inflight = useRef<AbortController | null>(null);
+
+  const scan = useCallback((params: {
+    universe?: string | null; tickers?: string; market: Market;
+  }) => {
+    // Same supersede-rather-than-race guard as the ranking scan: two scans
+    // settling out of order would put one universe's points under another's axis.
+    inflight.current?.abort();
+    const controller = new AbortController();
+    inflight.current = controller;
+    const token = (seq.current += 1);
+    const live = () => seq.current === token;
+
+    setState({ status: "loading" });
+    get<ExposureScanResponse>("/api/exposure", {
+      universe: params.universe ?? undefined,
+      tickers: params.universe ? undefined : params.tickers,
+      market: params.market,
+    }, controller.signal)
+      .then((data) => { if (live()) setState({ status: "ready", data }); })
+      .catch((err) => {
+        if (isAbort(err) || !live()) return;
+        setState({ status: "error", failure: asFailure(err) });
+      });
+  }, []);
+
+  const reset = useCallback(() => {
+    inflight.current?.abort();
+    seq.current += 1;
+    setState({ status: "idle" });
+  }, []);
+
+  return { state, scan, reset };
+}
+
 export function useDeepen() {
   const [state, setState] = useState<Engine<DeepenResponse>>({ status: "idle" });
   const seq = useRef(0);
@@ -506,6 +587,59 @@ export function useDeepen() {
  * this firm's header — the same class of mistake `_lib/symbols.py` exists to
  * prevent, arriving through the UI instead of the API.
  */
+/**
+ * Where the loaded ticker sits against a book of holdings.
+ *
+ * A SEPARATE, DELIBERATE REQUEST, like the peer comparison and for a sharper
+ * reason. It costs a batch download of the whole book, most readers will not
+ * have entered one, and — unlike every other route here — its input is personal.
+ * Firing it automatically on every ticker run would send somebody's holdings to
+ * the server on the strength of them having typed a symbol.
+ *
+ * The holdings themselves never reach the analytics event. `track` has always
+ * carried a market code and a count of successful lenses and nothing else; a
+ * portfolio is the single most revealing thing this app can be told, and it is
+ * not collected. It travels in a POST body rather than a query string for the
+ * same reason — see `post`.
+ */
+export function usePortfolio() {
+  const [state, setState] = useState<Engine<PortfolioResponse>>({ status: "idle" });
+  const seq = useRef(0);
+  const inflight = useRef<AbortController | null>(null);
+
+  const compare = useCallback(
+    (o: {
+      candidate: string; market: Market; holdings: string[];
+      weights?: Record<string, number>;
+    }) => {
+      inflight.current?.abort();
+      const controller = new AbortController();
+      inflight.current = controller;
+      const token = (seq.current += 1);
+      const live = () => seq.current === token;
+
+      setState({ status: "loading" });
+      // POST, so the holdings travel in a body rather than a URL. See `post`.
+      post<PortfolioResponse>("/api/portfolio", {
+        candidate: o.candidate, market: o.market,
+        holdings: o.holdings, weights: o.weights ?? {},
+      }, controller.signal)
+        .then((data) => { if (live()) setState({ status: "ready", data }); })
+        .catch((err) => {
+          if (isAbort(err) || !live()) return;
+          setState({ status: "error", failure: asFailure(err) });
+        });
+    }, []);
+
+  const reset = useCallback(() => {
+    inflight.current?.abort();
+    seq.current += 1;
+    setState({ status: "idle" });
+  }, []);
+
+  return { state, compare, reset };
+}
+
 export function usePeers() {
   const [state, setState] = useState<Engine<PeersResponse>>({ status: "idle" });
   const seq = useRef(0);

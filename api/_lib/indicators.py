@@ -110,6 +110,14 @@ def donchian_channels(high, low, length: int = 252):
     Donchian's followers traded and that George & Hwang (2004) later documented
     as an anomaly in its own right.
     """
+    # `min_periods` is a QUARTER of the window on purpose, and the reason it is
+    # safe here is that nothing labels this output with its window length. These
+    # bands are drawn on the chart, where starting 63 bars in rather than 252 is
+    # the difference between a visible band and an empty one, and they are shown
+    # as a bare number in the indicator grid with no claim attached. The
+    # user-facing "52-week high" is `longterm.price_position`, which measures its
+    # own window explicitly and reports `windowDays` beside the figure; the
+    # breakout setups in `swing.py` use their own 20- and 55-bar windows in full.
     upper = high.rolling(length, min_periods=max(2, length // 4)).max()
     lower = low.rolling(length, min_periods=max(2, length // 4)).min()
     return lower, (upper + lower) / 2.0, upper
@@ -136,6 +144,19 @@ def bollinger_bandwidth(lower, middle, upper) -> pd.Series:
 # Momentum oscillators
 # ============================================================================ #
 def rsi(close: pd.Series, length: int = 14) -> pd.Series:
+    """Wilder's RSI.
+
+    THE SATURATED CASES ARE THREE, NOT TWO, and conflating two of them was a
+    bug. With no average loss the ratio is undefined, and the old code sent
+    every such window to 100 — correct when there were gains, and badly wrong
+    when there were none: a price that had not moved for fourteen days came
+    back as 100, the most overbought reading the scale has. That is reachable
+    on a halted or thinly traded listing, which this app explicitly supports.
+
+        gains, no losses   -> 100   (genuinely overbought)
+        losses, no gains   ->   0
+        neither            ->  50   (nothing happened; neutral is the answer)
+    """
     delta = close.diff()
     gain = delta.clip(lower=0.0)
     loss = -delta.clip(upper=0.0)
@@ -143,7 +164,9 @@ def rsi(close: pd.Series, length: int = 14) -> pd.Series:
     avg_loss = wilder_smooth(loss, length)
     rs = avg_gain / avg_loss.replace(0.0, np.nan)
     out = 100.0 - (100.0 / (1.0 + rs))
-    return out.where(avg_loss != 0.0, 100.0).where(avg_gain.notna())
+    flat = (avg_gain == 0.0) & (avg_loss == 0.0)
+    out = out.where(avg_loss != 0.0, 100.0).where(~flat, 50.0)
+    return out.where(avg_gain.notna())
 
 
 def macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9):
@@ -436,17 +459,44 @@ def chaikin_money_flow(high, low, close, volume, length: int = 21) -> pd.Series:
 
 
 def money_flow_index(high, low, close, volume, length: int = 14) -> pd.Series:
+    """Volume-weighted RSI: the same oscillator, weighted by money traded.
+
+    SAME THREE SATURATED CASES AS `rsi`, AND THE SAME BUG UNTIL NOW. A blanket
+    `fillna(50)` sent every undefined window to neutral, which is right when
+    nothing moved and wrong when everything moved one way: fourteen consecutive
+    up days produced no negative flow, so the ratio was undefined and the most
+    overbought reading on the scale came back as 50 — the exact middle.
+
+    The warm-up window is left as NaN rather than filled. A partial window is
+    not a neutral reading, and callers that cannot carry NaN drop those rows
+    (`whale.py`) or take the last valid value (`technical.py`) — both of which
+    are better than being handed a 50 that means "not computed yet".
+    """
     typical = (high + low + close) / 3.0
     raw_flow = typical * volume
     delta = typical.diff()
     positive = raw_flow.where(delta > 0, 0.0).rolling(length, min_periods=length).sum()
     negative = raw_flow.where(delta < 0, 0.0).rolling(length, min_periods=length).sum()
     ratio = positive / negative.replace(0.0, np.nan)
-    return (100.0 - 100.0 / (1.0 + ratio)).fillna(50.0)
+    out = 100.0 - 100.0 / (1.0 + ratio)
+    both_zero = (positive == 0.0) & (negative == 0.0)
+    # No negative flow but some positive flow is saturation, not neutrality.
+    out = out.where(negative != 0.0, 100.0).where(~both_zero, 50.0)
+    return out.where(positive.notna())
 
 
 def volume_trend(volume: pd.Series, short: int = 21, long: int = 252) -> pd.Series:
     """Recent volume against its own long-run average. Rising participation in a
-    trend is the classic confirmation; a trend on fading volume is not."""
-    return (volume.rolling(short, min_periods=short // 2).mean()
-            / volume.rolling(long, min_periods=long // 4).mean().replace(0.0, np.nan))
+    trend is the classic confirmation; a trend on fading volume is not.
+
+    BOTH WINDOWS ARE REQUIRED IN FULL, and that is a correction. The long
+    average carried `min_periods = long // 4`, so on a short chart range this
+    divided by a 63-day mean while the explanation layer called the result
+    "volume versus its year". A number is allowed to be absent; it is not
+    allowed to be computed over a quarter and labelled as a year. On the app's
+    default five-year range nothing changes, because there are 1,250 bars; on a
+    three- or six-month range the reading now goes missing, which is the same
+    treatment the 200-day average already gets and for the same reason.
+    """
+    return (volume.rolling(short, min_periods=short).mean()
+            / volume.rolling(long, min_periods=long).mean().replace(0.0, np.nan))

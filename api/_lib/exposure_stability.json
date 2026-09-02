@@ -1,0 +1,2804 @@
+{
+  "measuredOn": "2026-09-01",
+  "years": 9,
+  "blockWeeks": 52,
+  "blocks": 9,
+  "transitions": 8,
+  "weeks": 475,
+  "killAt": 0.25,
+  "namesMeasured": 157,
+  "namesExcludedForShortHistory": {
+    "ABNB": 300,
+    "APP": 282,
+    "ARM": 156,
+    "BUKA.JK": 265,
+    "CEG": 242,
+    "DASH": 300,
+    "DDOG": 364,
+    "GEHC": 195,
+    "GFS": 254,
+    "GOTO.JK": 230,
+    "MBMA.JK": 177,
+    "NCKL.JK": 178,
+    "PGEO.JK": 184,
+    "PLTR": 310,
+    "TAPG.JK": 282
+  },
+  "tiers": {
+    "all": 157,
+    "US": 111,
+    "ID": 46,
+    "resources": 12,
+    "nonResources": 145,
+    "ID-illiquidHalf": 23,
+    "ID-liquidHalf": 23,
+    "US-illiquidHalf": 55,
+    "US-liquidHalf": 56
+  },
+  "factors": {
+    "gold": {
+      "label": "gold",
+      "symbol": "GC=F",
+      "all": {
+        "names": 157,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 1 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.06555637921524458,
+          "stdev": 0.07793067563729993,
+          "tStat": 2.3793126346744637,
+          "min": -0.03612649545085246,
+          "max": 0.14756975669658084,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 153,
+              "rho": 0.13796523394046614
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 156,
+              "rho": -0.01973415940952411
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 157,
+              "rho": 0.13510689101272025
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 157,
+              "rho": 0.14756975669658084
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 157,
+              "rho": 0.02969194797784655
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 157,
+              "rho": -0.03612649545085246
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 157,
+              "rho": 0.006657818517852381
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 157,
+              "rho": 0.123320040436867
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.2799250154485723,
+          "medianAbsBeta": 0.08819344076630982,
+          "names": 157
+        }
+      },
+      "US": {
+        "names": 111,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.011642513717719481,
+          "stdev": 0.17563073315544914,
+          "tStat": 0.18749566780138277,
+          "min": -0.1567918567918568,
+          "max": 0.2989225185058161,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 108,
+              "rho": 0.2989225185058161
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 110,
+              "rho": -0.14134751932917072
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 111,
+              "rho": 0.10505440505440504
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 111,
+              "rho": 0.1311074061074061
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 111,
+              "rho": -0.1567918567918568
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 111,
+              "rho": -0.14914882414882413
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 111,
+              "rho": -0.125008775008775
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 111,
+              "rho": 0.13035275535275534
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.2604598412280357,
+          "medianAbsBeta": 0.0737670442346538,
+          "names": 111
+        }
+      },
+      "ID": {
+        "names": 46,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.1509369831525243,
+          "stdev": 0.10508711285661067,
+          "tStat": 4.062479648274995,
+          "min": 0.015232809127351218,
+          "max": 0.30965155720012333,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 45,
+              "rho": 0.017918313570487482
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 46,
+              "rho": 0.1411655874190564
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 46,
+              "rho": 0.1738513721862473
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 46,
+              "rho": 0.11970397779833486
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 46,
+              "rho": 0.15929694727104532
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 46,
+              "rho": 0.015232809127351218
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 46,
+              "rho": 0.30965155720012333
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 46,
+              "rho": 0.2706753006475485
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.3450547562941649,
+          "medianAbsBeta": 0.12750537878571253,
+          "names": 46
+        }
+      },
+      "resources": {
+        "names": 12,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.2211538461538462,
+          "stdev": 0.44675468203301155,
+          "tStat": 1.4001365007681417,
+          "min": -0.7552447552447553,
+          "max": 0.7132867132867133,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 12,
+              "rho": -0.7552447552447553
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 12,
+              "rho": 0.16083916083916086
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 12,
+              "rho": 0.5034965034965035
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 12,
+              "rho": 0.5104895104895105
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 12,
+              "rho": 0.3076923076923077
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 12,
+              "rho": 0.06293706293706294
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 12,
+              "rho": 0.7132867132867133
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 12,
+              "rho": 0.2657342657342658
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.4187871998137134,
+          "medianAbsBeta": 0.23080766638567385,
+          "names": 12
+        }
+      },
+      "nonResources": {
+        "names": 145,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.0425553230416971,
+          "stdev": 0.10439194873901685,
+          "tStat": 1.1530068309615333,
+          "min": -0.07649976381672176,
+          "max": 0.1845541333105013,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 141,
+              "rho": 0.1845541333105013
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 144,
+              "rho": -0.05672373603408086
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 145,
+              "rho": 0.11118327822390174
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 145,
+              "rho": 0.1375373956857188
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 145,
+              "rho": -0.006530467642890882
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 145,
+              "rho": -0.07649976381672176
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 145,
+              "rho": -0.06377342150842387
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 145,
+              "rho": 0.11069516611557234
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.27561984365666903,
+          "medianAbsBeta": 0.08222069975032142,
+          "names": 145
+        }
+      },
+      "ID-illiquidHalf": {
+        "names": 23,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.043372388481084136,
+          "stdev": 0.23061815692945625,
+          "tStat": 0.5319426782274251,
+          "min": -0.3142292490118577,
+          "max": 0.36462450592885376,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 22,
+              "rho": 0.06041784302653869
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 23,
+              "rho": -0.3142292490118577
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 23,
+              "rho": -0.11462450592885376
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 23,
+              "rho": -0.12055335968379448
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 23,
+              "rho": 0.36462450592885376
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 23,
+              "rho": 0.03063241106719368
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 23,
+              "rho": 0.33498023715415026
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 23,
+              "rho": 0.1057312252964427
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.33201395308245196,
+          "medianAbsBeta": 0.11505236704206218,
+          "names": 23
+        }
+      },
+      "ID-liquidHalf": {
+        "names": 23,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.22097332015810278,
+          "stdev": 0.23315428506935867,
+          "tStat": 2.68065814185862,
+          "min": -0.0909090909090909,
+          "max": 0.4841897233201581,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 23,
+              "rho": -0.0909090909090909
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 23,
+              "rho": 0.4841897233201581
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 23,
+              "rho": 0.4762845849802372
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 23,
+              "rho": 0.3320158102766798
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 23,
+              "rho": 0.04644268774703557
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 23,
+              "rho": -0.06818181818181818
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 23,
+              "rho": 0.21739130434782608
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 23,
+              "rho": 0.37055335968379455
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.3570801845826454,
+          "medianAbsBeta": 0.13532829869648821,
+          "names": 23
+        }
+      },
+      "US-illiquidHalf": {
+        "names": 55,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.01070135315418333,
+          "stdev": 0.16314257791978673,
+          "tStat": 0.18553095040377732,
+          "min": -0.23369408369408373,
+          "max": 0.28157042119306264,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 54,
+              "rho": 0.28157042119306264
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 55,
+              "rho": -0.05165945165945167
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 55,
+              "rho": 0.04841269841269842
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 55,
+              "rho": 0.13492063492063494
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 55,
+              "rho": -0.15909090909090912
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 55,
+              "rho": 0.06919191919191921
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 55,
+              "rho": -0.23369408369408373
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 55,
+              "rho": -0.004040404040404041
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.250723350172638,
+          "medianAbsBeta": 0.08565365919274517,
+          "names": 55
+        }
+      },
+      "US-liquidHalf": {
+        "names": 56,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.011233155430027317,
+          "stdev": 0.22829263167713407,
+          "tStat": 0.13917296095527704,
+          "min": -0.31852358168147643,
+          "max": 0.29910425004764624,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 54,
+              "rho": 0.29910425004764624
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 55,
+              "rho": -0.22878787878787885
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 56,
+              "rho": 0.13759398496240602
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 56,
+              "rho": 0.10362269309637732
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 56,
+              "rho": -0.14757347915242652
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 56,
+              "rho": -0.31852358168147643
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 56,
+              "rho": -0.021394395078605605
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 56,
+              "rho": 0.26582365003417635
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.26930244190990626,
+          "medianAbsBeta": 0.06532428530503862,
+          "names": 56
+        }
+      },
+      "stress": {
+        "usable": true,
+        "names": 157,
+        "worstBlocksRSquared": 0.013168650395731906,
+        "restRSquared": 0.006827367308180894,
+        "rise": 0.006341283087551012,
+        "worstBlocks": 2,
+        "totalBlocks": 9
+      },
+      "asymmetry": {
+        "usable": true,
+        "names": 157,
+        "byHalf": {
+          "signAgreement": 0.4840764331210191,
+          "rankCorrelation": 0.00549184750587637
+        },
+        "byRegime": {
+          "signAgreement": 0.4840764331210191,
+          "rankCorrelation": 0.025189315240109405
+        },
+        "medianGapEarly": 0.02142039588462502,
+        "medianGapLate": -0.048745039071601944,
+        "medianGapRising": -0.03162850885187215,
+        "medianGapFalling": -0.04811796221384235,
+        "risingBlocks": 5,
+        "fallingBlocks": 4
+      },
+      "frequency": {
+        "usable": true,
+        "names": 157,
+        "medianAbsDaily": 0.07081809257407541,
+        "medianAbsDimson": 0.13557093534443704,
+        "medianAbsWeekly": 0.25935449320847903,
+        "signDisagreeDailyWeekly": 0.09554140127388536,
+        "signDisagreeDimsonWeekly": 0.03821656050955414,
+        "weeklyOverDaily": 3.6622631841883537
+      }
+    },
+    "oil": {
+      "label": "the energy complex",
+      "symbol": "CL=F",
+      "all": {
+        "names": 157,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.1981703535593875,
+          "stdev": 0.1291557941877613,
+          "tStat": 4.339800679116786,
+          "min": -0.04395062508890329,
+          "max": 0.3527031301360093,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 153,
+              "rho": 0.23107233323951587
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 156,
+              "rho": -0.04395062508890329
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 157,
+              "rho": 0.13817066590589125
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 157,
+              "rho": 0.17229392392659346
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 157,
+              "rho": 0.2973226080538828
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 157,
+              "rho": 0.3143346212764902
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 157,
+              "rho": 0.3527031301360093
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 157,
+              "rho": 0.12341617102562034
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.11221436188846498,
+          "medianAbsBeta": 0.03496258578313131,
+          "names": 157
+        }
+      },
+      "US": {
+        "names": 111,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.09010474159476345,
+          "stdev": 0.13682637147051258,
+          "tStat": 1.8626138547407063,
+          "min": -0.12555958794490907,
+          "max": 0.2923394173394173,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 108,
+              "rho": 0.05375975306524908
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 110,
+              "rho": -0.12555958794490907
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 111,
+              "rho": 0.15024570024570025
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 111,
+              "rho": 0.2923394173394173
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 111,
+              "rho": 0.16637416637416635
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 111,
+              "rho": 0.12655317655317652
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 111,
+              "rho": 0.13806598806598808
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 111,
+              "rho": -0.08094068094068094
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.10234430704044739,
+          "medianAbsBeta": 0.029272225298502444,
+          "names": 111
+        }
+      },
+      "ID": {
+        "names": 46,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.25167318420093626,
+          "stdev": 0.2803500740912402,
+          "tStat": 2.5391085166380365,
+          "min": -0.06395312981806969,
+          "max": 0.6224483502929387,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 45,
+              "rho": 0.3440052700922266
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 46,
+              "rho": 0.048905334566759176
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 46,
+              "rho": -0.06395312981806969
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 46,
+              "rho": -0.05445575084798027
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 46,
+              "rho": 0.6131976564909035
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 46,
+              "rho": 0.6224483502929387
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 46,
+              "rho": 0.3913043478260869
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 46,
+              "rho": 0.11193339500462535
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.14617916196947994,
+          "medianAbsBeta": 0.05646747561887707,
+          "names": 46
+        }
+      },
+      "resources": {
+        "names": 12,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.004370629370629372,
+          "stdev": 0.34152266820296745,
+          "tStat": 0.03619673835750699,
+          "min": -0.46153846153846156,
+          "max": 0.4685314685314686,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 12,
+              "rho": 0.1958041958041958
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 12,
+              "rho": -0.22377622377622378
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 12,
+              "rho": -0.18881118881118883
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 12,
+              "rho": 0.0
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 12,
+              "rho": -0.21678321678321683
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 12,
+              "rho": 0.46153846153846156
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 12,
+              "rho": 0.4685314685314686
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 12,
+              "rho": -0.46153846153846156
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.16293222086035308,
+          "medianAbsBeta": 0.15622747848797286,
+          "names": 12
+        }
+      },
+      "nonResources": {
+        "names": 145,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.15072473804057415,
+          "stdev": 0.10168476079647334,
+          "tStat": 4.192505682316651,
+          "min": -0.0614862149344908,
+          "max": 0.28200677058730905,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 141,
+              "rho": 0.1926580761162721
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 144,
+              "rho": -0.0614862149344908
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 145,
+              "rho": 0.16442686191150996
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 145,
+              "rho": 0.17490946307668082
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 145,
+              "rho": 0.14404818138875766
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 145,
+              "rho": 0.21587151629664617
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 145,
+              "rho": 0.28200677058730905
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 145,
+              "rho": 0.09336324988190835
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.10997315023115954,
+          "medianAbsBeta": 0.03089749734731695,
+          "names": 145
+        }
+      },
+      "ID-illiquidHalf": {
+        "names": 23,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.19177018633540374,
+          "stdev": 0.29240644425773676,
+          "tStat": 1.85497962647701,
+          "min": -0.23715415019762848,
+          "max": 0.5247035573122529,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 22,
+              "rho": 0.3088650479954828
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 23,
+              "rho": -0.07114624505928854
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 23,
+              "rho": -0.23715415019762848
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 23,
+              "rho": -0.023715415019762844
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 23,
+              "rho": 0.5247035573122529
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 23,
+              "rho": 0.45553359683794475
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 23,
+              "rho": 0.49604743083003955
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 23,
+              "rho": 0.08102766798418974
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.1576525206630424,
+          "medianAbsBeta": 0.05356467241365462,
+          "names": 23
+        }
+      },
+      "ID-liquidHalf": {
+        "names": 23,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.33102766798418976,
+          "stdev": 0.29316653818918353,
+          "tStat": 3.1937056696551154,
+          "min": 0.0,
+          "max": 0.7915019762845852,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 23,
+              "rho": 0.4466403162055336
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 23,
+              "rho": 0.11857707509881424
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 23,
+              "rho": 0.11363636363636365
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 23,
+              "rho": 0.0
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 23,
+              "rho": 0.7124505928853756
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 23,
+              "rho": 0.7915019762845852
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 23,
+              "rho": 0.30138339920948615
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 23,
+              "rho": 0.16403162055335968
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.11973091746532044,
+          "medianAbsBeta": 0.06761853390710619,
+          "names": 23
+        }
+      },
+      "US-illiquidHalf": {
+        "names": 55,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.09825155190721231,
+          "stdev": 0.1261033498964407,
+          "tStat": 2.203726980218876,
+          "min": -0.1407647907647908,
+          "max": 0.2684704184704185,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 54,
+              "rho": 0.06415094339622641
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 55,
+              "rho": -0.1407647907647908
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 55,
+              "rho": 0.18340548340548343
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 55,
+              "rho": 0.2684704184704185
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 55,
+              "rho": 0.010822510822510824
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 55,
+              "rho": 0.19357864357864363
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 55,
+              "rho": 0.10021645021645025
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 55,
+              "rho": 0.10613275613275615
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.1004271537925822,
+          "medianAbsBeta": 0.030737744024703233,
+          "names": 55
+        }
+      },
+      "US-liquidHalf": {
+        "names": 56,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.06696371252602633,
+          "stdev": 0.1882722641486031,
+          "tStat": 1.0060004416413897,
+          "min": -0.27074504442925496,
+          "max": 0.2850991114149009,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 54,
+              "rho": 0.045244901848675426
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 55,
+              "rho": -0.10714285714285716
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 56,
+              "rho": 0.062474367737525634
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 56,
+              "rho": 0.28086124401913876
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 56,
+              "rho": 0.2850991114149009
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 56,
+              "rho": 0.07347915242652085
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 56,
+              "rho": 0.1664388243335612
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 56,
+              "rho": -0.27074504442925496
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.11302452903765417,
+          "medianAbsBeta": 0.02702172333287221,
+          "names": 56
+        }
+      },
+      "stress": {
+        "usable": true,
+        "names": 157,
+        "worstBlocksRSquared": 0.024130904738593768,
+        "restRSquared": 0.010812305196939053,
+        "rise": 0.013318599541654715,
+        "worstBlocks": 2,
+        "totalBlocks": 9
+      },
+      "asymmetry": {
+        "usable": true,
+        "names": 157,
+        "byHalf": {
+          "signAgreement": 0.4840764331210191,
+          "rankCorrelation": -0.0630616662221919
+        },
+        "byRegime": {
+          "signAgreement": 0.47770700636942676,
+          "rankCorrelation": -0.10169996092756715
+        },
+        "medianGapEarly": -0.0004816135355201305,
+        "medianGapLate": 0.035736419067072624,
+        "medianGapRising": 0.025577800336117833,
+        "medianGapFalling": 0.00522077002025105,
+        "risingBlocks": 5,
+        "fallingBlocks": 4
+      },
+      "frequency": {
+        "usable": true,
+        "names": 157,
+        "medianAbsDaily": 0.061509936297022595,
+        "medianAbsDimson": 0.059262256470568785,
+        "medianAbsWeekly": 0.07366483371497277,
+        "signDisagreeDailyWeekly": 0.044585987261146494,
+        "signDisagreeDimsonWeekly": 0.03184713375796178,
+        "weeklyOverDaily": 1.1976086816161853
+      }
+    },
+    "copper": {
+      "label": "copper",
+      "symbol": "HG=F",
+      "all": {
+        "names": 157,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.12984830297006042,
+          "stdev": 0.06628911044429854,
+          "tStat": 5.540373973360031,
+          "min": 0.016568572119648472,
+          "max": 0.23131190344767705,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 153,
+              "rho": 0.11199455858898583
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 156,
+              "rho": 0.09962225980306932
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 157,
+              "rho": 0.184762991583922
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 157,
+              "rho": 0.016568572119648472
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 157,
+              "rho": 0.23131190344767705
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 157,
+              "rho": 0.17047364471374793
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 157,
+              "rho": 0.088585888029571
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 157,
+              "rho": 0.1354666054738618
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.1904955714172074,
+          "medianAbsBeta": 0.06041040092213327,
+          "names": 157
+        }
+      },
+      "US": {
+        "names": 111,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.11404725703576772,
+          "stdev": 0.09006646716105632,
+          "tStat": 3.5815144689314913,
+          "min": -0.009985959985959986,
+          "max": 0.279282284786872,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 108,
+              "rho": 0.138395876799375
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 110,
+              "rho": 0.279282284786872
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 111,
+              "rho": -0.009985959985959986
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 111,
+              "rho": 0.17155142155142156
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 111,
+              "rho": 0.1329062829062829
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 111,
+              "rho": 0.10933660933660933
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 111,
+              "rho": 0.031177606177606176
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 111,
+              "rho": 0.059713934713934706
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.17100575329974255,
+          "medianAbsBeta": 0.06444847697362856,
+          "names": 111
+        }
+      },
+      "ID": {
+        "names": 46,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.17881976564909033,
+          "stdev": 0.1040247433005299,
+          "tStat": 4.8620997231537295,
+          "min": 0.01227258711069997,
+          "max": 0.35368485969781066,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 45,
+              "rho": 0.09999999999999998
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 46,
+              "rho": 0.01227258711069997
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 46,
+              "rho": 0.15843354918285538
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 46,
+              "rho": 0.13327166204131977
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 46,
+              "rho": 0.260191181005242
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 46,
+              "rho": 0.35368485969781066
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 46,
+              "rho": 0.22355843354918287
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 46,
+              "rho": 0.18914585260561206
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.29751718700009533,
+          "medianAbsBeta": 0.09231728624746188,
+          "names": 46
+        }
+      },
+      "resources": {
+        "names": 12,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.36888111888111896,
+          "stdev": 0.2628995977304413,
+          "tStat": 3.968638109214081,
+          "min": 0.034965034965034975,
+          "max": 0.7762237762237763,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 12,
+              "rho": 0.32867132867132864
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 12,
+              "rho": 0.6853146853146854
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 12,
+              "rho": 0.034965034965034975
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 12,
+              "rho": 0.16083916083916086
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 12,
+              "rho": 0.30069930069930073
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 12,
+              "rho": 0.7762237762237763
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 12,
+              "rho": 0.16783216783216784
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 12,
+              "rho": 0.49650349650349657
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.3392306427689933,
+          "medianAbsBeta": 0.19028240667147625,
+          "names": 12
+        }
+      },
+      "nonResources": {
+        "names": 145,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.08696003691561585,
+          "stdev": 0.0779270502937449,
+          "tStat": 3.156286889519297,
+          "min": -0.06202172886159659,
+          "max": 0.18105022831050227,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 141,
+              "rho": 0.09116828631362642
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 144,
+              "rho": 0.0356763925729443
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 145,
+              "rho": 0.1788497874350496
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 145,
+              "rho": -0.06202172886159659
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 145,
+              "rho": 0.18105022831050227
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 145,
+              "rho": 0.09143048338844276
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 145,
+              "rho": 0.07686584789796881
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 145,
+              "rho": 0.10266099826798929
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.1820847116227269,
+          "medianAbsBeta": 0.0589373388949682,
+          "names": 145
+        }
+      },
+      "ID-illiquidHalf": {
+        "names": 23,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.11005434782608696,
+          "stdev": 0.25948739029729806,
+          "tStat": 1.1995985709784123,
+          "min": -0.18873517786561267,
+          "max": 0.5909090909090909,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 22,
+              "rho": -0.09881422924901187
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 23,
+              "rho": -0.06126482213438736
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 23,
+              "rho": -0.18873517786561267
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 23,
+              "rho": -0.0029644268774703555
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 23,
+              "rho": 0.2964426877470355
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 23,
+              "rho": 0.27865612648221344
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 23,
+              "rho": 0.06620553359683795
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 23,
+              "rho": 0.5909090909090909
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.34700030901208045,
+          "medianAbsBeta": 0.07542491782240147,
+          "names": 23
+        }
+      },
+      "ID-liquidHalf": {
+        "names": 23,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.2745800395256917,
+          "stdev": 0.1794734387210089,
+          "tStat": 4.327267796521226,
+          "min": -0.0909090909090909,
+          "max": 0.4683794466403162,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 23,
+              "rho": 0.3557312252964427
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 23,
+              "rho": 0.13339920948616601
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 23,
+              "rho": 0.4683794466403162
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 23,
+              "rho": 0.27964426877470355
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 23,
+              "rho": 0.2845849802371542
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 23,
+              "rho": 0.42885375494071143
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 23,
+              "rho": 0.33695652173913043
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 23,
+              "rho": -0.0909090909090909
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.22610729481288783,
+          "medianAbsBeta": 0.09633920233301578,
+          "names": 23
+        }
+      },
+      "US-illiquidHalf": {
+        "names": 55,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.09105015791336547,
+          "stdev": 0.15972136138258183,
+          "tStat": 1.6123625176079377,
+          "min": -0.06681096681096682,
+          "max": 0.3812409812409813,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 54,
+              "rho": 0.13756432246998285
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 55,
+              "rho": 0.3812409812409813
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 55,
+              "rho": 0.2671717171717172
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 55,
+              "rho": 0.05865800865800867
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 55,
+              "rho": -0.06681096681096682
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 55,
+              "rho": -0.0008658008658008659
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 55,
+              "rho": -0.015223665223665226
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 55,
+              "rho": -0.03333333333333334
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.1811728134959261,
+          "medianAbsBeta": 0.06996786806243396,
+          "names": 55
+        }
+      },
+      "US-liquidHalf": {
+        "names": 56,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.12174830300450956,
+          "stdev": 0.1721904823155537,
+          "tStat": 1.9998561940183832,
+          "min": -0.25153793574846206,
+          "max": 0.29460013670539986,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 54,
+              "rho": 0.17331808652563369
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 55,
+              "rho": 0.11789321789321792
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 56,
+              "rho": -0.25153793574846206
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 56,
+              "rho": 0.29460013670539986
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 56,
+              "rho": 0.25953520164046484
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 56,
+              "rho": 0.2309637730690362
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 56,
+              "rho": 0.062474367737525634
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 56,
+              "rho": 0.08673957621326042
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.15911587108424466,
+          "medianAbsBeta": 0.05922823881520119,
+          "names": 56
+        }
+      },
+      "stress": {
+        "usable": true,
+        "names": 157,
+        "worstBlocksRSquared": 0.015697182014976482,
+        "restRSquared": 0.005415438569255249,
+        "rise": 0.010281743445721234,
+        "worstBlocks": 2,
+        "totalBlocks": 9
+      },
+      "asymmetry": {
+        "usable": true,
+        "names": 157,
+        "byHalf": {
+          "signAgreement": 0.4840764331210191,
+          "rankCorrelation": -0.0635578240996285
+        },
+        "byRegime": {
+          "signAgreement": 0.4840764331210191,
+          "rankCorrelation": -0.11325113651163801
+        },
+        "medianGapEarly": 0.02331919062599666,
+        "medianGapLate": -0.01631301970231585,
+        "medianGapRising": -0.01589880335215535,
+        "medianGapFalling": 0.0565957333405083,
+        "risingBlocks": 5,
+        "fallingBlocks": 4
+      },
+      "frequency": {
+        "usable": true,
+        "names": 157,
+        "medianAbsDaily": 0.15488535545701004,
+        "medianAbsDimson": 0.18005936356749125,
+        "medianAbsWeekly": 0.27579427249452143,
+        "signDisagreeDailyWeekly": 0.006369426751592357,
+        "signDisagreeDimsonWeekly": 0.006369426751592357,
+        "weeklyOverDaily": 1.780634919813777
+      }
+    },
+    "dollar": {
+      "label": "the dollar",
+      "symbol": "DX-Y.NYB",
+      "all": {
+        "names": 157,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 1 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.07661048932415047,
+          "stdev": 0.12276877570402413,
+          "tStat": 1.765002418586496,
+          "min": -0.07914338342460571,
+          "max": 0.2604580777603433,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 153,
+              "rho": 0.0998116950129334
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 156,
+              "rho": -0.0371544625499834
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 157,
+              "rho": -0.07914338342460571
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 157,
+              "rho": 0.03777622039332916
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 157,
+              "rho": 0.2604580777603433
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 157,
+              "rho": 0.2255223612153387
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 157,
+              "rho": -0.014828918561886392
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 157,
+              "rho": 0.12044232474773474
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.7138886420546702,
+          "medianAbsBeta": 0.19188082683472651,
+          "names": 157
+        }
+      },
+      "US": {
+        "names": 111,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.09237084513278458,
+          "stdev": 0.1227377620490725,
+          "tStat": 2.128637507703945,
+          "min": -0.14665672165672164,
+          "max": 0.20630045630045626,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 108,
+              "rho": 0.07353739746777557
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 110,
+              "rho": 0.18045217861731624
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 111,
+              "rho": -0.14665672165672164
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 111,
+              "rho": 0.18486310986310983
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 111,
+              "rho": 0.19034749034749032
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 111,
+              "rho": 0.022893997893997892
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 111,
+              "rho": 0.027228852228852227
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 111,
+              "rho": 0.20630045630045626
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.6687664313769254,
+          "medianAbsBeta": 0.254376630745962,
+          "names": 111
+        }
+      },
+      "ID": {
+        "names": 46,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.11405474728786477,
+          "stdev": 0.11089165071332317,
+          "tStat": 2.909105770001043,
+          "min": -0.013999383287079862,
+          "max": 0.33148319457292624,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 45,
+              "rho": 0.0600790513833992
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 46,
+              "rho": -0.013999383287079862
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 46,
+              "rho": 0.10662966389145853
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 46,
+              "rho": 0.06395312981806969
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 46,
+              "rho": 0.18186864014801107
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 46,
+              "rho": 0.33148319457292624
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 46,
+              "rho": 0.016096207215541166
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 46,
+              "rho": 0.16632747456059202
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.8556712154370183,
+          "medianAbsBeta": 0.21878706411713916,
+          "names": 46
+        }
+      },
+      "resources": {
+        "names": 12,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.2648601398601399,
+          "stdev": 0.2877333162617162,
+          "tStat": 2.6035831150087927,
+          "min": -0.18181818181818185,
+          "max": 0.6433566433566434,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 12,
+              "rho": -0.18181818181818185
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 12,
+              "rho": -0.07692307692307693
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 12,
+              "rho": 0.3636363636363637
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 12,
+              "rho": 0.6433566433566434
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 12,
+              "rho": 0.5524475524475525
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 12,
+              "rho": 0.2517482517482518
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 12,
+              "rho": 0.16783216783216784
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 12,
+              "rho": 0.39860139860139865
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.8810509304019862,
+          "medianAbsBeta": 0.40665471926690655,
+          "names": 12
+        }
+      },
+      "nonResources": {
+        "names": 145,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 1 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.046464226388904746,
+          "stdev": 0.13740049306709265,
+          "tStat": 0.956478942070122,
+          "min": -0.1319634703196347,
+          "max": 0.24357187844433942,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 141,
+              "rho": 0.07189948199837322
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 144,
+              "rho": -0.068997668997669
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 145,
+              "rho": -0.1319634703196347
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 145,
+              "rho": -0.02964887419304046
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 145,
+              "rho": 0.24357187844433942
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 145,
+              "rho": 0.22454731538340417
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 145,
+              "rho": -0.03780507006770587
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 145,
+              "rho": 0.10011021886317116
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.6834275839834962,
+          "medianAbsBeta": 0.18616016087200032,
+          "names": 145
+        }
+      },
+      "ID-illiquidHalf": {
+        "names": 23,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.05106578204404292,
+          "stdev": 0.1433494242571073,
+          "tStat": 1.0075788153895342,
+          "min": -0.09486166007905138,
+          "max": 0.3656126482213439,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 22,
+              "rho": -0.02428006775832863
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 23,
+              "rho": -0.015810276679841896
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 23,
+              "rho": 0.06719367588932806
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 23,
+              "rho": -0.09486166007905138
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 23,
+              "rho": 0.0899209486166008
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 23,
+              "rho": 0.3656126482213439
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 23,
+              "rho": 0.07509881422924902
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 23,
+              "rho": -0.05434782608695652
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 1.052078910193794,
+          "medianAbsBeta": 0.2796775386354192,
+          "names": 23
+        }
+      },
+      "ID-liquidHalf": {
+        "names": 23,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.20812747035573126,
+          "stdev": 0.20345102665873144,
+          "tStat": 2.893440216187255,
+          "min": -0.10177865612648221,
+          "max": 0.43478260869565216,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 23,
+              "rho": 0.16699604743083005
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 23,
+              "rho": -0.08300395256916995
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 23,
+              "rho": 0.25592885375494073
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 23,
+              "rho": 0.25592885375494073
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 23,
+              "rho": 0.3596837944664032
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 23,
+              "rho": 0.43478260869565216
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 23,
+              "rho": -0.10177865612648221
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 23,
+              "rho": 0.3764822134387352
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.7861321910890383,
+          "medianAbsBeta": 0.1835950073654885,
+          "names": 23
+        }
+      },
+      "US-illiquidHalf": {
+        "names": 55,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.09840078684418307,
+          "stdev": 0.16231297596958474,
+          "tStat": 1.7147085927289558,
+          "min": -0.1798701298701299,
+          "max": 0.33686868686868693,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 54,
+              "rho": -0.029388221841052026
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 55,
+              "rho": 0.26962481962481966
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 55,
+              "rho": -0.1798701298701299
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 55,
+              "rho": 0.33686868686868693
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 55,
+              "rho": 0.06847041847041849
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 55,
+              "rho": 0.14855699855699858
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 55,
+              "rho": 0.06681096681096682
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 55,
+              "rho": 0.10613275613275615
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.6663104549339433,
+          "medianAbsBeta": 0.22989873912074113,
+          "names": 55
+        }
+      },
+      "US-liquidHalf": {
+        "names": 56,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.09046290862949255,
+          "stdev": 0.18003883131441797,
+          "tStat": 1.4211808790529645,
+          "min": -0.17676008202323992,
+          "max": 0.3019138755980862,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 54,
+              "rho": 0.23941299790356388
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 55,
+              "rho": 0.1261904761904762
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 56,
+              "rho": -0.17676008202323992
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 56,
+              "rho": 0.022829801777170197
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 56,
+              "rho": 0.3019138755980862
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 56,
+              "rho": -0.08120300751879699
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 56,
+              "rho": -0.007928913192071087
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 56,
+              "rho": 0.2992481203007519
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.6692956517384709,
+          "medianAbsBeta": 0.2684489920312536,
+          "names": 56
+        }
+      },
+      "stress": {
+        "usable": true,
+        "names": 157,
+        "worstBlocksRSquared": 0.024122077463329967,
+        "restRSquared": 0.003970328446809343,
+        "rise": 0.02015174901652062,
+        "worstBlocks": 2,
+        "totalBlocks": 9
+      },
+      "asymmetry": {
+        "usable": true,
+        "names": 157,
+        "byHalf": {
+          "signAgreement": 0.49044585987261147,
+          "rankCorrelation": 0.11350231643709029
+        },
+        "byRegime": {
+          "signAgreement": 0.5222929936305732,
+          "rankCorrelation": 0.1049032802237672
+        },
+        "medianGapEarly": -0.1418237116150067,
+        "medianGapLate": 0.12782416714194966,
+        "medianGapRising": 0.00992094975281449,
+        "medianGapFalling": 0.12596600291674107,
+        "risingBlocks": 4,
+        "fallingBlocks": 5
+      },
+      "frequency": {
+        "usable": true,
+        "names": 157,
+        "medianAbsDaily": 0.4028384032327591,
+        "medianAbsDimson": 0.5496933753813292,
+        "medianAbsWeekly": 1.1044424802705923,
+        "signDisagreeDailyWeekly": 0.01910828025477707,
+        "signDisagreeDimsonWeekly": 0.006369426751592357,
+        "weeklyOverDaily": 2.7416514200421154
+      }
+    }
+  },
+  "headline": "Exposure beta persistence could not be measured, so nothing in this app may print a forward-looking factor beta.",
+  "caveats": [
+    "Today's index constituents, so every name measured is one that survived.",
+    "Persistence, not accuracy. A beta that predicts next year's beta is still a description of a relationship, not a forecast of a return.",
+    "Non-overlapping blocks, so the t-statistics do not share weeks. One history, one regime.",
+    "The stress comparison selects whole blocks rather than the worst weeks, which removes the worst of the conditioning bias (Forbes & Rigobon 2002) but not all of it \u2014 a block is still chosen on its own realised return.",
+    "Names with fewer than eight 52-week blocks are excluded by name rather than averaged in, and the exclusions are listed in this file."
+  ]
+}

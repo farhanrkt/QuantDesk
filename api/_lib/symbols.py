@@ -102,3 +102,23 @@ def hint(symbol: str) -> str:
         return ("Non-US listings need their exchange suffix — Indonesian tickers "
                 "end in .JK. Crypto takes a pair, such as BTC-USD.")
     return "Check the symbol, or try a wider date range."
+
+
+def market_for(ticker: str, market_code: str = DEFAULT_MARKET) -> str:
+    """The market whose CONVENTIONS apply to what the user actually typed.
+
+    `resolve()` lets an explicitly typed suffix beat the dropdown, because the
+    user was more specific than it was. The conventions have to follow the
+    symbol for exactly the same reason, and until this existed they did not:
+    "ITMG.JK" with the dropdown left on US — the first of the two ways the
+    README tells you to reach an IDX listing — resolved to the right Indonesian
+    company and then priced it as if it were American. Rupiah carried a dollar
+    sign, the cost of equity took the US 10-year and a 5.5% ERP instead of the
+    IndoGB proxy and 7%, and beta was regressed against ^GSPC rather than
+    ^JKSE. Fair value came out at Rp 98,000 against the correct Rp 67,525, and
+    the upside the page led with read +282% instead of +159%.
+
+    Composed rather than reimplemented: the market that applies is the market of
+    the symbol the app is actually going to fetch.
+    """
+    return market_of(resolve(ticker, market_code))

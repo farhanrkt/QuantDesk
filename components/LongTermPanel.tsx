@@ -5,10 +5,11 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { Check, Minus, X } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
 import {
-  Explain, ExplainedRow, ExplainedStat, TONE_HEX, useDetail,
+  Explain, ExplainedRow, ExplainedStat, TONE_HEX, TONE_TEXT, useDetail,
 } from "@/components/ui/explain";
+import { useHorizon } from "@/components/ui/horizon";
 import type { ExplainMap, LongTermBlock } from "@/lib/types";
 import { cn, num, pct, signedPct } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
           plainEnglish } = data;
   const detail = useDetail();
   const simple = detail === "simple";
+  const horizon = useHorizon();
   const ex: ExplainMap = data.explain ?? {};
 
   const verdictColor = view.tone === "bull" ? UP : view.tone === "bear" ? DOWN : ASH;
@@ -64,7 +66,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card accent={verdictColor}>
           <CardHeader>
             <CardTitle>In plain English</CardTitle>
-            <span className="num text-xs font-semibold" style={{ color: verdictColor }}>
+            <span className="num text-meta font-semibold" style={{ color: verdictColor }}>
               {view.verdict}
             </span>
           </CardHeader>
@@ -74,8 +76,8 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                  className={cn(
                    "leading-relaxed",
                    i === plainEnglish.paragraphs.length - 1
-                     ? "text-[0.78rem] text-ash"
-                     : "text-[0.95rem] text-chalk/90",
+                     ? "text-meta text-ash"
+                     : "text-base text-body",
                  )}>
                 {paragraph}
               </p>
@@ -99,16 +101,17 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       <Card>
         <CardHeader>
           <CardTitle>Long-horizon checklist</CardTitle>
-          <span className="num text-xs font-semibold" style={{ color: verdictColor }}>
+          <span className="num text-meta font-semibold" style={{ color: verdictColor }}>
             {view.passed}/{view.scored} pointing up
           </span>
         </CardHeader>
         <CardBody className="px-0">
-          <p className="px-5 pb-3 text-sm leading-relaxed text-chalk/85">{view.headline}</p>
+          <p className="px-5 pb-3 text-base leading-relaxed text-body">{view.headline}</p>
           <ul>
             {checks.map((check) => (
               <li key={check.label}
-                  className="flex items-baseline gap-3 border-b border-rule/60 px-5 py-2 last:border-0">
+                  className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 border-b
+                             border-ruleSoft px-5 py-2 last:border-0">
                 <span className="mt-0.5 shrink-0">
                   {check.passed === null
                     ? <Minus aria-label="no reading" className="h-3.5 w-3.5 text-ash" />
@@ -116,14 +119,20 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                       ? <Check aria-label="points up" className="h-3.5 w-3.5 text-acc" />
                       : <X aria-label="points down" className="h-3.5 w-3.5 text-dist" />}
                 </span>
-                <span className="w-56 shrink-0 text-xs text-chalk/90">{check.label}</span>
-                <span className="flex-1 text-[0.7rem] leading-relaxed text-ash">
+                <span className="min-w-0 flex-1 text-meta text-body sm:w-56 sm:flex-none">
+                  {check.label}
+                </span>
+                {/* THE FIXED 224px LABEL LEAVES 73px FOR THIS ONE AT 375px, which is narrower
+                    than its longest word, so the row — and therefore the page — scrolled
+                    sideways. Below `sm` the detail takes a line of its own and the label takes
+                    the width instead; at `sm` and above the two-column row is unchanged. */}
+                <span className="w-full text-meta leading-relaxed text-ash sm:w-auto sm:flex-1">
                   {check.detail}
                 </span>
               </li>
             ))}
           </ul>
-          <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
+          <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
             A tick means that line points upward, not that it is a reason to buy. {view.caveat}
           </p>
         </CardBody>
@@ -134,11 +143,11 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card>
           <CardHeader>
             <CardTitle>If you had bought at any point and held</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">% per year</span>
+            <span className="font-mono text-micro text-ash">% per year</span>
           </CardHeader>
           <CardBody className="px-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Held for</th>
@@ -152,43 +161,80 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                   </tr>
                 </thead>
                 <tbody>
-                  {rollingReturns.map((row) => (
-                    <tr key={row.years}
-                        className="border-b border-rule/60 last:border-0 hover:bg-raised/60">
-                      <td className="num px-5 py-2 font-semibold">
-                        <span className="flex items-center gap-1.5">
-                          {row.years}y
-                          <Explain explain={ex[`rollingWorst.${row.years}`]} />
-                        </span>
-                      </td>
-                      <td className={cn("num px-5 py-2 text-right",
-                                        row.worst >= 0 ? "text-acc" : "text-dist")}>
-                        {signedPct(row.worst)}
-                      </td>
-                      {!simple && (
-                        <td className="num px-5 py-2 text-right text-ash">{signedPct(row.p25)}</td>
-                      )}
-                      <td className="num px-5 py-2 text-right font-semibold">
-                        {signedPct(row.median)}
-                      </td>
-                      {!simple && (
-                        <td className="num px-5 py-2 text-right text-ash">{signedPct(row.p75)}</td>
-                      )}
-                      <td className="num px-5 py-2 text-right text-acc">{signedPct(row.best)}</td>
-                      <td className="num px-5 py-2 text-right">{pct(row.positiveShare, 0)}</td>
-                      {!simple && (
-                        <td className="num px-5 py-2 text-right text-ash">{row.windows}</td>
-                      )}
-                    </tr>
-                  ))}
+                  {rollingReturns.map((row) => {
+                    // A HORIZON THE HISTORY CANNOT SUPPORT GETS A ROW SAYING SO.
+                    // These used to be dropped, and on the app's default range
+                    // the five-year row usually was — leaving a reader unable to
+                    // tell whether the stock had never had a bad five-year
+                    // stretch or whether nobody had looked.
+                    const measured = row.usable !== false && row.worst != null;
+                    const chosen = row.years === horizon;
+                    if (!measured) {
+                      return (
+                        <tr key={row.years} className="border-b border-ruleSoft last:border-0">
+                          <td className={cn("num px-5 py-2 font-semibold",
+                                            chosen ? "text-chalk" : "text-ash")}>
+                            <span className="flex items-center gap-1.5">
+                              {row.years}y
+                              <Explain explain={ex[`rollingWorst.${row.years}`]} />
+                            </span>
+                          </td>
+                          <td className="px-5 py-2 text-meta leading-relaxed text-ash"
+                              colSpan={simple ? 4 : 7}>
+                            {row.reason ?? "Not enough loaded history for this horizon."}
+                          </td>
+                        </tr>
+                      );
+                    }
+                    return (
+                      <tr key={row.years}
+                          className={cn("border-b border-ruleSoft last:border-0 hover:bg-raised/60",
+                                        chosen && "bg-raised/70")}>
+                        <td className="num px-5 py-2 font-semibold">
+                          <span className="flex items-center gap-1.5">
+                            {row.years}y
+                            {chosen && (
+                              <span className="eyebrow text-tech" title="your stated horizon">
+                                yours
+                              </span>
+                            )}
+                            <Explain explain={ex[`rollingWorst.${row.years}`]} />
+                          </span>
+                        </td>
+                        {/* From the served tone, not the sign. A worst 3-year
+                            outcome of +0.4% a year is break-even, and
+                            `_rolling_worst` grades it neutral rather than
+                            green — the sign alone would call it a good result. */}
+                        <td className={cn("num px-5 py-2 text-right",
+                                          TONE_TEXT[ex[`rollingWorst.${row.years}`]?.tone ?? ""]
+                                          ?? "text-chalk")}>
+                          {signedPct(row.worst)}
+                        </td>
+                        {!simple && (
+                          <td className="num px-5 py-2 text-right text-ash">{signedPct(row.p25)}</td>
+                        )}
+                        <td className="num px-5 py-2 text-right font-semibold">
+                          {signedPct(row.median)}
+                        </td>
+                        {!simple && (
+                          <td className="num px-5 py-2 text-right text-ash">{signedPct(row.p75)}</td>
+                        )}
+                        <td className="num px-5 py-2 text-right text-acc">{signedPct(row.best)}</td>
+                        <td className="num px-5 py-2 text-right">{pct(row.positiveShare, 0)}</td>
+                        {!simple && (
+                          <td className="num px-5 py-2 text-right text-ash">{row.windows}</td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
-            <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
-              Read a row like this: &quot;buying on any day in this history and holding for that
-              many years, here is the range of yearly returns you would have got&quot;. The
-              <span className="text-chalk/80"> worst </span>column is the one that decides
-              position size — a headline growth rate quietly reports only the one path that
+            <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
+              Read a row as: buying on <em>any</em> day in this history and holding that many
+              years, here is the range of yearly returns you would have got. The
+              <span className="font-semibold text-body"> worst </span>column is the one that
+              decides position size — a headline growth rate reports only the single path that
               happened to occur.
             </p>
           </CardBody>
@@ -200,7 +246,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card accent={DOWN}>
           <CardHeader>
             <CardTitle>What holding it cost</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               time spent below a previous high
             </span>
           </CardHeader>
@@ -240,18 +286,18 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                           fill="url(#ddFill)" isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
-                <p className="mt-1 text-[0.7rem] leading-relaxed text-ash">
-                  The line is how far below its best-ever price it sat on each day. Zero means a
-                  new high; every dip is a stretch where holders were down on paper.
+                <p className="prose-col mt-1 text-meta leading-relaxed text-ash">
+                  How far below its best-ever price it sat each day. Zero is a new high; every
+                  dip is a stretch where holders were down on paper.
                 </p>
               </>
             )}
 
-            <p className="mt-3 text-[0.7rem] leading-relaxed text-ash">
+            <Note>
               Depth is only half of it. A 30% fall that recovers in a quarter is survivable; a
               15% one that grinds on for three years is where most people sell. The Ulcer index
-              scores both at once, which is why it is here beside the maximum.
-            </p>
+              scores depth and duration together, which is why it sits beside the maximum.
+            </Note>
           </CardBody>
         </Card>
       )}
@@ -261,7 +307,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card>
           <CardHeader>
             <CardTitle>Was the risk paid for?</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               over {risk.observations} trading days
             </span>
           </CardHeader>
@@ -286,13 +332,13 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card accent={relativeStrength.outperforming ? UP : DOWN}>
           <CardHeader>
             <CardTitle>Against just owning the index</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               vs {relativeStrength.benchmark}
             </span>
           </CardHeader>
           <CardBody className="px-0">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
+              <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Period</th>
@@ -305,7 +351,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                   {Object.entries(relativeStrength.periods).map(([label, row]) => {
                     const explain = ex[`relativeExcess.${label}`];
                     return (
-                      <tr key={label} className="border-b border-rule/60 last:border-0">
+                      <tr key={label} className="border-b border-ruleSoft last:border-0">
                         <td className="num px-5 py-2">
                           <span className="flex items-center gap-1.5">
                             {label}
@@ -318,8 +364,11 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                         <td className="num px-5 py-2 text-right text-ash">
                           {row ? signedPct(row.benchmark) : "—"}
                         </td>
+                        {/* Served tone: beating the index by 0.2% is not the
+                            same finding as beating it by 20%, and `_relative_excess`
+                            already draws that line. */}
                         <td className={cn("num px-5 py-2 text-right font-semibold",
-                                          (row?.excess ?? 0) >= 0 ? "text-acc" : "text-dist")}>
+                                          TONE_TEXT[explain?.tone ?? ""] ?? "text-chalk")}>
                           {row ? signedPct(row.excess) : "—"}
                         </td>
                       </tr>
@@ -328,8 +377,8 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                 </tbody>
               </table>
             </div>
-            <p className="px-5 pt-3 text-[0.7rem] leading-relaxed text-ash">
-              The real alternative is never cash — it is the index fund you could have bought
+            <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
+              The real alternative was never cash — it was the index fund you could have bought
               instead. A stock up 40% while the market rose 60% has cost its holder money in the
               only sense that matters.
             </p>
@@ -343,7 +392,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
           {position.usable && (
             <Card>
               <CardHeader><CardTitle>Where it sits</CardTitle></CardHeader>
-              <CardBody className="space-y-2 text-xs">
+              <CardBody className="space-y-2 text-meta">
                 <ExplainedRow explain={ex.fromHigh52w} />
                 <ExplainedRow explain={ex.rangePosition} />
                 <ExplainedRow explain={ex.fromAllTimeHigh} />
@@ -362,12 +411,12 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
             <Card accent={TONE_HEX[ex.faberDistance?.tone ?? "neutral"]}>
               <CardHeader>
                 <CardTitle>A simple long-term trend rule</CardTitle>
-                <span className={cn("num text-xs font-semibold",
+                <span className={cn("num text-meta font-semibold",
                                     faber.signal === "invested" ? "text-acc" : "text-dist")}>
                   {faber.signal === "invested" ? "Stay invested" : "Stand aside"}
                 </span>
               </CardHeader>
-              <CardBody className="space-y-2 text-xs">
+              <CardBody className="space-y-2 text-meta">
                 <ExplainedRow explain={ex.faberDistance} />
                 <ExplainedRow label="Months in this stance"
                               value={String(faber.monthsInStance ?? 0)} tone="text-chalk" />
@@ -392,7 +441,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card>
           <CardHeader>
             <CardTitle>Year by year</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">total return each year</span>
+            <span className="font-mono text-micro text-ash">total return each year</span>
           </CardHeader>
           <CardBody>
             <ResponsiveContainer width="100%" height={150}>
@@ -422,7 +471,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <Card>
           <CardHeader>
             <CardTitle>Average return by calendar month</CardTitle>
-            <span className="font-mono text-[0.65rem] text-warn">descriptive only</span>
+            <span className="font-mono text-micro text-warn">descriptive only</span>
           </CardHeader>
           <CardBody>
             <div className="grid grid-cols-6 gap-2 lg:grid-cols-12">
@@ -437,17 +486,17 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                            : `${value >= 0 ? UP : DOWN}${Math.round(intensity * 40)
                                .toString(16).padStart(2, "0")}`,
                        }}>
-                    <div className="font-mono text-[0.6rem] uppercase text-ash">{month.month}</div>
-                    <div className={cn("num text-[0.7rem]",
+                    <div className="font-mono text-micro uppercase text-ash">{month.month}</div>
+                    <div className={cn("num text-micro",
                                        value >= 0 ? "text-acc" : "text-dist")}>
                       {month.mean == null ? "—" : signedPct(month.mean)}
                     </div>
-                    <div className="text-[0.55rem] text-ash">n={month.count}</div>
+                    <div className="text-micro text-ash">n={month.count}</div>
                   </div>
                 );
               })}
             </div>
-            <p className="mt-3 text-[0.7rem] leading-relaxed text-warn">
+            <p className="mt-3 text-meta leading-relaxed text-warn">
               {seasonality.caveat}
             </p>
           </CardBody>

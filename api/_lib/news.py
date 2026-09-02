@@ -26,6 +26,7 @@ instructions to act on, and the client renders it as text with links marked
 
 from __future__ import annotations
 
+import re
 import ssl
 import urllib.parse
 import urllib.request
@@ -66,6 +67,36 @@ def _feed_url(symbol: str) -> str:
     return f"https://news.google.com/rss/search?{params}"
 
 
+# One megabyte. Google's RSS for a single ticker runs about 25 KB; this is the
+# ceiling that stops a hostile or broken upstream from deciding how much memory
+# this function allocates.
+MAX_FEED_BYTES = 1_048_576
+
+# Entity declarations are refused outright rather than expanded.
+#
+# `xml.etree.ElementTree` does not resolve EXTERNAL entities, so there is no XXE
+# here — verified against `file:///etc/passwd`, which raises rather than reads.
+# It does expand INTERNAL ones, which is the billion-laughs shape: a few hundred
+# bytes of nested declarations expands without bound inside the parser. Measured
+# on this parser before the fix, a three-level nest expanded 300x from under 400
+# bytes, and the nesting depth is the sender's to choose.
+#
+# REFUSED BY INSPECTION RATHER THAN BY A PARSER HOOK, because Python 3.12's
+# `XMLParser` does not expose the underlying expat parser — there is no
+# `EntityDeclHandler` to install. A feed has no legitimate reason to declare a
+# doctype at all, so the declaration is rejected before parsing begins. A false
+# positive costs the news panel one fetch, which already degrades to an empty
+# list; there is no failure mode worse than that.
+_DECLARATION = re.compile(rb"<!\s*(?:DOCTYPE|ENTITY)", re.IGNORECASE)
+
+
+def _parse_feed(raw: bytes) -> ET.Element:
+    """Parse a feed, refusing any payload that declares entities."""
+    if _DECLARATION.search(raw):
+        raise ET.ParseError("entity or doctype declarations are not accepted in a feed")
+    return ET.fromstring(raw)
+
+
 def _text(item: ET.Element, tag: str) -> str:
     node = item.find(tag)
     return (node.text or "").strip() if node is not None else ""
@@ -79,8 +110,15 @@ def fetch_news(symbol: str, limit: int = MAX_ITEMS) -> list[dict]:
                                     context=_ssl_context()) as response:
             if getattr(response, "status", 200) != 200:
                 return []
-            raw = response.read()
-        root = ET.fromstring(raw)
+            # BOUNDED READ. `response.read()` with no argument will happily pull
+            # a multi-gigabyte body into a serverless function's memory, and the
+            # size is chosen by whoever is on the other end of the socket. A
+            # timeout does not help: a slow drip inside the timeout still fills
+            # memory. One megabyte is roughly forty times the largest real feed.
+            raw = response.read(MAX_FEED_BYTES + 1)
+            if len(raw) > MAX_FEED_BYTES:
+                return []
+        root = _parse_feed(raw)
     except Exception:
         # Network error, timeout, DNS failure, malformed XML -> no news, no crash.
         return []

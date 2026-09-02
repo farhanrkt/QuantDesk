@@ -187,11 +187,30 @@ def test_rolling_returns_expose_a_bad_window(history):
     assert one_year["p25"] <= one_year["median"] <= one_year["p75"]
 
 
-def test_rolling_returns_skip_horizons_longer_than_the_history():
+def test_a_horizon_the_history_cannot_support_is_marked_not_dropped():
+    """It used to vanish, and on the app's own default range the five-year row
+    usually did. A reader then could not tell whether the stock had never had a
+    bad five-year stretch or whether nobody had looked — which is the
+    absence-reads-as-evidence failure, in the oldest table in the app."""
     short = price_path(np.linspace(100, 130, 400))
-    assert L.rolling_returns(short, years=(1, 3, 5)) == [
-        r for r in L.rolling_returns(short, years=(1,))
-    ]
+    rows = {r["years"]: r for r in L.rolling_returns(short, years=(1, 3, 5))}
+
+    assert set(rows) == {1, 3, 5}, "every requested horizon must be accounted for"
+    assert rows[1]["usable"] is True
+    for horizon in (3, 5):
+        assert rows[horizon]["usable"] is False
+        assert rows[horizon]["windows"] == 0
+        # The reason has to be actionable, not a shrug.
+        assert "Widen the chart range" in rows[horizon]["reason"]
+        assert "400" in rows[horizon]["reason"], "say how much history there actually is"
+        # And it must carry no numbers that would read as a result.
+        assert "worst" not in rows[horizon] and "median" not in rows[horizon]
+
+
+def test_the_default_horizons_are_the_ones_a_holder_would_state():
+    assert L.HOLDING_HORIZONS == (1, 2, 3, 5, 10)
+    rows = L.rolling_returns(price_path(np.linspace(100, 130, 400)))
+    assert [r["years"] for r in rows] == list(L.HOLDING_HORIZONS)
 
 
 # ============================================================================ #
@@ -331,3 +350,63 @@ def test_longterm_output_is_json_safe(history):
         "calendar": L.calendar_returns(history),
     }
     json.dumps(clean(payload), allow_nan=False)
+
+
+# ============================================================================ #
+# Downside deviation — the published quantity, not a lookalike
+# ============================================================================ #
+def _downside_published(returns, target=0.0):
+    """Sortino & Price (1994), written out here independently of the module."""
+    short = np.minimum(np.asarray(returns, dtype=float) - target, 0.0)
+    return float(np.sqrt(np.mean(short**2)) * np.sqrt(252))
+
+
+def test_downside_deviation_is_the_rms_shortfall_over_all_periods():
+    """NOT the standard deviation of the losing days about their own mean, which
+    is what this computed until the audit. That statistic answers a different
+    question and its error does not even have a consistent sign — measured at
+    0.85x on ordinary returns, 1.44x on a series with rare crashes, and exactly
+    zero when every loss is the same size."""
+    rng = np.random.default_rng(11)
+    for name, r in (
+        ("ordinary", rng.normal(0.0005, 0.013, 1500)),
+        ("rare crashes", np.where(rng.random(1500) < 0.02, -0.09,
+                                  rng.normal(0.001, 0.004, 1500))),
+        ("uniform losses", np.where(np.arange(1500) % 3 == 0, -0.01, 0.008)),
+    ):
+        got = L.downside_deviation_of(pd.Series(r))
+        assert got == pytest.approx(_downside_published(r), rel=1e-12), name
+
+
+def test_uniform_losses_no_longer_produce_an_infinite_sortino():
+    """The failure this fix exists for. Losses that are all the same size have
+    zero dispersion ABOUT THEIR OWN MEAN, so the old formula returned 0 and
+    Sortino came back as 4.7e14 — which the panel would have rendered as a
+    superb risk-adjusted return for a holding that loses money every third day."""
+    r = np.where(np.arange(600) % 3 == 0, -0.01, 0.008)
+    prices = price_path(100 * np.cumprod(1 + r))
+    metrics = L.risk_metrics(prices)
+    # Compared against the returns the ENGINE sees: `pct_change` yields n-1 of
+    # them from n prices, so the reference has to drop the first planted value
+    # too, or the two are describing different samples.
+    seen = prices.pct_change().dropna().to_numpy()
+    assert metrics["downsideDeviation"] == pytest.approx(_downside_published(seen), rel=1e-9)
+    assert 0 < metrics["sortino"] < 100, metrics["sortino"]
+
+
+def test_a_series_that_never_falls_has_no_downside_rather_than_a_zero_one():
+    """Dividing by zero downside would be an infinite Sortino; the honest answer
+    is that the ratio is undefined."""
+    rising = pd.Series(np.full(400, 0.001))
+    assert np.isnan(L.downside_deviation_of(rising))
+    metrics = L.risk_metrics(price_path(100 * np.cumprod(np.full(400, 1.001))))
+    assert metrics["downsideDeviation"] is None
+    assert metrics["sortino"] is None
+
+
+def test_downside_deviation_never_exceeds_total_volatility():
+    """It measures one tail of the same distribution, so it cannot be larger."""
+    for seed in range(6):
+        r = np.random.default_rng(seed).normal(0.0004, 0.012, 800)
+        m = L.risk_metrics(price_path(100 * np.cumprod(1 + r)))
+        assert m["downsideDeviation"] <= m["volatility"] + 1e-12, seed

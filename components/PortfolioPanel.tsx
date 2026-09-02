@@ -1,0 +1,383 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { AlertTriangle, Layers } from "lucide-react";
+import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
+import { Explain, ExplainedRow, TONE_TEXT, useDetail } from "@/components/ui/explain";
+import { ApplyButton } from "@/components/ui/controls";
+import type { Engine, ExplainMap, PortfolioResponse } from "@/lib/types";
+import { cn, num, pct } from "@/lib/utils";
+
+/**
+ * Where this candidate sits against what the reader already owns.
+ *
+ * THE HOLDINGS NEVER LEAVE THE BROWSER EXCEPT TO ANSWER THIS QUESTION. They are
+ * kept in localStorage, exactly where the reading mode and the holding horizon
+ * live, because this app has no database and wants none. They are sent on the
+ * request that needs them, used, and forgotten — there is nowhere on the server
+ * to keep them. Nothing about them reaches the analytics event, which has always
+ * carried a market code and a lens count and never a ticker.
+ *
+ * IT IS THE ONE POST IN THIS APP, and the reason is the input rather than the
+ * size. A company name in a URL is not a fact about anybody; a holdings list is,
+ * and URLs are logged by every hop that handles them — the platform's access
+ * log, any proxy, the browser's own history — none of which a response header
+ * can reach. A body is not. The cost is that "everything the UI does is a plain
+ * GET" is now "everything except this", plus one CORS preflight on this call.
+ *
+ * IT IS A BUTTON, NOT AN AUTOMATIC LEG. Firing this on every ticker run would
+ * send somebody's portfolio to the server on the strength of them having typed
+ * a symbol, and it costs a batch download most readers will not want.
+ */
+
+const STORAGE_KEY = "quantdesk.holdings";
+const PORTFOLIO = "#6FD0C0";
+
+function useHoldings(): [string, (v: string) => void] {
+  const [raw, setRaw] = useState("");
+  // Read on mount, not during render: the server renders this tree too.
+  useEffect(() => {
+    try {
+      setRaw(window.localStorage.getItem(STORAGE_KEY) ?? "");
+    } catch { /* private mode — an empty list is the right default */ }
+  }, []);
+  const update = (next: string) => {
+    setRaw(next);
+    try { window.localStorage.setItem(STORAGE_KEY, next); } catch { /* ignore */ }
+  };
+  return [raw, update];
+}
+
+/**
+ * `AAPL, MSFT:2, NVDA` → symbols plus the optional weights, as a map.
+ *
+ * A MAP RATHER THAN A STRING because the request is a POST now: the body can
+ * carry structure, so there is no reason to flatten a mapping into text and ask
+ * the server to parse it back. The self-describing `TICKER:WEIGHT` shape stays
+ * in the TEXTAREA, where a human types it.
+ */
+function parse(raw: string): { symbols: string[]; weights: Record<string, number> } {
+  const symbols: string[] = [];
+  const weights: Record<string, number> = {};
+  for (const chunk of raw.split(/[\s,]+/)) {
+    if (!chunk) continue;
+    const [ticker, weight] = chunk.split(":");
+    const symbol = ticker.trim().toUpperCase();
+    if (!symbol) continue;
+    symbols.push(symbol);
+    if (weight && Number(weight) > 0) weights[symbol] = Number(weight);
+  }
+  return { symbols: [...new Set(symbols)], weights };
+}
+
+export function PortfolioPanel({
+  state, ticker, onCompare,
+}: {
+  state: Engine<PortfolioResponse>;
+  ticker: string;
+  onCompare: (holdings: string[], weights: Record<string, number>) => void;
+}) {
+  const [raw, setRaw] = useHoldings();
+  const guided = useDetail() === "simple";
+  const { symbols, weights } = parse(raw);
+  const others = symbols.filter((s) => s !== ticker.toUpperCase());
+
+  return (
+    <div className="space-y-4 animate-rise">
+      <Card accent={PORTFOLIO}>
+        <CardHeader>
+          <CardTitle>What you already own</CardTitle>
+          <span className="font-mono text-micro text-ash">
+            {others.length} holding{others.length === 1 ? "" : "s"}, stored in this browser
+          </span>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          <p className="text-meta leading-relaxed text-ash">
+            Every other lens here reads one company on its own, which hides the most common
+            way a portfolio goes wrong: the candidate is the fourth copy of a bet already
+            held. Paste what you own — one symbol per line or comma separated, with{" "}
+            <code className="font-mono text-body">TICKER:WEIGHT</code> if the sizes differ.
+          </p>
+          <textarea
+            value={raw}
+            onChange={(e) => setRaw(e.target.value)}
+            rows={3}
+            spellCheck={false}
+            aria-label="Holdings"
+            placeholder="AAPL, MSFT:2, BBCA.JK"
+            className="w-full rounded border border-rule bg-ink px-3 py-2 font-mono text-meta
+                       text-chalk placeholder:text-faint focus:border-tech/60
+                       focus:outline-none focus-visible:ring-1 focus-visible:ring-tech"
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <ApplyButton onClick={() => onCompare(others, weights)}
+                         busy={state.status === "loading"}
+                         disabled={others.length === 0 || !ticker}>
+              Compare with {ticker || "this ticker"}
+            </ApplyButton>
+            <span className="min-w-0">
+              <Explainer summary="Your holdings stay in this browser">
+                There are no accounts and no database here. The list is sent to answer this one
+                question and then forgotten.
+                {" "}It is the only request in the app that travels in the body rather than the
+                address, because a web address is written into a log by every machine that
+                handles it — and a list of what you own has no business in a log.
+              </Explainer>
+            </span>
+          </div>
+        </CardBody>
+      </Card>
+
+      {state.status === "error" && (
+        <Card className="border-dist/40 bg-dist/5">
+          <CardBody>
+            <div className="flex gap-3">
+              <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
+              <p className="text-base leading-relaxed text-body">{state.failure.message}</p>
+            </div>
+          </CardBody>
+        </Card>
+      )}
+
+      {state.status === "ready" && <Result data={state.data} guided={guided} />}
+    </div>
+  );
+}
+
+function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) {
+  const ex: ExplainMap = data.explain ?? {};
+
+  if (!data.usable) {
+    return (
+      <Card>
+        <CardBody>
+          <p className="text-base leading-relaxed text-ash">{data.reason}</p>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  const independence = data.independence;
+  const rows = data.contributions?.rows ?? [];
+
+  return (
+    <>
+      <Card accent={TONE_HEXish(ex.effectiveHoldings?.tone)}>
+        <CardHeader>
+          <CardTitle>Is this a bet you already hold?</CardTitle>
+          <span className="flex items-center gap-1.5 font-mono text-micro text-ash">
+            {data.observations} trading days
+            <Explain explain={ex.effectiveHoldings} />
+          </span>
+        </CardHeader>
+        <CardBody className="space-y-3">
+          {independence && (
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="num text-h2 font-semibold text-chalk">
+                {num(independence.after ?? 0, 1)}
+              </span>
+              <span className="text-meta leading-relaxed text-ash">
+                independent bets across {independence.withCandidate} positions — from{" "}
+                {num(independence.before ?? 0, 1)} across {independence.holdings} before
+                adding this one. An unrelated name would have added a full bet.
+              </span>
+            </div>
+          )}
+          {ex.effectiveHoldings && (
+            <p className={cn("text-meta leading-relaxed",
+                             TONE_TEXT[ex.effectiveHoldings.tone] ?? "text-body")}>
+              {ex.effectiveHoldings.reading}
+            </p>
+          )}
+        </CardBody>
+      </Card>
+
+      {data.driver?.usable && (
+        <Card>
+          <CardHeader>
+            <CardTitle>What these move with</CardTitle>
+            <span className="flex items-center gap-1.5 font-mono text-micro text-ash">
+              {data.driver.weeks} weeks
+              <Explain explain={ex.sharedDirection} />
+            </span>
+          </CardHeader>
+          {/*
+            NEVER TONE-COLOURED, and this is the panel where that is hardest to
+            hold. Being 60% driven by the energy complex is not good or bad news
+            about a book — it describes what is being held, and a reader who
+            bought four coal miners on purpose has a concentrated portfolio doing
+            exactly what they asked of it. Python returns `context` for every
+            figure here, which the tone map renders neutral; this file reads
+            those explanations and never picks a colour from a number's size.
+          */}
+          <CardBody className="space-y-3">
+            {ex.sharedDirection && (
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <span className="num text-h2 font-semibold text-chalk">
+                  {pct(data.driver.varianceShare ?? 0, 0)}
+                </span>
+                <span className="text-meta leading-relaxed text-ash">
+                  of the week-to-week movement is one shared direction
+                  {data.driver.marketShare != null && (
+                    <> — of which {pct(data.driver.marketShare, 0)} is
+                    {" "}{data.driver.indexSymbol === "^JKSE"
+                      ? "the Jakarta Composite" : "the S&P 500"} itself</>
+                  )}
+                </span>
+              </div>
+            )}
+            {ex.sharedDirection && (
+              <p className="text-meta leading-relaxed text-body">
+                {ex.sharedDirection.reading}
+              </p>
+            )}
+            {ex.sharedDriver && (
+              <div className="border-t border-ruleSoft pt-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="eyebrow">What they have in common</span>
+                  <Explain explain={ex.sharedDriver} />
+                </div>
+                <p className="mt-1 text-meta leading-relaxed text-body">
+                  {ex.sharedDriver.reading}
+                </p>
+              </div>
+            )}
+            {(data.driver.tested ?? []).length > 0 && (
+              <Explainer summary="Four things were tested, and they are not the only things there are">
+                <p>
+                  The shared movement is compared against gold, energy, copper and the
+                  dollar — contracts that trade everywhere, so none of them can be one of
+                  your holdings. Peer baskets of miners and plantations were built and
+                  measured for this and did not work: a foreign coal basket scored lower
+                  against four Indonesian coal miners than palm oil did, and a domestic
+                  one labelled a nickel-and-gold book as coal. Both were dropped rather
+                  than shipped, so a resources book will often come back with nothing
+                  named even when its holder can see exactly what it is.
+                </p>
+                <p className="mt-2">
+                  Tested here:{" "}
+                  {(data.driver.tested ?? [])
+                    .map((t) => `${t.label}${t.available ? "" : " (no data)"}`)
+                    .join(", ")}. Measured on weekly moves, because at daily frequency the
+                  markets these settle in are hours apart and the signal washes out.
+                </p>
+              </Explainer>
+            )}
+          </CardBody>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>How closely it tracks each holding</CardTitle>
+          <span className="font-mono text-micro text-ash">past year</span>
+        </CardHeader>
+        <CardBody className="space-y-1.5 text-meta">
+          {(data.pairs ?? []).map((pair) => (
+            <ExplainedRow key={pair.ticker}
+                          label={pair.ticker}
+                          value={num(pair.correlation)}
+                          explain={ex[`holdingCorrelation.${pair.ticker}`]} />
+          ))}
+          {(data.missing ?? []).length > 0 && (
+            <p className="pt-2 text-meta leading-relaxed text-ash">
+              Not compared: {(data.missing ?? []).join(", ")} — too few trading days in
+              common to mean anything. Dropped rather than estimated.
+            </p>
+          )}
+        </CardBody>
+      </Card>
+
+      {rows.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Where the risk actually sits</CardTitle>
+            <span className="font-mono text-micro text-ash">
+              {data.equalWeighted ? "equal weights assumed" : "your weights"}
+            </span>
+          </CardHeader>
+          <CardBody className="px-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-meta">
+                <thead>
+                  <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
+                    <th>Position</th>
+                    <th className="text-right">Share of money</th>
+                    <th className="text-right">Share of risk</th>
+                    {!guided && <th className="text-right">Volatility</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...rows].sort((a, b) => b.riskShare - a.riskShare).map((row) => {
+                    const explain = ex[`riskShare.${row.ticker}`];
+                    return (
+                      <tr key={row.ticker} className="border-b border-ruleSoft last:border-0">
+                        <td className="num px-5 py-2">
+                          <span className="flex items-center gap-1.5">
+                            {row.ticker}
+                            <Explain explain={explain} />
+                          </span>
+                        </td>
+                        <td className="num px-5 py-2 text-right text-ash">
+                          {pct(row.weight, 0)}
+                        </td>
+                        <td className={cn("num px-5 py-2 text-right font-semibold",
+                                          explain ? TONE_TEXT[explain.tone] : "text-chalk")}>
+                          {pct(row.riskShare, 0)}
+                        </td>
+                        {!guided && (
+                          <td className="num px-5 py-2 text-right text-ash">
+                            {pct(row.volatility, 0)}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
+              Compare the two columns. A holding with a tenth of the money and a quarter of the
+              risk is not diversified by being one of ten — it is the whole portfolio under a
+              smaller name.
+            </p>
+          </CardBody>
+        </Card>
+      )}
+
+      {data.stability && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Why this one is allowed to inform position size</CardTitle>
+            <span className="font-mono text-micro text-ash">
+              measured {data.stability.measuredOn}
+            </span>
+          </CardHeader>
+          <CardBody className="space-y-2">
+            <p className="text-meta leading-relaxed text-body">
+              {data.stability.headline}
+            </p>
+            <ul className="space-y-1">
+              {(data.stability.caveats ?? []).map((caveat) => (
+                <li key={caveat} className="flex gap-2 text-meta leading-relaxed text-ash">
+                  <Layers aria-hidden className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span>{caveat}</span>
+                </li>
+              ))}
+            </ul>
+            <Note>
+              All of this is price and volume only — the filings cannot be fetched in bulk, so
+              nothing here knows what these businesses do. Two companies can move together 0.9
+              of the time and be nothing alike.
+            </Note>
+          </CardBody>
+        </Card>
+      )}
+    </>
+  );
+}
+
+/** The accent for a card, from a tone that may be absent. */
+function TONE_HEXish(tone?: string): string {
+  return tone === "warn" ? "#F2C14E" : tone === "bad" ? "#FF6B6B" : PORTFOLIO;
+}

@@ -4,22 +4,32 @@ import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { AnomalyPanel } from "@/components/AnomalyPanel";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
+import { HoldingHorizonBar } from "@/components/HoldingHorizonBar";
 import { EventStudyPanel } from "@/components/EventStudyPanel";
 import { NewsPanel } from "@/components/NewsPanel";
 import { PeersPanel } from "@/components/PeersPanel";
+import { PortfolioPanel } from "@/components/PortfolioPanel";
+import { PreTradePanel } from "@/components/PreTradePanel";
 import { QualityPanel } from "@/components/QualityPanel";
+import { ExposurePanel } from "@/components/ExposurePanel";
 import { RankingPanel } from "@/components/RankingPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
 import { SynthesisPanel } from "@/components/SynthesisPanel";
+import { ThesisPanel } from "@/components/ThesisPanel";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { TickerBar } from "@/components/TickerBar";
 import { ManualRescue } from "@/components/ValuationControls";
 import { ValuationPanel } from "@/components/ValuationPanel";
-import { Card } from "@/components/ui/card";
+import { Card, CardBody } from "@/components/ui/card";
+import { ApplyButton } from "@/components/ui/controls";
 import { DetailProvider, DetailToggle, useDetailLevel } from "@/components/ui/explain";
+import { HorizonProvider, useHoldingHorizon } from "@/components/ui/horizon";
 import { PanelSkeleton } from "@/components/ui/skeleton";
-import { Tabs } from "@/components/ui/tabs";
-import { useEngines, useEventStudy, usePeers, type RunOptions } from "@/lib/api";
+import { TabPanel, Tabs } from "@/components/ui/tabs";
+import {
+  useEngines, useEventStudy, useExposureScan, usePeers, usePortfolio,
+  useUniverses, type RunOptions,
+} from "@/lib/api";
 import type { Engine, EngineFailure } from "@/lib/types";
 
 const INITIAL: RunOptions = {
@@ -29,13 +39,73 @@ const INITIAL: RunOptions = {
   contamination: 0.02, madK: 3.0, scoreThreshold: -0.10,
 };
 
+// LABELLED BY THE QUESTION, NOT THE METHOD. "Flow · anomalies" and "Intrinsic
+// value" name the technique, which tells a newcomer nothing about whether the
+// tab is worth opening. The hues are the lens identity colours from
+// `ConfluenceRail.LENS_HUE`, so a chip in the rail and the tab that owns it are
+// the same colour.
 const TABS = [
-  { id: "flow", label: "Flow · anomalies", accent: "#35C4A8" },
-  { id: "trend", label: "Technicals", accent: "#5B8DEF" },
-  { id: "value", label: "Intrinsic value", accent: "#E8B44C" },
-  { id: "quality", label: "Quality", accent: "#F2C14E" },
+  { id: "flow", label: "Who is trading it", accent: "#2FBFA4" },
+  { id: "trend", label: "What the price did", accent: "#6B9BFF" },
+  { id: "value", label: "What it is worth", accent: "#E8B44C" },
+  { id: "quality", label: "Are the numbers real", accent: "#C9A227" },
+  // The fourth question this app can answer — how does it sit against what I
+  // already own — and the only one that needs an input other than a ticker.
+  { id: "portfolio", label: "Portfolio fit", accent: "#6FD0C0" },
+  // The cross-sectional half of the same question. Portfolio fit asks what YOUR
+  // holdings share; this asks what a whole index moves with, and needs no input
+  // beyond picking a list. Its own tab rather than a section inside Portfolio
+  // fit because it answers without being given anything, and burying a scan
+  // behind a form nobody fills in is how the first version of this went unread.
+  { id: "exposure", label: "What drives it", accent: "#D4763A" },
+  // Last, because it is the only tab that asks the reader for something rather
+  // than telling them something, and it is meant to be reached after the rest
+  // has been read.
+  { id: "thesis", label: "Thesis", accent: "#A78BFA" },
   { id: "screen", label: "Scan & rank", accent: "#A78BFA" },
 ];
+
+/**
+ * A pointer from Trend to the one question this page cannot answer.
+ *
+ * WHY A SIGNPOST AND NOT THE READING ITSELF. What a set of holdings has in
+ * common is a property of the SET — it is measured from how several names move
+ * together, and one ticker does not have it. So the finding lives on the
+ * Portfolio tab, where the holdings are, and this says so rather than
+ * reproducing a number that would mean something different here.
+ *
+ * IT EXISTS BECAUSE THE FEATURE WAS UNFINDABLE. The driver label only draws
+ * once holdings have been pasted in, so a reader who had never opened the
+ * Portfolio tab had no way to learn it was there — the owner loaded the app
+ * after it shipped and saw nothing new at all. Discoverability was the whole
+ * defect and one line is the whole fix.
+ *
+ * ONE LINE, DELIBERATELY. The Trend tab is the one a copy pass cut from 2,294
+ * words to 1,552, and a permanent navigation card with a paragraph in it would
+ * put some of that straight back.
+ *
+ * IT SITS FIRST, AND THE FIRST ATTEMPT PUT IT LAST. The reasoning for last was
+ * that a signpost must not outrank a finding, which is right about hierarchy and
+ * wrong about this: measured in the browser at 1440px, the bottom of the Trend
+ * tab is 4,718px down a 4,947px page — 95% of the way through. A pointer nobody
+ * scrolls to is the same defect as no pointer, which is the defect this exists
+ * to fix. One line carrying no number and no verdict does not compete with the
+ * lens's reading for authority; it is a wayfinder, and a wayfinder belongs where
+ * the reader arrives.
+ */
+function PortfolioSignpost({ onOpen }: { onOpen: () => void }) {
+  return (
+    <Card>
+      <CardBody className="flex flex-wrap items-center justify-between gap-3 py-4">
+        <p className="max-w-measure text-lead leading-snug text-chalk">
+          Holdings that each look fine on their own can be one bet.
+        </p>
+        <ApplyButton onClick={onOpen}>Portfolio fit</ApplyButton>
+      </CardBody>
+    </Card>
+  );
+}
+
 
 /** One wrapper so all three panels handle loading and failure identically. */
 function Panel<T>({
@@ -50,19 +120,19 @@ function Panel<T>({
   if (state.status === "error") {
     const { failure } = state;
     return (
-      <Card className="border-dist/40 bg-dist/5">
-        <div className="flex gap-3 p-5">
-          <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
+      <Card tone="bad" className="bg-dist/5">
+        <div className="flex gap-3.5 p-5">
+          <AlertTriangle aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-dist" />
           <div className="min-w-0 flex-1">
-            <div className="eyebrow mb-1 text-dist">This engine could not run</div>
-            <p className="text-sm leading-relaxed text-chalk/80">{failure.message}</p>
+            <h3 className="mb-1.5 text-lead text-dist">This engine could not run</h3>
+            <p className="prose-col text-base leading-relaxed text-body">{failure.message}</p>
             {/* A data gap the user can close is a different problem from a
                 business the model cannot value. Only the former gets a form —
                 and the form has to be here, because the panel that normally
                 holds it never rendered. */}
             {failure.manualRequired && (
               <>
-                <p className="mt-2 text-xs leading-relaxed text-warn">
+                <p className="prose-col mt-2.5 text-meta leading-relaxed text-warn">
                   Yahoo is missing{" "}
                   {failure.missing?.length ? failure.missing.join(", ") : "a required figure"} for
                   this listing. Enter it below to value the company anyway.
@@ -81,11 +151,20 @@ function Panel<T>({
 
 export default function Home() {
   const {
-    anomaly, technical, valuation, quality, news, synthesis,
+    anomaly, technical, valuation, quality, news, synthesis, preTrade,
     run, refineValuation, refineTechnical, csvUrl,
   } = useEngines();
   const { state: eventStudy, validate, reset: resetEventStudy } = useEventStudy();
   const { state: peers, compare, reset: resetPeers } = usePeers();
+  const { state: portfolio, compare: comparePortfolio,
+          reset: resetPortfolio } = usePortfolio();
+  // The exposure tier keeps its own universe catalogue and scan state. It does
+  // NOT reset when the ticker changes, unlike every lens above: a cross-section
+  // of the IDX30 is still the cross-section of the IDX30 after someone types a
+  // different symbol, and throwing away a six-second scan because the header
+  // moved would be the panel forgetting something the reader did not.
+  const { state: universes } = useUniverses();
+  const { state: exposureScan, scan: scanExposure } = useExposureScan();
   // The ticker bar is controlled from here so the screener can drive it too.
   const [opts, setOpts] = useState<RunOptions>(INITIAL);
   // The last SUBMITTED symbol, which is not what is currently typed in the box.
@@ -101,6 +180,11 @@ export default function Home() {
   // short version of the technical lens wants the short version of the quality
   // lens too, and a per-panel switch makes them say so four times.
   const [detail, setDetail] = useDetailLevel();
+  // How long the reader means to hold, stated once and read by the horizon bar
+  // and the rolling-return table. It never reaches the API: every horizon the
+  // loaded history supports is already in the technical payload, so changing it
+  // selects rather than re-runs.
+  const [horizon, setHorizon] = useHoldingHorizon();
 
   // PROGRESS, NOT JUST BUSY. One shared spinner gated on the SLOWEST lens meant a
   // ten-to-sixteen-second first run behind a dead button with nothing to say
@@ -120,6 +204,9 @@ export default function Home() {
     // put another company's abnormal returns under this company's header.
     resetEventStudy();
     resetPeers();
+    // A comparison belongs to the candidate it was run for; carrying one across
+    // would put another company's correlations under this company's header.
+    resetPortfolio();
     run(cleaned);
   };
 
@@ -144,28 +231,33 @@ export default function Home() {
 
   return (
     <DetailProvider level={detail}>
+    <HorizonProvider value={horizon}>
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {/* THE HEADER STOPPED EXPLAINING ITSELF AT LENGTH. v1 spent a 68-word
+          paragraph up here on how the app works, in 12px grey, above the fold,
+          before the reader had entered a ticker or seen a single number — the
+          worst possible moment to teach anything. The tagline says what the app
+          does in one line; the mechanics moved to a disclosure that a reader
+          opens when they have a reason to care, and Guided mode explains itself
+          in place, beside the numbers it applies to. */}
       <header className="mb-8 border-b border-rule pb-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="font-mono text-2xl font-semibold tracking-[0.22em]">QUANTDESK</h1>
-            <p className="eyebrow mt-2">
-              Flow · Trend · Value · Quality — US &amp; IDX
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+          <div className="min-w-0">
+            <h1 className="font-mono tracking-[0.16em]">QUANTDESK</h1>
+            <p className="mt-1.5 text-base text-ash">
+              Four models read the same stock from different data — and say where they
+              disagree.{" "}
+              <a href="/docs/field-manual.html"
+                 className="text-tech underline decoration-tech/40 hover:decoration-tech">
+                New to this?
+              </a>
             </p>
           </div>
-          <div className="flex flex-col items-end gap-3">
-            <DetailToggle level={detail} onChange={setDetail} />
-            <p className="max-w-sm text-xs leading-relaxed text-ash">
-              Four models read the same ticker from different data. Where they agree is more
-              interesting than what any one of them says alone — with the caveat that they are
-              not equally independent. Every number has an{" "}
-              <span className="text-chalk/80">i</span> beside it explaining what it means.{" "}
-              <span className="text-chalk/80">Guided</span> adds those readings to the page and
-              folds the expert controls away; <span className="text-chalk/80">Full</span> is
-              every control and every indicator.
-            </p>
-          </div>
+          <DetailToggle level={detail} onChange={setDetail} />
         </div>
+        {/* The 100-word "How to read this" disclosure is gone. It taught the app
+            to a reader who had not entered a ticker yet — the worst possible
+            moment — and docs/field-manual.html exists to do that properly. */}
       </header>
 
       <div className="mb-8">
@@ -175,15 +267,29 @@ export default function Home() {
 
       {!started ? (
         <div className="space-y-6">
-          <div className="rounded border border-dashed border-rule px-6 py-16 text-center">
-            <p className="eyebrow mb-2">No ticker loaded</p>
-            <p className="mx-auto max-w-md text-sm leading-relaxed text-ash">
-              Enter a symbol above, or pick one of the presets. Indonesian listings take the{" "}
-              <code className="font-mono text-chalk/80">.JK</code> suffix; crypto takes a pair such
-              as <code className="font-mono text-chalk/80">BTC-USD</code>.
+          <div className="rounded-xl border border-dashed border-rule px-6 py-16 text-center">
+            <h2 className="mb-2">Enter a ticker to begin</h2>
+            <p className="mx-auto max-w-measure text-base leading-relaxed text-ash">
+              Type a symbol above, or pick one of the presets. Indonesian listings take the{" "}
+              <code className="rounded bg-sunken px-1.5 py-0.5 font-mono text-meta text-body">.JK</code>{" "}
+              suffix; crypto takes a pair such as{" "}
+              <code className="rounded bg-sunken px-1.5 py-0.5 font-mono text-meta text-body">BTC-USD</code>.
             </p>
           </div>
           <RankingPanel onSelect={handleSelect} />
+          {/* REACHABLE WITHOUT A TICKER, because it needs none. This tier scans
+              a whole universe and the tab that holds it lives behind the
+              ticker gate, so until this was here the one screen in the app that
+              asks for no input could only be reached by supplying some. The
+              ranking scan was already offered on this landing for the same
+              reason. */}
+          <div>
+            <h2 className="mb-3">Or see what a whole market moves with</h2>
+            <ExposurePanel universeState={universes} market={opts.market}
+                           onMarketChange={(m) => setOpts((o) => ({ ...o, market: m }))}
+                           state={exposureScan} onScan={scanExposure}
+                           highlight={null} />
+          </div>
         </div>
       ) : (
         <div className="space-y-6">
@@ -191,16 +297,44 @@ export default function Home() {
                           technical={technical} valuation={valuation}
                           quality={quality} />
 
+          {/* The frame everything below is read through: what this length of
+              ownership has historically been like. Above the synthesis because
+              it is neither a summary nor an objection — the synthesis then says
+              what the lenses report, and the pre-trade panel what argues
+              against acting on them. */}
+          <HoldingHorizonBar state={technical} horizon={horizon} onHorizon={setHorizon} />
+
           {/* Reads the assembled payload, so it can only appear once every leg
               has settled. That is the right coupling: a summary of four lenses
               that renders before three of them have answered would be
               describing a picture that does not exist yet. */}
           {synthesis && <SynthesisPanel data={synthesis} />}
 
+          {/* AFTER the synthesis, deliberately. The synthesis describes what the
+              four lenses reported; this names what would argue against acting on
+              it. A reader should meet the description before the objections to
+              it, which is the same ordering the synthesis uses internally when
+              it puts its blind spots above its next steps.
+
+              It is above the tabs rather than inside a lens because a condition
+              that only appears once you open the panel that already worried you
+              is not a veto — it is a footnote to a decision already made. */}
+          {preTrade && <PreTradePanel data={preTrade} />}
+
           <div>
-            <Tabs tabs={TABS} active={tab} onChange={setTab} />
-            <div className="pt-5">
-              {tab === "flow" && (
+            {/* STICKY, because the tools were four thousand pixels down.
+                The reading order is deliberate — the summary, then what argues
+                against it, then the lenses — and moving the tabs above the
+                synthesis would break the argument the app is making. Sticking
+                them keeps the order and still puts every tool one click away
+                from any scroll position, which was the actual complaint. */}
+            <div className="sticky top-0 z-20 -mx-4 bg-ink/95 px-4 backdrop-blur
+                            supports-[backdrop-filter]:bg-ink/80 sm:-mx-6 sm:px-6
+                            lg:-mx-8 lg:px-8">
+              <Tabs tabs={TABS} active={tab} onChange={setTab} />
+            </div>
+            <div className="pt-6">
+              <TabPanel id="flow" active={tab}>
                 <div className="space-y-4">
                   <Panel state={anomaly}>{(d) => <AnomalyPanel data={d} />}</Panel>
                   <EventStudyPanel
@@ -213,9 +347,12 @@ export default function Home() {
                   />
                   <NewsPanel state={news} />
                 </div>
-              )}
-              {tab === "trend" && (
+              </TabPanel>
+              <TabPanel id="trend" active={tab}>
                 <div className="space-y-4">
+                  {/* First on the tab, not last — see PortfolioSignpost for the
+                      measurement that moved it. */}
+                  <PortfolioSignpost onOpen={() => setTab("portfolio")} />
                   <Panel state={technical}>
                     {(d) => (
                       <TechnicalPanel data={d} onApply={refineTechnical}
@@ -231,8 +368,8 @@ export default function Home() {
                                 ticker: opts.ticker, market: opts.market, universe,
                               })} />
                 </div>
-              )}
-              {tab === "value" && (
+              </TabPanel>
+              <TabPanel id="value" active={tab}>
                 <Panel
                   state={valuation}
                   rescue={(failure) => (
@@ -248,11 +385,56 @@ export default function Home() {
                                     csvUrl={csvUrl()} />
                   )}
                 </Panel>
-              )}
-              {tab === "quality" && (
+              </TabPanel>
+              <TabPanel id="quality" active={tab}>
                 <Panel state={quality}>{(d) => <QualityPanel data={d} />}</Panel>
-              )}
-              {tab === "screen" && (
+              </TabPanel>
+              {/* THE SNAPSHOT IS ASSEMBLED HERE, FROM WHAT IS ON SCREEN. A
+                  thesis is frozen against the numbers the reader was actually
+                  looking at, so these are read from the settled legs rather
+                  than re-fetched — a snapshot taken from a second request
+                  would record a page nobody saw. */}
+              <TabPanel id="thesis" active={tab}>
+                <ThesisPanel
+                  ticker={resolvedTicker}
+                  snapshot={{
+                    impliedGrowth: valuation.status === "ready"
+                      ? valuation.data.baseCase?.impliedGrowth ?? null : null,
+                    assumedGrowth: valuation.status === "ready"
+                      ? valuation.data.baseCase?.assumedGrowth ?? null : null,
+                    price: valuation.status === "ready" ? valuation.data.price : null,
+                    priceLabel: valuation.status === "ready"
+                      ? valuation.data.priceLabel : null,
+                    maxDrawdown: technical.status === "ready"
+                      ? technical.data.longTerm?.drawdown?.maxDrawdown ?? null : null,
+                    worstAtHorizon: technical.status === "ready"
+                      ? (technical.data.longTerm?.rollingReturns ?? [])
+                          .find((r) => r.years === horizon && r.usable !== false)?.worst ?? null
+                      : null,
+                    firedChecks: (preTrade?.flags ?? []).map((f) => f.explain.label),
+                  }}
+                />
+              </TabPanel>
+              <TabPanel id="portfolio" active={tab}>
+                <PortfolioPanel
+                  state={portfolio}
+                  ticker={resolvedTicker}
+                  onCompare={(holdings, weights) => comparePortfolio({
+                    candidate: opts.ticker, market: opts.market, holdings, weights,
+                  })}
+                />
+              </TabPanel>
+              <TabPanel id="exposure" active={tab}>
+                <ExposurePanel
+                  universeState={universes}
+                  market={opts.market}
+                  onMarketChange={(m) => setOpts((o) => ({ ...o, market: m }))}
+                  state={exposureScan}
+                  onScan={scanExposure}
+                  highlight={resolvedTicker}
+                />
+              </TabPanel>
+              <TabPanel id="screen" active={tab}>
                 <div className="space-y-8">
                   <RankingPanel onSelect={handleSelect} />
                   {/* The anomaly screener still answers a question the ranking
@@ -260,23 +442,22 @@ export default function Home() {
                       one-off event rather than a standing characteristic. It
                       keeps its own multiple-testing correction, so it stays. */}
                   <div>
-                    <h2 className="eyebrow mb-3">
-                      Or scan for fresh unusual activity instead
-                    </h2>
+                    <h2 className="mb-3">Or scan for fresh unusual activity instead</h2>
                     <ScreenerPanel onSelect={handleSelect} />
                   </div>
                 </div>
-              )}
+              </TabPanel>
             </div>
           </div>
         </div>
       )}
 
-      <footer className="hairline mt-16 pt-5 text-xs leading-relaxed text-ash">
+      <footer className="hairline prose-col mt-16 pt-5 text-meta leading-relaxed text-faint">
         Prices and filings from Yahoo Finance, unaudited and occasionally incomplete for IDX
         listings. Educational and research use only — not investment advice.
       </footer>
     </main>
+    </HorizonProvider>
     </DetailProvider>
   );
 }

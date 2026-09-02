@@ -15,6 +15,20 @@ export function signedPct(value: number | null | undefined, digits = 1) {
   return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(digits)}%`;
 }
 
+/**
+ * A signed decimal, for statistics whose sign is half the reading.
+ *
+ * A kappa of 0.03 and one of -0.03 mean opposite things — agreement slightly
+ * above chance, and slightly below it — and dropping the sign on the second
+ * loses the more interesting of the two. Distinct from `signedPct` because
+ * these are not percentages: a correlation printed as "3.0%" invites being read
+ * as a return.
+ */
+export function signed(value: number | null | undefined, digits = 2) {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}`;
+}
+
 export function num(value: number | null | undefined, digits = 2) {
   if (value == null || !Number.isFinite(value)) return "—";
   return value.toLocaleString(undefined, {

@@ -80,6 +80,15 @@ _group("quality", "piotroski altman beneish altmanComponent beneishIndex")
 _group("flow", "spread moveVsSpread yangZhangVol amihud anomalyRate qValue cusumEpisode flowBias")
 _group("value", "upside probUndervalued terminalShare discountRate valuationSpread impliedGrowth")
 _group("rank", "compositeRank signalRank signalOverlap")
+_group("pretrade", "checkFiringRate")
+_group("provenance", "validationDomain manipulationPosterior")
+_group("portfolio", "holdingCorrelation effectiveHoldings riskShare "
+                    "sharedDirection sharedDriver")
+# On the Trend tab rather than the portfolio one: it reads the price record,
+# which is the family that lens owns.
+_group("trend-ind", "factorExposure")
+# The cross-sectional tier, beside the other scan metrics.
+_group("rank", "factorBreadth")
 
 # Values chosen to land inside SOME band of every ladder in the registry. An
 # interpreter is asked in turn until one returns a reading; the specific value

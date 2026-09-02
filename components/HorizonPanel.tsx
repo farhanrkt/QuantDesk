@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowRight, Ban, Target } from "lucide-react";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
 import {
   Explain, ExplainedRow, ExplainedStat, TONE_HEX, useDetail,
 } from "@/components/ui/explain";
@@ -48,7 +48,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
             <div className="eyebrow mb-1 text-warn">
               {data.label ?? "This horizon"} withheld
             </div>
-            <p className="text-sm leading-relaxed text-chalk/80">{data.reason}</p>
+            <p className="text-base leading-relaxed text-body">{data.reason}</p>
           </div>
         </CardBody>
       </Card>
@@ -75,12 +75,12 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
           </CardTitle>
           <div className="flex items-center gap-3">
             {evidence && (
-              <span className="font-mono text-[0.65rem] uppercase tracking-[0.1em]"
+              <span className="font-mono text-micro uppercase tracking-[0.1em]"
                     style={{ color: evidence.colour }}>
                 {evidence.text}
               </span>
             )}
-            <span className="font-mono text-[0.65rem] text-ash">{data.window}</span>
+            <span className="font-mono text-micro text-ash">{data.window}</span>
           </div>
         </CardHeader>
         <CardBody className="space-y-3">
@@ -89,8 +89,8 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                className={cn(
                  "leading-relaxed",
                  i === story.paragraphs.length - 1
-                   ? "rounded border border-warn/30 bg-warn/5 px-3 py-2 text-[0.75rem] text-warn/90"
-                   : "text-[0.9rem] text-chalk/90",
+                   ? "rounded border border-warn/30 bg-warn/5 px-3 py-2 text-meta text-warn/90"
+                   : "text-base text-body",
                )}>
               {paragraph}
             </p>
@@ -103,7 +103,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
         <Card accent={TONE_HEX[ex.riskReward?.tone ?? "neutral"]}>
           <CardHeader>
             <CardTitle>Where the levels would sit</CardTitle>
-            <span className="font-mono text-[0.65rem] text-ash">
+            <span className="font-mono text-micro text-ash">
               not a recommendation
             </span>
           </CardHeader>
@@ -114,8 +114,8 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded border border-rule bg-raised/40 px-3 py-2">
                 <div className="eyebrow mb-1">Entry</div>
-                <div className="num text-lg font-semibold text-chalk">{money(plan.entry)}</div>
-                <div className="mt-0.5 text-[0.68rem] leading-snug text-ash">
+                <div className="num text-figure font-semibold text-chalk">{money(plan.entry)}</div>
+                <div className="mt-0.5 text-micro leading-snug text-ash">
                   today&apos;s price
                 </div>
               </div>
@@ -123,8 +123,8 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                 <div className="eyebrow mb-1 flex items-center gap-1.5">
                   Stop <Explain explain={ex.stopDistance} />
                 </div>
-                <div className="num text-lg font-semibold text-dist">{money(plan.stop)}</div>
-                <div className="mt-0.5 text-[0.68rem] leading-snug text-ash">
+                <div className="num text-figure font-semibold text-dist">{money(plan.stop)}</div>
+                <div className="mt-0.5 text-micro leading-snug text-ash">
                   {pct(plan.stopDistancePct)} down ·{" "}
                   {num(plan.stopDistanceAtr, 1)} average days
                   {plan.stopWidened && " · widened from structure"}
@@ -134,10 +134,10 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                 <div className="eyebrow mb-1 flex items-center gap-1.5">
                   <Target aria-hidden className="h-3 w-3" /> First target
                 </div>
-                <div className="num text-lg font-semibold text-acc">
+                <div className="num text-figure font-semibold text-acc">
                   {money(plan.targets?.[0]?.price)}
                 </div>
-                <div className="mt-0.5 text-[0.68rem] leading-snug text-ash">
+                <div className="mt-0.5 text-micro leading-snug text-ash">
                   {signedPct(plan.targets?.[0]?.distancePct)} · {plan.targets?.[0]?.basis}
                 </div>
               </div>
@@ -150,11 +150,11 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
             </div>
 
             {(plan.targets?.length ?? 0) > 1 && !simple && (
-              <div className="space-y-1 text-xs">
+              <div className="space-y-1 text-meta">
                 <div className="eyebrow">Further targets</div>
                 {plan.targets!.slice(1).map((target) => (
                   <div key={target.label}
-                       className="flex items-baseline justify-between gap-3 border-b border-rule/40 pb-1 last:border-0">
+                       className="flex items-baseline justify-between gap-3 border-b border-ruleSoft pb-1 last:border-0">
                     <span className="text-ash">{target.label}</span>
                     <span className="num">
                       {money(target.price)} · {num(target.rMultiple, 1)}x risk
@@ -164,19 +164,17 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
               </div>
             )}
 
-            <p className="text-[0.7rem] leading-relaxed text-ash">
-              The stop is placed just beyond a level the price has previously turned at, not at a
-              round percentage — if it is hit, the reason for the trade has actually broken.
-              Position size is the arithmetic that makes those two facts consistent: a wider stop
-              means a smaller position for the same money at risk.
-            </p>
+            <Note>
+              The stop sits beyond a level the price turned at before, not at a round
+              percentage. A wider stop means a smaller position for the same money at risk.
+            </Note>
           </CardBody>
         </Card>
       ) : (
         <Card>
           <CardBody className="flex gap-3">
             <Ban aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-ash" />
-            <p className="text-sm leading-relaxed text-ash">{plan.reason}</p>
+            <p className="text-base leading-relaxed text-ash">{plan.reason}</p>
           </CardBody>
         </Card>
       )}
@@ -185,18 +183,18 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
       <Card>
         <CardHeader>
           <CardTitle>Floors and ceilings</CardTitle>
-          <span className="font-mono text-[0.65rem] text-ash">
+          <span className="font-mono text-micro text-ash">
             confirmed turning points
           </span>
         </CardHeader>
         <CardBody className="space-y-3">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5 text-xs">
+            <div className="space-y-1.5 text-meta">
               <div className="eyebrow flex items-center gap-1.5">
                 Ceilings above <Explain explain={ex["distanceToLevel.resistance"]} />
               </div>
               {levels.resistances.length === 0 ? (
-                <p className="text-[0.72rem] leading-relaxed text-ash">
+                <p className="text-meta leading-relaxed text-ash">
                   None. The price is above every level it has previously turned at in this
                   window — there is no overhead supply to work through, and equally no reference
                   point for a target.
@@ -205,12 +203,12 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                 <LevelRow key={level.price} level={level} money={money} tone="text-dist" />
               ))}
             </div>
-            <div className="space-y-1.5 text-xs">
+            <div className="space-y-1.5 text-meta">
               <div className="eyebrow flex items-center gap-1.5">
                 Floors below <Explain explain={ex["distanceToLevel.support"]} />
               </div>
               {levels.supports.length === 0 ? (
-                <p className="text-[0.72rem] leading-relaxed text-ash">
+                <p className="text-meta leading-relaxed text-ash">
                   None in this window, which is why any stop below has to be placed by
                   volatility rather than by structure.
                 </p>
@@ -219,9 +217,9 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
               ))}
             </div>
           </div>
-          <p className="text-[0.7rem] leading-relaxed text-ash">
+          <p className="text-meta leading-relaxed text-ash">
             A level is a price the market turned at, with {" "}
-            <span className="text-chalk/80">bars either side</span> confirming it. A level tested
+            <span className="text-body">bars either side</span> confirming it. A level tested
             once is barely a level; one tested three or four times is a price more participants
             are watching. The most recent {levels.confirmationLag} bars can never appear here —
             a turning point is only a turning point in hindsight.
@@ -249,7 +247,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
             <Card>
               <CardHeader>
                 <CardTitle>Pivot levels</CardTitle>
-                <span className="font-mono text-[0.65rem] text-ash">
+                <span className="font-mono text-micro text-ash">
                   from last complete {data.pivots.classic.period}
                 </span>
               </CardHeader>
@@ -260,7 +258,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                   <PivotTable title="Fibonacci" set={data.pivots.fibonacci}
                               price={data.price!} money={money} />
                 </div>
-                <p className="text-[0.7rem] leading-relaxed text-ash">
+                <p className="text-meta leading-relaxed text-ash">
                   Arithmetic on last {data.pivots.classic.period}&apos;s high, low and close —
                   nothing more. They are here because a great many traders watch them, which is
                   the only mechanism by which they could work and also the reason not to
@@ -276,22 +274,22 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
           <Card>
             <CardHeader>
               <CardTitle>Candlestick and chart patterns</CardTitle>
-              <span className="font-mono text-[0.65rem] text-warn">no demonstrated value</span>
+              <span className="font-mono text-micro text-warn">no demonstrated value</span>
             </CardHeader>
             <CardBody className="space-y-3">
               {(data.candlesticks?.length ?? 0) === 0 ? (
-                <p className="text-sm text-ash">
+                <p className="text-base text-ash">
                   No single- or two-bar formation on the latest bar.
                 </p>
               ) : (
                 <ul className="space-y-2">
                   {data.candlesticks!.map((pattern) => (
-                    <li key={pattern.name} className="border-b border-rule/40 pb-2 last:border-0">
+                    <li key={pattern.name} className="border-b border-ruleSoft pb-2 last:border-0">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-xs font-semibold text-chalk/90">{pattern.name}</span>
-                        <span className="font-mono text-[0.6rem] text-ash">{pattern.date}</span>
+                        <span className="text-meta font-semibold text-body">{pattern.name}</span>
+                        <span className="font-mono text-micro text-ash">{pattern.date}</span>
                       </div>
-                      <p className="mt-0.5 text-[0.72rem] leading-relaxed text-ash">
+                      <p className="mt-0.5 text-meta leading-relaxed text-ash">
                         {pattern.meaning}
                       </p>
                     </li>
@@ -299,34 +297,31 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                 </ul>
               )}
               <div className="rounded border border-warn/30 bg-warn/5 px-3 py-2">
-                <p className="text-[0.72rem] leading-relaxed text-warn/90">
-                  These are shown because you will see them on any chart and deserve to know
-                  what they are. They are not used to place any entry, stop or target here.
-                  Marshall, Young &amp; Rose (2006) tested the standard candlestick set against
-                  a bootstrap of randomly generated open-high-low-close series on Dow component
-                  stocks and found no value in them.
-                </p>
+                <Note tone="warn">
+                  Shown because you will meet them elsewhere. No entry, stop or target here
+                  ever comes from one — tested against random price series, they show no value.
+                </Note>
               </div>
               <div>
                 <div className="eyebrow mb-1.5">What this app will not claim to detect</div>
                 <ul className="space-y-1">
                   {(data.undetectable ?? []).map((item) => (
-                    <li key={item.name} className="flex gap-2 text-[0.72rem] leading-relaxed">
+                    <li key={item.name} className="flex gap-2 text-meta leading-relaxed">
                       <ArrowRight aria-hidden className="mt-1 h-2.5 w-2.5 shrink-0 text-ash" />
                       <span>
-                        <span className="text-chalk/80">{item.name}</span>
+                        <span className="text-body">{item.name}</span>
                         <span className="text-ash"> — {item.why}.</span>
                       </span>
                     </li>
                   ))}
                 </ul>
-                <p className="mt-2 text-[0.7rem] leading-relaxed text-ash">
-                  These need a judgement about where a shape begins, and two honest
-                  implementations disagree. Lo, Mamaysky &amp; Wang (2000) needed nonparametric
-                  kernel regression with a cross-validated bandwidth just to DEFINE them, and
-                  reported a shift in the return distribution rather than a tradeable edge. A
-                  fixed-threshold matcher would fire several times a month on noise.
-                </p>
+                <div className="mt-2">
+                  <Note>
+                    Each needs a judgement about where the shape begins. A simple matcher would
+                    fire several times a month on noise, so they are declined rather than
+                    detected badly.
+                  </Note>
+                </div>
               </div>
             </CardBody>
           </Card>
@@ -335,7 +330,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader><CardTitle>Moving-average alignment</CardTitle></CardHeader>
-              <CardBody className="space-y-2 text-xs">
+              <CardBody className="space-y-2 text-meta">
                 <ExplainedRow label={`${setup.trend?.fastLength}-day average`}
                               value={money(setup.trend?.fast)} tone="text-chalk" />
                 <ExplainedRow label={`${setup.trend?.slowLength}-day average`}
@@ -352,7 +347,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                                 : "mixed"}
                               tone={setup.trend?.alignment === "up" ? "text-acc"
                                 : setup.trend?.alignment === "down" ? "text-dist" : "text-ash"} />
-                <p className="pt-1 text-[0.7rem] leading-relaxed text-ash">
+                <p className="pt-1 text-meta leading-relaxed text-ash">
                   &quot;Stacked&quot; means the price, the fast average and the slow average are
                   in order. It is the plainest description of a trend there is, and it is
                   descriptive — it tells you what has been happening, not what happens next.
@@ -362,16 +357,16 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
 
             <Card>
               <CardHeader><CardTitle>Recent gaps</CardTitle></CardHeader>
-              <CardBody className="space-y-2 text-xs">
+              <CardBody className="space-y-2 text-meta">
                 {(data.gaps?.gaps?.length ?? 0) === 0 ? (
-                  <p className="text-[0.72rem] leading-relaxed text-ash">
+                  <p className="text-meta leading-relaxed text-ash">
                     No gap larger than half an average daily range in the recent history.
                   </p>
                 ) : (
                   <>
                     {data.gaps!.gaps.slice(-5).reverse().map((gap) => (
                       <div key={gap.date}
-                           className="flex items-baseline justify-between gap-3 border-b border-rule/40 pb-1.5 last:border-0">
+                           className="flex items-baseline justify-between gap-3 border-b border-ruleSoft pb-1.5 last:border-0">
                         <span className="text-ash">
                           {gap.date} · {gap.direction}
                         </span>
@@ -380,11 +375,12 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                         </span>
                       </div>
                     ))}
-                    <p className="pt-1 text-[0.7rem] leading-relaxed text-ash">
-                      A gap is a band of prices the stock jumped straight over, so almost nobody
-                      transacted inside it and there is no established support there. The common
-                      claim that gaps always fill is not supported — many never do.
-                    </p>
+                    <div className="pt-1">
+                      <Note>
+                        Prices the stock jumped over, so almost nobody traded there. Gaps do
+                        not always fill.
+                      </Note>
+                    </div>
                   </>
                 )}
               </CardBody>
@@ -392,10 +388,10 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
           </div>
 
           {data.vwap?.usable && (
-            <p className="text-[0.7rem] leading-relaxed text-ash">{data.vwap.caveat}</p>
+            <p className="text-meta leading-relaxed text-ash">{data.vwap.caveat}</p>
           )}
           {data.divergence?.caveat && (
-            <p className="text-[0.7rem] leading-relaxed text-ash">{data.divergence.caveat}</p>
+            <p className="text-meta leading-relaxed text-ash">{data.divergence.caveat}</p>
           )}
         </>
       )}
@@ -411,7 +407,7 @@ function LevelRow({
   tone: string;
 }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-rule/40 pb-1 last:border-0">
+    <div className="flex items-baseline justify-between gap-3 border-b border-ruleSoft pb-1 last:border-0">
       <span className="text-ash">
         turned {level.touches}x
       </span>
@@ -438,25 +434,27 @@ function PivotTable({
   return (
     <div>
       <div className="eyebrow mb-1.5">{title}</div>
-      <table className="w-full text-left text-xs">
-        <tbody>
-          {rows.map(([label, value]) => (
-            <tr key={label} className="border-b border-rule/40 last:border-0">
-              <td className={cn("py-1", label === "Pivot" ? "text-chalk" : "text-ash")}>
-                {label}
-              </td>
-              <td className={cn("num py-1 text-right",
-                                label === "Pivot" ? "font-semibold text-chalk"
-                                  : label.startsWith("R") ? "text-dist/80" : "text-acc/80")}>
-                {money(value)}
-              </td>
-              <td className="num py-1 text-right text-ash">
-                {value == null ? "—" : signedPct(value / price - 1)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-meta">
+          <tbody>
+            {rows.map(([label, value]) => (
+              <tr key={label} className="border-b border-ruleSoft last:border-0">
+                <td className={cn("py-1", label === "Pivot" ? "text-chalk" : "text-ash")}>
+                  {label}
+                </td>
+                <td className={cn("num py-1 text-right",
+                                  label === "Pivot" ? "font-semibold text-chalk"
+                                    : label.startsWith("R") ? "text-dist/80" : "text-acc/80")}>
+                  {money(value)}
+                </td>
+                <td className="num py-1 text-right text-ash">
+                  {value == null ? "—" : signedPct(value / price - 1)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

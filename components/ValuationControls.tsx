@@ -68,7 +68,7 @@ export function ManualRescue({
     setManual((prev) => ({ ...prev, [key]: v }));
 
   return (
-    <div className="mt-4 space-y-3 border-t border-rule/60 pt-4">
+    <div className="mt-4 space-y-3 border-t border-ruleSoft pt-4">
       <div className="eyebrow">Supply the missing figures</div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Field label={isRi ? "Book value per share"
@@ -251,10 +251,10 @@ export function ValuationControls({
 
         <Disclosure summary="Manual input mode" defaultOpen={useManual}>
           <div className="space-y-3">
-            <p className="text-[0.7rem] leading-relaxed text-ash">
+            <p className="text-meta leading-relaxed text-ash">
               For when Yahoo has gaps in the filings — common on smaller IDX listings. Supply the
               figures yourself and they replace the fetched ones. Amounts are absolute, in{" "}
-              <span className="font-mono text-chalk/80">{currencySymbol}</span>.
+              <span className="font-mono text-body">{currencySymbol}</span>.
             </p>
             <Toggle checked={useManual} onChange={setUseManual}
                     label="Use the figures below instead of Yahoo's" />
@@ -293,7 +293,7 @@ export function ValuationControls({
 
         <div className="flex items-center gap-3 pt-1">
           <ApplyButton onClick={apply} busy={busy}>Re-run valuation</ApplyButton>
-          <span className="text-[0.7rem] text-ash">
+          <span className="text-meta text-ash">
             Only the valuation engine re-runs; the other two panels keep their results.
           </span>
         </div>
@@ -306,7 +306,7 @@ export function ValuationControls({
         <CardHeader>
           <CardTitle>Assumptions</CardTitle>
           <button type="button" onClick={reset}
-                  className="font-mono text-[0.65rem] uppercase tracking-[0.12em] text-ash hover:text-chalk">
+                  className="font-mono text-micro uppercase tracking-[0.12em] text-ash hover:text-chalk">
             Reset to defaults
           </button>
         </CardHeader>
@@ -322,7 +322,7 @@ export function ValuationControls({
                             px-5 py-3 text-ash transition-colors hover:text-chalk
                             focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-tech">
           <span className="eyebrow">Change the assumptions</span>
-          <span className="text-[0.7rem]">
+          <span className="text-micro">
             Growth, discount rate, terminal growth — every input is editable
           </span>
         </summary>

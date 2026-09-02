@@ -131,6 +131,13 @@ export interface EventStudyResponse {
     byDirection: Record<string, Record<string, CarSummary | null>>;
     config?: { estimationWindow: number; gap: number; horizons: number[] };
     caveat?: string;
+    /**
+     * How the EVENTS were chosen, which is a separate question from how each
+     * CAR was measured. The detector behind them is fitted on the whole loaded
+     * window, so selection is not point-in-time; the market model behind each
+     * CAR is. Rendered beside the main caveat, never in place of it.
+     */
+    selectionCaveat?: string;
   };
   earningsProximity: {
     available: boolean; tagged: number; total: number;
@@ -141,6 +148,101 @@ export interface EventStudyResponse {
 
 /** Engine 4 — Piotroski / Altman / Beneish. */
 export interface QualitySignal { name: string; passed: boolean | null; detail: string }
+
+/**
+ * One axis on which this use of a screen does or does not match the sample the
+ * screen was fitted on.
+ *
+ * `verdict` is NOT a colour input and there is deliberately no tone here. Both
+ * directions would mislead: "outside" is the normal condition of every use of
+ * these models today, and "inside" as a green tick would claim the score is
+ * therefore reliable — a claim about accuracy that nothing in this app measures.
+ * Colour comes from `explain["domain.<screen>.<key>"].tone`, which is always
+ * neutral, decided in Python like every other tone.
+ */
+export interface DomainDimension {
+  key: string;
+  name: string;
+  /** What the published study's sample actually was, on this axis. */
+  sample: string;
+  /** What this company is, on the same axis. */
+  thisUse: string;
+  verdict: "inside" | "outside" | "unknown";
+  note: string;
+}
+
+/**
+ * One point on the prior/posterior curve, served ALREADY COMPUTED and already
+ * worded. The control selects a point; it never calculates one, because
+ * arithmetic in TypeScript is arithmetic no pytest can reach.
+ */
+export interface PosteriorPoint {
+  prior: number;
+  priorText: string;
+  /** Present only where this stop is a published estimate worth naming. */
+  label: string | null;
+  source: string | null;
+  event: string | null;
+  /** True where the prior counts a broader event than the sensitivity was measured on. */
+  extrapolated: boolean;
+  isDefault: boolean;
+  givenFlag: number;
+  givenFlagText: string;
+  falseAlarmText: string;
+  givenClean: number;
+  givenCleanText: string;
+}
+
+/**
+ * What a Beneish flag is worth, given how rare manipulation is.
+ *
+ * There is no tone here and there must not be: the M-Score already carries the
+ * alarm, and this number qualifies it downward at every published prior. Colour
+ * comes from `explain.manipulationPosterior`, which is always neutral.
+ */
+export interface ManipulationPosterior {
+  screen: string;
+  flagged: boolean;
+  band: string;
+  prior: number;
+  priorText: string;
+  posterior: number;
+  posteriorText: string;
+  givenFlag: number;
+  givenClean: number;
+  /** How far the test moved the estimate — the honest framing for both branches. */
+  shift: { from: number; fromText: string; to: number; toText: string };
+  characteristics: {
+    cutoff: number; sensitivity: number; falsePositiveRate: number;
+    specificity: number; citation: string; note: string;
+  };
+  curve: PosteriorPoint[];
+  anchors: { prior: number; label: string; source: string; event: string;
+             extrapolated: boolean }[];
+  robustRange: { lowText: string; highText: string; sentence: string };
+  partialScore: boolean;
+  partialNote: string | null;
+  caveat: string;
+}
+
+export interface ScreenDomain {
+  label: string;
+  citation: string;
+  sample: string;
+  dimensions: DomainDimension[];
+}
+
+/**
+ * Provenance for the three accounting screens. Note what is absent: no fit
+ * score, no count of matching dimensions, no overall verdict. A tally would be
+ * a reliability rating, which is exactly the claim this block refuses to make.
+ */
+export interface ValidationDomains {
+  asOf: string;
+  /** The fiscal year the scores were computed on, not today's year. */
+  fiscalYear: number | null;
+  screens: Record<string, ScreenDomain>;
+}
 export interface QualityResponse {
   applicable: boolean;
   reason?: string;
@@ -162,6 +264,12 @@ export interface QualityResponse {
     indices: Record<string, number | null>;
     indicesAvailable: number; indicesTotal: number;
   } | null;
+  /** What a flag is worth. Null when no M-Score could be computed. */
+  manipulationPosterior?: ManipulationPosterior | null;
+  /** Where the three numbers came from. Absent when the lens refused to score. */
+  domains?: ValidationDomains;
+  /** Machine-readable reason the lens declined, when it did. */
+  cause?: "financial" | "no-statements";
   explain?: ExplainMap;
 }
 
@@ -290,9 +398,22 @@ export interface LongTermCheck {
   tone: string; horizon: string;
 }
 
+/**
+ * One holding-period distribution.
+ *
+ * `usable` is false for a horizon the loaded history cannot support, and such a
+ * row carries `reason` and NOTHING ELSE — no worst, no median. That is
+ * deliberate: these rows used to be dropped, so a reader could not tell whether
+ * a stock had never had a bad five-year stretch or whether nobody had looked.
+ * Never render a figure from a row whose `usable` is false; there is none.
+ */
 export interface RollingReturnRow {
-  years: number; windows: number; best: number; worst: number;
-  median: number; mean: number; positiveShare: number; p25: number; p75: number;
+  years: number;
+  usable?: boolean;
+  reason?: string;
+  windows: number;
+  best?: number; worst?: number; median?: number; mean?: number;
+  positiveShare?: number; p25?: number; p75?: number;
 }
 
 export interface LongTermBlock {
@@ -451,6 +572,30 @@ export interface DivergenceLeg {
 
 export interface TechnicalResponse {
   ticker: string; currency: string; range: string; bars: number; hasSma200: boolean;
+  /**
+   * What this name moves with, among the factors whose betas survived the
+   * persistence study. Estimated over its own fixed 52 weeks — the block length
+   * the study measured — so it does not change when the chart range does.
+   * Never carries a vote: a negative beta is not a bad beta.
+   */
+  exposure?: {
+    usable: boolean;
+    reason?: string;
+    weeks?: number;
+    /** Declaration order, never strength order. */
+    factors?: { key: string; label: string; symbol: string; beta: number;
+                rSquared: number; tStat: number; weeks: number; note: string;
+                marketRemoved: boolean }[];
+    /** Tested and declined, with why. An empty section is not "no exposure". */
+    refused?: { key: string; label: string; reason: string }[];
+    materialAt?: number;
+    materialT?: number;
+    /** What the stability study can and cannot say — context, never a gate. */
+    persistence?: { measured: boolean; measuredOn?: string | null;
+                    blockWeeks?: number;
+                    rawOneYear?: Record<string, number | null> };
+    explain?: ExplainMap;
+  };
   latest: { date: string; close: number; change: number; changePct: number;
             high: number; low: number; volume: number };
   summary: {
@@ -598,6 +743,49 @@ export interface SynthesisReading {
 
 export interface SynthesisNote { title: string; text: string }
 
+/**
+ * One pair of readings, and how much they agree beyond what chance supplies.
+ *
+ * `kappa` is null where it is genuinely undefined — two lenses that never
+ * varied cannot be shown to agree beyond chance, and 0 would read as "no better
+ * than chance" rather than "this sample cannot say". `usable` is decided in
+ * Python against the minimum sample; never re-derive it here.
+ *
+ * There is deliberately no confidence field and no weight. This is a caveat
+ * with a number on it, and the moment anything downstream multiplied by it the
+ * app would have the composite score it refuses to have.
+ */
+export interface AgreementPair {
+  a: string; b: string;
+  n: number;
+  observed: number;
+  chance: number;
+  kappa: number | null;
+  tauB: number | null;
+  low: number | null;
+  high: number | null;
+  excludesZero: boolean;
+  usable: boolean;
+}
+
+/** The measured half of the app's central claim. Absent when never measured. */
+export interface AgreementMeasurement {
+  measuredOn: string;
+  scope: string;
+  families: AgreementPair;
+  pairs: AgreementPair[];
+  lenses: {
+    available: boolean;
+    reason?: string;
+    lenses?: string[];
+    measuredLenses?: number;
+    effectiveLenses?: number;
+    completeCases?: number;
+    droppedForNoVariation?: string[];
+  };
+  reading: string;
+}
+
 export interface Synthesis {
   headline: string;
   tone: string;
@@ -605,6 +793,8 @@ export interface Synthesis {
   agreement: {
     text: string; tone: string;
     independentSources: number; lensesReading: number;
+    /** Present only when the measurement has been run and is usable. */
+    measured?: AgreementMeasurement;
   };
   /** Named conflicts. The most useful sentences on the page. */
   tensions: SynthesisNote[];
@@ -612,6 +802,148 @@ export interface Synthesis {
   blindSpots: SynthesisNote[];
   nextChecks: string[];
   caveat: string;
+}
+
+/**
+ * One condition that would give a careful buyer pause.
+ *
+ * `firingRate` is the whole point and is never optional: a condition true of a
+ * third of the market is a description of the market, and it is indistinguishable
+ * from a finding about this company without that number. `classification` is
+ * decided in Python against `baseRateMax` — never re-derived here.
+ *
+ * There is deliberately NO severity field and no ordering weight. Three of these
+ * is not a worse reading than two, and any field that implied otherwise would be
+ * a composite arriving by the back door.
+ */
+export interface PreTradeCheck {
+  id: string;
+  classification: "flag" | "base";
+  /** The panel that owns the underlying number, so it can be gone and checked. */
+  where: string;
+  family: "price" | "filings";
+  firingRate: number;
+  firingRateText: string;
+  sampleSize: number;
+  universeLabel: string;
+  rateSentence: string;
+  explain: Explanation;
+}
+
+/** A condition that was never tested. NOT the same as one that came back clear. */
+export interface PreTradeUnchecked {
+  id: string; label: string; reason: string; where: string;
+}
+
+/**
+ * What would give a careful buyer pause.
+ *
+ * Note what is absent: no count, no score, no severity order, no overall verdict.
+ * That is enforced in `api/_lib/pretrade.py` and asserted by
+ * `tests/test_pretrade.py` against the payload's key set, because an aggregate
+ * field is the direction any later change to this panel would drift in.
+ */
+export interface PreTrade {
+  headline: string;
+  framing: string;
+  /** Keyed by the section each note describes — never matched by wording. */
+  notes: { base?: string; notChecked?: string; uncalibrated?: string };
+  measuredOn: string | null;
+  caveat: string;
+  flags: PreTradeCheck[];
+  /** True here AND true of most of the market, so shown apart and uncoloured. */
+  baseConditions: PreTradeCheck[];
+  notChecked: PreTradeUnchecked[];
+  /** Known to the app, withheld because nobody has measured its base rate. */
+  uncalibrated: { id: string; label: string }[];
+  calibration: {
+    measuredOn: string | null;
+    universeLabel: string | null;
+    universes: string[] | null;
+    /** Which population the rates describe — see `_rate_for` in pretrade.py. */
+    market: string | null;
+    baseRateMax: number;
+  } | null;
+}
+
+/**
+ * Where a candidate sits against a book of holdings.
+ *
+ * The one place in this app where a measurement informs position size, and it
+ * is earned: `stability` carries the offline finding that licenses it — pairwise
+ * correlations persist year to year — along with the limit the same measurement
+ * found, that they run higher in bad quarters. Never render the numbers without
+ * it.
+ */
+export interface PortfolioPair {
+  ticker: string;
+  correlation: number;
+  band: "high" | "moderate" | "low";
+  overlapDays: number;
+}
+
+export interface PortfolioRiskRow {
+  ticker: string;
+  weight: number;
+  riskShare: number;
+  volatility: number;
+  /** Risk share minus money share. Positive means bigger than it looks. */
+  excess: number;
+}
+
+export interface PortfolioResponse {
+  candidate: string;
+  market: Market;
+  usable: boolean;
+  reason?: string;
+  missing?: string[];
+  holdings?: string[];
+  windowDays?: number;
+  equalWeighted?: boolean;
+  observations?: number;
+  pairs?: PortfolioPair[];
+  portfolioCorrelation?: number | null;
+  independence?: {
+    before: number | null; after: number | null;
+    holdings: number; withCandidate: number; gain: number | null;
+  };
+  contributions?: {
+    usable: boolean; reason?: string;
+    portfolioVolatility?: number; rows?: PortfolioRiskRow[];
+  };
+  volatility?: Record<string, number>;
+  /**
+   * What the holdings have in common, once the local market is taken out.
+   * Never carries a vote: a beta has no bullish or bearish direction, so this
+   * never reaches the confluence rail. See `api/_lib/exposure.py`.
+   */
+  driver?: {
+    usable: boolean;
+    reason?: string;
+    holdings?: string[];
+    weeks?: number;
+    varianceShare?: number;
+    hasSharedDirection?: boolean;
+    loadings?: Record<string, number>;
+    marketShare?: number | null;
+    indexSymbol?: string;
+    /** Declaration order, never strength order. */
+    matches?: { key: string; label: string; symbol: string;
+                correlation: number; overlapWeeks: number; note: string }[];
+    tested?: { key: string; label: string; symbol: string; available: boolean;
+               correlation?: number; overlapWeeks?: number }[];
+    ambiguous?: boolean;
+    nameAt?: number;
+    minVarianceShare?: number;
+  };
+  stability?: {
+    measuredOn: string | null;
+    headline: string | null;
+    yearlyPersistence: { mean: number | null; min: number | null; max: number | null };
+    stressRise: { mean: number | null; min: number | null; max: number | null };
+    caveats: string[];
+  } | null;
+  explain?: ExplainMap;
 }
 
 export interface ConfluenceResponse {
@@ -622,6 +954,7 @@ export interface ConfluenceResponse {
   quality: Leg<QualityResponse>;
   news: Leg<NewsResponse>;
   synthesis: Synthesis;
+  preTrade: PreTrade;
 }
 
 /**
@@ -685,4 +1018,43 @@ export interface RankValidation {
     spread: number; spreadQ: number;
     minimumDetectableIc: number;
   }[];
+}
+
+
+/**
+ * A whole universe against the factors whose betas survived the persistence
+ * study. One beta is uninterpretable alone, so this tier returns the
+ * cross-section and lets the reader place a name in it.
+ */
+export interface ExposureLoading {
+  beta: number; rSquared: number; tStat: number; material: boolean;
+  weeks: number; marketRemoved: boolean;
+}
+
+export interface ExposureRow {
+  ticker: string; weeks: number;
+  loadings: Record<string, ExposureLoading>;
+}
+
+export interface ExposureScanResponse {
+  universe: { id: string | null; name: string; market: Market;
+              asOf: string | null; count: number };
+  usable: boolean;
+  reason?: string | null;
+  /** Declaration order, never strength order. */
+  factors: { key: string; label: string; symbol: string; note: string }[];
+  /** Tested and declined, with why — an absent factor is never silently absent. */
+  refused: { key: string; label: string; reason: string }[];
+  rows: ExposureRow[];
+  missing?: string[];
+  scanned?: number;
+  requested?: number;
+  weeks?: number;
+  materialAt?: number;
+  materialT?: number;
+  indexSymbol?: string;
+  persistence?: { measured: boolean; measuredOn?: string | null;
+                  blockWeeks?: number;
+                  rawOneYear?: Record<string, number | null> };
+  explain?: ExplainMap;
 }

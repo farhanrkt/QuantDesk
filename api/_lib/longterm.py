@@ -152,6 +152,47 @@ def cagr(close: pd.Series) -> Optional[float]:
     return float((prices.iloc[-1] / prices.iloc[0]) ** (1.0 / years) - 1.0)
 
 
+def downside_deviation_of(returns: pd.Series, target: float = 0.0) -> float:
+    """Sortino & Price's downside deviation: RMS shortfall below `target`.
+
+        DD = sqrt( mean( min(r - target, 0)^2 ) ) * sqrt(252)
+
+    TWO THINGS THAT LOOK LIKE DETAILS AND ARE NOT. The mean is taken over EVERY
+    observation, not over the losing ones; and the quantity averaged is the
+    squared shortfall from the TARGET, not the variance of the losses about
+    their own mean.
+
+    This module previously computed `returns[returns < 0].std()`, which is a
+    different statistic — the dispersion of losses around their average loss —
+    and it is wrong in a way that does not even have a consistent sign. Measured
+    against the published definition on planted return series:
+
+        ordinary noisy returns        0.85x  (Sortino overstated by ~18%)
+        small losses, rare crashes    1.44x  (Sortino understated)
+        every down day the same size  0.00x  (Sortino -> infinity)
+
+    That last row is the one that matters. A series whose losses are all the
+    same size has zero dispersion among them, so the old formula returned zero
+    and Sortino came back as 4.7e14 — which the panel would have rendered as an
+    excellent risk-adjusted return for a holding that loses money regularly. The
+    published formula returns 0.0917 for that series and a Sortino of 7.4.
+
+    A series with no losses at all still has no downside, so the ratio is
+    undefined rather than infinite, and NaN is the honest answer.
+
+    > Sortino, F. A., & Price, L. N. (1994). "Performance Measurement in a
+    > Downside Risk Framework." Journal of Investing 3(3), 59-64.
+    """
+    values = returns.to_numpy(dtype="float64")
+    values = values[np.isfinite(values)]
+    if len(values) < 2:
+        return float("nan")
+    shortfall = np.minimum(values - target, 0.0)
+    if not np.any(shortfall < 0):
+        return float("nan")
+    return float(np.sqrt(np.mean(shortfall ** 2)) * np.sqrt(TRADING_DAYS))
+
+
 def risk_metrics(close: pd.Series, risk_free: float = 0.0) -> dict:
     """Risk-adjusted performance, with the downside measures that matter more.
 
@@ -168,9 +209,7 @@ def risk_metrics(close: pd.Series, risk_free: float = 0.0) -> dict:
     annual_return = cagr(prices)
     volatility = float(returns.std(ddof=1) * np.sqrt(TRADING_DAYS))
 
-    downside = returns[returns < 0]
-    downside_deviation = (float(downside.std(ddof=1) * np.sqrt(TRADING_DAYS))
-                          if len(downside) > 1 else np.nan)
+    downside_deviation = downside_deviation_of(returns)
 
     excess = (annual_return - risk_free) if annual_return is not None else np.nan
     sharpe = excess / volatility if volatility > 0 and np.isfinite(excess) else np.nan
@@ -213,7 +252,21 @@ def risk_metrics(close: pd.Series, risk_free: float = 0.0) -> dict:
     }
 
 
-def rolling_returns(close: pd.Series, years: Sequence[int] = (1, 3, 5)) -> list[dict]:
+# The horizons a holder might actually state. Not a tuning parameter: these are
+# the periods someone says out loud when asked how long they intend to own
+# something, and every one that the loaded history cannot support is REPORTED as
+# unsupported rather than dropped — see below.
+HOLDING_HORIZONS: tuple[int, ...] = (1, 2, 3, 5, 10)
+
+# A distribution needs more than one draw. Twenty extra bars past the window
+# length is twenty-one overlapping periods, which is few but is the point below
+# which "the worst N-year outcome" stops describing a distribution and starts
+# describing one date.
+MIN_WINDOWS = 20
+
+
+def rolling_returns(close: pd.Series,
+                    years: Sequence[float] = HOLDING_HORIZONS) -> list[dict]:
     """Every N-year holding period in the history, summarised.
 
     THE MOST USEFUL SINGLE TABLE for a long-term investor, because it answers
@@ -221,19 +274,40 @@ def rolling_returns(close: pd.Series, years: Sequence[int] = (1, 3, 5)) -> list[
     "what would I have earned buying at a RANDOM moment and holding N years?".
     The worst case in that distribution is the number that decides position
     size, and it is invisible in any single-path backtest.
+
+    A HORIZON THE HISTORY CANNOT SUPPORT COMES BACK MARKED, NOT MISSING. This
+    used to `continue`, so a five-year row simply was not there — and on the
+    app's own default range it usually was not, because five years of daily bars
+    is about twenty short of the twenty-one overlapping five-year windows this
+    needs. A reader could not tell whether the stock had never had a bad
+    five-year stretch or whether nobody had looked. That is the same
+    absence-reads-as-evidence failure the pre-trade panel is built against,
+    sitting in the oldest table in the app.
     """
     prices = close.dropna()
     out = []
     for horizon in years:
         window = int(horizon * TRADING_DAYS)
-        if len(prices) < window + 20:
+        needed = window + MIN_WINDOWS
+        if len(prices) < needed:
+            short_by = needed - len(prices)
+            out.append({
+                "years": horizon, "usable": False, "windows": 0,
+                "reason": (f"Needs about {needed:,} trading days of history to have "
+                           f"{MIN_WINDOWS + 1} overlapping {horizon}-year periods to compare, "
+                           f"and this range has {len(prices):,} — {short_by:,} short. Widen "
+                           f"the chart range."),
+            })
             continue
         ratio = prices / prices.shift(window)
         annualised = (ratio ** (1.0 / horizon) - 1.0).dropna()
         if annualised.empty:
+            out.append({"years": horizon, "usable": False, "windows": 0,
+                        "reason": "No complete period of this length in the loaded prices."})
             continue
         out.append({
             "years": horizon,
+            "usable": True,
             "windows": len(annualised),
             "best": float(annualised.max()),
             "worst": float(annualised.min()),

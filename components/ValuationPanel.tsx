@@ -6,8 +6,8 @@ import {
 } from "recharts";
 import { CornerUpLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardBody, CardHeader, CardTitle, Stat } from "@/components/ui/card";
-import { ExplainedStat, TONE_TEXT, useDetail } from "@/components/ui/explain";
+import { Card, CardBody, CardHeader, CardTitle, Note, Stat } from "@/components/ui/card";
+import { Explain, ExplainedStat, TONE_TEXT, useDetail } from "@/components/ui/explain";
 import { DownloadButton } from "@/components/ui/controls";
 import { ValuationControls } from "@/components/ValuationControls";
 import type { ValuationOptions } from "@/lib/api";
@@ -77,7 +77,7 @@ export function ValuationPanel({
 
       {data.notices.map((n, i) => (
         <div key={i}
-             className="rounded border px-4 py-3 text-xs leading-relaxed"
+             className="rounded border px-4 py-3 text-meta leading-relaxed"
              style={{
                borderColor: n.tone === "warn" ? "#F2C14E66" : `${accent}55`,
                background: n.tone === "warn" ? "#F2C14E14" : `${accent}14`,
@@ -94,12 +94,12 @@ export function ValuationPanel({
       <Card accent={accent}>
         <CardHeader>
           <CardTitle>What this is worth, and how sure the model is</CardTitle>
-          <span className="num text-xs font-semibold" style={{ color: verdictColor }}>
+          <span className="num text-meta font-semibold" style={{ color: verdictColor }}>
             {verdictLabel(data.verdict)}
           </span>
         </CardHeader>
         <CardBody className="space-y-3">
-          <p className="text-[0.95rem] leading-relaxed text-chalk/90">
+          <p className="text-base leading-relaxed text-body">
             Today the market prices {data.ticker} at {data.priceLabel}. Projecting the
             {data.engine === "DCF" ? " cash the business generates" :
              data.engine === "DDM" ? " dividends the business pays" :
@@ -107,11 +107,11 @@ export function ValuationPanel({
             at {pct(data.discountRate, 1)} a year puts it nearer {mc.p50Label} — a range of
             {" "}{mc.p25Label} to {mc.p75Label} once the assumptions are allowed to vary.
           </p>
-          <p className="text-[0.78rem] leading-relaxed text-ash">
-            This is not a forecast of the share price. It is what the business is worth IF the
-            growth and discount rates below are right, and they are estimates. That is why the
-            output is a range and why every input is editable.
-          </p>
+          <Note tone="warn">
+            This is not a price forecast. It is what the business is worth <em>if</em> the growth
+            and discount rates below are right — and those are estimates. Which is why the answer
+            is a range, and why every input is yours to change.
+          </Note>
         </CardBody>
       </Card>
 
@@ -119,9 +119,13 @@ export function ValuationPanel({
         <Stat label="Market price" value={data.priceLabel}
               sub={data.priceAsOf ? `close of ${data.priceAsOf}`
                                   : data.priceSource ?? undefined} />
+        {/* NO `tone` OVERRIDE. Colouring by the sign of `upside` painted a 5%
+            gap bright green while `_upside` — which knows that gap is inside
+            the noise of a model whose P25-P75 can span 60% — calls it neutral.
+            `ExplainedStat` falls back to `explain.tone`, which is the whole
+            point of deciding direction once, in Python. */}
         <ExplainedStat label="Model's middle estimate" value={mc.p50Label}
                        explain={ex.upside}
-                       tone={(mc.upside ?? 0) >= 0 ? "text-acc" : "text-dist"}
                        sub={`${signedPct(mc.upside)} vs market`} />
         <ExplainedStat explain={ex.valuationSpread}
                        label="Pessimistic to optimistic"
@@ -147,25 +151,29 @@ export function ValuationPanel({
                   <CornerUpLeft aria-hidden className="h-3 w-3" />
                   Working the model backwards
                 </div>
-                <p className="text-[0.95rem] leading-relaxed text-chalk/90">
+                <p className="prose-col text-base leading-relaxed text-body">
                   {ex.impliedGrowth.reading}
                 </p>
-                <p className="mt-1.5 text-[0.78rem] leading-relaxed text-ash">
-                  {ex.impliedGrowth.action}
-                </p>
+                {/* `action` is 122 words and it is the longest single block on
+                    this tab. It belongs where every other `action` lives — behind
+                    the info icon — not printed twice the length of the reading it
+                    follows. The affordance is right here on the figure. */}
               </div>
               <div className="shrink-0 text-right">
-                <div className="eyebrow mb-1">Implied growth</div>
-                <div className={cn("num text-2xl font-semibold leading-none",
+                <div className="eyebrow mb-1 flex items-center justify-end gap-1.5">
+                  Implied growth
+                  <Explain explain={ex.impliedGrowth} />
+                </div>
+                <div className={cn("num text-h2 font-semibold leading-none",
                                    TONE_TEXT[ex.impliedGrowth.tone])}>
                   {ex.impliedGrowth.valueText}
                 </div>
-                <div className="mt-1 text-[0.65rem] text-ash">
+                <div className="mt-1 text-meta text-ash">
                   a year, for five years
                 </div>
-                <div className="mt-2 border-t border-rule pt-2 text-[0.65rem] text-ash">
+                <div className="mt-2 border-t border-rule pt-2 text-micro text-ash">
                   you assumed{" "}
-                  <span className="num text-chalk/80">{pct(data.baseCase.assumedGrowth)}</span>
+                  <span className="num text-body">{pct(data.baseCase.assumedGrowth)}</span>
                 </div>
               </div>
             </div>
@@ -205,7 +213,7 @@ export function ValuationPanel({
                              label={{ value: "Median", fill: UP, fontSize: 11, position: "top" }} />
             </BarChart>
           </ResponsiveContainer>
-          <p className="mt-3 text-xs leading-relaxed text-ash">
+          <p className="mt-3 text-meta leading-relaxed text-ash">
             {data.assumptions.iterations.toLocaleString()} iterations.{" "}
             {data.engine === "DCF" ? "FCF growth" : "Dividend growth"} ~ N({pct(data.assumptions.growth)},{" "}
             {pct(data.assumptions.sdGrowth)}), {data.rateName} ~ N({pct(data.discountRate, 2)},{" "}
@@ -222,63 +230,73 @@ export function ValuationPanel({
         </div>
       )}
 
-      <div className={simple ? "hidden" : "grid gap-4 lg:grid-cols-[1.4fr_1fr]"}>
-        <Card>
+      {/* `minmax(0, …)` AND `min-w-0`, NOT `1.4fr_1fr`. A grid item's automatic minimum
+          size is its min-content width, so the projection table below refused to shrink and
+          stretched the track past the viewport instead of scrolling inside its own wrapper —
+          the whole page scrolled sideways on a phone. The track cap fixes the two-column
+          case and `min-w-0` on each child fixes the stacked one. */}
+      <div className={simple ? "hidden"
+                             : "grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"}>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>
               Base-case {data.engine === "DCF" ? "cash flow" : "dividend"} projection
             </CardTitle>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-[0.65rem] text-ash">{data.assumptions.basis}</span>
+              <span className="font-mono text-micro text-ash">{data.assumptions.basis}</span>
               <DownloadButton onClick={downloadSchedule}>CSV</DownloadButton>
             </div>
           </CardHeader>
           <CardBody className="px-0">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                  <th>Year</th>
-                  <th className="text-right">{data.streamLabel}</th>
-                  <th className="text-right">Discount factor</th>
-                  <th className="text-right">Present value</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.schedule.map((row) => (
-                  <tr key={row.year} className="border-b border-rule/60 last:border-0">
-                    <td className="num px-5 py-2 text-ash">{row.year}</td>
-                    <td className="num px-5 py-2 text-right">{row.stream}</td>
-                    <td className="num px-5 py-2 text-right text-ash">{row.discountFactor}</td>
-                    <td className="num px-5 py-2 text-right">{row.presentValue}</td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-meta">
+                <thead>
+                  <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
+                    <th>Year</th>
+                    <th className="text-right">{data.streamLabel}</th>
+                    <th className="text-right">Discount factor</th>
+                    <th className="text-right">Present value</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.schedule.map((row) => (
+                    <tr key={row.year} className="border-b border-ruleSoft last:border-0">
+                      <td className="num px-5 py-2 text-ash">{row.year}</td>
+                      <td className="num px-5 py-2 text-right">{row.stream}</td>
+                      <td className="num px-5 py-2 text-right text-ash">{row.discountFactor}</td>
+                      <td className="num px-5 py-2 text-right">{row.presentValue}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
             {data.history.length > 0 && (
               <>
                 <div className="eyebrow px-5 pb-2 pt-5">
                   {data.engine === "DCF" ? "Historical free cash flow" : "Declared dividend history"}
                 </div>
-                <table className="w-full text-left text-xs">
-                  <tbody>
-                    {data.history.map((row, i) => (
-                      <tr key={i} className="border-b border-rule/60 last:border-0">
-                        {Object.values(row).map((cell, j) => (
-                          <td key={j} className={`num px-5 py-2 ${j === 0 ? "text-ash" : "text-right"}`}>
-                            {cell}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-meta">
+                    <tbody>
+                      {data.history.map((row, i) => (
+                        <tr key={i} className="border-b border-ruleSoft last:border-0">
+                          {Object.values(row).map((cell, j) => (
+                            <td key={j} className={`num px-5 py-2 ${j === 0 ? "text-ash" : "text-right"}`}>
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
           </CardBody>
         </Card>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card accent={accent}>
             <CardHeader>
               <CardTitle>
@@ -286,41 +304,45 @@ export function ValuationPanel({
               </CardTitle>
             </CardHeader>
             <CardBody className="px-0">
-              <table className="w-full text-left text-xs">
-                <tbody>
-                  {data.bridge.map((row) => (
-                    <tr key={row.component} className="border-b border-rule/60 last:border-0">
-                      <td className="px-5 py-2 text-ash">{row.component}</td>
-                      <td className="num px-5 py-2 text-right">{row.amount}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-meta">
+                  <tbody>
+                    {data.bridge.map((row) => (
+                      <tr key={row.component} className="border-b border-ruleSoft last:border-0">
+                        <td className="px-5 py-2 text-ash">{row.component}</td>
+                        <td className="num px-5 py-2 text-right">{row.amount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardBody>
           </Card>
 
           <Card>
             <CardHeader><CardTitle>Model diagnostics</CardTitle></CardHeader>
             <CardBody className="px-0">
-              <table className="w-full text-left text-xs">
-                <tbody>
-                  {data.diagnostics.map((row) => (
-                    <tr key={row.metric} className="border-b border-rule/60 last:border-0">
-                      <td className="px-5 py-2 text-ash">{row.metric}</td>
-                      <td className="num px-5 py-2 text-right">{row.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-meta">
+                  <tbody>
+                    {data.diagnostics.map((row) => (
+                      <tr key={row.metric} className="border-b border-ruleSoft last:border-0">
+                        <td className="px-5 py-2 text-ash">{row.metric}</td>
+                        <td className="num px-5 py-2 text-right">{row.value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardBody>
           </Card>
         </div>
       </div>
 
-      <p className="text-xs leading-relaxed text-ash">
+      <p className="text-meta leading-relaxed text-ash">
         Routed to the {data.engine} because {data.routeReason}. The KPI strip reports the Monte
-        Carlo <b className="text-chalk/80">median</b>; the bridge reports the{" "}
-        <b className="text-chalk/80">base case</b>. They differ because the price distribution is
+        Carlo <b className="text-body">median</b>; the bridge reports the{" "}
+        <b className="text-body">base case</b>. They differ because the price distribution is
         right-skewed in 1/(r − g). Data from Yahoo Finance, unaudited. A research tool, not
         investment advice.
       </p>

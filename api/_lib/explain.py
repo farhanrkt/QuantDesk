@@ -394,7 +394,14 @@ def _var95(value, **_):
                 f"trading day in twenty was at least this bad.",
                 "Use it as a nerve test. If a one-day fall of this size in your position size "
                 "would make you sell, the position is too big.",
-                band, "low", evidence="strong", value_text=_pct(value))
+                # HIGH, and the SIGN is the whole reason. This is shown as a
+                # NEGATIVE percentage, so the better outcome is the LARGER
+                # number: -8% beats -60%. Declaring "low" printed an arrow
+                # reading "lower is better" beneath a negative value, which
+                # tells a reader that a deeper fall is the good one. The
+                # colour ladder was right throughout; only the arrow
+                # contradicted it, and no test compared the two.
+                band, "high", evidence="strong", value_text=_pct(value))
 
 
 @metric("cvar95")
@@ -413,7 +420,14 @@ def _cvar95(value, var95=None, **_):
                     f"past 1.0 this gets, the more the really bad days cluster far out.")
     return make(label, what, reading,
                 CONTEXT_NOT_TRIGGER + " It tells you the shape of the tail, not when it arrives.",
-                band, "low", evidence="strong", value_text=_pct(value))
+                # HIGH, and the SIGN is the whole reason. This is shown as a
+                # NEGATIVE percentage, so the better outcome is the LARGER
+                # number: -8% beats -60%. Declaring "low" printed an arrow
+                # reading "lower is better" beneath a negative value, which
+                # tells a reader that a deeper fall is the good one. The
+                # colour ladder was right throughout; only the arrow
+                # contradicted it, and no test compared the two.
+                band, "high", evidence="strong", value_text=_pct(value))
 
 
 @metric("skew")
@@ -486,7 +500,14 @@ def _worst_day(value, **_):
     return make(label, what,
                 f"The worst day here fell {_pct(magnitude)}. It has happened once, so it can "
                 f"happen again.",
-                CONTEXT_NOT_TRIGGER, band, "low", evidence="strong", value_text=_pct(value))
+                # HIGH, and the SIGN is the whole reason. This is shown as a
+                # NEGATIVE percentage, so the better outcome is the LARGER
+                # number: -8% beats -60%. Declaring "low" printed an arrow
+                # reading "lower is better" beneath a negative value, which
+                # tells a reader that a deeper fall is the good one. The
+                # colour ladder was right throughout; only the arrow
+                # contradicted it, and no test compared the two.
+                CONTEXT_NOT_TRIGGER, band, "high", evidence="strong", value_text=_pct(value))
 
 
 @metric("bestDay")
@@ -530,7 +551,14 @@ def _max_drawdown(value, **_):
     return make(label, what, reading,
                 "Size the position so a repeat of this fall does not force you out. That is "
                 "the decision this number is for.",
-                band, "low", evidence="strong", value_text=_pct(value, 0))
+                # HIGH, and the SIGN is the whole reason. This is shown as a
+                # NEGATIVE percentage, so the better outcome is the LARGER
+                # number: -8% beats -60%. Declaring "low" printed an arrow
+                # reading "lower is better" beneath a negative value, which
+                # tells a reader that a deeper fall is the good one. The
+                # colour ladder was right throughout; only the arrow
+                # contradicted it, and no test compared the two.
+                band, "high", evidence="strong", value_text=_pct(value, 0))
 
 
 @metric("currentDrawdown")
@@ -544,7 +572,7 @@ def _current_drawdown(value, **_):
         return make(label, what,
                     f"{_pct(depth)} below its peak, which is effectively at the high — "
                     f"everyone who has ever owned it is in profit.",
-                    CONTEXT_NOT_TRIGGER, "good", "low", evidence="strong",
+                    CONTEXT_NOT_TRIGGER, "good", "high", evidence="strong",
                     value_text=_pct(value, 1))
     band = _ladder(depth, ((0.10, "good"), (0.25, "fair"), (0.45, "poor"), (None, "bad")))
     return make(label, what,
@@ -552,7 +580,16 @@ def _current_drawdown(value, **_):
                 f"still down by that much.",
                 CONTEXT_NOT_TRIGGER + " Being far below a high is neither cheap nor broken on "
                 "its own — the Value and Quality lenses are what settle that.",
-                band, "low", evidence="strong", value_text=_pct(value, 1))
+                # HIGH, and the SIGN is the whole reason. This is shown as a
+                # NEGATIVE percentage, so the better outcome is the LARGER
+                # number: -8% beats -60%. Declaring "low" printed an arrow
+                # reading "lower is better" beneath a negative value, which
+                # tells a reader that a deeper fall is the good one. The colour
+                # ladder was right throughout; only the arrow contradicted it,
+                # and no test compared the two. Note `band` is picked from
+                # `depth`, the absolute value — which is why the ladder reads
+                # low-is-good while the DISPLAYED number does not.
+                band, "high", evidence="strong", value_text=_pct(value, 1))
 
 
 @metric("timeUnderWaterDays")
@@ -883,13 +920,17 @@ def _correlation(value, benchmark=None, **_):
 
 
 @metric("rollingWorst")
-def _rolling_worst(value, years=None, positiveShare=None, **_):
+def _rolling_worst(value, years=None, positiveShare=None, reason=None, windows=None, **_):
     horizon = f"{years}-year" if years else "multi-year"
     label = f"Worst {horizon} outcome"
     what = (f"Out of every possible {horizon} holding period in this history, the one that "
             f"turned out worst. It answers 'what if I had bought at the worst moment?'")
     if not _known(value):
-        return unavailable(label, what, f"needs more than {years or 'several'} years of history")
+        # The row carries WHY, including how much history is missing. A generic
+        # "needs more years" would hide that the fix is one dropdown away.
+        return unavailable(
+            label, what,
+            (reason or f"needs more than {years or 'several'} years of history").rstrip("."))
     band = _ladder(value, ((-0.10, "bad"), (0.0, "poor"), (0.05, "fair"),
                            (0.12, "good"), (None, "excellent")))
     reading = (f"The unluckiest {horizon} entry still returned {_signed_pct(value)} a year. ")
@@ -1743,10 +1784,17 @@ def _upside(value, engine=None, price_label=None, fair_label=None, **_):
         return unavailable(label, what, "the model could not produce a value")
     band = _ladder(value, ((-0.30, "bad"), (-0.10, "poor"), (0.10, "fair"),
                            (0.30, "good"), (None, "excellent")))
+    # SAY WHAT THE NUMBER IS A MOVE IN, rather than calling it a discount or a
+    # premium. This metric is a fraction of the PRICE, and both of those words
+    # are read against the fair value, which is a different base: a $112 estimate
+    # beside a $315 price was called "a 64% premium" when the premium the market
+    # is paying over that estimate is 180%. Phrased as the move required, the
+    # same 64% is exactly right — 315 less 64% is 112.
     reading = (f"The model's middle estimate is {fair_label or 'its fair value'} against a "
                f"market price of {price_label or 'today\'s price'} — "
-               + (f"a {_pct(abs(value), 0)} discount." if value >= 0
-                  else f"a {_pct(abs(value), 0)} premium.") + " ")
+               + (f"the price would have to rise {_pct(abs(value), 0)} to meet it."
+                  if value >= 0 else
+                  f"the price would have to fall {_pct(abs(value), 0)} to meet it.") + " ")
     if abs(value) > 0.5:
         reading += ("A gap that large is more often a sign the assumptions are wrong than a "
                     "genuine mispricing. Check the growth rate and the discount rate before "
@@ -1829,7 +1877,7 @@ def _implied_growth(value, assumedGrowth=None, engine=None, **_):
 
     return make(
         label=label, what=what, reading=reading + gap,
-        action=("This is the number to argue with. Ask whether you believe THIS company can "
+        action=("The number to argue with. Ask whether you believe THIS company can "
                 "grow at that rate for five years — you know things about the business the "
                 "model does not. If you think it can do better, the price is cheap on this "
                 "model; if worse, expensive. That judgement is yours, and it is a far more "
@@ -2262,13 +2310,14 @@ def long_horizon_story(ticker: str, block: dict) -> dict:
     # The single most useful sentence in the summary, because it replaces "it
     # returned X" (one lucky start date) with "here is what EVERY start date
     # would have given you".
-    chosen = None
-    for row in rolling:
-        if row.get("years") == 3:
-            chosen = row
-            break
-    if chosen is None and rolling:
-        chosen = rolling[-1]
+    # USABLE rows only. Unsupported horizons are now reported rather than
+    # dropped, so "there is a 3-year row" no longer means "there is a 3-year
+    # answer" — and a summary built from one would say a stock made money in
+    # every window it never measured.
+    usable = [row for row in rolling if row.get("usable", True) and _known(row.get("worst"))]
+    chosen = next((row for row in usable if row.get("years") == 3), None)
+    if chosen is None and usable:
+        chosen = usable[-1]
     if chosen:
         horizon = chosen.get("years")
         worst = chosen.get("worst")
@@ -2318,21 +2367,19 @@ def long_horizon_story(ticker: str, block: dict) -> dict:
     caveats = []
     if hurst_verdict == "indistinguishable":
         caveats.append(
-            "a statistical test on this price history cannot tell it apart from a random walk — "
-            "and that test is noisy enough that saying so is the honest answer rather than a "
-            "weak one — which means the trend lines and momentum readings further down are "
-            "probably describing noise rather than a real pattern")
+            "a statistical test cannot tell this price history apart from a random walk, so "
+            "the trend readings below are probably describing noise")
     elif hurst_verdict == "meanReverting":
         caveats.append(
-            "this price series has historically tended to REVERSE rather than continue, so "
-            "trend-following readings below should be discounted")
+            "this series has historically tended to reverse rather than continue, so discount "
+            "the trend readings below")
     if years is not None and years < 3:
         caveats.append(
-            f"there are only about {years:.0f} years of history loaded, which is thin for any "
-            f"statement about multi-year holding — set the range to 10y or max for a fuller picture")
+            f"only about {years:.0f} years of history is loaded, which is thin for any "
+            f"multi-year statement — try 10y or max")
     caveats.append(
-        "none of this knows anything about the business itself — it is price history alone, and "
-        "would read exactly the same on a company about to be delisted")
+        "none of this knows anything about the business — it would read the same on a company "
+        "about to be delisted")
     lead = "Worth remembering: " if len(caveats) == 1 else "Two things to remember: "
     if len(caveats) > 2:
         lead = "A few things to remember: "
@@ -2422,17 +2469,24 @@ def for_long_term(block: dict, ticker: str = "", risk_free: float = 0.0,
         if result:
             out[f"relativeExcess.{label}"] = result
 
-    for row in block.get("rollingReturns") or []:
+    rolling_rows = block.get("rollingReturns") or []
+    for row in rolling_rows:
         result = explain("rollingWorst", row.get("worst"), years=row.get("years"),
-                         positiveShare=row.get("positiveShare"))
+                         positiveShare=row.get("positiveShare"),
+                         reason=row.get("reason"), windows=row.get("windows"))
         if result:
             out[f"rollingWorst.{row.get('years')}"] = result
-    # The 3-year row is the one Simple mode shows, so it gets the bare key too.
-    if "rollingWorst.3" in out:
-        out["rollingWorst"] = out["rollingWorst.3"]
-    elif block.get("rollingReturns"):
-        last = block["rollingReturns"][-1]
-        out["rollingWorst"] = out.get(f"rollingWorst.{last.get('years')}")
+    # The bare key is what Simple mode renders, so it has to point at a horizon
+    # that was actually measured. Preferring the 3-year row by key alone would
+    # now hand Simple mode a "needs more history" card while a perfectly good
+    # 1-year answer sat beside it.
+    measured = [row for row in rolling_rows
+                if row.get("usable", True) and _known(row.get("worst"))]
+    preferred = next((row for row in measured if row.get("years") == 3), None)
+    if preferred is None and measured:
+        preferred = measured[-1]
+    if preferred is not None:
+        out["rollingWorst"] = out.get(f"rollingWorst.{preferred.get('years')}")
 
     if coppock:
         out["coppock"] = explain("coppock", coppock[-1].get("value"),
@@ -2476,8 +2530,20 @@ def for_indicators(indicators: dict, price: Optional[float] = None) -> dict:
 
 
 def for_quality(payload: dict) -> dict:
-    """Explanations for Piotroski, Altman, Beneish and each of their inputs."""
+    """Explanations for Piotroski, Altman, Beneish, their inputs and their provenance."""
     out: dict = {}
+    # One explanation per validation-domain dimension, keyed
+    # `domain.<screen>.<dimension>`. The FACTS live in `_lib/screendomain.py`
+    # where the citations are; this only wraps them in the standard three-part
+    # shape so the panel renders them with the same affordance as every other
+    # number, and so the band is decided in the one place bands are decided.
+    for screen, block in ((payload.get("domains") or {}).get("screens") or {}).items():
+        for dimension in block.get("dimensions") or []:
+            result = explain("validationDomain", dimension.get("verdict"),
+                             name=dimension.get("name"), sample=dimension.get("sample"),
+                             this_use=dimension.get("thisUse"), note=dimension.get("note"))
+            if result:
+                out[f"domain.{screen}.{dimension['key']}"] = result
     piotroski = payload.get("piotroski") or {}
     if piotroski:
         out["piotroski"] = explain("piotroski", piotroski.get("score"),
@@ -2494,6 +2560,13 @@ def for_quality(payload: dict) -> dict:
         out["beneish"] = explain("beneish", beneish.get("score"),
                                  indicesAvailable=beneish.get("indicesAvailable"),
                                  indicesTotal=beneish.get("indicesTotal"))
+    posterior = payload.get("manipulationPosterior")
+    if posterior:
+        out["manipulationPosterior"] = explain(
+            "manipulationPosterior", posterior.get("posterior"),
+            flagged=posterior.get("flagged"), prior_text=posterior.get("priorText"),
+            robust=(posterior.get("robustRange") or {}).get("sentence"),
+            partial=posterior.get("partialScore"))
         for part, value in (beneish.get("indices") or {}).items():
             result = explain("beneishIndex", value, part=part)
             if result:
@@ -2939,6 +3012,13 @@ def for_ranking_row(row: dict) -> dict:
 # rail's vote arithmetic, so the two cannot disagree about a tally.
 SYNTHESIS_FAMILY = {"flow": "price", "trend": "price",
                     "value": "filings", "quality": "filings"}
+
+# The GROUPING above stays a declared assumption — nothing measures which data a
+# lens reads, and nothing could. What is now measured is its CONSEQUENCE: how
+# often the two families' verdicts actually coincide once each family's own
+# habits are accounted for. `lensagreement` holds that measurement and
+# `_warrant` below is where it either earns this app's central claim or takes it
+# away. See §15 of RESEARCH_ROADMAP.md.
 FAMILY_LABEL = {"price": "price and volume", "filings": "the filings"}
 
 # Verbatim from the app's own framing. A DCF whose terminal value is more than
@@ -3040,13 +3120,20 @@ def _read_value(data: dict) -> Optional[dict]:
     monte = data.get("monteCarlo") or {}
     if not verdict or monte.get("p50Label") is None:
         return None
-    upside = monte.get("upside")
     engine = ENGINE_WORDS.get(data.get("engine"), "model")
 
+    # MEASURED AGAINST THE FAIR VALUE, because "that" in this sentence IS the
+    # fair value. `upside` is a fraction of the PRICE — a different denominator —
+    # and printing it here produced the impossible: ITMG.JK at Rp 25,650 against
+    # a model value of Rp 66,540 read "the market price is 159% below that",
+    # when nothing can be more than 100% below anything. The honest figure for
+    # this sentence is 61%.
     where = ""
-    if _known(upside):
-        side = "below" if upside >= 0 else "above"
-        where = f", putting the market price {_pct(abs(upside), 0)} {side} that"
+    fair, spot = monte.get("p50"), data.get("price")
+    if _known(fair) and _known(spot) and fair:
+        gap = (spot - fair) / fair
+        side = "below" if gap <= 0 else "above"
+        where = f", putting the market price {_pct(abs(gap), 0)} {side} that"
     prob = monte.get("probUndervalued")
     runs = (f" {_pct(prob, 0)} of the simulated runs came out cheap."
             if _known(prob) else "")
@@ -3121,7 +3208,49 @@ def _family_votes(readings: Sequence[dict]) -> dict:
     return out
 
 
-def _agreement(readings: Sequence[dict], families: dict) -> dict:
+def _warrant(measured: Optional[dict]) -> str:
+    """WHY agreement between the two families is worth anything — the clause
+    that carries this app's central claim, written from the measurement.
+
+    Until §15 this was an assertion: "the price record and the filings share no
+    inputs — so agreement between them is not one fact counted twice." Nothing
+    checked it. The grouping into families is still a declared assumption and
+    always will be, but its CONSEQUENCE is now measured across four index
+    universes, and this is where the measurement either earns the claim or
+    takes it away.
+
+    Three branches, and all three ship. A module that could only phrase the
+    result it hoped for would have decided the answer before running it.
+    """
+    if not measured:
+        # Never measured, or measured on too few names. Back to the stated
+        # assumption, said as an assumption — which is what the confluence rail
+        # has always admitted in smaller type.
+        return ("because the price record and the filings read different data — though "
+                "how far their verdicts actually overlap is a stated assumption here "
+                "rather than something this app has measured")
+
+    families = measured["families"]
+    kappa, n = families["kappa"], families["n"]
+    where = f"across {n} names in {measured['scope']}"
+
+    if not families.get("excludesZero"):
+        return (f"and that is measured rather than assumed: {where}, the two reach the "
+                f"same verdict no more often than their own separate habits already "
+                f"put them there (κ = {kappa:+.2f}), so agreement between them really "
+                f"is two facts and not one counted twice")
+    if kappa > 0:
+        return (f"with one measured qualification: {where}, the two agree rather more "
+                f"often than chance alone would produce (κ = {kappa:+.2f}), so the "
+                f"second reading is partly predictable from the first and this is "
+                f"worth less than two independent readings")
+    return (f"with one measured oddity: {where}, the two agree LESS often than chance "
+            f"alone would produce (κ = {kappa:+.2f}), which is a finding in its own "
+            f"right rather than reassurance about either of them")
+
+
+def _agreement(readings: Sequence[dict], families: dict,
+               measured: Optional[dict] = None) -> dict:
     """The cross-check sentence — the one claim this whole app is built on."""
     reading_count = len([r for r in readings if r["tone"] != "none"])
     if not families:
@@ -3144,18 +3273,15 @@ def _agreement(readings: Sequence[dict], families: dict) -> dict:
         direction = "the same constructive direction" if price > 0 else "the same negative direction"
         return {**base, "tone": "good" if price > 0 else "bad", "text": (
             f"Both bodies of data point in {direction}. That is the strongest thing this "
-            f"app can say, because the price record and the filings share no inputs — so "
-            f"agreement between them is not one fact counted twice.")}
+            f"app can say, {_warrant(measured)}.")}
 
     if price and filings and price != filings:
         up = "price and volume" if price > 0 else "the filings"
         down = "the filings" if price > 0 else "price and volume"
         return {**base, "tone": "warn", "text": (
             f"They disagree: {up} read constructively while {down} do not. The "
-            f"disagreement is the finding. It usually means the market is pricing "
-            f"something the accounts have not shown yet, or that the accounts are "
-            f"showing something the price has not reacted to — and which of those it is "
-            f"cannot be settled from this page.")}
+            f"disagreement is the finding, and this page cannot settle which side is "
+            f"right.")}
 
     active = "price and volume" if price else "the filings"
     quiet = "the filings" if price else "price and volume"
@@ -3224,16 +3350,12 @@ def _blind_spots(payload: dict, readings: dict) -> list[dict]:
         hurst = ((technical.get("longTerm") or {}).get("hurstReading")) or {}
         if hurst.get("verdict") == "indistinguishable":
             out.append({"title": "The trend tools may be describing noise", "text": (
-                "The Hurst exponent cannot separate this price series from a random walk "
-                "at the amount of history loaded. That is the app's own honesty check, and "
-                "when it fires the right response is to downgrade every price-based "
-                "reading on the page rather than act on it. The filings-based lenses are "
-                "unaffected.")})
+                "This price history cannot be told apart from a random walk, so discount "
+                "every price-based reading here. The filings lenses are unaffected.")})
         if not technical.get("hasLongTerm"):
             out.append({"title": "No long-horizon reading", "text": (
-                "There is not enough loaded history for the multi-year section, which is "
-                "the part with the strongest evidence behind it. Widen the chart range to "
-                "5y or more and run it again.")})
+                "Not enough history for the multi-year section — the part with the "
+                "strongest evidence. Set the range to 5y or more.")})
 
     valuation = _leg(payload, "valuation")
     if valuation:
@@ -3311,14 +3433,38 @@ def _next_checks(payload: dict, readings: dict) -> list[str]:
     return out
 
 
-def for_synthesis(payload: dict) -> dict:
+# `for_synthesis(payload)` loads the stamped agreement measurement from disk;
+# `for_synthesis(payload, agreement_measurement=None)` says there is none. Those
+# are different situations and one default could not tell them apart — the
+# second is a state the panel renders honestly rather than a bug to paper over.
+# Same device as `pretrade._LOAD_FROM_DISK`, and what lets the synthesis tests
+# exercise both warrants without a file on disk.
+_LOAD_FROM_DISK = object()
+
+
+def for_synthesis(payload: dict, market: Optional[str] = None,
+                  agreement_measurement=_LOAD_FROM_DISK) -> dict:
     """Everything the four lenses add up to, in sentences.
 
     `payload` is the `/api/confluence` response — each leg carrying its own
     `ok` flag — so this reads exactly the figures the panels render rather than
     recomputing them, and a failed leg becomes a stated blind spot instead of an
     exception.
+
+    `market` selects which population the agreement measurement describes, for
+    the reason `pretrade` takes one: the filings lenses read on a very different
+    share of Indonesian names than US ones, so the two families' agreement is
+    measured on a different population in each market and a blend describes
+    neither.
     """
+    # LOCAL, deliberately. Nothing else in this module imports from `_lib` at
+    # module level, and that is what keeps the dependency one-directional —
+    # `pretrade` imports `explain`, so `explain` acquiring imports of its own is
+    # how a cycle would start.
+    from . import lensagreement
+
+    if agreement_measurement is _LOAD_FROM_DISK:
+        agreement_measurement = lensagreement.for_synthesis(market)
     readers = {"flow": ("anomaly", _read_flow), "trend": ("technical", _read_trend),
                "value": ("valuation", _read_value), "quality": ("quality", _read_quality)}
 
@@ -3336,7 +3482,14 @@ def for_synthesis(payload: dict) -> dict:
 
     ordered = [readings[k] for k in ("flow", "trend", "value", "quality") if k in readings]
     families = _family_votes(ordered)
-    agreement = _agreement(ordered, families)
+    agreement = _agreement(ordered, families, agreement_measurement)
+    # The measurement rides along beside the sentence it justifies, so the panel
+    # can show the arithmetic behind the clause rather than asking the reader to
+    # take a Greek letter on trust. It is never consumed by anything else: the
+    # moment a measured agreement started scaling a verdict, this app would have
+    # the composite score it refuses to have.
+    if agreement_measurement:
+        agreement = {**agreement, "measured": agreement_measurement}
 
     lenses = agreement["lensesReading"]
     sources = agreement["independentSources"]
@@ -3500,5 +3653,710 @@ def for_peers(row: dict, universe: dict, signals: Sequence[dict],
             f"measures are computed from price and volume alone and know nothing about the "
             f"business — the Value and Quality lenses have no peer comparison here, because "
             f"the filings behind them cannot be fetched in batch."
+        ),
+    }
+
+
+# ============================================================================ #
+# The pre-trade panel — what would stop a careful buyer
+#
+# WHY A FIRING RATE IS PART OF THE EXPLANATION AND NOT A FOOTNOTE
+# ----------------------------------------------------------------
+# "Altman says distress" is unreadable without knowing how often Altman says
+# distress. On a universe of large listed companies the answer is "rarely", which
+# makes it a finding; on a screen tuned differently it could be "a third of the
+# time", which would make it a description of the market wearing a warning's
+# clothes. The app already applies this discipline to the anomaly screener, where
+# a scan over many names produces hits by construction and Benjamini-Hochberg
+# says how many were expected. This is the same correction arriving at a panel
+# that would otherwise present nine conditions as nine independent alarms.
+#
+# THE PROSE HERE HAS ONE JOB THE CHECKS THEMSELVES CANNOT DO: say what an empty
+# panel means. Every individual check is silent when it does not fire, and
+# silence is exactly what a reader mistakes for a pass. So the framing sentence
+# is written for the empty case FIRST and adjusted for the non-empty one, rather
+# than the other way round.
+# ============================================================================ #
+@metric("checkFiringRate")
+def _check_firing_rate(value, check_label=None, universe_label=None, **_):
+    label = "How often this condition fires"
+    what = ("The share of a large, published universe of companies on which this same "
+            "condition is true. It is measured offline across four index membership "
+            "lists and stamped with the date, not estimated.")
+    if not _known(value):
+        return unavailable(label, what, "this condition has never been calibrated")
+    where = universe_label or "the calibration universe"
+    band = _ladder(value, ((0.05, "context"), (0.15, "context"),
+                           (0.33, "context"), (None, "context")))
+    if value <= 0.05:
+        detail = ("Uncommon enough that its presence here says something specific about "
+                  "this company.")
+    elif value <= 0.15:
+        detail = ("Not rare, but far from typical. Worth reading as a fact about this "
+                  "company rather than about the market.")
+    elif value <= 0.33:
+        detail = ("Common enough that it is partly a description of listed equities in "
+                  "general. Weigh it as one input, not as an alarm.")
+    else:
+        detail = ("So common that it is a base condition of this market rather than a "
+                  "finding about this company, and the panel presents it as one.")
+    return make(
+        label=label, what=what,
+        reading=f"{_pct(value, 0)} of {where}. {detail}",
+        action=("Compare it against the other conditions on the panel before weighting "
+                "any of them. A rare condition and a common one presented in identical "
+                "type is the mistake this number exists to prevent."),
+        band=band, good_direction="none", evidence="strong",
+        value_text=_pct(value, 0),
+    )
+
+
+# ============================================================================ #
+# Portfolio context — the candidate against what is already owned
+#
+# THE ONE PLACE THIS APP LETS A MEASUREMENT INFORM POSITION SIZE, and it is
+# earned rather than assumed. Everything else here refuses: the ranking's
+# information coefficient is indistinguishable from zero, the event study
+# returns nulls, and the pre-trade panel deals only in present-tense facts.
+# Correlations are different, and the difference was measured before this
+# shipped — one year's pairwise correlations rank-correlate 0.50 to 0.65 with
+# the next year's across four index universes.
+#
+# THE READINGS ARE COLOURED, WHICH THE LAST TWO FEATURES WERE NOT. A candidate
+# correlating 0.9 with something already held is genuinely unfavourable for the
+# person holding it — not a base rate, not provenance, but a fact about their
+# book with a direction. That is what `caution` and `poor` are for.
+# ============================================================================ #
+@metric("holdingCorrelation")
+def _holding_correlation(value, ticker=None, overlap=None, **_):
+    label = f"Correlation with {ticker}" if ticker else "Correlation with a holding"
+    what = ("How closely these two have moved together day to day over the past year. "
+            "1.0 would be lockstep, 0 would be unrelated, and negative would mean one "
+            "tends to rise when the other falls.")
+    if not _known(value):
+        return unavailable(label, what, "too few overlapping trading days")
+    band = _ladder(value, ((0.3, "good"), (0.6, "fair"), (0.8, "caution"), (None, "poor")))
+    reading = f"{_num(value)} over the past year. "
+    reading += {
+        "good": "These have largely gone their own ways, so owning both is closer to two "
+                "positions than one.",
+        "fair": "They move together more often than not. Some of what looks like two "
+                "positions is one.",
+        "caution": "They move together most of the time. Owning both is closer to holding "
+                   "a double position in one of them than to being diversified.",
+        "poor": "These are effectively the same position with two ticker symbols on it. "
+                "Whatever reason you have for owning one applies to the other, and so "
+                "does whatever goes wrong.",
+    }[band]
+    if _known(overlap):
+        reading += f" Measured across {int(overlap)} shared trading days."
+    return make(label, what, reading,
+                "If you would not double the position you already hold, think about "
+                "whether adding this one amounts to the same thing.",
+                band, "low", evidence="moderate", value_text=_num(value))
+
+
+@metric("effectiveHoldings")
+def _effective_holdings(value, names=None, before=None, gain=None, **_):
+    label = "Independent positions"
+    what = ("How many genuinely separate bets a set of holdings amounts to. Nine names "
+            "that all rise and fall together are closer to one position than to nine, and "
+            "this counts them the way their price history says they behave rather than "
+            "the way the account statement lists them.")
+    if not _known(value):
+        return unavailable(label, what, "needs at least two holdings with shared history")
+    reading = f"About {_num(value, 1)} independent bets"
+    if _known(names):
+        reading += f" across {int(names)} holdings"
+        crowding = value / names if names else None
+        if crowding is not None:
+            reading += (". Close to one bet per position, so these are genuinely different "
+                        "things." if crowding >= 0.7 else
+                        ". Rather fewer than the position count, so some of these are "
+                        "the same bet twice." if crowding >= 0.4 else
+                        ". Far fewer than the position count — most of this book is one "
+                        "bet held several times over.")
+    else:
+        reading += "."
+    # THE SCALE IS ANCHORED ON WHAT AN UNCORRELATED ADDITION WOULD GIVE, which
+    # is 1.0 — one more name that shares nothing is one more bet. Testing for
+    # `gain <= 0` was the obvious rule and it was wrong: the participation ratio
+    # creeps up slightly with ANY extra name, so a fourth clone added to three
+    # clones scored a small positive gain and read as "a little more
+    # independence" when it is the exact case the panel exists to catch.
+    band = "context"
+    if _known(gain):
+        if gain >= 0.5:
+            reading += (f" Adding the candidate takes it from {_num(before, 1)} to "
+                        f"{_num(value, 1)} — most of a whole extra bet, so it brings "
+                        f"something the book did not have.")
+        elif gain >= 0.15:
+            reading += (f" Adding the candidate moves it from {_num(before, 1)} to "
+                        f"{_num(value, 1)}: some new ground, but well short of the whole "
+                        f"extra bet an unrelated name would add.")
+        else:
+            band = "caution"
+            reading += (f" Adding the candidate moves it from {_num(before, 1)} to "
+                        f"{_num(value, 1)} — one more name, and next to no more "
+                        f"independence, where an unrelated one would add a full bet. That "
+                        f"is the shape of buying the fourth copy of a bet you already hold.")
+    return make(label, what, reading,
+                "Compare it with the number of positions. Where the two diverge, the "
+                "account statement is flattering how diversified this is.",
+                band, "high", evidence="moderate", value_text=_num(value, 1))
+
+
+@metric("riskShare")
+def _risk_share(value, ticker=None, weight=None, **_):
+    label = f"{ticker}'s share of risk" if ticker else "Share of portfolio risk"
+    what = ("How much of the portfolio's total price swing this one position accounts for. "
+            "Compare it with how much of the money is in it: a position holding a tenth of "
+            "the money and a quarter of the risk is the portfolio wearing a smaller name.")
+    if not _known(value):
+        return unavailable(label, what, "the risk decomposition could not be computed")
+    if not _known(weight):
+        return make(label, what, f"{_pct(value, 0)} of the portfolio's movement.",
+                    CONTEXT_NOT_TRIGGER, "context", "none", evidence="moderate",
+                    value_text=_pct(value, 0))
+    # A NEGATIVE CONTRIBUTION IS A REAL AND DIFFERENT THING, not a small one.
+    # Marginal risk contribution goes below zero when a position moves against
+    # the rest of the book, which means it SUBTRACTS from total risk — it is
+    # doing the job diversification is supposed to do. The first version put
+    # that through the same ladder as everything else and told a reader holding
+    # a genuine hedge that risk and money were "broadly in line", which is the
+    # least useful thing that could have been said about it. Found by running it
+    # against a real book with a defensive name in it.
+    if value < 0:
+        return make(label, what,
+                    f"This position REDUCES the portfolio's movement rather than adding to "
+                    f"it, offsetting about {_pct(abs(value), 0)} of what the others "
+                    f"contribute, from {_pct(weight, 0)} of the money. It has been moving "
+                    f"against the rest of the book — which is what diversification looks "
+                    f"like when it is actually working.",
+                    "Nothing to fix. Worth knowing before trimming it: a position that "
+                    "offsets the others costs more to remove than its size suggests.",
+                    "context", "none", evidence="moderate", value_text=_pct(value, 0))
+
+    excess = value - weight
+    band = _ladder(excess, ((0.05, "context"), (0.10, "caution"), (None, "poor")))
+    reading = (f"{_pct(value, 0)} of the portfolio's movement, from {_pct(weight, 0)} of "
+               f"its money. ")
+    reading += ("Risk and money are broadly in line here." if band == "context" else
+                "It carries noticeably more of the risk than of the money — usually "
+                "because it swings harder than the rest, or moves with them." if band == "caution"
+                else "It dominates the portfolio's risk out of all proportion to its size. "
+                     "A bad stretch for this one name is a bad stretch for the whole book.")
+    return make(label, what, reading,
+                "Where risk share runs far above money share, the position is bigger than "
+                "it looks. That is a reason to check the size, not a reason to sell.",
+                band, "low", evidence="moderate", value_text=_pct(value, 0))
+
+
+# ============================================================================ #
+# What a book has in common — `exposure.py`
+#
+# NEVER COLOURED, AND THE REASON IS THE SAME ONE `screendomain.py` GIVES.
+# Being 60% driven by the energy complex is not good or bad news about a
+# portfolio; it is a description of what is being held. A green tint would say
+# "diversified" and an amber one would say "concentrated", and this app has no
+# basis for either — the reader's own thesis decides which of those a shared
+# driver is, and a holder who bought four coal miners ON PURPOSE has a
+# concentrated book that is doing exactly what they wanted.
+#
+# The one thing that would deserve a colour — "you are concentrated and did not
+# know it" — is a claim about the reader's intent, which nothing here can see.
+# ============================================================================ #
+@metric("sharedDirection")
+def _shared_direction(value, market_share=None, weeks=None, holdings=None, **_):
+    label = "Shared direction"
+    what = ("How much of these holdings' week-to-week movement is one common thing "
+            "rather than each name going its own way, and how much of that common "
+            "thing is simply the local market.")
+    if not _known(value):
+        return unavailable(label, what,
+                           "needs at least three holdings with a shared history")
+
+    reading = f"{_pct(value, 0)} of the joint movement is one shared direction"
+    if _known(holdings):
+        reading += f" across {int(holdings)} holdings"
+    reading += "."
+
+    # THE MARKET SHARE IS THE PART THAT CHANGES WHAT A READER DOES. A book whose
+    # common movement is the index is diversified in the only sense measurable
+    # here; a book whose common movement is NOT the index has something else
+    # driving it, and that something is what the next figure tries to name.
+    if _known(market_share):
+        if market_share >= 0.50:
+            reading += (f" Most of it — {_pct(market_share, 0)} — is the market itself, "
+                        f"which is what a spread-out book looks like.")
+        elif market_share >= 0.20:
+            reading += (f" About {_pct(market_share, 0)} of it is the market; the rest is "
+                        f"something these names share and the index does not.")
+        else:
+            reading += (f" Only {_pct(market_share, 0)} of it is the market, so almost all "
+                        f"of what moves these together is specific to them rather than "
+                        f"to where they are listed.")
+    return make(
+        label=label, what=what, reading=reading,
+        action=CONTEXT_NOT_TRIGGER,
+        band="context", good_direction="none", evidence="moderate",
+        value_text=_pct(value, 0),
+    )
+
+
+@metric("sharedDriver")
+def _shared_driver(value, matches=None, tested=None, ambiguous=False,
+                   name_at=None, **_):
+    label = "What they have in common"
+    what = ("Whether the movement these holdings share, once the local market is taken "
+            "out, tracks anything that can be named. Tested against gold, energy, copper "
+            "and the dollar.")
+    rows = list(matches or [])
+    checked = [t for t in (tested or []) if t.get("available")]
+
+    if not checked:
+        return unavailable(label, what,
+                           "none of the reference series had enough overlapping history")
+
+    if ambiguous:
+        # A TIE IS A REFUSAL. Two references this close are not distinguishable
+        # at this sample size, and naming the larger one would present a
+        # precision the data does not have.
+        return make(
+            label=label, what=what,
+            reading=("Two of the tested series track this book's shared movement about "
+                     "equally well, which is not enough to tell them apart. Nothing is "
+                     "named rather than picking the larger by a margin this sample "
+                     "cannot resolve."),
+            action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+            evidence="weak", value_text=None,
+        )
+
+    if not rows:
+        # CONSTRAINT 3, IN THE PLACE IT IS EASIEST TO BREAK. An empty result here
+        # reads as "diversified" unless it is explicitly denied, and the denial
+        # has to name the real reason: the tested set is four traded contracts,
+        # and the thing actually driving a book may not be in it. It usually is
+        # not, for a book of Indonesian resource names — the peer-equity baskets
+        # that would have caught those were measured and did not work.
+        labels = [t["label"] for t in checked]
+        names = (labels[0] if len(labels) == 1
+                 else " and ".join([", ".join(labels[:-1]), labels[-1]]))
+        return make(
+            label=label, what=what,
+            reading=(f"Nothing tested explained what these holdings share. That is not "
+                     f"evidence they are diversified — only that {names} did not account "
+                     f"for it, and whatever does may simply not be on that list."),
+            action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+            evidence="weak", value_text=None,
+        )
+
+    # ONE MATCH IS THE COMMON CASE, so it gets its own phrasing. Building the
+    # sentence generically produced "tracks the energy complex — the energy
+    # complex at 0.54", which reads as a stutter and cost the reader the number.
+    if len(rows) == 1:
+        row = rows[0]
+        body = (f"tracks {row['label']}, at {_num(row['correlation'], 2)} on weekly "
+                f"moves with the local market already taken out")
+    else:
+        body = ("tracks "
+                + ", ".join(f"{r['label']} at {_num(r['correlation'], 2)}" for r in rows)
+                + ", on weekly moves with the local market already taken out")
+    reading = (f"What these holdings share {body}. A position in this book is partly a "
+               f"position on that.")
+    if _known(name_at):
+        reading += (f" Reported because it passed {_num(name_at, 2)}, a reading "
+                    f"threshold rather than a published one.")
+    return make(
+        label=label, what=what, reading=reading,
+        action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+        evidence="moderate",
+        value_text=_num(max(abs(row["correlation"]) for row in rows), 2),
+    )
+
+
+# ============================================================================ #
+# What one name moves with — `exposure.for_symbol`
+#
+# NEVER COLOURED, for the reason `screendomain.py` gives about provenance. A
+# stock that moves 0.6x with copper is not thereby better or worse than one that
+# does not; it describes what is being bought. And a NEGATIVE beta is not a bad
+# beta — a name that rises when the dollar falls is not failing at anything,
+# which is why `good_direction` here is "none" and the band never leaves
+# `context`.
+#
+# THE READING CARRIES ITS OWN PERSISTENCE FIGURE, which is unusual in this file
+# and deliberate. Every other metric here describes the present; this one is
+# printed because a study said it survives the year, and the number that licensed
+# it belongs in the same sentence rather than two clicks away. It is also the
+# number that shrinks the claim: 0.42 is real and is well short of the 0.50-0.65
+# at which correlations persist.
+# ============================================================================ #
+@metric("factorBreadth")
+def _factor_breadth(value, label=None, loaded=None, scanned=None,
+                    rank_correlation=None, **_):
+    name = label or "this factor"
+    heading = f"How many move with {name}"
+    what = (f"The share of the names scanned whose weekly moves {name} accounts for "
+            f"enough of to be worth reporting, once the local market is out of both. "
+            f"It calibrates a single reading: one stock loading on {name} means "
+            f"something different in an index where three do than in one where thirty "
+            f"do.")
+    if not _known(value):
+        return unavailable(heading, what, "nothing in this list could be measured")
+    reading = f"{_pct(value, 0)}"
+    if _known(loaded) and _known(scanned):
+        reading += f" — {int(loaded)} of {int(scanned)} names"
+    reading += f" carry a material loading on {name}."
+    # WITHOUT THIS THE BREADTH READS AS A CONCLUSION. A factor that half an index
+    # loads on may be describing the market rather than a driver, and the reader
+    # has no way to tell that from the count alone.
+    if value >= 0.5:
+        reading += (" More than half the list, so this is closer to a description of "
+                    "the whole market here than of any one name in it.")
+    elif value <= 0.1:
+        reading += (" A small minority, so a name that does load on it is unusual "
+                    "within this list rather than typical of it.")
+    reading += (" Measured over five years with the local market removed from both "
+                "sides, so it describes what these did rather than what they will do.")
+    return make(
+        label=heading, what=what, reading=reading,
+        action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+        evidence="moderate", value_text=_pct(value, 0),
+    )
+
+
+@metric("factorExposure")
+def _factor_exposure(value, label=None, r_squared=None, weeks=None,
+                     rank_correlation=None, **_):
+    name = label or "this factor"
+    heading = f"Moves with {name}"
+    what = (f"How hard this stock's weekly moves track {name} once the local market "
+            f"is taken out of both, and how much of the rest that accounts for. "
+            f"Removing the market first is what separates a real exposure from a "
+            f"stock and a commodity both drifting with the same index.")
+    if not _known(value):
+        return unavailable(heading, what, "no material loading on this name")
+
+    reading = f"{_num(value, 2)}x — a 1% move in {name} has gone with "
+    reading += f"{_num(abs(value), 2)}% here"
+    reading += ", in the opposite direction." if value < 0 else "."
+    if _known(r_squared):
+        reading += f" That accounts for {_pct(r_squared, 0)} of its week-to-week movement"
+        reading += f" over {int(weeks)} weeks." if _known(weeks) else "."
+    # THE HONEST QUALIFIER, and it is the point of shipping this at all. A beta
+    # printed without it invites being read as next year's number.
+    # IT IS HISTORY, AND THE SENTENCE HAS TO SAY SO. This figure carried a
+    # persistence number for one revision, which attached a measurement of raw
+    # one-year betas to a market-removed five-year one. The persistence of what
+    # is actually shown could not be measured at this data depth — nine years
+    # holds fewer than two non-overlapping five-year blocks — so no forward
+    # claim is made and the absence is stated rather than left to be assumed.
+    reading += (" This is what happened over five years, not a forecast: whether a "
+                "loading like this one persists could not be measured from the "
+                "history available.")
+    return make(
+        label=heading, what=what, reading=reading,
+        action=CONTEXT_NOT_TRIGGER,
+        band="context", good_direction="none", evidence="moderate",
+        value_text=f"{_num(value, 2)}x",
+    )
+
+
+def for_exposure_scan(result: dict) -> dict:
+    """The sentences a cross-sectional exposure scan needs, and no more.
+
+    Deliberately thin. The scatter carries the finding — position IS the reading
+    — and a paragraph restating what a reader can see is the overload
+    `PRODUCT.md` constraint 7 was revised to stop. What prose is still load
+    bearing is the part a chart cannot say: how many names were measured, what
+    the dotted line means, and that a factor is missing because it was refused
+    rather than because nobody thought of it.
+    """
+    out: dict = {}
+    if not result.get("usable"):
+        return out
+
+    rows = result.get("rows") or []
+    factors = result.get("factors") or []
+    for factor in factors:
+        loaded = [r for r in rows
+                  if (r["loadings"].get(factor["key"]) or {}).get("material")]
+        entry = explain("factorBreadth", len(loaded) / len(rows) if rows else None,
+                        label=factor["label"], loaded=len(loaded), scanned=len(rows))
+        if entry:
+            out[f"factorBreadth.{factor['key']}"] = entry
+    return out
+
+
+def for_exposure(block: dict) -> dict:
+    """Explanations for the factor-exposure section of the Trend lens."""
+    out: dict = {}
+    if not block.get("usable"):
+        return out
+    for row in block.get("factors") or []:
+        entry = explain("factorExposure", row.get("beta"), label=row.get("label"),
+                        r_squared=row.get("rSquared"), weeks=row.get("weeks"))
+        if entry:
+            out[f"factorExposure.{row['key']}"] = entry
+    return out
+
+
+def for_portfolio(result: dict) -> dict:
+    """Explanations for the portfolio panel.
+
+    Reads the assembled result, like every other `for_*` here, so each sentence
+    quotes a figure the panel renders rather than a parallel computation.
+    """
+    out: dict = {}
+    if not result.get("usable"):
+        return out
+
+    for pair in result.get("pairs") or []:
+        entry = explain("holdingCorrelation", pair.get("correlation"),
+                        ticker=pair.get("ticker"), overlap=pair.get("overlapDays"))
+        if entry:
+            out[f"holdingCorrelation.{pair['ticker']}"] = entry
+
+    independence = result.get("independence") or {}
+    entry = explain("effectiveHoldings", independence.get("after"),
+                    names=independence.get("withCandidate"),
+                    before=independence.get("before"), gain=independence.get("gain"))
+    if entry:
+        out["effectiveHoldings"] = entry
+
+    for row in ((result.get("contributions") or {}).get("rows") or []):
+        entry = explain("riskShare", row.get("riskShare"), ticker=row.get("ticker"),
+                        weight=row.get("weight"))
+        if entry:
+            out[f"riskShare.{row['ticker']}"] = entry
+
+    driver = result.get("driver") or {}
+    if driver.get("usable"):
+        entry = explain("sharedDirection", driver.get("varianceShare"),
+                        market_share=driver.get("marketShare"),
+                        weeks=driver.get("weeks"),
+                        holdings=len(driver.get("holdings") or []))
+        if entry:
+            out["sharedDirection"] = entry
+        entry = explain("sharedDriver", driver.get("varianceShare"),
+                        matches=driver.get("matches"), tested=driver.get("tested"),
+                        ambiguous=driver.get("ambiguous"),
+                        name_at=driver.get("nameAt"))
+        if entry:
+            out["sharedDriver"] = entry
+    return out
+
+
+# ============================================================================ #
+# What a flag is worth — the posterior, not the flag
+#
+# WHY THIS IS `context` AND NOT A WARNING COLOUR
+# ----------------------------------------------
+# The M-Score itself already carries the alarm: a flagged reading comes back
+# `bad`. This number is the QUALIFIER on that alarm, and at every prior anyone
+# has published it qualifies downward — an 11% chance of being real is a reason
+# to look, not a finding. Colouring it amber as well would count the same fact
+# twice and, worse, would make the number that DEFLATES the flag look like a
+# second flag.
+#
+# The clean branch is the mirror hazard and is why the reading always names the
+# shift rather than the level. "0.84%" beside a clean score reads as a clean
+# bill of health; "2.8% before the test, 0.8% after" reads as what the test
+# actually did, which is move a number that was already small.
+# ============================================================================ #
+@metric("manipulationPosterior")
+def _manipulation_posterior(value, flagged=None, prior_text=None, robust=None,
+                            partial=False, **_):
+    label = "What the flag is worth"
+    what = ("How likely it is that a company this screen flags really has manipulated its "
+            "earnings. It combines how often the screen catches a manipulator, how often "
+            "it cries wolf, and how rare manipulation is to begin with — the third being "
+            "the input that decides the answer and the one nobody can measure exactly.")
+    if not _known(value):
+        return unavailable(label, what,
+                           "no M-Score was computed, so there is nothing to condition on")
+
+    base = f" Starting from {prior_text} before the test." if prior_text else ""
+    tail = (" Built from fewer than the eight indices the published error rates were "
+            "measured on, so read it as indicative." if partial else "")
+    if flagged:
+        reading = (f"About {_pct(value, 0)} likely to be a real manipulator — so roughly "
+                   f"{_pct(1 - value, 0)} of flags like this one are false alarms.{base}"
+                   f"{tail}")
+        action = ("Treat a flag as a reading assignment, not a finding: go to the cash-flow "
+                  "statement and the income statement and see whether profit and cash have "
+                  "diverged. If you would not do that work, the flag should not change what "
+                  "you do.")
+    else:
+        reading = (f"No flag, which leaves about {_pct(value, 2)} — down from {prior_text} "
+                   f"before the test.{tail} The screen moved a number that was already small, "
+                   f"and it tests one specific accrual pattern rather than honesty.")
+        action = ("Nothing. A clean M-Score is the absence of one signature, not a clean "
+                  "bill of health — a business can be a poor holding for reasons this "
+                  "screen has no view on at all.")
+    # The robust range is a sentence about what a FLAG is worth. Appended to a
+    # clean reading it is a non-sequitur — it answers a question the company in
+    # front of the reader did not raise. The panel still prints it in its own
+    # paragraph, where it describes the screen rather than this company.
+    if robust and flagged:
+        reading += f" {robust}"
+    return make(label, what, reading, action, "context", "none", evidence="moderate",
+                value_text=_pct(value, 0 if flagged else 2))
+
+
+# ============================================================================ #
+# Validation domain — whether a use sits inside the sample a screen was fitted on
+#
+# WHY THIS IS ALWAYS `context` AND NEVER A COLOUR
+# -----------------------------------------------
+# Both directions would mislead, and the second is the dangerous one.
+#
+# OUTSIDE is not a warning. Every practical use of Piotroski, Altman and Beneish
+# today is outside their samples, because the samples ended between 1965 and
+# 1996. A panel that painted that amber would be crying wolf on all three scores
+# for every company, forever, which is how a reader learns to ignore the colour.
+#
+# INSIDE is not reassurance. A green tick against "period: inside" would say the
+# score can be trusted here — a claim about the model's accuracy on this company
+# that nothing in this app measures. Absence of a mismatch is not evidence of
+# fit, which is the same rule the pre-trade panel is built around.
+#
+# So the band is `context` in every case and the words carry the difference.
+# ============================================================================ #
+@metric("validationDomain")
+def _validation_domain(value, name=None, sample=None, this_use=None, note=None, **_):
+    label = name or "Validation domain"
+    what = ("Which companies, in which market and in which years, the published study "
+            "behind this score was actually fitted on. A model used outside that sample "
+            "is not thereby wrong — it is being asked a question nobody has checked it "
+            "against.")
+    if not _known(value):
+        # No verdict at all is a gap, and gaps take the one band that is never a
+        # colour anywhere in this app.
+        return unavailable(label, what, "this dimension was not evaluated")
+    verdict = str(value).lower() if isinstance(value, str) else ""
+    if verdict not in (INSIDE_WORD, OUTSIDE_WORD, UNKNOWN_WORD):
+        # The glossary probes every interpreter with numbers. This one takes a
+        # verdict string, so the numeric probe falls through to the definition
+        # rather than to None — which would fail the manual's build.
+        return make(label, what,
+                    "This line reports whether one aspect of this company matches the "
+                    "study's sample: the years, the market, the kind of business, or the "
+                    "size of firm the effect was found in.",
+                    "Read it as provenance. It tells you how far the number has been "
+                    "carried from where it was tested, not whether the number is right.",
+                    "context", "none", evidence="strong")
+
+    where = f"Study sample: {sample}. This company: {this_use}. " if sample and this_use else ""
+    heading = {
+        INSIDE_WORD: "Inside the study's sample on this axis. ",
+        OUTSIDE_WORD: "Outside the study's sample on this axis. ",
+        UNKNOWN_WORD: "Cannot be placed against the study's sample on this axis. ",
+    }[verdict]
+    return make(
+        label=label, what=what, reading=heading + where + (note or ""),
+        action=("Nothing to act on. This is where the number came from, not a judgement "
+                "about the number — and matching the sample would not make the score "
+                "reliable here any more than missing it makes it wrong."),
+        band="context", good_direction="none", evidence="strong",
+        value_text=verdict,
+    )
+
+
+# The three words `screendomain` speaks. Kept here as well so the interpreter
+# above does not import that module and create a cycle through `valuation`.
+INSIDE_WORD, OUTSIDE_WORD, UNKNOWN_WORD = "inside", "outside", "unknown"
+
+
+# The sentence the whole panel is designed around. It is a constant rather than
+# inline text because `tests/test_pretrade.py` asserts its presence in EVERY
+# state, including — especially — the one where nothing fired.
+ABSENCE_IS_NOT_EVIDENCE = (
+    "An empty panel is not a clean bill of health — only that none of the conditions "
+    "this app can test fired."
+)
+
+# Appended only when something actually went untested, because a caveat that
+# points at an absent section teaches a reader to skip the caveats.
+NOTHING_UNTESTED_CLAUSE = (
+    " Anything listed as not checked was never evaluated at all."
+)
+
+
+def for_pretrade(flags: Sequence[dict], base_conditions: Sequence[dict],
+                 not_checked: Sequence[dict], uncalibrated: Sequence[dict],
+                 calibration: Optional[dict] = None) -> dict:
+    """The panel's framing, written so silence cannot be misread as a pass.
+
+    DELIBERATELY CONTAINS NO TALLY. Not "two conditions fired", not "seven of
+    nine clear" — a count is a composite in the one field everybody reads, and
+    three flags on one company are not a worse reading than two on another. The
+    per-check firing rates are what make the lines comparable, and they are
+    attached to the lines rather than summed.
+    """
+    # THREE STATES, NOT TWO. The obvious two-branch version ("flags, or nothing")
+    # told a company with three demoted base conditions that none of the
+    # conditions was true of it, which is false: they were true and had been
+    # judged ordinary. Demoting a condition changes how it should be weighed, not
+    # whether it applies, and the framing has to keep that distinction.
+    if flags:
+        framing = (
+            "Each condition below is true of this company right now. Beside each one is how "
+            "often it is true across a published universe — a common condition describes "
+            "the market, not this company."
+        )
+    elif base_conditions:
+        framing = (
+            "Nothing unusual fired. The conditions below are true here and true of most of "
+            "this market, so they describe the market rather than this company."
+        )
+    else:
+        framing = (
+            "None of the conditions this app can test is true of this company right now. "
+            "That is a narrower statement than it looks."
+        )
+
+    # KEYED, NOT A LIST. The panel needs to place each note under the section it
+    # describes, and a list would force the component to identify them by
+    # matching on their wording — so rewording a sentence here would silently
+    # drop it from the page. A key survives an edit; a substring match does not.
+    notes = {}
+    if base_conditions:
+        notes["base"] = (
+            "True here, and true of more than "
+            f"{int((calibration or {}).get('baseRateMax', 0.33) * 100)}% of the universe. "
+            "Real, but not a finding about this company."
+        )
+    if not_checked:
+        notes["notChecked"] = (
+            "Never tested — a refused lens, a missing filing, an estimate the data cannot "
+            "resolve. Not tested is not clear."
+        )
+    if uncalibrated:
+        notes["uncalibrated"] = (
+            "Testable, but nobody has measured how often they fire. A flag without a base "
+            "rate is not readable, so it is withheld."
+        )
+
+    # The stamp deliberately does NOT name a universe. Each line carries the
+    # group its own percentage is a percentage of, because those differ: a US
+    # listing is scored against the US universes and an IDX one against the
+    # Indonesian ones. A single scope in the footer would contradict the lines
+    # above it on every second ticker.
+    stamp = None
+    if calibration and calibration.get("measuredOn"):
+        stamp = (f"Rates measured {calibration['measuredOn']}, each against the universe "
+                 f"named beside it.")
+
+    return {
+        "headline": "What would give a careful buyer pause",
+        "framing": framing,
+        "notes": notes,
+        "measuredOn": stamp,
+        "caveat": (
+            ABSENCE_IS_NOT_EVIDENCE
+            + (NOTHING_UNTESTED_CLAUSE if not_checked else "")
+            + " None of this is a recommendation."
         ),
     }

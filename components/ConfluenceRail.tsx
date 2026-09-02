@@ -3,7 +3,10 @@
 import type {
   AnomalyResponse, Engine, QualityResponse, TechnicalResponse, ValuationResponse,
 } from "@/lib/types";
-import { cn, pct, verdictLabel } from "@/lib/utils";
+import { useState } from "react";
+import { ChevronRight } from "lucide-react";
+import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
+import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
 
 const ACC = "#35C4A8";
 const DIST = "#FF6B6B";
@@ -195,7 +198,11 @@ function readTechnical(state: Engine<TechnicalResponse>): Reading {
   // description of the last few months wearing the same word.
   const context = hasLongTerm
     ? longTerm.view.headline
-    : `Last close ${latest.close.toFixed(2)} (${latest.changePct >= 0 ? "+" : ""}${latest.changePct.toFixed(2)}% on the day)`;
+    // `num` rather than `toFixed`: these are typed non-null, but `jsonsafe`
+    // turns any NaN into a null on the wire, and `.toFixed` on a null throws —
+    // which would take down the rail that sits above every other panel. The
+    // shared formatters render "—" for missing data and are asserted to.
+    : `Last close ${num(latest.close)} (${signedPct(latest.changePct / 100)} on the day)`;
   return {
     lens: "Trend",
     question,
@@ -280,10 +287,81 @@ function readQuality(state: Engine<QualityResponse>): Reading {
 }
 
 /**
- * The one view none of the three source apps could produce: what the flow model,
- * the trend model and the valuation model each conclude, side by side, and
- * whether they agree. Agreement is the finding — three independent methods
- * landing in the same place is worth more than any one of them alone.
+ * IDENTITY, NOT JUDGEMENT. Which lens is speaking is structural and always the
+ * same colour; whether its reading is good or bad is `tone`, and the two are
+ * never the same token. Before v2 the flow lens and the "accumulation" verdict
+ * were both teal, so a lens name and a conclusion rendered identically and
+ * neither read as meaningful.
+ */
+const LENS_HUE: Record<string, string> = {
+  Flow: "#2FBFA4", Trend: "#6B9BFF", Value: "#E8B44C", Quality: "#C9A227",
+};
+
+/** A vote is the SERVER's direction. This maps it to a tone and nothing else. */
+const voteTone = (r: Reading): string =>
+  r.verdict === "—" || r.verdict === "…" || r.verdict === "n/a" ? "none"
+    : r.vote > 0 ? "good" : r.vote < 0 ? "bad" : "neutral";
+
+const DOT: Record<string, string> = {
+  good: "bg-acc", bad: "bg-dist", neutral: "bg-ash", none: "bg-faint",
+};
+
+/**
+ * THE FOUR CHIPS. The one piece of at-a-glance this app allows itself.
+ *
+ * Four lenses, four words, four status dots, side by side. A reader takes the
+ * shape of the answer in about a second — which is the entire request v2 was
+ * built to satisfy — and the app still refuses to say what it adds up to.
+ *
+ * What makes that refusal real rather than rhetorical: there is no count, no
+ * total, no average, no ordering by strength, and the chips are laid out on a
+ * fixed grid so a reader cannot infer a ranking from their positions. Three
+ * greens and a red stay three greens and a red. The synthesis below says in
+ * sentences what they mean together, because sentences can carry "these two
+ * disagree and that disagreement is the finding" and a score cannot.
+ */
+function LensChips({ readings }: { readings: Reading[] }) {
+  return (
+    <ul className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+      {readings.map((r) => {
+        const tone = voteTone(r);
+        const hue = LENS_HUE[r.lens] ?? "#8496A9";
+        return (
+          <li key={r.lens}
+              className="flex items-start gap-2.5 rounded-lg border border-rule bg-sunken px-3 py-2.5"
+              style={{ borderColor: `${hue}2E` }}>
+            <span aria-hidden
+                  className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full",
+                                DOT[tone] ?? "bg-faint",
+                                r.pending && "animate-pulseline")} />
+            <span className="min-w-0">
+              <span className="block text-micro font-semibold uppercase tracking-wider"
+                    style={{ color: hue }}>
+                {r.lens}
+              </span>
+              {/* WRAPS, NEVER TRUNCATES. Two of these verdicts are three words
+                  long — "Above model range" came out as "Above mod…" in a
+                  two-column grid on a phone, and a clipped verdict is not a
+                  shorter verdict, it is a different one. The chip grows a line
+                  instead; four chips of unequal height is a smaller cost than
+                  one that lies. */}
+              <span className={cn("block text-meta font-semibold leading-snug",
+                                  TONE_TEXT[tone] ?? "text-chalk")}>
+                {r.verdict}
+              </span>
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * The one view none of the three source apps could produce: what each lens
+ * concludes, side by side, and whether they agree. Agreement is the finding —
+ * methods that share no inputs landing in the same place is worth more than any
+ * one of them alone, and §15 measured how much more.
  */
 export function ConfluenceRail({
   ticker, anomaly, technical, valuation, quality,
@@ -298,66 +376,98 @@ export function ConfluenceRail({
                     readValuation(valuation), readQuality(quality)];
   const agreement = agreementOf(readings);
   const pending = readings.filter((r) => r.pending).length;
+  // THE CHIPS AND THE COLUMNS ARE THE SAME FOUR VERDICTS. Side by side on a
+  // wide screen that reads as summary-then-detail; stacked on a phone it reads
+  // as the app saying everything twice, and it puts four paragraphs between the
+  // reader and the synthesis. So below `lg` the detail is behind one control,
+  // and the chips — which is what a glance wanted anyway — carry the rail.
+  const [showDetail, setShowDetail] = useState(false);
 
   return (
-    <section className="animate-rise rounded border border-rule bg-panel">
-      <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
-        <div className="flex items-baseline gap-3">
-          <h2 className="font-mono text-lg font-semibold tracking-[0.14em]">{ticker}</h2>
-          <span className="eyebrow">
+    <section className="animate-rise overflow-hidden rounded-xl border border-rule bg-panel">
+      {/* The ticker is the largest thing on the page, because it is the one
+          fact the reader brought with them and every number below is about it. */}
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-5 pb-4 pt-5">
+        <div className="min-w-0">
+          <h1 className="font-mono tracking-tight">{ticker}</h1>
+          <p className="mt-1 text-meta text-ash">
             {pending > 0
-              ? `${readings.length - pending} of ${readings.length} lenses in`
-              : `${agreement.lenses || "no"} lenses reading`}
-          </span>
+              ? `${readings.length - pending} of ${readings.length} lenses have answered`
+              : `${agreement.lenses || "No"} lenses reading · ${agreement.independent} independent `
+                + `${agreement.independent === 1 ? "source" : "sources"} of data`}
+          </p>
         </div>
-        <div className="text-right">
-          <span className="num block text-xs font-semibold"
-                style={{ color: agreement.color }}>
+        <div className="min-w-0 text-left sm:text-right">
+          <p className="text-lead font-semibold" style={{ color: agreement.color }}>
             {agreement.headline}
-          </span>
+          </p>
           {/* The reconciliation sits WITH the headline, not in the paragraph
               below it. A reader who takes the top line at face value and never
               reads on should still have been told what it counts. */}
           {agreement.footnote && (
-            <span className="mt-0.5 block text-[0.6rem] text-ash">{agreement.footnote}</span>
+            <p className="mt-0.5 text-micro text-ash">{agreement.footnote}</p>
           )}
         </div>
       </div>
-      <div className="border-b border-rule px-5 py-2">
-        {/* Agreement is the product's headline claim, so its main weakness
-            belongs next to it rather than in a footnote. */}
-        <p className="text-[0.68rem] leading-relaxed text-ash">
-          These lenses are not fully independent: flow and trend are both functions of the same
-          price and volume series, while value and quality both read the filings — so four
-          panels rest on two bodies of data. The verdict above counts those two rather than the
-          four, which is why it can say &ldquo;both&rdquo; where the grid shows four. The
-          grouping is a stated assumption about what shares a source, not a measured
-          correlation; the ranking panel measures its own overlap because a scan gives it a
-          cross-section to measure from, and a single ticker does not.
-        </p>
+
+      <div className="px-5 pb-4">
+        <LensChips readings={readings} />
       </div>
 
-      <div className="grid divide-y divide-rule sm:grid-cols-2 sm:divide-x lg:grid-cols-4 lg:divide-y-0">
-        {readings.map((r) => (
-          <div key={r.lens} className="relative px-5 py-4">
-            {/* Same `animate-pulseline` the panel skeletons use, so a lens that
-                is still fetching pulses in the rail and in its own panel at the
-                same rate rather than inventing a second idea of "loading". */}
-            <span aria-hidden
-                  className={cn("absolute left-0 top-4 h-[calc(100%-2rem)] w-[2px]",
-                                r.pending && "animate-pulseline")}
-                  style={{ background: r.pending ? TECH : r.color,
-                           opacity: r.verdict === "—" ? 0.25 : 1 }} />
-            <div className="eyebrow mb-0.5">{r.lens}</div>
-            <div className="mb-1.5 text-[0.65rem] italic leading-snug text-ash/70">
-              {r.question}
+      {/* ONE LINE, NOT NINETY-SIX WORDS. The paragraph here explained why four
+          panels count as two sources, why the grouping is declared rather than
+          measured, and what the ranking panel does differently — a defence of
+          the method, permanently open, above every tab. The reasoning is in
+          RESEARCH_ROADMAP §6 and §15; what a reader needs beside the count is
+          what the count counts. */}
+      <p className="border-t border-rule px-5 py-2.5 text-meta text-ash">
+        Flow and Trend both read price and volume; Value and Quality both read the filings.
+        The count is of data sources, not panels.
+      </p>
+
+      <button
+        type="button"
+        onClick={() => setShowDetail((v) => !v)}
+        aria-expanded={showDetail}
+        aria-controls="lens-detail"
+        className="flex w-full items-center gap-2 border-t border-rule px-5 py-3 text-meta
+                   text-ash transition-colors hover:text-chalk focus:outline-none
+                   focus-visible:ring-2 focus-visible:ring-tech lg:hidden"
+      >
+        <ChevronRight aria-hidden
+                      className={cn("h-4 w-4 shrink-0 transition-transform",
+                                    showDetail && "rotate-90")} />
+        {showDetail ? "Hide what each lens says" : "What each lens says"}
+      </button>
+
+      <div id="lens-detail"
+           className={cn("divide-y divide-rule border-t border-rule",
+                         "sm:grid-cols-2 sm:divide-x lg:grid lg:grid-cols-4 lg:divide-y-0",
+                         showDetail ? "grid" : "hidden lg:grid")}>
+        {readings.map((r) => {
+          const hue = LENS_HUE[r.lens] ?? "#8496A9";
+          const tone = voteTone(r);
+          return (
+            <div key={r.lens} className="px-5 py-4">
+              <div className="mb-2 flex items-center gap-2">
+                <span aria-hidden className="h-3.5 w-1 shrink-0 rounded-full"
+                      style={{ background: hue, opacity: r.verdict === "—" ? 0.3 : 1 }} />
+                <span className="text-micro font-semibold uppercase tracking-wider"
+                      style={{ color: hue }}>{r.lens}</span>
+              </div>
+              {/* The QUESTION, at reading size and not in italic grey. It is the
+                  most useful line in the whole rail for a newcomer, and v1 set
+                  it at 10.4px at 70% opacity — the least legible text on screen. */}
+              <p className="mb-2.5 text-meta text-ash">{r.question}</p>
+              <p className={cn("text-h3 font-semibold leading-tight",
+                               r.pending && "animate-pulseline")}
+                 style={{ color: TONE_HEX[tone] ?? "#8496A9" }}>
+                {r.verdict}
+              </p>
+              <p className="mt-2 text-meta leading-relaxed text-body">{r.detail}</p>
             </div>
-            <div className="num text-lg font-semibold leading-tight" style={{ color: r.color }}>
-              {r.verdict}
-            </div>
-            <p className="mt-1 text-xs leading-relaxed text-ash">{r.detail}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

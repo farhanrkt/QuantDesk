@@ -118,6 +118,24 @@ SAMPLES: dict[str, tuple] = {
     "compositeRank": (78.0, {"coverage": 1.0, "available": 7, "total": 7}),
     "signalRank": (93.0, {"signal": "lowVolatility", "raw": 0.14, "raw_text": "14.0%"}),
     "signalOverlap": (0.98, {"a": "Momentum", "b": "Trend"}),
+    "checkFiringRate": (0.08, {"universe_label": "4 index universes"}),
+    "manipulationPosterior": (0.113, {"flagged": True, "prior_text": "2.8%"}),
+    "holdingCorrelation": (0.82, {"ticker": "MSFT", "overlap": 251}),
+    "effectiveHoldings": (3.1, {"names": 9, "before": 3.0, "gain": 0.1}),
+    "riskShare": (0.24, {"ticker": "NVDA", "weight": 0.10}),
+    "validationDomain": ("outside", {"name": "Period", "sample": "US filings, 1976-1996",
+                                     "this_use": "2025 filings",
+                                     "note": "29 years after the sample ends."}),
+    "factorExposure": (0.62, {"label": "copper", "r_squared": 0.21, "weeks": 52,
+                              "rank_correlation": 0.43}),
+    "factorBreadth": (0.24, {"label": "copper", "loaded": 11, "scanned": 46,
+                             "rank_correlation": 0.43}),
+    "sharedDirection": (0.54, {"market_share": 0.09, "weeks": 72, "holdings": 4}),
+    "sharedDriver": (0.54, {"matches": [{"key": "oil", "label": "the energy complex",
+                                         "correlation": 0.50, "overlapWeeks": 72}],
+                            "tested": [{"key": "oil", "label": "the energy complex",
+                                        "available": True, "correlation": 0.50}],
+                            "ambiguous": False, "name_at": 0.45}),
 }
 
 
@@ -169,10 +187,19 @@ def test_reading_quotes_the_actual_value(key):
 def test_missing_values_never_get_a_colour(key):
     """An absent number must never be rendered as good or bad news."""
     _value, ctx = SAMPLES[key]
-    if key in ("cusumEpisode", "maxDrawdownRecoveryDays", "divergenceState", "gapState"):
+    if key in ("cusumEpisode", "maxDrawdownRecoveryDays", "divergenceState", "gapState",
+               "sharedDriver"):
         # These READ their missing case rather than lacking data: "no regime
         # detected", "never recovered", "price and momentum agree", "no unfilled
         # gap" are findings, not gaps, so they are exempt by design.
+        #
+        # `sharedDriver` is the same shape and the most load-bearing of them.
+        # "Nothing tested explained what these holdings share" is the finding,
+        # and it is the one place constraint 3 is easiest to break — an empty
+        # result here reads as "diversified" unless the words deny it, which is
+        # exactly what that branch does. Its genuinely-absent case, where no
+        # reference had enough overlapping history to correlate at all, still
+        # returns `unavailable`, and `test_shared_driver_*` below pins both.
         return
     result = E.explain(key, None, **ctx)
     assert result["band"] == "unavailable"
@@ -218,14 +245,11 @@ LOWER_IS_BETTER = {
     # identical, which is the point: direction lives in the ladder, not here.
     "volatility": [0.60, 0.42, 0.30, 0.20, 0.10],
     "downsideDeviation": [0.50, 0.33, 0.24, 0.16, 0.08],
-    "maxDrawdown": [-0.75, -0.55, -0.40, -0.25, -0.08],
+
     "ulcerIndex": [45.0, 25.0, 15.0, 7.0, 2.0],
     "timeUnderWaterDays": [900, 600, 300, 120, 20],
     "atrPct": [0.10, 0.055, 0.032, 0.02, 0.008],
     "spread": [0.035, 0.015, 0.006, 0.002, 0.0004],
-    "var95": [-0.09, -0.05, -0.03, -0.015],
-    "cvar95": [-0.12, -0.07, -0.04, -0.02],
-    "worstDay": [-0.30, -0.15, -0.09, -0.04],
     "beneish": [-1.0, -2.0, -3.0],
     "qValue": [0.5, 0.15, 0.01],
     "maxDrawdownRecoveryDays": [1500, 800, 300, 60],
@@ -245,6 +269,65 @@ def test_low_is_good_metrics_are_not_coloured_backwards(key):
     assert E.explain(key, LOWER_IS_BETTER[key][-1])["goodDirection"] == "low", (
         f"{key} is a low-is-good metric but declares goodDirection 'high'"
     )
+
+
+# The five metrics whose DISPLAYED value is negative. They belong in neither
+# list above: the ladder improves as the number rises toward zero, so a reader
+# is looking at -33% and the arrow has to say "higher is better".
+NEGATIVE_SCALE = {
+    "maxDrawdown": [-0.75, -0.55, -0.40, -0.25, -0.08],
+    "currentDrawdown": [-0.60, -0.35, -0.18, -0.05],
+    "var95": [-0.09, -0.05, -0.03, -0.015],
+    "cvar95": [-0.12, -0.07, -0.04, -0.02],
+    "worstDay": [-0.30, -0.15, -0.09, -0.04],
+}
+
+
+@pytest.mark.parametrize("key", sorted(NEGATIVE_SCALE))
+def test_metrics_shown_as_negative_numbers_point_their_arrow_upward(key):
+    """The arrow has to agree with the ladder, and for these five it did not.
+
+    A maximum drawdown reaches the panel as "-33%" and improves toward zero, so
+    the honest arrow reads "higher is better". All five declared "low", which
+    renders a down arrow labelled "lower is better" underneath a negative
+    number — telling a reader that -60% is the better outcome. The colour was
+    right the whole time; only the arrow disagreed, and the old test could not
+    see it because it asserted the label against a hand-kept list rather than
+    against the ladder.
+    """
+    _monotone(key, NEGATIVE_SCALE[key])
+    assert E.explain(key, NEGATIVE_SCALE[key][-1])["goodDirection"] == "high"
+
+
+def test_no_metric_declares_a_direction_its_own_ladder_contradicts():
+    """The check that would have caught the above, derived rather than listed.
+
+    For every metric with a stated direction, sweep its own sample values and
+    require the tone to move the way the direction claims. Nothing here is
+    maintained by hand, so a new metric is covered the day it is added.
+    """
+    order = {"bad": 0, "warn": 1, "neutral": 2, "good": 3}
+    problems = []
+    for key, values in {**HIGHER_IS_BETTER, **LOWER_IS_BETTER, **NEGATIVE_SCALE}.items():
+        _value, ctx = SAMPLES[key]
+        readings = [E.explain(key, v, **ctx) for v in values]
+        direction = readings[-1]["goodDirection"]
+        if direction == "none":
+            continue
+        tones = [order[r["tone"]] for r in readings if r["band"] != "unavailable"]
+        improving = all(a <= b for a, b in pairwise(tones))
+        if not improving:
+            problems.append(f"{key}: tone does not improve across its own list")
+            continue
+        # The list runs worst-to-best, so the direction must match which end of
+        # the numeric range "best" sits at.
+        rises = values[-1] > values[0]
+        expected = "high" if rises else "low"
+        if direction != expected:
+            problems.append(
+                f"{key}: improves toward {values[-1]} (so {expected!r}) but "
+                f"declares {direction!r} — the arrow contradicts the colour")
+    assert not problems, "\n".join(problems)
 
 
 def test_a_finished_flow_regime_is_still_explained():
@@ -533,6 +616,43 @@ def test_story_states_the_numbers_the_tables_state():
     assert "break-even" in text               # worst 3y window ~0%
 
 
+def test_the_story_never_summarises_a_horizon_that_was_not_measured():
+    """Unsupported horizons are now REPORTED rather than dropped, so the presence
+    of a 3-year row stopped meaning there is a 3-year answer. A summary that
+    picked it up by key would tell a reader the stock made money in every window
+    it never measured."""
+    story = E.long_horizon_story("NEW", _block(rollingReturns=[
+        {"years": 1, "usable": True, "worst": -0.30, "positiveShare": 0.7, "windows": 900},
+        {"years": 3, "usable": False, "windows": 0, "reason": "Needs about 776 days."},
+    ]))
+    text = " ".join(story["paragraphs"])
+    assert "held for 1 years" in text or "held for 1 year" in text, text
+    assert "held for 3" not in text
+
+
+def test_simple_mode_gets_a_measured_horizon_not_an_empty_card():
+    """The bare `rollingWorst` key is what Simple mode renders. Preferring the
+    3-year row by key alone would hand it a 'needs more history' card while a
+    perfectly good 1-year answer sat beside it."""
+    out = E.for_long_term(_block(rollingReturns=[
+        {"years": 1, "usable": True, "worst": -0.30, "positiveShare": 0.7, "windows": 900},
+        {"years": 3, "usable": False, "windows": 0, "reason": "Needs about 776 days."},
+    ]))
+    assert out["rollingWorst"]["band"] != "unavailable"
+    assert out["rollingWorst"] is out["rollingWorst.1"]
+    # ...and the unsupported horizon still gets its own entry, quoting the fix.
+    assert out["rollingWorst.3"]["band"] == "unavailable"
+    assert "Needs about 776 days" in out["rollingWorst.3"]["reading"]
+
+
+def test_an_unsupported_horizon_never_reads_as_a_result():
+    unavailable = E.explain("rollingWorst", None, years=5,
+                            reason="Needs about 1,280 trading days of history.")
+    assert unavailable["band"] == "unavailable"
+    assert unavailable["tone"] == "none"
+    assert "1,280" in unavailable["reading"]
+
+
 def test_story_says_when_the_trend_is_noise():
     story = E.long_horizon_story("XYZ", _block(
         hurst=0.50,
@@ -547,7 +667,9 @@ def test_story_survives_a_nearly_empty_block():
     story = E.long_horizon_story("NEW", {"risk": {}, "drawdown": {},
                                          "rollingReturns": [], "position": {}})
     assert story["paragraphs"]                # the honesty paragraph always runs
-    assert "price history alone" in story["paragraphs"][-1]
+    # The guarantee is that the closing paragraph says this lens knows nothing
+    # about the business. Wording shortened in the v2 copy pass.
+    assert "knows anything about the business" in story["paragraphs"][-1]
 
 
 def test_story_admits_a_loss_rather_than_softening_it():
