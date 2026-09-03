@@ -765,7 +765,7 @@ def exposure_scan(
         description="Comma or newline separated symbols, used when `universe` is absent."),
     market: str = Query("US", pattern="^(US|ID|us|id)$"),
 ):
-    """What every name in a universe moves with, on the factors that persist.
+    """What every name in a universe moves with, over five years of weekly moves.
 
     A SCAN RATHER THAN A LOOKUP, and that is the point. One beta is
     uninterpretable alone — 0.57 against the energy complex is remarkable or
@@ -774,10 +774,15 @@ def exposure_scan(
     `/api/peers` makes about percentiles, applied to a quantity with no natural
     scale at all.
 
-    Only factors whose year-to-year persistence was measured and survived appear
-    here; the rest are named in `refused` with the reason rather than silently
-    absent. Gold is one of them, at a rank correlation of +0.21 against a 0.25
-    line set before the numbers were seen — see `exposure_stability.json`.
+    EVERY FACTOR IS SCANNED, AND NONE IS FILTERED ON PERSISTENCE. This claimed
+    the opposite until 3 September 2026 — that only factors whose year-to-year
+    persistence survived a 0.25 line appeared, gold having failed it at +0.21.
+    That gate was removed when the study was re-run against the quantity the
+    panel actually shows and found its persistence cannot be measured at this
+    data depth. The stamped finding is a null, and the honest consequence is
+    that this route prints no forward-looking beta at all: what comes back is
+    five years of history, labelled as history. See `exposure_stability.json`
+    and `exposure.persistence_context`.
 
     Price only, so it batches: one upstream call for a whole universe.
     """

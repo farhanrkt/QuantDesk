@@ -442,7 +442,7 @@ def analyse(holding_returns: pd.DataFrame, reference_returns: pd.DataFrame,
 
 
 # --------------------------------------------------------------------------- #
-# One name against the factors that survived the gate
+# One name against every factor, with the study reported rather than applied
 # --------------------------------------------------------------------------- #
 def load_stability(path: Path = STABILITY_PATH) -> Optional[dict]:
     """The measured persistence of factor betas, or None if never measured.
@@ -564,24 +564,33 @@ def _fit(own: pd.Series, factor: pd.Series,
 
 def for_symbol(symbol: str, market_code: str = "US",
                weeks: int = ESTIMATION_WEEKS) -> dict:
-    """What one stock moves with, among the factors whose betas survive a year.
+    """What one stock moves with, over five years of weekly moves.
 
-    THE RAW WEEKLY BETA, NOT A MARKET-ADJUSTED ONE, and that is a constraint
-    rather than a simplification. `measure_exposure_stability.py` measured the
-    persistence of the raw beta; reporting a residualised one here would quote a
-    stability figure for a quantity nobody measured. The market beta is a
-    separate number and `riskmodel.estimate_beta` already reports it.
+    THE LOCAL MARKET IS REMOVED FROM BOTH SIDES — `_fit` is where that happens
+    and why. This docstring asserted the exact opposite until 3 September 2026,
+    describing a RAW weekly beta and arguing that residualising it would quote a
+    stability figure for a quantity nobody measured. That argument was sound
+    while it was true; the panel moved to the market-removed five-year beta and
+    the paragraph stayed, so two docstrings one function apart described
+    different quantities. The stability study it appealed to no longer gates
+    anything either — see `persistence_context`.
 
-    THREE REFUSALS, ALL OF WHICH FIRE IN PRACTICE:
+    TWO REFUSALS, BOTH OF WHICH FIRE IN PRACTICE:
 
-      * a factor the study could not clear — gold, at +0.21 against a 0.25 line
-        set before the numbers were seen — is never printed, and is named on
-        screen as refused rather than quietly dropped;
-      * a factor this name does not materially load on is not printed either,
-        because the persistence figure was measured on names that DID load and
-        does not describe a beta estimated from noise;
-      * too little history is a refusal rather than a shorter window, since a
-        different window has no measured stability at all.
+      * a factor this name does not materially load on is not printed, because a
+        beta estimated from noise is not a finding — and it is named on screen as
+        refused rather than quietly dropped;
+      * too little history is a refusal rather than a shorter window, because a
+        five-year reading is what the panel says it is showing.
+
+    THERE USED TO BE A THIRD, and its removal is the whole reason for the note
+    above: factors were filtered by measured persistence, and gold was refused at
+    +0.21 against a 0.25 line set before the numbers were seen. Re-running the
+    study on what the panel actually shows found that the persistence of THIS
+    quantity cannot be measured at this data depth at all, so the gate went
+    rather than being quietly loosened. Nothing is filtered on persistence now.
+    What ships is five years of history labelled as history, which needs no gate
+    for the same reason the portfolio driver label needed none.
 
     What it does NOT report is an upside and downside beta. The study found the
     gap between them does not persist — sign agreement of 46% to 66% across the
@@ -640,7 +649,15 @@ def for_symbol(symbol: str, market_code: str = "US",
 # --------------------------------------------------------------------------- #
 def scan(symbols: Sequence[str], market_code: str = "US",
          weeks: int = ESTIMATION_WEEKS) -> dict:
-    """Every name in a universe against every factor that survived the gate.
+    """Every name in a universe against every factor, in one batched fetch.
+
+    EVERY FACTOR, WITH NOTHING GATED OUT. This said "every factor that survived
+    the gate" until 3 September 2026, describing a persistence filter that had
+    already been removed — see `for_symbol`. `refused` is therefore empty here
+    by construction rather than by accident, and
+    `test_every_factor_is_offered_now_that_none_is_gated` pins it that way so
+    the gate cannot come back unnoticed. The per-name tier still fills its own
+    `refused`, for reasons that are about the name rather than the factor.
 
     WHY THIS EXISTS AS ITS OWN TIER RATHER THAN A PER-TICKER READING. A single
     beta is uninterpretable on its own — 0.57 against the energy complex is

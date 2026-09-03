@@ -573,10 +573,11 @@ export interface DivergenceLeg {
 export interface TechnicalResponse {
   ticker: string; currency: string; range: string; bars: number; hasSma200: boolean;
   /**
-   * What this name moves with, among the factors whose betas survived the
-   * persistence study. Estimated over its own fixed 52 weeks — the block length
-   * the study measured — so it does not change when the chart range does.
-   * Never carries a vote: a negative beta is not a bad beta.
+   * What this name moves with, across every factor — none is filtered on
+   * persistence, and the study that once did the filtering is reported as
+   * context instead. Estimated over its own fixed 260 weeks, with the local
+   * market removed from both sides, so it does not change when the chart range
+   * does. Never carries a vote: a negative beta is not a bad beta.
    */
   exposure?: {
     usable: boolean;
@@ -1022,9 +1023,9 @@ export interface RankValidation {
 
 
 /**
- * A whole universe against the factors whose betas survived the persistence
- * study. One beta is uninterpretable alone, so this tier returns the
- * cross-section and lets the reader place a name in it.
+ * A whole universe against every factor — nothing is gated on persistence, so
+ * `refused` is empty here by construction. One beta is uninterpretable alone,
+ * so this tier returns the cross-section and lets the reader place a name in it.
  */
 export interface ExposureLoading {
   beta: number; rSquared: number; tStat: number; material: boolean;

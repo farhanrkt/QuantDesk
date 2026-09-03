@@ -41,11 +41,18 @@ spends real effort establishing how much that agreement is actually worth — pu
 measurement whichever way it comes out. Five stamped artifacts already do this
 (`backtest_results.json`, `check_calibration.json`, `correlation_stability.json`,
 `lens_agreement.json`, `exposure_stability.json`), including a backtest that reports
-its own ranking has **no detectable edge** and a beta study that refuses one of the
-four factors it tested.
+its own ranking has **no detectable edge** and a beta study that could not measure
+the thing it set out to measure — so the exposure panel prints **no forward-looking
+beta at all**, only five years of history labelled as history.
 
 *The count said "three" while listing four, from before `lens_agreement.json`
 existed. Corrected 31 August 2026 along with the fifth.*
+
+*This read "a beta study that refuses one of the four factors it tested" — true of
+an earlier run that gated gold at +0.21 against a 0.25 line, and left behind when the
+re-run of 1 September 2026 replaced that gate with a null. Corrected 3 September 2026,
+along with three docstrings that made the same stale claim. The null is the stronger
+result: refusing one factor implies the other three were validated, and none was.*
 
 A neighbouring product could copy the four lenses. It could not truthfully copy
 "we measured whether our own signal works and published the null result".

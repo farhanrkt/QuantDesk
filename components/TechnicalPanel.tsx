@@ -150,7 +150,7 @@ export function TechnicalPanel({
         tall. Caught by reading the element's own box, not by looking at the page.
 
         It belongs here on the merits anyway: the beta is estimated over its own
-        fixed 52 weeks and does not change when the reader switches horizon or
+        fixed 260 weeks and does not change when the reader switches horizon or
         chart range, so tying its visibility to one of those would imply a
         relationship that is not there.
       */}
