@@ -17,6 +17,13 @@ answers "what is and is not known about this company" for a reader who should
 form their own view. This answers "of 837 Indonesian listings, which forty are
 worth my attention this week, and in what order" — a question that is not
 answerable without ranking, and where refusing to rank means refusing to answer.
+
+It also reads two things the published view does not: the heavy-session tape
+(`tape.py`) and the share register (`ownership.py`). Both are new bodies of
+evidence rather than new presentations of old ones, and both arrive with their
+own refusals — the tape is not a broker summary and says so on every surface
+that renders it, and the register's independence from the filings is measured
+rather than claimed.
 The honest response to that is not to pretend the two questions are the same. It
 is to build the second one where it cannot leak into the first, and to attach to
 every number it prints the measurement that says how much the ordering is worth.
@@ -39,19 +46,33 @@ can be met by a feature the measurement did not vindicate.
 
 HOW THE SCORE IS BUILT, AND WHY IN THAT ORDER
 ---------------------------------------------
-1. FIVE COMPONENTS, each 0-100, each read from a lens that has already run.
+1. EIGHT COMPONENTS, each 0-100, each read from something that has already run.
    Nothing here recomputes anything — same contract as `explain.for_synthesis`
    and for the same reason: the score must quote the figures the panels render,
    and a parallel computation would eventually drift from them.
 
-2. TWO FAMILY SCORES, not five component scores averaged. Four lenses over two
-   bodies of data are not four opinions — `explain._family_votes` has said so
-   since it shipped. Price, trend and flow are one weighted mean; value and
-   quality are another. Averaging all five would give the price record three
-   votes to the filings' two purely because it is cheaper to compute.
+2. THREE FAMILY SCORES, not eight component scores averaged. Eight measurements
+   over three bodies of data are not eight opinions — `explain._family_votes`
+   has said so since it shipped.
 
-3. ONE RAW SCORE: the two families, weighted equally. Each body of data gets one
-   vote. That is the app's central claim expressed as arithmetic.
+     price and volume   the cross-sectional rank, the long-horizon trend, order
+                        flow, and the heavy-session tape reading
+     the filings        the valuation model and the accounting screens
+     the share register free float and the share-count trend
+
+   Averaging all eight would give the price record four votes to the filings'
+   two purely because price signals are cheaper to compute.
+
+   THE THIRD FAMILY'S INDEPENDENCE CLAIM IS DELIBERATELY NARROWER THAN THE
+   OTHERS'. The share count is printed in the filings; what is actually true is
+   that no filings lens reads it. So it is measured rather than asserted —
+   `family_overlap` reports the realised rank correlation across a scan, and on
+   a real IDX sweep the three read +0.07 to +0.10 against each other.
+
+3. ONE RAW SCORE: the families, one vote each, scaled only by how much of its
+   own evidence each family actually brought. Each body of data gets one vote;
+   a family reporting on half its evidence makes half a claim. That is the app's
+   central claim expressed as arithmetic.
 
 4. SHRINKAGE TOWARD 50, by how much independent evidence there actually is.
    Families that disagree, a family that never read, components that were
@@ -59,6 +80,14 @@ HOW THE SCORE IS BUILT, AND WHY IN THAT ORDER
    dropped. A 78 computed from two agreeing families and a 78 computed from one
    family with three gaps are not the same claim, and the second must not print
    as though it were.
+
+   A SILENT FAMILY IS NOT A DISSENTING ONE, and conflating those two was a real
+   mistake in the two-to-three-family change. The share register reads neutral
+   for the median listing by construction, so requiring all three families to
+   take a direction dropped high conviction to zero names out of twenty-nine on
+   a real IDX30 sweep — and the compression was invisible: every score simply
+   moved toward 50 and nothing said why. The bar is TWO INDEPENDENT SOURCES
+   ACTIVELY AGREEING, with abstentions named rather than counted.
 
 5. PENALTIES from the pre-trade checks that fired, each scaled by how rare it
    is. `pretrade.py` already establishes why: a condition firing on a third of a
@@ -87,6 +116,7 @@ from __future__ import annotations
 from typing import Optional
 
 from . import explain as E
+from . import ownership
 
 # --------------------------------------------------------------------------- #
 # Components — what reads what, and how much each is trusted
@@ -130,6 +160,20 @@ COMPONENTS: list[dict] = [
                    "predictive edge in the anomaly flag."),
     },
     {
+        "key": "tape",
+        "label": "Who wins the heavy days",
+        "family": "price",
+        "evidence": "weak",
+        "weight": 0.4,
+        "detail": ("Whether this name's heaviest sessions close nearer the high of their "
+                   "range than its ordinary ones, tested against its own market's median. "
+                   "The readable shadow of what bandarmology looks for — it cannot say WHO "
+                   "bought, because that needs the exchange's broker summary and no "
+                   "provider here carries it. Graded weak because it is measured: the test "
+                   "fires on 13% of Indonesian listings against 5% expected by chance, and "
+                   "on 4% of US large caps, which IS chance."),
+    },
+    {
         "key": "value",
         "label": "Value against the model",
         "family": "filings",
@@ -148,10 +192,69 @@ COMPONENTS: list[dict] = [
                    "discounted where Beneish flags the accrual pattern. Graded strong: the "
                    "F-score is among the better replicated accounting anomalies."),
     },
+    {
+        "key": "float",
+        "label": "Free float and control",
+        "family": "register",
+        "evidence": "weak",
+        "weight": 0.4,
+        "detail": ("How much of the company is not held by insiders, and how much of that "
+                   "turns over in a session. The structural precondition for a stock that "
+                   "one holder can walk. Graded weak deliberately: a thin float is a "
+                   "strong statement about whether a position can be exited and a weak one "
+                   "about what the price does next."),
+    },
+    {
+        "key": "issuance",
+        "label": "Share count trend",
+        "family": "register",
+        "evidence": "moderate",
+        "weight": 0.7,
+        "detail": ("Whether the number of shares is growing or being retired, annualised "
+                   "over three years, with the largest single step named. Net share "
+                   "issuance is among the better replicated cross-sectional effects, and "
+                   "on IDX it is not subtle — a rights issue dilutes a holder who does not "
+                   "subscribe, and no other lens here would notice."),
+    },
 ]
 
 COMPONENT_BY_KEY = {c["key"]: c for c in COMPONENTS}
-FAMILY_LABEL = {"price": "price and volume", "filings": "the filings"}
+
+# THE THIRD FAMILY, AND THE HONEST LIMIT OF THE CLAIM MADE FOR IT.
+#
+# The app's central claim has always been that the price record and the filings
+# share no inputs, so agreement between them is not one fact counted twice. The
+# register is a genuine third thing — nothing in `ranking.py` sees a float, and
+# none of Piotroski, Altman, Beneish or the discounted cash flow reads a share
+# count trend — but the claim must be narrower than the one made for the first
+# two, because the share count is PRINTED IN THE FILINGS. What is true is that
+# no lens here reads it, not that it is independent by construction.
+#
+# So the assumption is not asserted, it is measured: `family_overlap` computes
+# the realised rank correlation between family scores across a scan, and the
+# scanner prints it. If the register turns out to move with the filings, that
+# measurement is where it will show up.
+FAMILY_LABEL = {"price": "price and volume", "filings": "the filings",
+                "register": "the share register"}
+FAMILIES = ("price", "filings", "register")
+
+# The total evidence each family can bring when everything reads. Used only to
+# compute a family's own coverage — see `_family_score` — never to weight one
+# family against another.
+FAMILY_BASE_WEIGHT = {
+    family: sum(c["weight"] for c in COMPONENTS if c["family"] == family)
+    for family in FAMILIES
+}
+
+# A family reporting on half its evidence does not get a whole vote. The floor
+# stops a family with one thin component from vanishing entirely, because half a
+# body of data still says something the other two cannot.
+#
+# THIS IS NOT "THE COUNT DECIDES". The count of components in a family is
+# deliberately not consulted anywhere; what is consulted is how much of the
+# evidence that family was SUPPOSED to bring actually arrived, which is the same
+# coverage rule applied globally in `score` and per-signal in `ranking.py`.
+MIN_FAMILY_VOTE = 0.5
 
 # --------------------------------------------------------------------------- #
 # Constants, each with the reason it sits where it does
@@ -487,12 +590,87 @@ def read_quality(legs: dict) -> dict:
             "weightScale": 1.0, "detail": (", ".join(parts) + ".").capitalize()}
 
 
+def read_tape(tape_result: Optional[dict]) -> dict:
+    """The heavy-session reading, which is usually that there is nothing to read.
+
+    `tape.read` returns "unreadable" for most names by design — against a
+    calibrated null the test fires on about one Indonesian listing in seven and
+    one US listing in twenty-five. An unreadable tape is NOT unavailable: the
+    test ran, it produced a number, and the number was ordinary. It scores near
+    neutral and says so, which is different from having no reading at all.
+    """
+    if not isinstance(tape_result, dict):
+        return _unavailable("the tape was not read for this name")
+    if not tape_result.get("available"):
+        return _unavailable(tape_result.get("reason") or "the tape could not be read")
+    if not tape_result.get("calibrated"):
+        # A direction computed against the wrong null is worse than no
+        # direction. `tape.py` already refuses to report one; this refuses to
+        # score it, so an uncalibrated market cannot contribute a component at
+        # all rather than contributing a confident 50.
+        return _unavailable(
+            "this market has no measured tape baseline, so no direction can be read "
+            "from it — run scripts/calibrate_tape.py")
+
+    score = _finite(tape_result.get("score"))
+    if score is None:
+        return _unavailable("the tape produced no usable score")
+    return {"score": score, "available": True, "reason": None, "refused": False,
+            "weightScale": 1.0, "detail": tape_result.get("reading")}
+
+
+def read_float(register_result: Optional[dict]) -> dict:
+    """How much of the company is actually for sale."""
+    if not isinstance(register_result, dict) or not register_result.get("available"):
+        reason = (register_result or {}).get("reason")
+        return _unavailable(reason or "the share register was not read")
+    floats = register_result.get("float") or {}
+    if not floats.get("available"):
+        return _unavailable(floats.get("reason") or "no float figure came back")
+    score = _finite(floats.get("score"))
+    if score is None:
+        return _unavailable("the float could not be scored")
+
+    detail = floats.get("reading") or ""
+    turnover = _finite(register_result.get("floatTurnover"))
+    if turnover is not None and turnover > 0:
+        share = f"{turnover * 100:.3f}%" if turnover < 1e-4 else f"{turnover * 100:.2f}%"
+        detail += f" A session turns over {share} of that float."
+    return {"score": score, "available": True, "reason": None, "refused": False,
+            "weightScale": 1.0, "detail": detail.strip()}
+
+
+def read_issuance(register_result: Optional[dict]) -> dict:
+    """Whether the share count is growing, and by how much a year."""
+    if not isinstance(register_result, dict) or not register_result.get("available"):
+        reason = (register_result or {}).get("reason")
+        return _unavailable(reason or "the share register was not read")
+    issued = register_result.get("issuance") or {}
+    if not issued.get("available"):
+        return _unavailable(issued.get("reason") or "no share-count history came back")
+    score = _finite(issued.get("score"))
+    if score is None:
+        return _unavailable("the share count could not be scored")
+
+    # A three-year trend read from four filing dates is a weaker version of the
+    # same statement than one read from twenty. The WEIGHT bends rather than the
+    # score, for the reason `read_price_rank` bends it: renormalising the score
+    # would move a thinly reported name toward the middle and call it a finding.
+    observations = issued.get("observations") or 0
+    scale = 0.6 if observations < 8 else 1.0
+    return {"score": score, "available": True, "reason": None, "refused": False,
+            "weightScale": scale, "detail": issued.get("reading")}
+
+
 READERS = {
-    "priceRank": lambda legs, rank_row: read_price_rank(rank_row),
-    "trend": lambda legs, rank_row: read_trend(legs),
-    "flow": lambda legs, rank_row: read_flow(legs),
-    "value": lambda legs, rank_row: read_value(legs),
-    "quality": lambda legs, rank_row: read_quality(legs),
+    "priceRank": lambda ctx: read_price_rank(ctx.get("rank_row")),
+    "trend": lambda ctx: read_trend(ctx.get("legs") or {}),
+    "flow": lambda ctx: read_flow(ctx.get("legs") or {}),
+    "tape": lambda ctx: read_tape(ctx.get("tape")),
+    "value": lambda ctx: read_value(ctx.get("legs") or {}),
+    "quality": lambda ctx: read_quality(ctx.get("legs") or {}),
+    "float": lambda ctx: read_float(ctx.get("register")),
+    "issuance": lambda ctx: read_issuance(ctx.get("register")),
 }
 
 
@@ -500,60 +678,116 @@ READERS = {
 # Families, agreement, shrinkage
 # ============================================================================ #
 def _family_score(components: list[dict], family: str) -> Optional[dict]:
-    """One weighted mean per BODY OF DATA, over the components that read."""
+    """One weighted mean per BODY OF DATA, over the components that read.
+
+    `vote` is how much of a whole vote this family gets when the families are
+    combined. It is its own COVERAGE — how much of the evidence it was supposed
+    to bring actually arrived — floored so a half-read family still speaks. See
+    `MIN_FAMILY_VOTE` for why this is not the component count in disguise.
+    """
     members = [c for c in components if c["family"] == family and c["available"]]
     if not members:
         return None
     total_weight = sum(c["effectiveWeight"] for c in members)
     if total_weight <= 0:
         return None
+
     score = sum(c["score"] * c["effectiveWeight"] for c in members) / total_weight
     side = 1 if score > NEUTRAL_HIGH else -1 if score < NEUTRAL_LOW else 0
+    base = FAMILY_BASE_WEIGHT.get(family) or 0.0
+    read_base = sum(c["baseWeight"] for c in members)
+    coverage = (read_base / base) if base > 0 else 0.0
     return {"family": family, "label": FAMILY_LABEL[family], "score": score,
             "side": side, "members": [c["key"] for c in members],
-            "weight": total_weight}
+            "weight": total_weight, "coverage": round(coverage, 3),
+            "vote": round(max(MIN_FAMILY_VOTE, min(1.0, coverage)), 3)}
 
 
-def _agreement(price: Optional[dict], filings: Optional[dict]) -> dict:
-    """What the two bodies of data add up to, and how much to trust it.
+def _agreement(families: dict) -> dict:
+    """What the bodies of data add up to, and how much of it to believe.
 
-    The four branches are the same four `explain._agreement` prints in sentences,
-    with a shrinkage factor attached to each. That is deliberate: the private
-    scanner and the published rail must not be able to reach opposite readings of
-    the same two families.
+    THE BRANCHES ARE THE SAME FOUR `explain._agreement` PRINTS, generalised from
+    two families to three. That correspondence is deliberate and load-bearing:
+    the private scanner and the published rail must not be able to reach opposite
+    readings of the same evidence, so the states are the same states and only the
+    arithmetic behind "they agree" had to change.
+
+    With three families "they agree" now means every family that took a
+    direction took the SAME direction, and one family pointing the other way is
+    a disagreement even when the other two concur. That is the conservative
+    reading and it is the right one here: the whole argument for combining
+    independent sources is that a dissent from one of them is information, not
+    an outvoted minority.
     """
-    if price is None and filings is None:
+    present = [f for f in families.values() if f is not None]
+    if not present:
         return {"state": "none", "shrink": 0.0, "conviction": "none",
                 "text": "No lens returned a usable reading, so there is nothing to score."}
 
-    if price is None or filings is None:
-        only = price or filings
+    if len(present) == 1:
+        only = present[0]
         return {"state": "single", "shrink": SHRINK_SINGLE_FAMILY, "conviction": "low",
                 "text": (f"Only {only['label']} could be read here, so there is no "
                          f"cross-check. Everything rests on one body of data, which is "
                          f"exactly the situation this app exists to avoid.")}
 
-    if price["side"] and price["side"] == filings["side"]:
-        direction = "constructive" if price["side"] > 0 else "negative"
-        return {"state": "agree", "shrink": SHRINK_AGREE, "conviction": "high",
-                "text": (f"Both bodies of data point the same {direction} way. That is the "
-                         f"strongest thing this app can say, because the price record and "
-                         f"the filings read different data.")}
+    directional = [f for f in present if f["side"] != 0]
+    neutral = [f for f in present if f["side"] == 0]
+    names = ", ".join(f["label"] for f in present)
 
-    if price["side"] and filings["side"]:
-        up = "price and volume" if price["side"] > 0 else "the filings"
-        down = "the filings" if price["side"] > 0 else "price and volume"
+    if not directional:
+        return {"state": "allNeutral", "shrink": SHRINK_ONE_NEUTRAL, "conviction": "medium",
+                "text": (f"All {len(present)} bodies of data read as unremarkable "
+                         f"({names}). Nothing here argues either way, which is a finding "
+                         f"rather than a gap.")}
+
+    sides = {f["side"] for f in directional}
+    if len(sides) > 1:
+        up = ", ".join(f["label"] for f in directional if f["side"] > 0)
+        down = ", ".join(f["label"] for f in directional if f["side"] < 0)
         return {"state": "disagree", "shrink": SHRINK_DISAGREE, "conviction": "low",
                 "text": (f"They disagree: {up} read constructively while {down} do not. "
-                         f"The disagreement is the finding, and nothing here can settle "
-                         f"which side is right — which is why the score is pulled hard "
-                         f"toward neutral.")}
+                         f"The disagreement is the finding, nothing here can settle which "
+                         f"side is right, and that is why the score is pulled hard toward "
+                         f"neutral.")}
 
-    active = price if price["side"] else filings
-    quiet = filings if price["side"] else price
+    direction = "constructive" if directional[0]["side"] > 0 else "negative"
+    quiet = ", ".join(f["label"] for f in neutral)
+    active = ", ".join(f["label"] for f in directional)
+
+    # A SILENT SOURCE IS NOT A DISSENTING ONE, and conflating the two was a real
+    # mistake in the two-to-three-family change. With two families, "one of them
+    # is neutral" meant half the evidence had no opinion. With three it stopped
+    # meaning that: the share register reads NEUTRAL for the median listing by
+    # construction — an ordinary float and a flat share count is what most
+    # companies have — so requiring all three to take a direction made high
+    # conviction almost unreachable. On a real IDX30 sweep it fell to zero names
+    # out of twenty-nine, and the compression was invisible in the output; every
+    # score simply moved toward 50 and nothing said why.
+    #
+    # The bar is now TWO INDEPENDENT SOURCES ACTIVELY AGREEING, which is the
+    # claim the cross-check was always about. A third source with nothing to say
+    # neither adds to that nor takes from it, and is named in the sentence so the
+    # reader can see it abstained rather than concurred.
+    if len(directional) >= 2:
+        # Singular where one family abstained, plural where several did. The
+        # labels are noun phrases ("the share register"), so the verb has to
+        # follow the count of them rather than being written once either way.
+        plural = len(neutral) > 1
+        aside = (f" {quiet.capitalize()} "
+                 f"{'read' if plural else 'reads'} as unremarkable and "
+                 f"{'neither support nor contradict' if plural else 'neither supports nor contradicts'} "
+                 f"them." if neutral else "")
+        return {"state": "agree", "shrink": SHRINK_AGREE, "conviction": "high",
+                "text": (f"{len(directional)} independent bodies of data point the same "
+                         f"{direction} way ({active}).{aside} That is the strongest thing "
+                         f"this app can say, because those sources are not reading the "
+                         f"same numbers.")}
+
     return {"state": "oneNeutral", "shrink": SHRINK_ONE_NEUTRAL, "conviction": "medium",
-            "text": (f"{active['label'].capitalize()} lean one way while {quiet['label']} "
-                     f"read as unremarkable. One body of data is carrying this.")}
+            "text": (f"{active.capitalize()} lean {direction} while {quiet} read as "
+                     f"unremarkable. One body of data is carrying this, and the others "
+                     f"are silent rather than opposed.")}
 
 
 def _penalties(pretrade_result: Optional[dict]) -> list[dict]:
@@ -606,7 +840,9 @@ def _penalties(pretrade_result: Optional[dict]) -> list[dict]:
 # ============================================================================ #
 def _gates(liquidity: Optional[dict], price: Optional[float], market: str,
            legs: dict, available: int,
-           turnover_floor: Optional[float] = None) -> list[dict]:
+           turnover_floor: Optional[float] = None,
+           register_result: Optional[dict] = None,
+           tape_result: Optional[dict] = None) -> list[dict]:
     market = (market or "US").upper()
     floor = turnover_floor if turnover_floor is not None else TURNOVER_FLOOR.get(market, 0.0)
     gates: list[dict] = []
@@ -647,6 +883,70 @@ def _gates(liquidity: Optional[dict], price: Optional[float], market: str,
             "detail": (f"{available} of {len(COMPONENTS)} components read. Below "
                        f"{MIN_COMPONENTS} there is no blend, only a single lens wearing a "
                        f"composite's name."),
+        })
+
+    # --- the register gates ------------------------------------------------
+    # THESE ARE TRADEABILITY AND STRUCTURE, NOT OPINION, which is why they sit
+    # with the turnover floor rather than costing points. A 6% free float is not
+    # a company with poor prospects; it is a company whose quoted price is a
+    # handful of holders' opinion and whose exit is not guaranteed to exist.
+    register = register_result if isinstance(register_result, dict) else {}
+    floats = (register.get("float") or {}) if register.get("available") else {}
+    if floats.get("available"):
+        value = _finite(floats.get("freeFloat"))
+        if value is not None and value < ownership.FLOAT_CRITICAL:
+            gates.append({
+                "id": "microFloat", "action": "HOLD",
+                "label": "Almost nothing is free to trade",
+                # ONE DECIMAL, because whole percentages put this sentence at war
+                # with itself. HMSP.JK's 7.5% float rendered as "Only 8% ... under
+                # the 8% line", which reads as an arithmetic error rather than as
+                # rounding, in the one sentence explaining why a good score was
+                # capped.
+                "detail": (f"Only {value * 100:.1f}% of the shares sit outside insider "
+                           f"hands, under the {ownership.FLOAT_CRITICAL * 100:.0f}% line. "
+                           f"The quoted price is what a handful of holders agree it is, "
+                           f"one seller moves it, and a position that has to be exited "
+                           f"may not find the other side. Capped at hold rather than "
+                           f"refused: this describes the instrument, not the business."),
+            })
+
+    issued = (register.get("issuance") or {}) if register.get("available") else {}
+    if issued.get("available"):
+        annual = _finite(issued.get("annualised"))
+        if annual is not None and annual >= ownership.ISSUANCE_SEVERE:
+            step = ""
+            if issued.get("largestStep") and issued["largestStep"] > 0.1:
+                step = (f" The largest single step was +{issued['largestStep'] * 100:.0f}%"
+                        + (f" around {issued['largestStepAt']}."
+                           if issued.get("largestStepAt") else "."))
+            gates.append({
+                "id": "heavyIssuance", "action": "HOLD",
+                "label": "The share count is growing fast",
+                "detail": (f"Shares outstanding have grown {annual * 100:.0f}% a year over "
+                           f"{issued.get('years', 0):.1f} years.{step} A holder who does "
+                           f"not subscribe to each issue owns a shrinking share of the "
+                           f"same company, and every per-share figure elsewhere is "
+                           f"measured against a moving denominator."),
+            })
+
+    # --- volume concentration ----------------------------------------------
+    tape_payload = tape_result if isinstance(tape_result, dict) else {}
+    conc = (tape_payload.get("concentration") or {}) if tape_payload.get("available") else {}
+    if conc.get("band") == "severe" and conc.get("calibrated"):
+        top = _finite(conc.get("topFiveShare"))
+        effective = _finite(conc.get("effectiveDays"))
+        gates.append({
+            "id": "episodicVolume", "action": "HOLD",
+            "label": "The year happened in a handful of sessions",
+            "detail": (f"{(top or 0) * 100:.0f}% of the year's volume traded on its five "
+                       f"biggest days"
+                       + (f", making the window worth about {effective:.0f} sessions of "
+                          f"even trading" if effective else "")
+                       + f" — past the {(conc.get('severe') or 0) * 100:.0f}% line that "
+                         f"only one name in twenty of this market clears. A position "
+                         f"cannot be sized against liquidity that only shows up on the "
+                         f"days everyone else also wants to trade."),
         })
 
     quality = _leg(legs, "quality") or {}
@@ -727,7 +1027,9 @@ def score(ticker: str,
           latest_close: Optional[float] = None,
           risk_budget: float = 0.02,
           max_weight: float = 0.10,
-          turnover_floor: Optional[float] = None) -> dict:
+          turnover_floor: Optional[float] = None,
+          tape_result: Optional[dict] = None,
+          register_result: Optional[dict] = None) -> dict:
     """One name's score, action and the arithmetic that produced both.
 
     `legs` is the `/api/confluence` shape — each leg carrying its own `ok` flag —
@@ -740,10 +1042,16 @@ def score(ticker: str,
     toward the middle of the pack and call it a measurement.
     """
     legs = legs or {}
+    # ONE CONTEXT OBJECT RATHER THAN A GROWING POSITIONAL SIGNATURE. Each reader
+    # takes what it needs and ignores the rest, so adding a component is adding a
+    # key here and a row in `COMPONENTS` — not editing every reader's arguments,
+    # which is how the fifth one would silently get handed the fourth one's data.
+    context = {"legs": legs, "rank_row": rank_row, "tape": tape_result,
+               "register": register_result}
 
     components: list[dict] = []
     for spec in COMPONENTS:
-        reading = READERS[spec["key"]](legs, rank_row)
+        reading = READERS[spec["key"]](context)
         effective = spec["weight"] * reading.get("weightScale", 1.0)
         components.append({
             **{k: spec[k] for k in ("key", "label", "family", "evidence", "detail")},
@@ -761,16 +1069,23 @@ def score(ticker: str,
     coverage = (sum(c["baseWeight"] for c in available) / intended_weight
                 if intended_weight else 0.0)
 
-    price_family = _family_score(components, "price")
-    filings_family = _family_score(components, "filings")
-    agreement = _agreement(price_family, filings_family)
+    scored_families = {family: _family_score(components, family) for family in FAMILIES}
+    agreement = _agreement(scored_families)
 
-    # THE TWO FAMILIES ARE WEIGHTED EQUALLY, not by how many components each
-    # happened to contribute. Three price components and two filings ones are
-    # still two bodies of data, and letting the count decide would give the price
-    # record more say purely because it is cheaper to compute.
-    families = [f for f in (price_family, filings_family) if f is not None]
-    raw = sum(f["score"] for f in families) / len(families) if families else None
+    # EACH BODY OF DATA GETS ONE VOTE, not one vote per component. Four price
+    # components, two filings ones and two register ones are still three bodies
+    # of data, and letting the count decide would give the price record most of
+    # the say purely because price signals are cheaper to compute.
+    #
+    # The one thing that scales a vote is that family's OWN coverage — a family
+    # reporting on half its evidence is making half a claim. That is the same
+    # rule applied globally below and per-signal in `ranking.py`, and it is not
+    # the component count wearing a disguise: a family with one component that
+    # read fully votes in full.
+    present = [f for f in scored_families.values() if f is not None]
+    vote_total = sum(f["vote"] for f in present)
+    raw = (sum(f["score"] * f["vote"] for f in present) / vote_total
+           if vote_total > 0 else None)
 
     coverage_shrink = SHRINK_COVERAGE_FLOOR + (1.0 - SHRINK_COVERAGE_FLOOR) * coverage
     shrink = agreement["shrink"] * coverage_shrink
@@ -781,7 +1096,8 @@ def score(ticker: str,
     final = _clamp(shrunk - penalty_total) if shrunk is not None else None
 
     gates = _gates(liquidity, latest_close, market, legs, len(available),
-                   turnover_floor=turnover_floor)
+                   turnover_floor=turnover_floor, register_result=register_result,
+                   tape_result=tape_result)
 
     if final is None:
         action, action_label, tone = "NO_ACTION", "No action", "none"
@@ -821,13 +1137,18 @@ def score(ticker: str,
         # things. On IDX small caps it is the common failure: Yahoo publishes no
         # statements, both filings lenses go quiet, and a name reaches the buy
         # bands on price history alone.
-        "crossChecked": price_family is not None and filings_family is not None,
-        "familiesRead": len(families),
+        # Two or more of the three bodies of data returned something. It stays a
+        # two-family test rather than becoming a three-family one: the claim
+        # "nothing cross-checked this" is about whether ANY second source spoke,
+        # and requiring all three would mark a perfectly cross-checked name as
+        # unchecked whenever one register field was missing.
+        "crossChecked": len(present) >= 2,
+        "familiesRead": len(present),
         "coverage": round(coverage, 3),
         "componentsRead": len(available),
         "componentsTotal": len(COMPONENTS),
         "components": components,
-        "families": {"price": price_family, "filings": filings_family},
+        "families": scored_families,
         "agreement": agreement,
         "shrink": {
             "agreement": agreement["shrink"],
@@ -902,6 +1223,92 @@ def _reasons(components: list[dict], agreement: dict, penalties: list[dict],
 
 
 # ============================================================================ #
+# Is the third family actually a third source? — measured, not asserted
+# ============================================================================ #
+def family_overlap(rows: list[dict]) -> dict:
+    """Rank correlation between the family scores, across a whole scan.
+
+    THE HONEST COUNTERWEIGHT TO GIVING EACH FAMILY A VOTE. This module weights
+    the price record, the filings and the share register equally on the argument
+    that they read different data. `ranking.signal_correlation` makes exactly
+    this move for its seven price signals — it reports the measured overlap
+    rather than asserting independence — and the argument applies harder here,
+    because the register's independence claim is the weakest of the three: the
+    share count is printed in the filings, and what is actually true is only
+    that no filings lens reads it.
+
+    So this measures it. If the register turns out to track the filings across a
+    real universe, this is where it shows, and the equal weighting above becomes
+    a thing to fix rather than a thing to believe.
+
+    Spearman rather than Pearson, because the scores are bounded, capped and
+    saturating in several places — a linear correlation over a saturated scale
+    measures the saturation.
+    """
+    import numpy as _np
+    import pandas as _pd
+
+    frame = _pd.DataFrame([
+        {family: ((row.get("families") or {}).get(family) or {}).get("score")
+         for family in FAMILIES}
+        for row in rows
+    ], columns=list(FAMILIES))
+
+    usable = [f for f in FAMILIES if frame[f].notna().sum() >= 10]
+    if len(usable) < 2:
+        return {"available": False,
+                "reason": ("Fewer than two families read on enough names to measure "
+                           "whether they overlap.")}
+
+    matrix = frame[usable].corr(method="spearman")
+    pairs = []
+    for index, first in enumerate(usable):
+        for second in usable[index + 1:]:
+            both = int((frame[first].notna() & frame[second].notna()).sum())
+            value = matrix.loc[first, second]
+            if _np.isfinite(value):
+                pairs.append({"a": first, "b": second, "aLabel": FAMILY_LABEL[first],
+                              "bLabel": FAMILY_LABEL[second],
+                              "correlation": float(value), "names": both})
+    pairs.sort(key=lambda entry: -abs(entry["correlation"]))
+    if not pairs:
+        return {"available": False,
+                "reason": "No pair of families could be compared on this scan."}
+
+    strongest = pairs[0]
+    return {
+        "available": True,
+        "families": usable,
+        "pairs": pairs,
+        "counts": {family: int(frame[family].notna().sum()) for family in usable},
+        "reading": _overlap_reading(strongest, pairs),
+    }
+
+
+def _overlap_reading(strongest: dict, pairs: list[dict]) -> str:
+    text = (f"Across this scan the most overlapping pair is {strongest['aLabel']} and "
+            f"{strongest['bLabel']}, correlated at {strongest['correlation']:+.2f} over "
+            f"{strongest['names']} names. ")
+    if abs(strongest["correlation"]) > 0.6:
+        text += ("They are close to measuring the same thing, so weighting them as "
+                 "separate votes is over-counting one fact — treat that pair as one "
+                 "source until it is fixed. ")
+    elif abs(strongest["correlation"]) > 0.3:
+        text += ("That is a real but partial overlap: they share some information and "
+                 "each still carries something the other does not. ")
+    else:
+        text += ("Nothing here is duplicating another family, which is what the equal "
+                 "weighting assumes and this measurement is here to check. ")
+    register = [p for p in pairs if "register" in (p["a"], p["b"])]
+    if register:
+        worst = max(register, key=lambda p: abs(p["correlation"]))
+        text += (f"The share register — the family with the weakest independence claim, "
+                 f"because the share count is printed in the filings — reads at most "
+                 f"{worst['correlation']:+.2f} against the others.")
+    return text
+
+
+# ============================================================================ #
 # Provenance — the measurement that says what this ordering is worth
 # ============================================================================ #
 def provenance() -> dict:
@@ -933,9 +1340,14 @@ def provenance() -> dict:
         "tests": measured.get("tests"),
         "significant": measured.get("significant"),
         "headline": measured.get("headline"),
-        "appliesTo": ("the price-and-volume composite, which is one of five components "
-                      "below and the only one whose predictive power this app has "
-                      "measured at all. The four lens components have not been "
-                      "backtested as a combined score, and this scan does not claim "
-                      "they have."),
+        # THE COUNT IS DERIVED, NOT WRITTEN. It read "one of five components" for
+        # a while after the component list grew to eight — a small wrongness in
+        # the one paragraph whose whole job is to be exact about what has and has
+        # not been measured.
+        "appliesTo": (f"the price-and-volume composite, which is one of "
+                      f"{len(COMPONENTS)} components below and the only one whose "
+                      f"predictive power this app has measured at all. The other "
+                      f"{len(COMPONENTS) - 1} have not been backtested individually and "
+                      f"the blend of them has never been backtested at all, so nothing "
+                      f"here claims they add up to an edge."),
     }

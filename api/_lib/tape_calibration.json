@@ -1,0 +1,47 @@
+{
+ "measuredOn": "2026-09-08",
+ "window": 252,
+ "heavyQuantile": 0.8,
+ "alpha": 0.05,
+ "headline": "Share of each market where heavy-session close location differs from that market's own median at the 5% bar: 13% of the Indonesian listed market (188 names); 4% of the Nasdaq-100 and the Dow (120 names). Chance alone predicts 5%. A market at that number is a market where this signal does not exist.",
+ "markets": {
+  "ID": {
+   "names": 188,
+   "population": "the Indonesian listed market",
+   "measuredOn": "2026-09-08",
+   "liftMedian": 0.06831859954738084,
+   "liftSd": 0.1435285353113477,
+   "liftP05": -0.18424901128042936,
+   "liftP95": 0.2939272825525477,
+   "wickSd": 0.09790227792950752,
+   "wickMedian": -0.017608371252624426,
+   "significantShare": 0.13297872340425532,
+   "significantCount": 25,
+   "tested": 188,
+   "concentration": {
+    "caution": 0.20680698580971424,
+    "severe": 0.3610167066097258,
+    "median": 0.1340226372944745
+   }
+  },
+  "US": {
+   "names": 120,
+   "population": "the Nasdaq-100 and the Dow",
+   "measuredOn": "2026-09-08",
+   "liftMedian": 0.0060117767443801685,
+   "liftSd": 0.09602977674042809,
+   "liftP05": -0.1465487565622982,
+   "liftP95": 0.14069024350114945,
+   "wickSd": 0.026430624684073055,
+   "wickMedian": -0.004439404288238309,
+   "significantShare": 0.041666666666666664,
+   "significantCount": 5,
+   "tested": 120,
+   "concentration": {
+    "caution": 0.07297762823070564,
+    "severe": 0.10499622958446242,
+    "median": 0.05981036717990589
+   }
+  }
+ }
+}

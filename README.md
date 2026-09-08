@@ -423,7 +423,8 @@ So there is a second, private tier — not linked from the app, writing to a git
 
 ```bash
 python scripts/refresh_listings.py --market ID     # once, then when it goes stale
-python scripts/scan_market.py --market ID --deepen 45 --hold BBCA,TLKM
+python scripts/calibrate_tape.py                   # measures the tape baselines
+python scripts/scan_market.py --market ID --deepen all --hold BBCA,TLKM
 ```
 
 **The universe is fetched, not remembered.** `universes.py` refuses to ship an S&P 500 list
@@ -433,18 +434,63 @@ list comes from the provider's own equity screener, is written to disk with the 
 taken, and every report prints how many days old it is.
 
 **The funnel narrows in a deliberate order.** Universe → batched price history → **the
-turnover floor** → cross-sectional rank → four lenses on a shortlist → verdict. Tradeability
+turnover floor** → cross-sectional rank → four lenses and the share register on a shortlist →
+verdict. Tradeability
 is filtered *second*, not last, and that placement is the single most consequential decision
 in the scanner: most of IDX cannot absorb a personal order, thin names carry the most extreme
 percentiles on every price signal, and a scan that ranked first would spend its whole
 fundamentals budget on names it was about to discard. On a real sweep, **837 listed → 243
 tradeable**.
 
-**The score is two family scores, not five component scores.** Price rank, long-horizon trend
-and order flow are one weighted mean; value and accounting quality are another. The two are
-then weighted *equally*, because four lenses over two bodies of data are not four opinions —
-the same argument `explain._family_votes` has made since it shipped. Averaging all five would
-hand the price record three votes to the filings' two purely because it is cheaper to compute.
+**The score is three family scores, not eight component scores.** Price rank, long-horizon
+trend, order flow and the tape reading are one weighted mean; value and accounting quality
+are another; free float and share-count trend are a third. The three are then weighted
+*equally*, because eight measurements over three bodies of data are not eight opinions — the
+same argument `explain._family_votes` has made since it shipped. Averaging all eight would
+hand the price record four votes to the filings' two purely because price signals are cheaper
+to compute. A family that read only half its evidence casts only half a vote.
+
+**A third body of data: the share register.** The app's cross-check always rested on price
+and filings sharing no inputs. The register is neither — who holds the shares, how little of
+the company is actually for sale, and whether the count of shares keeps going up. On IDX the
+median listing is **68% insider-held**, and a 9% free float is a different instrument from a
+60% one: the quoted price is what a handful of holders agree it is, and the turnover floor
+does not catch it because a thin float still prints respectable volume on its excited days.
+Share issuance is the other half — rights issues are routine on IDX, and nothing else in this
+app would notice a company that doubled its share count in three years. Both are gates as
+well as components: under 8% free float, or over 25% a year of issuance, caps the action at
+hold whatever the score.
+
+The independence claim for this third family is deliberately narrower than for the first two
+— the share count *is* printed in the filings, and what is true is only that no filings lens
+reads it. So it is measured rather than asserted: every scan reports the realised rank
+correlation between the three families. On a real IDX30 sweep they read **+0.07 to +0.10**
+against each other, which is what the equal weighting assumes and what this measurement
+exists to check.
+
+**Bandarmology, and what it actually needs.** The Indonesian practice reads the exchange's
+**broker summary** — which broker codes net-bought today, and how much was foreign. That
+file *is* the method, it sits behind a bot check, and no provider this app can reach
+redistributes it. So `tape.py` does not claim to do bandarmology. It computes the OHLCV
+shadow of the one question that survives the missing data: *on the days when the most shares
+changed hands, who finished in control?* A session's close inside its own high-low range says
+who won it; averaged over a year's heaviest sessions and compared against its ordinary ones,
+it says whether size arrives to buy or to sell. It cannot say who, and every surface that
+renders it says so.
+
+It is also *measured*, and the measurement is the interesting part. Tested against each
+market's own median — not against zero, which called the median stock an accumulation
+candidate until `scripts/calibrate_tape.py` existed — the test fires on **13.3% of 188
+Indonesian listings** against 5% expected by chance, and on **4.2% of 120 US large caps**,
+which *is* chance. This is an emerging-market phenomenon, exactly the shape you would expect
+if thin books let one operator leave a footprint and deep ones do not. Two consequences ship
+with it: on US listings the component is measuring nothing and says so, and even on IDX
+roughly two in five hits are false positives — a count the scan prints against the count
+chance predicts.
+
+Volume concentration rides along and deliberately **never scores**. A stock that traded a
+quarter of its year in five sessions is not thereby good or bad, it is unsizeable — so it
+gates rather than costing points.
 
 **Then it is shrunk toward 50 by how much evidence there actually was.** Families that
 disagree, a family that never read, components that were missing — each pulls the result
@@ -463,13 +509,13 @@ multiple testing. That paragraph is the first and largest block on the page, abo
 because the table means something different depending on it. Where the artifact is missing
 the warning gets *louder*, not quieter.
 
-Click any row in the HTML report for the arithmetic: five components with their evidence
-grades, both family readings, the shrinkage, every pre-trade flag with its measured firing
-rate, and every gate. A score with no decomposition cannot be argued with, which is exactly
+Click any row in the HTML report for the arithmetic: eight components with their evidence
+grades, all three family readings and how much of a vote each one earned, the shrinkage,
+every pre-trade flag with its measured firing rate, and every gate. A score with no decomposition cannot be argued with, which is exactly
 why `technical.long_term_view` refuses to ship one.
 
-`GET /api/verdict?ticker=BBCA&market=ID` does the same for a single name in about eight
-seconds. **The published single-company view is untouched** — `/api/confluence` has no score
+`GET /api/verdict?ticker=BBCA&market=ID` does the same for a single name in about ten
+seconds, and the **Score it** tab renders it. **The published single-company view is untouched** — `/api/confluence` has no score
 and no ordering, and `tests/test_verdict.py` asserts by AST that neither `explain` nor
 `pretrade` can import the scoring module at all.
 
@@ -560,7 +606,15 @@ scripts/
                       Do the four lenses actually carry separate
                       information? The measurement behind the rail's
                       "two independent sources"
-tests/        1,100 offline tests
+  refresh_listings.py Fetches the whole-market universe — dated, from a
+                      source that maintains one, never recited
+  calibrate_tape.py   The per-market baselines the heavy-session test is
+                      tested against, and the firing rate that says
+                      whether the signal exists in that market at all
+  scan_market.py      The private scanner: sweep a market, score every
+                      tradeable name, write a report
+  render_scan.py      That report as one self-contained HTML file
+tests/        1,300 offline tests
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -595,7 +649,7 @@ Interactive docs at `/api/docs`.
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
 | `GET /api/rank/universes` | The predefined lists and the fetched whole-market lists, each with its as-of date |
-| `GET /api/verdict` | **The private scanner's score and action for one name** — five components, both families, the shrinkage, the gates, and the null result that calibrates all of it |
+| `GET /api/verdict` | **The private scanner's score and action for one name** — eight components across three families, the tape reading with its market-wide firing rate, the share register, the shrinkage, the gates, and the null result that calibrates all of it |
 | `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. The one POST, and the one `no-store` |
 | `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
 | `GET /api/rank/deepen` | Quality + valuation for a shortlist of up to 8 |
@@ -671,6 +725,15 @@ for every name in four universes, which is why it is a script rather than a requ
 
 ```bash
 .venv/bin/python scripts/measure_lens_agreement.py
+```
+
+The tape reading has no null to test against until its baselines are measured, and without
+one it reports no direction at all rather than guessing. Re-run it after changing the heavy
+threshold, the window, or the statistic itself — and read the output, because the firing rate
+it prints is the honest answer to whether the signal exists in that market:
+
+```bash
+.venv/bin/python scripts/calibrate_tape.py
 ```
 
 The field manual's glossary is generated, so regenerate it after touching the explanation

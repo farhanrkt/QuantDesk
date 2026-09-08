@@ -1,10 +1,13 @@
 "use client";
 
-import { AlertTriangle, Gauge, Lock, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Gauge, Lock, ShieldAlert, Users, Waves } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import { TONE_FIELD, TONE_HEX } from "@/components/ui/explain";
-import type { Engine, VerdictComponent, VerdictResponse } from "@/lib/types";
+import type {
+  Engine, TapeCalibration, VerdictComponent, VerdictRegister, VerdictResponse,
+  VerdictTape,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,7 +43,8 @@ import { cn } from "@/lib/utils";
  */
 
 const ACTION_NOTE: Record<string, string> = {
-  STRONG_BUY: "Both bodies of data read constructively and every component was available.",
+  STRONG_BUY: "At least two independent bodies of data read constructively, none "
+    + "contradicted them, and the components were substantially complete.",
   BUY: "The evidence leans constructive, with something missing or something disagreeing.",
   HOLD: "Nothing here argues strongly either way once the gaps are accounted for.",
   REDUCE: "The evidence leans against it.",
@@ -51,6 +55,15 @@ const ACTION_NOTE: Record<string, string> = {
 const FAMILY_WORD: Record<string, string> = {
   price: "price and volume",
   filings: "the filings",
+  register: "the share register",
+};
+
+// Identity, never judgement — the same rule the lens hues follow. A family is
+// its colour whether its reading is excellent or terrible.
+const FAMILY_HUE: Record<string, string> = {
+  price: "#6B9BFF",
+  filings: "#E8B44C",
+  register: "#A78BFA",
 };
 
 /** Ends a server-supplied clause so it can be followed by another sentence. */
@@ -61,7 +74,7 @@ function sentence(text: string | null): string {
 }
 
 function ComponentRow({ item }: { item: VerdictComponent }) {
-  const hue = item.family === "price" ? "#6B9BFF" : "#E8B44C";
+  const hue = FAMILY_HUE[item.family] ?? "#8496A9";
   return (
     <div className="border-t border-ruleSoft py-3 first:border-t-0">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -97,6 +110,100 @@ function ComponentRow({ item }: { item: VerdictComponent }) {
           </span>
         )}
       </p>
+    </div>
+  );
+}
+
+/**
+ * The heavy-session reading, and the three things it is not.
+ *
+ * THE REFUSAL IS THE POINT OF THIS BLOCK. The reader asked for bandarmology and
+ * this is not bandarmology: the method is defined by the exchange's broker
+ * summary, which names the accumulating desk and splits foreign from domestic,
+ * and no provider this app can reach carries it. What renders here is the OHLCV
+ * shadow of one question that method asks. Saying so in the panel rather than
+ * only in a docstring is the difference between a tool that is honest and one
+ * that is honest where nobody looks.
+ *
+ * The market-wide firing rate renders beside the verdict for the same reason
+ * the backtest null renders above the score: on US listings the test fires at
+ * chance, so a US accumulation reading means nothing, and a reader must not
+ * have to go looking for that.
+ */
+function TapeReading({ tape, calibration }: {
+  tape: VerdictTape;
+  calibration: TapeCalibration | null;
+}) {
+  const concentration = tape.concentration;
+  const chanceRate = tape.alpha ?? 0.05;
+  const measured = calibration?.significantShare ?? null;
+  const atChance = measured !== null && measured <= chanceRate * 1.5;
+
+  return (
+    <div>
+      <div className="eyebrow mb-1 flex items-center gap-1.5">
+        <Waves aria-hidden className="h-3 w-3" /> Who wins the heavy days
+      </div>
+      <p className="prose-col text-meta leading-relaxed text-ash">{tape.reading}</p>
+
+      {concentration?.available && concentration.topFiveShare !== null && (
+        <p className="prose-col mt-1.5 text-meta leading-relaxed text-ash">
+          {(concentration.topFiveShare * 100).toFixed(0)}% of the year&rsquo;s volume
+          traded on its five biggest sessions
+          {concentration.effectiveDays !== null &&
+            `, making the window worth about ${concentration.effectiveDays.toFixed(0)} sessions of even trading`}
+          . Reported and never scored: a year that happened in five sessions is not
+          thereby good or bad, it is unsizeable.
+        </p>
+      )}
+
+      {measured !== null && (
+        <p className={cn("prose-col mt-1.5 text-meta leading-relaxed",
+                         atChance ? "text-warn" : "text-faint")}>
+          Across {calibration?.names} names in {calibration?.population}, this test fires
+          on {(measured * 100).toFixed(0)}% against {(chanceRate * 100).toFixed(0)}%
+          expected by chance
+          {atChance
+            ? " — which is chance. In this market the reading above is measuring nothing, and no accumulation verdict should be taken from it."
+            : ` — so roughly ${Math.max(0, Math.round((1 - chanceRate / measured) * 100))}% of the names that fire are real and the rest are noise, with no way to tell which is which.`}
+        </p>
+      )}
+
+      <p className="prose-col mt-1.5 text-meta leading-relaxed text-faint">
+        {tape.missing}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * The share register: how much is actually for sale, and whether the count of
+ * shares keeps going up.
+ *
+ * Institutional ownership renders here and never as a component. "Somebody
+ * professional owns this" is an argument from authority, and the holders are
+ * mostly index funds with no view on the company at all.
+ */
+function RegisterReading({ register }: { register: VerdictRegister }) {
+  const institutions = register.institutions;
+
+  return (
+    <div>
+      <div className="eyebrow mb-1 flex items-center gap-1.5">
+        <Users aria-hidden className="h-3 w-3" /> The share register
+      </div>
+      <p className="prose-col text-meta leading-relaxed text-ash">{register.reading}</p>
+
+      {/* The turnover sentence lives in `register.reading`, which the server
+          assembles. Repeating it here printed it twice on every name that had
+          one — the same duplication the reasons list already had to drop. */}
+      {institutions && institutions.percentHeld !== null && (
+        <p className="prose-col mt-1.5 text-meta leading-relaxed text-faint">
+          {(institutions.percentHeld * 100).toFixed(1)}% sits with
+          {institutions.count !== null ? ` ${institutions.count.toFixed(0)}` : ""}{" "}
+          institutions. {institutions.note}
+        </p>
+      )}
     </div>
   );
 }
@@ -330,6 +437,10 @@ export function VerdictPanel({
               </p>
             </div>
           )}
+
+          {data.tape?.available && <TapeReading tape={data.tape}
+                                                calibration={data.tapeCalibration} />}
+          {data.register?.available && <RegisterReading register={data.register} />}
 
           <Explainer summary="Every reason, in order of how much it moved the score">
             <ul className="list-disc space-y-1.5 pl-4">

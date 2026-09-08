@@ -1103,6 +1103,100 @@ export interface VerdictFamily {
   side: number;
   members: string[];
   weight: number;
+  /** Share of this family's intended evidence that actually read. */
+  coverage: number;
+  /** How much of a whole vote it casts. Its own coverage, floored. */
+  vote: number;
+}
+
+/** The heavy-session reading — the readable shadow of bandarmology. */
+export interface VerdictTape {
+  available: boolean;
+  reason?: string;
+  direction?: "accumulation" | "distribution" | "unreadable";
+  score?: number;
+  /** Mean close-location gap between heavy and ordinary sessions. */
+  lift?: number;
+  /** The market's own median lift — the null this is tested against. */
+  liftBaseline?: number;
+  excessLift?: number;
+  tStat?: number | null;
+  pValue?: number | null;
+  significant?: boolean;
+  alpha?: number;
+  /** False when this market has no measured baseline. No direction is reported. */
+  calibrated?: boolean;
+  market?: string | null;
+  measuredOn?: string | null;
+  heavySessions?: number;
+  ordinarySessions?: number;
+  wick?: number | null;
+  spanRatio?: number | null;
+  concentration?: {
+    available: boolean;
+    topFiveShare: number | null;
+    effectiveDays: number | null;
+    sessions: number;
+    band?: string | null;
+    caution?: number | null;
+    severe?: number | null;
+    calibrated?: boolean;
+  };
+  reading?: string;
+  /** What a broker summary would settle and this cannot. Always rendered. */
+  missing?: string;
+}
+
+/** The share register — ownership concentration and share count. */
+export interface VerdictRegister {
+  available: boolean;
+  reason?: string;
+  float?: {
+    available: boolean;
+    reason?: string;
+    freeFloat?: number;
+    insidersHeld?: number;
+    band?: string;
+    score?: number;
+    reading?: string;
+    institutionsHeld?: number | null;
+    institutionsCount?: number | null;
+  };
+  issuance?: {
+    available: boolean;
+    reason?: string;
+    annualised?: number | null;
+    total?: number | null;
+    years?: number;
+    observations?: number;
+    largestStep?: number | null;
+    largestStepAt?: string | null;
+    band?: string;
+    score?: number;
+    reading?: string;
+  };
+  floatShares?: number | null;
+  sharesOutstanding?: number | null;
+  floatTurnover?: number | null;
+  daysToTradeFloat?: number | null;
+  reading?: string;
+  /** Reported and deliberately never scored. */
+  institutions?: { percentHeld: number | null; count: number | null; note: string };
+}
+
+/** One market's measured tape baselines, from `tape_calibration.json`. */
+export interface TapeCalibration {
+  names: number;
+  population: string;
+  measuredOn: string;
+  liftMedian: number;
+  liftSd: number;
+  wickSd: number | null;
+  /** Share of this market where the test fires. Compare against `alpha`. */
+  significantShare: number | null;
+  significantCount: number;
+  tested: number;
+  concentration: { caution: number | null; severe: number | null; median: number | null };
 }
 
 export interface VerdictGate {
@@ -1143,7 +1237,16 @@ export interface VerdictResponse {
   componentsRead: number;
   componentsTotal: number;
   components: VerdictComponent[];
-  families: { price: VerdictFamily | null; filings: VerdictFamily | null };
+  families: {
+    price: VerdictFamily | null;
+    filings: VerdictFamily | null;
+    /** The third body of data: who holds it and how many shares there are. */
+    register: VerdictFamily | null;
+  };
+  tape: VerdictTape | null;
+  register: VerdictRegister | null;
+  /** Null where this market has never been calibrated. */
+  tapeCalibration: TapeCalibration | null;
   agreement: { state: string; shrink: number; conviction: string; text: string };
   shrink: { agreement: number; coverage: number; combined: number; text: string };
   penalties: VerdictPenalty[];

@@ -94,6 +94,51 @@ def quality(applicable=True, score=8, altman="safe", beneish="clean",
     })
 
 
+def tape_payload(direction="accumulation", score=80.0, top_five=0.10,
+                 band="ordinary", calibrated=True, available=True):
+    """A `tape.read` payload. Built by hand rather than by running the module so
+    the verdict's handling of each state is testable without market data."""
+    if not available:
+        return {"available": False, "reason": "not enough sessions"}
+    return {
+        "available": True, "direction": direction, "score": score,
+        "calibrated": calibrated, "significant": direction != "unreadable",
+        "lift": 0.30, "excessLift": 0.23, "tStat": 3.1, "pValue": 0.002,
+        "reading": "On its heaviest sessions it closed nearer the high.",
+        "concentration": {"available": True, "topFiveShare": top_five,
+                          "effectiveDays": 120.0, "band": band, "severe": 0.36,
+                          "caution": 0.21, "calibrated": True, "sessions": 252},
+    }
+
+
+# The DEFAULT register is deliberately constructive — a wide float and a small
+# buyback — so that `scored()` produces the all-three-families-agree case. A
+# fixture whose default lands in the neutral band would make the strongest
+# branch of `_agreement` unreachable from most tests, which is how the branch
+# that matters most ends up untested.
+def register_payload(free=0.55, annualised=-0.06, observations=20, band="retiring",
+                     available=True, float_ok=True, issuance_ok=True):
+    """An `ownership.read` payload."""
+    if not available:
+        return {"available": False, "reason": "no register data"}
+    floats = ({"available": True, "freeFloat": free, "insidersHeld": 1 - free,
+               "band": ("critical" if free < 0.08 else "tight" if free < 0.20
+                        else "moderate" if free < 0.40 else "comfortable"),
+               "score": 50.0 + (free - 0.30) * 100.0,
+               "reading": f"{free * 100:.0f}% outside insider hands.",
+               "institutionsHeld": 0.1, "institutionsCount": 40}
+              if float_ok else {"available": False, "reason": "no float figure"})
+    issued = ({"available": True, "annualised": annualised, "years": 3.0,
+               "observations": observations, "band": band, "largestStep": 0.02,
+               "largestStepAt": None, "score": 50.0 - annualised * 128.0,
+               "reading": f"Share count {annualised * 100:+.0f}% a year."}
+              if issuance_ok else {"available": False, "reason": "no share history"})
+    return {"available": True, "float": floats, "issuance": issued,
+            "floatTurnover": 0.004, "floatShares": 1e9,
+            "reading": "register reading",
+            "institutions": {"percentHeld": 0.1, "count": 40, "note": "context"}}
+
+
 def legs(**overrides):
     base = {"anomaly": anomaly(), "technical": technical(),
             "valuation": valuation(), "quality": quality()}
@@ -114,7 +159,8 @@ def liquid(turnover=5.0e10):
 def scored(**kwargs):
     """A fully specified, tradeable, everything-available call."""
     payload = {"legs": legs(), "rank_row": rank_row(), "liquidity": liquid(),
-               "market": "ID", "latest_close": 1000.0, "annual_volatility": 0.30}
+               "market": "ID", "latest_close": 1000.0, "annual_volatility": 0.30,
+               "tape_result": tape_payload(), "register_result": register_payload()}
     payload.update(kwargs)
     return V.score("T.JK", **payload)
 
@@ -194,7 +240,20 @@ def test_a_family_with_no_readable_component_is_absent_not_neutral():
     result = scored(legs=legs(valuation=leg(None, ok=False),
                               quality=leg(None, ok=False)))
     assert result["families"]["filings"] is None
+    # Still cross-checked: the register is a third body of data and survived.
+    # An absent family is absent, never a neutral 50 averaged in.
+    assert result["families"]["price"] is not None
+    assert result["families"]["register"] is not None
+    assert result["agreement"]["state"] != "single"
+
+
+def test_only_one_surviving_family_is_reported_as_no_cross_check():
+    result = scored(legs=legs(valuation=leg(None, ok=False),
+                              quality=leg(None, ok=False)),
+                    register_result=register_payload(available=False))
     assert result["agreement"]["state"] == "single"
+    assert result["crossChecked"] is False
+    assert "one body of data" in result["agreement"]["text"]
 
 
 # ============================================================================ #
@@ -290,7 +349,8 @@ def test_a_name_resting_on_the_tick_floor_is_gated():
 
 
 def test_one_lens_is_not_a_composite():
-    result = scored(legs={"anomaly": anomaly()}, rank_row=None)
+    result = scored(legs={"anomaly": anomaly()}, rank_row=None,
+                    tape_result=None, register_result=None)
     assert result["action"] == "NO_ACTION"
     assert any(gate["id"] == "insufficientEvidence" for gate in result["gates"])
 
@@ -324,15 +384,28 @@ def test_disagreeing_families_are_pulled_harder_toward_neutral_than_agreeing_one
                                     quality=quality(score=1)))
     assert agreeing["agreement"]["state"] == "agree"
     assert disagreeing["agreement"]["state"] == "disagree"
+    assert disagreeing["conviction"] == "low"
     assert disagreeing["shrink"]["agreement"] < agreeing["shrink"]["agreement"]
     assert abs(disagreeing["shrunkScore"] - 50) < abs(agreeing["shrunkScore"] - 50)
 
 
 def test_a_single_family_cannot_reach_high_conviction():
     result = scored(legs=legs(valuation=leg(None, ok=False),
-                              quality=leg(None, ok=False)))
+                              quality=leg(None, ok=False)),
+                    register_result=register_payload(available=False))
     assert result["conviction"] == "low"
     assert result["action"] != "STRONG_BUY"
+
+
+def test_one_family_dissenting_is_a_disagreement_and_not_an_outvoted_minority():
+    """Three families do not vote. The whole argument for combining independent
+    sources is that a dissent from one of them is information; treating it as a
+    minority to be outvoted throws away the only thing the third source added."""
+    result = scored(register_result=register_payload(free=0.45, annualised=0.30,
+                                                     band="severe"))
+    assert result["families"]["register"]["side"] == -1
+    assert result["agreement"]["state"] == "disagree"
+    assert result["conviction"] == "low"
 
 
 def test_strong_buy_requires_high_conviction_as_well_as_the_score():
@@ -357,14 +430,30 @@ def test_shrinkage_never_flips_the_side_of_the_score():
         assert abs(shrunk - 50) <= abs(raw - 50) + 1e-9
 
 
-def test_the_two_families_are_weighted_equally_not_by_component_count():
-    """Three price components and two filings ones are still two bodies of data.
-    Letting the count decide would give the price record more say purely because
-    it is cheaper to compute."""
+def test_each_body_of_data_gets_one_vote_not_one_vote_per_component():
+    """Four price components, two filings ones and two register ones are still
+    three bodies of data. Letting the count decide would give the price record
+    most of the say purely because price signals are cheaper to compute."""
     result = scored()
-    price = result["families"]["price"]["score"]
-    filings = result["families"]["filings"]["score"]
-    assert result["rawScore"] == pytest.approx((price + filings) / 2, abs=0.06)
+    families = [f for f in result["families"].values() if f is not None]
+    assert len(families) == 3
+    assert all(f["vote"] == 1.0 for f in families), (
+        "every family read in full here, so every family should hold a whole vote")
+    expected = sum(f["score"] for f in families) / len(families)
+    assert result["rawScore"] == pytest.approx(expected, abs=0.06)
+
+
+def test_a_half_read_family_casts_less_than_a_whole_vote():
+    """A family reporting on half the evidence it was supposed to bring is
+    making half a claim. This is COVERAGE, not the component count: the floor
+    stops a thin family vanishing, and a one-component family that read fully
+    still votes in full."""
+    full = scored()
+    thin = scored(register_result=register_payload(issuance_ok=True, float_ok=False))
+
+    assert full["families"]["register"]["vote"] == 1.0
+    assert thin["families"]["register"]["vote"] < 1.0
+    assert thin["families"]["register"]["vote"] >= V.MIN_FAMILY_VOTE
 
 
 # ============================================================================ #
@@ -470,3 +559,142 @@ def test_sizing_is_not_computed_for_anything_outside_the_buy_bands():
                                               regime="distribution")))
     assert result["action"] in {"AVOID", "REDUCE"}
     assert result["sizing"]["applicable"] is False
+
+
+# ============================================================================ #
+# The tape component — the bandarmology proxy, and what it refuses to claim
+# ============================================================================ #
+def test_an_unreadable_tape_is_a_reading_and_not_a_gap():
+    """"Unreadable" means the test ran and the answer was ordinary. That is a
+    measurement. Treating it as unavailable would remove its weight from the
+    blend and quietly reward every name the test found nothing in."""
+    result = scored(tape_result=tape_payload(direction="unreadable", score=48.0))
+    component = next(c for c in result["components"] if c["key"] == "tape")
+    assert component["available"] is True
+    assert component["score"] == 48.0
+
+
+def test_an_uncalibrated_market_contributes_no_tape_component_at_all():
+    """A direction computed against the wrong null is worse than no direction.
+    The median listing has a positive heavy-day lift, so testing against zero
+    calls the median stock an accumulation candidate — the bug the calibration
+    artifact exists to remove. Without a baseline, the component is absent."""
+    result = scored(tape_result=tape_payload(calibrated=False))
+    component = next(c for c in result["components"] if c["key"] == "tape")
+    assert component["available"] is False
+    assert component["effectiveWeight"] == 0.0
+    assert "baseline" in component["reason"]
+
+
+def test_the_tape_lives_in_the_price_family_because_it_reads_price_and_volume():
+    """It must not become a fourth body of data. It reads the same two series
+    `whale.py` and `accumulation.py` read, and filing it separately would let
+    one dataset cast two votes — the exact double-count the family split
+    exists to prevent."""
+    assert V.COMPONENT_BY_KEY["tape"]["family"] == "price"
+    assert V.COMPONENT_BY_KEY["tape"]["evidence"] == "weak"
+
+
+def test_volume_concentration_gates_but_never_scores():
+    """It is not directional. A stock whose year happened in five sessions is
+    not thereby good or bad, it is unsizeable — which is a gate, not points."""
+    ordinary = scored(tape_result=tape_payload(top_five=0.10, band="ordinary"))
+    episodic = scored(tape_result=tape_payload(top_five=0.55, band="severe"))
+
+    assert ordinary["score"] == episodic["score"], (
+        "concentration moved the score; it is not a directional quantity")
+    assert any(g["id"] == "episodicVolume" for g in episodic["gates"])
+    assert episodic["action"] in {"HOLD", "REDUCE", "AVOID"}
+
+
+# ============================================================================ #
+# The register — the third body of data
+# ============================================================================ #
+def test_the_register_is_its_own_family_and_not_a_fifth_lens():
+    for key in ("float", "issuance"):
+        assert V.COMPONENT_BY_KEY[key]["family"] == "register"
+    assert set(V.FAMILIES) == {"price", "filings", "register"}
+
+
+def test_dilution_scores_worse_than_a_buyback():
+    diluting = scored(register_result=register_payload(annualised=0.20, band="material"))
+    retiring = scored(register_result=register_payload(annualised=-0.20, band="retiring"))
+    assert diluting["score"] < retiring["score"]
+
+
+def test_heavy_issuance_gates_at_hold_however_good_the_rest_is():
+    result = scored(rank_row=rank_row(composite=99.0),
+                    register_result=register_payload(annualised=0.40, band="severe"))
+    assert any(g["id"] == "heavyIssuance" for g in result["gates"])
+    assert result["action"] not in {"BUY", "STRONG_BUY"}
+
+
+def test_a_micro_float_gates_at_hold_rather_than_being_refused():
+    """It describes the instrument, not the business. Refusing outright would
+    say something about the company that the float does not support."""
+    result = scored(rank_row=rank_row(composite=99.0),
+                    register_result=register_payload(free=0.05))
+    gate = next(g for g in result["gates"] if g["id"] == "microFloat")
+    assert gate["action"] == "HOLD"
+    assert result["action"] not in {"BUY", "STRONG_BUY"}
+    assert result["score"] is not None, "the score stays visible under a gate"
+
+
+def test_half_a_register_still_reads_rather_than_being_discarded():
+    """One half is enough for a reading; the missing half becomes coverage,
+    never an imputed 50."""
+    result = scored(register_result=register_payload(issuance_ok=False))
+    float_component = next(c for c in result["components"] if c["key"] == "float")
+    issuance_component = next(c for c in result["components"] if c["key"] == "issuance")
+    assert float_component["available"] is True
+    assert issuance_component["available"] is False
+    assert result["families"]["register"] is not None
+
+
+def test_a_thinly_reported_share_count_bends_its_weight_not_its_score():
+    """A three-year trend read from four filing dates is a weaker version of the
+    same statement, not a different statement. Renormalising the score instead
+    would move a thinly reported name toward the middle and call it a finding."""
+    thin = scored(register_result=register_payload(observations=4))
+    thick = scored(register_result=register_payload(observations=30))
+    thin_component = next(c for c in thin["components"] if c["key"] == "issuance")
+    thick_component = next(c for c in thick["components"] if c["key"] == "issuance")
+
+    assert thin_component["score"] == thick_component["score"]
+    assert thin_component["effectiveWeight"] < thick_component["effectiveWeight"]
+
+
+def test_institutional_ownership_is_never_a_component():
+    """"Somebody professional owns this" is an argument from authority, and the
+    holders are mostly index funds with no view. It renders as context."""
+    assert "institutions" not in V.COMPONENT_BY_KEY
+    assert not any("institution" in c["key"].lower() for c in V.COMPONENTS)
+
+
+def test_a_silent_family_neither_supports_nor_blocks_high_conviction():
+    """The bar is TWO INDEPENDENT SOURCES ACTIVELY AGREEING, not unanimity.
+
+    The share register reads neutral for the median listing by construction — an
+    ordinary float and a flat share count is what most companies have. Requiring
+    all three families to take a direction made high conviction unreachable: on a
+    real IDX30 sweep it fell to zero of twenty-nine names, and nothing in the
+    output said why. A source with nothing to say abstains; it does not dissent.
+    """
+    silent = scored(register_result=register_payload(free=0.30, annualised=0.0,
+                                                     band="flat"))
+    assert silent["families"]["register"]["side"] == 0
+    assert silent["agreement"]["state"] == "agree"
+    assert silent["conviction"] == "high"
+    assert "unremarkable" in silent["agreement"]["text"]
+
+
+def test_one_lone_directional_family_is_still_only_medium_conviction():
+    """Two agreeing sources is the bar. One source and two abstentions is not a
+    cross-check, whatever the score."""
+    result = scored(
+        legs=legs(valuation=valuation(prob=0.50, verdict_word="FAIRLY VALUED"),
+                  quality=quality(score=5, altman="grey")),
+        register_result=register_payload(free=0.30, annualised=0.0, band="flat"))
+    if result["agreement"]["state"] == "oneNeutral":
+        assert result["conviction"] == "medium"
+        assert result["action"] != "STRONG_BUY"

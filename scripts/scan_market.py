@@ -76,8 +76,8 @@ sys.path.insert(0, str(ROOT / "api"))
 import numpy as np                                                  # noqa: E402
 import pandas as pd                                                 # noqa: E402
 
-from _lib import (listings, market_data, microstructure, pretrade,   # noqa: E402
-                  ranking, symbols, universes, verdict)
+from _lib import (listings, market_data, microstructure, ownership,  # noqa: E402
+                  pretrade, ranking, symbols, tape, universes, verdict)
 from _lib.jsonsafe import clean                                      # noqa: E402
 
 # The four lens payloads are imported from the route module rather than
@@ -198,9 +198,14 @@ def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
         "valuation": leg(lambda: valuation_payload(
             symbol, **_valuation_kwargs(market=market))),
         "quality": leg(lambda: quality_payload(symbol)),
+        # The share register is the third body of data and it is fetched here
+        # rather than beside the price batch because, like the filings, it is one
+        # call per symbol and does not batch. It is cached with the four lenses
+        # for the same reason: it moves on a filing cycle, not intraday.
+        "register": leg(lambda: market_data.share_register(symbol)),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(clean(legs)))
+    path.write_text(json.dumps(clean(legs), default=str))
     return legs
 
 
@@ -295,8 +300,8 @@ def run(args) -> dict:
         + [h for h in held if h in rows_by_ticker]))
     missing_holdings = [h for h in held if h not in rows_by_ticker]
 
-    say(f"\nDeepening {len(shortlist)} names with the four lenses "
-        f"({args.workers} at a time). This is the slow part.")
+    say(f"\nDeepening {len(shortlist)} names with the four lenses and the share "
+        f"register ({args.workers} at a time). This is the slow part.")
     if missing_holdings:
         say(f"  NOTE: {', '.join(missing_holdings)} could not be deepened — not in the "
             f"tradeable ranked set. See the report's rejected list for why.")
@@ -315,14 +320,21 @@ def run(args) -> dict:
                 legs_by_ticker[symbol] = {}
                 say(f"  [{done}/{len(shortlist)}] {symbol} FAILED: {exc}")
                 continue
-            ok_count = sum(1 for leg in legs_by_ticker[symbol].values()
+            fetched = legs_by_ticker[symbol]
+            ok_count = sum(1 for leg in fetched.values()
                            if isinstance(leg, dict) and leg.get("ok"))
-            say(f"  [{done}/{len(shortlist)}] {symbol}: {ok_count}/4 lenses")
+            # LEGS, NOT LENSES. There are five now — the four lenses plus the
+            # share register — and the denominator is taken from what was
+            # actually fetched rather than written as a literal, which is how
+            # this line came to read "5/4 lenses" the day the register landed.
+            say(f"  [{done}/{len(shortlist)}] {symbol}: {ok_count}/{len(fetched)} legs")
 
     # --- verdicts -----------------------------------------------------------
     say("\nScoring ...")
     names = provenance_universe.get("names") or {}
     verdicts = []
+    tape_fired = 0
+    tape_tested = 0
     for symbol in shortlist:
         row = rows_by_ticker.get(symbol)
         legs = legs_by_ticker.get(symbol) or {}
@@ -330,6 +342,26 @@ def run(args) -> dict:
         liquidity = microstructure.liquidity_profile(frame, window=TURNOVER_WINDOW)
         checks = pretrade.assess(legs, market=symbols.market_of(symbol))
         volatility = ((row or {}).get("signals", {}).get("lowVolatility", {}) or {}).get("raw")
+
+        # THE TAPE READS THE BATCHED FRAME, not a second download. It is the one
+        # new component that costs nothing per name: the price history is already
+        # in memory from step 2, so a whole-market tape reading is free where a
+        # whole-market fundamentals reading is minutes.
+        tape_result = tape.read(frame, market_code=symbols.market_of(symbol))
+        if tape_result.get("available") and tape_result.get("calibrated"):
+            tape_tested += 1
+            tape_fired += int(bool(tape_result.get("significant")))
+
+        register_leg = legs.get("register") or {}
+        register_raw = register_leg.get("data") if register_leg.get("ok") else None
+        # No share count is passed: `ownership.read` takes the last observation
+        # from the register's own history, which is the same number from the
+        # same fetch. Asking the company cache for it here would be one extra
+        # request per name, past that cache's eviction bound.
+        register_result = ownership.read(
+            register_raw,
+            median_volume=float(frame["Volume"].tail(TURNOVER_WINDOW).median()))
+
         result = verdict.score(
             symbol,
             legs=legs,
@@ -343,9 +375,13 @@ def run(args) -> dict:
             risk_budget=args.risk_budget,
             max_weight=args.max_weight,
             turnover_floor=floor,
+            tape_result=tape_result,
+            register_result=register_result,
         )
         result["rank"] = (row or {}).get("rank")
         result["held"] = symbol in held
+        result["tape"] = tape_result
+        result["register"] = register_result
         result["preTrade"] = {"flags": len(checks.get("flags") or []),
                               "baseConditions": len(checks.get("baseConditions") or []),
                               "notChecked": len(checks.get("notChecked") or [])}
@@ -379,6 +415,26 @@ def run(args) -> dict:
         },
         "provenance": verdict.provenance(),
         "signalOverlap": ranked["correlation"],
+        # WHETHER THE THREE FAMILIES ARE ACTUALLY THREE SOURCES. The score
+        # weights them equally on the argument that they read different data;
+        # this is the measurement that checks it rather than the assertion that
+        # assumes it. See `verdict.family_overlap`.
+        "familyOverlap": verdict.family_overlap(verdicts),
+        # How often the tape test fired against how often chance predicts it
+        # would. One name's p-value needs no correction; a scan of hundreds does,
+        # and this is the count that makes the correction legible.
+        "tapeSignificance": {
+            "tested": tape_tested,
+            "fired": tape_fired,
+            "expectedByChance": round(tape_tested * tape.ALPHA, 1),
+            "alpha": tape.ALPHA,
+            "note": (f"The heavy-session test fired on {tape_fired} of {tape_tested} "
+                     f"names against {tape_tested * tape.ALPHA:.1f} expected by chance "
+                     f"alone. The excess is the real signal; the rest are false "
+                     f"positives and there is no way to tell which is which."
+                     if tape_tested else
+                     "No name had a calibrated tape reading on this scan."),
+        },
         "verdicts": verdicts,
         "rejected": sorted(rejected, key=lambda r: r["why"]),
         "notDeepened": [

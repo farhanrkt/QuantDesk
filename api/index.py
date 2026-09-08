@@ -58,9 +58,9 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from _lib import (accumulation, eventstudy, explain, exposure, listings,
-                  market_data, microstructure, news, portfolio, pretrade, quality,
-                  ranking, riskmodel, symbols, technical, universes, valuation,
-                  verdict)
+                  market_data, microstructure, news, ownership, portfolio,
+                  pretrade, quality, ranking, riskmodel, symbols, tape,
+                  technical, universes, valuation, verdict)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -891,18 +891,42 @@ async def name_verdict(
     liquidity = None
     latest_close = None
     annual_volatility = None
+    tape_result = None
+    register_result = None
     technical_data = legs["technical"].get("data") if legs["technical"]["ok"] else None
     if technical_data:
         latest_close = (technical_data.get("latest") or {}).get("close")
     if row is not None:
         annual_volatility = ((row.get("signals") or {}).get("lowVolatility")
                              or {}).get("raw")
+
+    # TWO YEARS, NOT ONE. The liquidity profile only needs a few weeks, but the
+    # tape reading compares a year's heaviest sessions against its ordinary ones
+    # and `tape.MIN_BARS` wants 160 usable bars after the rolling volume
+    # baseline warms up. Fetching one year here and discovering the tape could
+    # not be read is a silent capability loss, not an error anybody would see.
+    frame = None
     try:
-        frame = market_data.ohlcv(symbol, period="1y")
+        frame = market_data.ohlcv(symbol, period="2y")
         liquidity = microstructure.liquidity_profile(frame)
         latest_close = latest_close or float(frame["Close"].iloc[-1])
     except Exception:
         liquidity = None
+
+    if frame is not None:
+        tape_result = tape.read(frame, market_code=symbols.market_of(symbol))
+
+    # The share register is the third body of data, and its own fetch. It is
+    # sequential rather than gathered with the four lenses for the reason the
+    # universe scan above is: this route already learned once what happens when
+    # a batched yfinance call runs beside the per-symbol ones.
+    try:
+        register_result = ownership.read(
+            await asyncio.to_thread(market_data.share_register, symbol),
+            median_volume=(float(frame["Volume"].tail(21).median())
+                           if frame is not None else None))
+    except Exception:
+        register_result = None
 
     checks = pretrade.assess(legs, market=symbols.market_of(symbol))
     scored = verdict.score(
@@ -914,12 +938,22 @@ async def name_verdict(
         name=listings.names_for(symbols.market_of(symbol)).get(symbol),
         annual_volatility=annual_volatility, latest_close=latest_close,
         risk_budget=risk_budget, max_weight=max_weight,
+        tape_result=tape_result, register_result=register_result,
     )
 
     return ok({
         **scored,
         "rank": (row or {}).get("rank"),
         "universe": universe_context,
+        # The full readings ride along beside the components that quote them, so
+        # a panel can show the test statistic and the share-count history rather
+        # than only the one-line summary the component carries.
+        "tape": tape_result,
+        "register": register_result,
+        # WHAT THE TAPE TEST IS WORTH IN THIS MARKET, beside its reading. On US
+        # listings the measured firing rate is chance, and a reader must not have
+        # to go looking for that.
+        "tapeCalibration": tape.calibration_for(symbols.market_of(symbol)),
         # THE NULL RESULT TRAVELS WITH THE SCORE, in the same response, so a
         # client cannot render one without having been handed the other.
         "provenance": verdict.provenance(),

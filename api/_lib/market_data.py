@@ -913,3 +913,194 @@ def listed_equities(market_code: str = "ID") -> list[dict]:
 
     return sorted(rows.values(),
                   key=lambda r: (r["marketCap"] is None, -(r["marketCap"] or 0.0)))
+
+
+# --------------------------------------------------------------------------- #
+# The share register — who holds it, and how many shares there are
+#
+# WHY THIS IS A SEPARATE FETCH FROM `company()`.
+#
+# `company()` returns the three financial statements plus a price, and every
+# caller of it wants all of that. The register is wanted by one component and is
+# four more endpoints, so folding it in would slow the confluence run for every
+# reader who never asks about ownership. Same cache shape, same locking, its own
+# key.
+#
+# WHAT IT IS FOR, AND THE HONEST NAME FOR IT.
+#
+# The Indonesian practice of `bandarmology` reads the exchange's BROKER SUMMARY:
+# which broker codes net-bought a stock today, and how much of that was foreign.
+# That file is what defines the method, and it is not obtainable here — the
+# exchange publishes it behind a bot check, and no provider this app can reach
+# redistributes it. Nothing in this module is broker summary data and nothing
+# downstream may imply that it is.
+#
+# What the register DOES give is the structural precondition the method looks
+# for. A stock cannot be walked by one operator unless the free float is small
+# enough to walk, and Yahoo reports the insider-held share for essentially every
+# IDX listing. Ownership concentration and the change in share count are also
+# genuinely absent from every existing lens: no price signal sees them, and none
+# of Piotroski, Altman, Beneish or the DCF reads a share count trend.
+# --------------------------------------------------------------------------- #
+_REGISTER_CACHE: dict[tuple[str, str], dict] = {}
+_REGISTER_GUARD = threading.Lock()
+_REGISTER_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+
+# How far back the share-count series is pulled. Four years covers three or four
+# annual reporting points on a listing that files them, which is the minimum for
+# "is this diluting" to be a trend rather than one observation.
+REGISTER_HISTORY_DAYS = 1460
+
+
+def _register_lock(key: tuple[str, str]) -> threading.Lock:
+    with _REGISTER_GUARD:
+        if len(_REGISTER_LOCKS) > 256 and key not in _REGISTER_LOCKS:
+            _REGISTER_LOCKS.clear()
+        return _REGISTER_LOCKS.setdefault(key, threading.Lock())
+
+
+def share_register(ticker: str) -> dict:
+    """Ownership, share count history and analyst counts, cached for the day.
+
+    EVERY FIELD IS INDEPENDENTLY OPTIONAL, and the four sub-fetches are wrapped
+    separately for that reason. Coverage differs sharply by market and by size:
+    the insider-held share is present for essentially every IDX listing, the
+    share-count series for most, and analyst counts for well under half. A
+    single try/except around all four would let the thinnest one erase the
+    others — which is the shape of failure this app spends most of its error
+    handling avoiding.
+
+    `ok` says whether ANYTHING came back. It is never used to mean the data is
+    complete; each consumer checks the field it needs.
+    """
+    key = (ticker.upper(), dt.date.today().isoformat())
+
+    cached = _REGISTER_CACHE.get(key)
+    if cached is not None:
+        return dict(cached)
+
+    with _register_lock(key):
+        cached = _REGISTER_CACHE.get(key)
+        if cached is not None:
+            return dict(cached)
+        result = _register_uncached(ticker)
+        with _REGISTER_GUARD:
+            if len(_REGISTER_CACHE) > 128:
+                _REGISTER_CACHE.clear()
+            _REGISTER_CACHE[key] = result
+
+    return dict(result)
+
+
+def _holder_value(frame, label: str) -> Optional[float]:
+    """One row out of `major_holders`, which arrives as a labelled column.
+
+    The frame is indexed by a `Breakdown` label with a single `Value` column, and
+    yfinance has changed that shape before. Reading it positionally would break
+    silently into a wrong number rather than loudly into a missing one, so this
+    goes by label and returns None when the label is absent.
+    """
+    try:
+        if frame is None or label not in frame.index:
+            return None
+        return _safe_float(frame.loc[label].iloc[0], default=None)
+    except (KeyError, IndexError, AttributeError, TypeError):
+        return None
+
+
+def _register_uncached(ticker: str) -> dict:
+    out: dict = {
+        "ok": False,
+        "symbol": ticker.upper(),
+        "insidersPercentHeld": None,
+        "institutionsPercentHeld": None,
+        "institutionsFloatPercentHeld": None,
+        "institutionsCount": None,
+        "shares": None,
+        "recommendations": None,
+        "earningsSurprises": None,
+    }
+    try:
+        handle = yf.Ticker(ticker)
+    except Exception:
+        return out
+
+    try:
+        holders = handle.major_holders
+        out["insidersPercentHeld"] = _holder_value(holders, "insidersPercentHeld")
+        out["institutionsPercentHeld"] = _holder_value(holders, "institutionsPercentHeld")
+        out["institutionsFloatPercentHeld"] = _holder_value(
+            holders, "institutionsFloatPercentHeld")
+        out["institutionsCount"] = _holder_value(holders, "institutionsCount")
+    except Exception:
+        pass
+
+    # The share-count series, as DATED RECORDS rather than a pandas Series.
+    #
+    # Everything else this module returns is either a frame the engines consume
+    # in-process or a scalar. This one is neither: the scanner caches the whole
+    # register payload to disk as JSON between runs, and the API route sends it
+    # over the wire, so a Series here would have to be special-cased in two
+    # places and would arrive back as something else in a third. Records survive
+    # the round trip unchanged, and `ownership.issuance` rebuilds the index it
+    # needs from the dates.
+    #
+    # The points are irregular — filing dates, not a calendar — and are NOT
+    # resampled. Resampling at the boundary would invent share counts on days
+    # nobody reported one.
+    try:
+        start = dt.date.today() - dt.timedelta(days=REGISTER_HISTORY_DAYS)
+        series = handle.get_shares_full(start=start)
+        if series is not None and len(series) > 0:
+            cleaned = pd.to_numeric(pd.Series(series), errors="coerce").dropna()
+            cleaned = cleaned[cleaned > 0].sort_index()
+            records = []
+            for stamp, count in cleaned.items():
+                try:
+                    date = pd.Timestamp(stamp).date().isoformat()
+                except (TypeError, ValueError):
+                    continue
+                records.append({"date": date, "count": float(count)})
+            if records:
+                out["shares"] = records
+    except Exception:
+        pass
+
+    # Analyst counts by period, as records for the same round-trip reason as the
+    # share series above. `period` is the provider's own relative label — "0m"
+    # for now, "-1m" a month ago — so a revision is read by comparing rows
+    # rather than by parsing a date this feed does not supply.
+    try:
+        rows = handle.recommendations
+        if rows is not None and len(rows):
+            out["recommendations"] = [
+                {key: (int(value) if key != "period" and pd.notna(value) else value)
+                 for key, value in record.items()}
+                for record in rows.to_dict("records")
+            ]
+    except Exception:
+        pass
+
+    # Earnings surprises. `earnings_dates` mixes future scheduled dates, which
+    # carry no actual, with past ones; the surprise column only means anything
+    # where a figure was reported.
+    try:
+        rows = handle.earnings_dates
+        if rows is not None and len(rows) and "Surprise(%)" in rows.columns:
+            surprises = pd.to_numeric(rows["Surprise(%)"], errors="coerce").dropna()
+            records = []
+            for stamp, value in surprises.sort_index().items():
+                try:
+                    date = pd.Timestamp(stamp).date().isoformat()
+                except (TypeError, ValueError):
+                    continue
+                records.append({"date": date, "surprisePct": float(value)})
+            if records:
+                out["earningsSurprises"] = records
+    except Exception:
+        pass
+
+    out["ok"] = any(out[field] is not None for field in (
+        "insidersPercentHeld", "institutionsPercentHeld", "shares",
+        "recommendations", "earningsSurprises"))
+    return out

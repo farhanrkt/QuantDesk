@@ -131,6 +131,7 @@ tr.detail>td{background:var(--sunken);padding:0;border-bottom:1px solid var(--ru
 .comp .meta{font-size:11.5px;color:var(--faint);margin-top:3px}
 .comp .read{font-size:12.5px;color:var(--ash);margin-top:6px;line-height:1.5}
 .fam-price i{background:var(--trend)} .fam-filings i{background:var(--value)}
+.fam-register i{background:var(--thesis)}
 .blk{background:var(--panel);border:1px solid var(--rule);border-radius:8px;
   padding:13px 15px;margin-bottom:12px}
 .blk p{font-size:13px;color:var(--body);margin:0}
@@ -225,7 +226,9 @@ def _component_block(component: dict) -> str:
     </div>"""
 
 
-FAMILY_WORD = {"price": "price and volume", "filings": "the filings"}
+FAMILY_WORD = {"price": "price and volume", "filings": "the filings",
+               "register": "the share register"}
+FAMILY_ORDER = ("price", "filings", "register")
 
 
 def _detail(index: int, entry: dict) -> str:
@@ -233,13 +236,21 @@ def _detail(index: int, entry: dict) -> str:
 
     families = entry["families"]
     family_lines = []
-    for key in ("price", "filings"):
+    for key in FAMILY_ORDER:
         family = families.get(key)
         if family:
+            # The vote is shown whenever it is not a whole one. A family
+            # reporting on half its evidence casts half a vote, and a reader
+            # checking the arithmetic below cannot reproduce the blend without
+            # knowing that.
+            vote = family.get("vote", 1.0)
+            share = ("" if vote >= 0.999 else
+                     f' <span class="op">&times; {vote:.2f} vote '
+                     f'({family.get("coverage", 0) * 100:.0f}% of its evidence read)</span>')
             family_lines.append(
                 f'<div>{_e(FAMILY_WORD[key]).capitalize()}: '
                 f'<b>{family["score"]:.0f}</b> '
-                f'<span class="op">from {", ".join(family["members"])}</span></div>')
+                f'<span class="op">from {", ".join(family["members"])}</span>{share}</div>')
         else:
             family_lines.append(
                 f'<div class="op">{_e(FAMILY_WORD[key]).capitalize()}: never read</div>')
@@ -249,8 +260,10 @@ def _detail(index: int, entry: dict) -> str:
     final = entry["score"]
     arithmetic = "".join(family_lines)
     if raw is not None:
+        voting = len([f for f in families.values() if f])
         arithmetic += (
-            f'<div><span class="op">the two families, equally weighted</span> '
+            f'<div><span class="op">the {voting} '
+            f'{"family" if voting == 1 else "families"} that read, one vote each</span> '
             f'&rarr; <b>{raw:.1f}</b></div>'
             f'<div><span class="op">&times; {entry["shrink"]["combined"]:.2f} '
             f'evidence shrinkage</span> &rarr; <b>{shrunk:.1f}</b></div>')
@@ -368,6 +381,26 @@ def render(report: dict) -> str:
     # The selection warning is true of a shortlist run and false of a full one.
     # Printing it either way would train the reader to skip it on the runs where
     # it is load-bearing.
+    # The paragraph about single-source rows is only worth printing when there
+    # are some. It read "0 of these rest on one body of data" followed by four
+    # lines explaining a situation that had not arisen — and the reason it had
+    # not is itself the more interesting fact, so that is what prints instead.
+    cross_check_note = (
+        f'<p><b>{one_family_count} of these rest on one body of data.</b> Where a '
+        f'listing publishes no usable statements &mdash; common among IDX small caps '
+        f'&mdash; the value and quality lenses go quiet and the whole verdict comes from '
+        f'price history. Those rows are marked '
+        f'<span class="cross no">one lens only</span>, and their scores are already '
+        f'pulled toward neutral for it. This app exists to cross-check independent '
+        f'bodies of data; on those rows it could not.</p>'
+        if one_family_count else
+        '<p><b>Every row here was cross-checked.</b> At least two of the three '
+        'independent bodies of data returned a reading for each one. That is not '
+        'usually true of an Indonesian sweep &mdash; small caps routinely publish no '
+        'usable statements, which silences both filings lenses &mdash; and it is true '
+        'here because the share register reads for almost every listing and stands in '
+        'as the second source when the filings do not.</p>')
+
     selection_note = (
         f'<p><b>The deepened set was pre-selected on the price rank.</b> These '
         f'{counts["deepened"]} names got the four lenses <i>because</i> they already '
@@ -376,10 +409,10 @@ def render(report: dict) -> str:
         f'separates these rows from each other &mdash; the other four are.</p>'
         if counts["deepened"] < counts["tradeable"] else
         f'<p><b>Every tradeable name was deepened.</b> All {counts["deepened"]} names '
-        f'that cleared the turnover and tick floors got all four lenses, so nothing in '
-        f'this table was pre-selected on its price rank &mdash; the ordering below is '
-        f'the blend, not the rank. Rank and score genuinely disagree here, which is the '
-        f'point of running the other four.</p>')
+        f'that cleared the turnover and tick floors got all four lenses and the share '
+        f'register, so nothing in this table was pre-selected on its price rank '
+        f'&mdash; the ordering below is the blend, not the rank. Rank and score '
+        f'genuinely disagree here, which is the point of running the rest.</p>')
     tally_html = " &nbsp;&middot;&nbsp; ".join(
         f"{k}: <b style='color:var(--chalk)'>{v}</b>" for k, v in tally.items())
 
@@ -408,6 +441,37 @@ def render(report: dict) -> str:
     overlap_html = (f'<p>{_e(overlap.get("reading"))}</p>'
                     if overlap.get("available") else
                     f'<p>{_e(overlap.get("reason", "Not measured on this scan."))}</p>')
+
+    # WHETHER THE THREE FAMILIES ARE ACTUALLY THREE SOURCES. The score weights
+    # them equally on the argument that they read different data; this is the
+    # measurement that checks it. It renders next to the signal overlap because
+    # the two answer the same question at different levels.
+    family = report.get("familyOverlap") or {}
+    if family.get("available"):
+        rows = "".join(
+            f'<div class="pen"><span>{_e(pair["aLabel"])} vs {_e(pair["bLabel"])} '
+            f'<span style="color:var(--faint)">({pair["names"]} names)</span></span>'
+            f'<b style="color:var(--ash)">{pair["correlation"]:+.2f}</b></div>'
+            for pair in family["pairs"])
+        family_html = f'<p>{_e(family.get("reading"))}</p>{rows}'
+    else:
+        family_html = (f'<p>{_e(family.get("reason", "Not measured on this scan."))}</p>'
+                       if family else "<p>Not measured on this scan.</p>")
+
+    tape_stats = report.get("tapeSignificance") or {}
+    if tape_stats.get("tested"):
+        fired, expected = tape_stats["fired"], tape_stats["expectedByChance"]
+        excess = max(0.0, fired - expected)
+        tape_html = (
+            f'<p>{_e(tape_stats.get("note"))}</p>'
+            f'<p>Of the {fired} that fired, roughly <b style="color:var(--chalk)">'
+            f'{excess:.0f}</b> are the real signal and <b style="color:var(--chalk)">'
+            f'{min(fired, expected):.0f}</b> are chance. Which is which is not knowable '
+            f'from this scan, so a single accumulation verdict below is worth rather '
+            f'less than the sentence attached to it sounds.</p>')
+    else:
+        tape_html = (f'<p>{_e(tape_stats.get("note", "No tape reading on this scan."))}'
+                     f'</p>')
 
     return f"""<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -446,12 +510,7 @@ def render(report: dict) -> str:
   <div class="blk" style="max-width:82ch">
     <div class="h">Two things about this table before you compare rows</div>
     {selection_note}
-    <p><b>{one_family_count} of these rest on one body of data.</b> Where a listing
-      publishes no usable statements &mdash; common among IDX small caps &mdash; the
-      value and quality lenses go quiet and the whole verdict comes from price
-      history. Those rows are marked <span class="cross no">one lens only</span>, and
-      their scores are already pulled toward neutral for it. This app exists to
-      cross-check two independent bodies of data; on those rows it could not.</p>
+    {cross_check_note}
   </div>
   <p class="note">Click any row for the arithmetic behind its score &mdash; the five
     components, both family readings, the shrinkage, every flag and every gate.</p>
@@ -468,6 +527,30 @@ def render(report: dict) -> str:
 
   <details><summary>How much of this table is one opinion wearing seven labels</summary>
     <div class="body">{overlap_html}</div></details>
+
+  <details><summary>Are the three bodies of data actually three bodies of data</summary>
+    <div class="body">
+      <p>Every score above weights the price record, the filings and the share register
+         equally, on the argument that they read different numbers. That is an
+         assumption, so here it is measured across this scan rather than asserted.
+         The share register has the weakest claim of the three &mdash; the share count
+         is printed in the filings, and what is actually true is only that no filings
+         lens reads it.</p>
+      {family_html}
+    </div></details>
+
+  <details><summary>How many of the heavy-day readings are real</summary>
+    <div class="body">
+      <p>The tape test asks whether a name's heaviest sessions close nearer the high of
+         their range than its ordinary ones, against that market's own median. One
+         name's p-value needs no correction. A scan of hundreds does, and this is the
+         count that makes the correction legible.</p>
+      {tape_html}
+      <p style="color:var(--faint)">This is not a broker summary. It cannot say who
+         bought, cannot separate foreign from domestic money, and cannot tell a
+         pre-arranged cross from open trading &mdash; the three things the exchange's
+         own daily file would settle.</p>
+    </div></details>
 
   <details><summary>{counts['rejected']}
     {"name" if counts['rejected'] == 1 else "names"} never reached the ranking</summary>

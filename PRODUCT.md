@@ -40,12 +40,15 @@ Most research tools give one opinion. This gives four that share no inputs, and 
 spends real effort establishing how much that agreement is actually worth — publishing the
 measurement whichever way it comes out. Five stamped artifacts already do this
 (`backtest_results.json`, `check_calibration.json`, `correlation_stability.json`,
-`lens_agreement.json`, `exposure_stability.json`), including a backtest that reports
-its own ranking has **no detectable edge** and a beta study that refuses one of the
-four factors it tested.
+`lens_agreement.json`, `exposure_stability.json`, `tape_calibration.json`), including a
+backtest that reports its own ranking has **no detectable edge**, a beta study that
+refuses one of the four factors it tested, and a tape calibration that reports the
+signal it calibrates **does not exist on US markets** — 4.2% of names firing against
+5% expected by chance.
 
 *The count said "three" while listing four, from before `lens_agreement.json`
-existed. Corrected 31 August 2026 along with the fifth.*
+existed. Corrected 31 August 2026 along with the fifth. A sixth landed 8 September
+2026 with the market scanner.*
 
 A neighbouring product could copy the four lenses. It could not truthfully copy
 "we measured whether our own signal works and published the null result".
@@ -134,8 +137,10 @@ These are durable product facts. Future work preserves them; none is a style pre
 ## Terminology
 
 - **Lens** — one of the four models (Flow, Trend, Value, Quality).
-- **Family** — the body of data a lens reads: *price and volume*, or *the filings*. Flow
-  and Trend are one family; Value and Quality are the other.
+- **Family** — the body of data a reading rests on: *price and volume*, *the filings*, or
+  *the share register*. Flow and Trend are the first; Value and Quality the second. The
+  third exists only in the private scanner (`verdict.py`) and holds free float and share
+  issuance — facts no published lens reads. The single-company view still speaks of two.
 - **Tone** — the server's judgement on a figure: `good` / `bad` / `warn` / `neutral` /
   `none`. The only permitted input to colour.
 - **Guided / Full** — the two reading modes. Guided is the default.
@@ -146,8 +151,11 @@ These are durable product facts. Future work preserves them; none is a style pre
 - Measured artifacts, each stamped with its date, in `api/_lib/*.json`.
 - `docs/field-manual.html` — beginner's guide; its glossary is **generated** from
   `api/_lib/explain.py` and CI fails if a metric is added without regenerating.
-- Six network scripts in `scripts/` deliberately outside CI. Re-run after touching what
-  they measure; a stale stamped number is worse than none.
+- Eight network scripts in `scripts/` deliberately outside CI. Re-run after touching what
+  they measure; a stale stamped number is worse than none. Two arrived with the market
+  scanner: `refresh_listings.py` fetches the whole-market universe, and
+  `calibrate_tape.py` measures the per-market baselines the tape reading is tested
+  against — without which it has no null to test and reports no direction at all.
 
 ## Accessibility
 
