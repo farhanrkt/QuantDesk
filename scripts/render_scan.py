@@ -1,0 +1,511 @@
+#!/usr/bin/env python3
+"""
+render_scan.py
+==============
+The scan report as one self-contained HTML file.
+
+WHY HTML AND NOT A TERMINAL TABLE ALONE
+---------------------------------------
+The terminal summary answers "what came out on top". This answers "and why",
+which is forty lines per name and does not fit in a column. The decomposition is
+the point: a score with no decomposition cannot be argued with, which is the
+exact property `technical.long_term_view` refuses to ship a score for. Every row
+here opens into the five components, the two family scores, the agreement
+branch, the shrinkage arithmetic, every penalty with its firing rate, and every
+gate — so a reader can find the one number they disagree with.
+
+WHAT THE LAYOUT IS ARGUING
+--------------------------
+The published measurement of whether this ranking predicts anything comes FIRST,
+above the table, in the largest block on the page. That is not a disclaimer
+position, it is the correct reading order: the table means something different
+depending on that paragraph, so the paragraph cannot come after it. `PRODUCT.md`
+constraint 2 says a feature implying prediction is measured and published
+including nulls or does not ship. This is the null, published, at the top.
+
+Self-contained by design — no CDN, no fetch, no build step. A report a year old
+must still render, and a report is a record.
+"""
+
+from __future__ import annotations
+
+import html
+import json
+from typing import Optional
+
+PALETTE = """
+:root{
+  --ink:#080C10; --panel:#111820; --raised:#161F29; --sunken:#0C1116;
+  --rule:#1E2A36; --ruleSoft:#18222C;
+  --chalk:#E7EEF5; --body:#C3CFDC; --ash:#8496A9; --faint:#7387A0;
+  --acc:#35C4A8; --dist:#FF6B6B; --warn:#F2C14E;
+  --flow:#2FBFA4; --trend:#6B9BFF; --value:#E8B44C; --quality:#C9A227;
+  --tech:#6B9BFF;
+}
+"""
+
+CSS = PALETTE + """
+*{box-sizing:border-box}
+body{margin:0;background:var(--ink);color:var(--body);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,'Segoe UI',Inter,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:34px 22px 90px}
+h1{font-size:26px;line-height:1.2;color:var(--chalk);margin:0 0 6px;letter-spacing:-.01em}
+h2{font-size:18px;color:var(--chalk);margin:34px 0 12px;letter-spacing:-.005em}
+h3{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--faint);
+  margin:0 0 10px;font-weight:600}
+p{margin:0 0 12px}
+a{color:var(--tech)}
+.sub{color:var(--ash);font-size:13.5px;margin-bottom:26px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+
+/* --- the measurement, first and largest ------------------------------- */
+.provenance{background:linear-gradient(180deg,rgba(242,193,78,.07),rgba(242,193,78,.02));
+  border:1px solid rgba(242,193,78,.32);border-left:3px solid var(--warn);
+  border-radius:10px;padding:20px 22px;margin:0 0 30px}
+.provenance h3{color:var(--warn)}
+.provenance p{color:var(--body);font-size:14.5px;max-width:82ch}
+.provenance p:last-child{margin-bottom:0}
+.provenance .stamp{color:var(--faint);font-size:12.5px;margin-top:12px}
+
+/* --- funnel ------------------------------------------------------------ */
+.funnel{display:flex;flex-wrap:wrap;gap:1px;background:var(--rule);
+  border:1px solid var(--rule);border-radius:9px;overflow:hidden;margin-bottom:8px}
+.funnel div{flex:1 1 150px;background:var(--panel);padding:13px 15px}
+.funnel .n{font-size:23px;color:var(--chalk);font-weight:600;letter-spacing:-.02em}
+.funnel .k{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--faint);margin-top:3px}
+.funnel .w{font-size:12px;color:var(--ash);margin-top:5px;line-height:1.4}
+.note{font-size:12.5px;color:var(--ash);margin:8px 0 0}
+.note.stale{color:var(--warn)}
+
+/* --- table ------------------------------------------------------------- */
+/* The table has eight columns and a company-name column that must stay
+   readable. Below about 900px the name wraps to four lines and the row stops
+   reading as a row, so the table keeps its own minimum and scrolls inside its
+   wrapper rather than compressing. The page body never scrolls sideways. */
+.tablewrap{overflow-x:auto;margin-top:6px;border-radius:9px}
+table{width:100%;min-width:820px;border-collapse:collapse}
+td:first-child{min-width:230px}
+thead th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);
+  text-align:left;padding:9px 10px;border-bottom:1px solid var(--rule);font-weight:600;
+  background:var(--ink)}
+thead th.num{text-align:right}
+tbody tr.row{border-bottom:1px solid var(--ruleSoft);cursor:pointer}
+tbody tr.row:hover{background:var(--raised)}
+tbody td{padding:10px;vertical-align:middle;font-size:14px}
+td.num{text-align:right}
+.tick{color:var(--chalk);font-weight:600}
+.nm{color:var(--ash);font-size:12.5px}
+.held{color:var(--warn);font-size:11px;letter-spacing:.06em;margin-left:6px}
+.score{font-size:17px;font-weight:600;color:var(--chalk)}
+.pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11.5px;
+  font-weight:600;letter-spacing:.03em;white-space:nowrap;border:1px solid}
+.t-good{color:var(--acc);border-color:rgba(53,196,168,.4);background:rgba(53,196,168,.1)}
+.t-bad{color:var(--dist);border-color:rgba(255,107,107,.4);background:rgba(255,107,107,.1)}
+.t-warn{color:var(--warn);border-color:rgba(242,193,78,.4);background:rgba(242,193,78,.1)}
+.t-neutral{color:var(--ash);border-color:var(--rule);background:var(--raised)}
+.t-none{color:var(--faint);border-color:var(--ruleSoft);background:transparent}
+.conv{font-size:12px;color:var(--ash)}
+.conv.high{color:var(--acc)} .conv.low{color:var(--warn)}
+.cross{font-size:11.5px;letter-spacing:.02em}
+.cross.yes{color:var(--ash)}
+.cross.no{color:var(--warn)}
+.bar{height:5px;border-radius:3px;background:var(--sunken);overflow:hidden;
+  min-width:56px;margin-top:5px}
+.bar i{display:block;height:100%;border-radius:3px}
+
+/* --- detail ------------------------------------------------------------ */
+tr.detail{display:none}
+tr.detail.open{display:table-row}
+tr.detail>td{background:var(--sunken);padding:0;border-bottom:1px solid var(--rule)}
+.det{padding:20px 22px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);
+  gap:26px}
+@media(max-width:860px){.det{grid-template-columns:1fr}}
+.comp{border-top:1px solid var(--ruleSoft);padding:11px 0}
+.comp:first-of-type{border-top:0}
+.comp .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.comp .lab{color:var(--chalk);font-size:13.5px;font-weight:500}
+.comp .val{font-size:13.5px;color:var(--chalk)}
+.comp .val.off{color:var(--faint);font-size:12px;font-style:italic}
+.comp .meta{font-size:11.5px;color:var(--faint);margin-top:3px}
+.comp .read{font-size:12.5px;color:var(--ash);margin-top:6px;line-height:1.5}
+.fam-price i{background:var(--trend)} .fam-filings i{background:var(--value)}
+.blk{background:var(--panel);border:1px solid var(--rule);border-radius:8px;
+  padding:13px 15px;margin-bottom:12px}
+.blk p{font-size:13px;color:var(--body);margin:0}
+.blk p+p{margin-top:8px}
+.blk .h{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);
+  font-weight:600;margin-bottom:7px}
+.gate{border-color:rgba(255,107,107,.4);background:rgba(255,107,107,.06)}
+.gate .h{color:var(--dist)}
+.pen{display:flex;justify-content:space-between;gap:12px;font-size:12.5px;padding:5px 0}
+.pen b{color:var(--dist);font-weight:600;font-family:ui-monospace,monospace}
+.pen span{color:var(--ash)}
+ul.why{margin:0;padding-left:17px}
+ul.why li{font-size:12.5px;color:var(--ash);margin-bottom:7px;line-height:1.5}
+.arith{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;
+  color:var(--body);line-height:1.9}
+.arith b{color:var(--chalk)}
+.arith .op{color:var(--faint)}
+
+details{margin-top:14px;border:1px solid var(--rule);border-radius:8px;
+  background:var(--panel)}
+details summary{padding:11px 15px;cursor:pointer;color:var(--ash);font-size:13px;
+  list-style:none}
+details summary::-webkit-details-marker{display:none}
+details summary:before{content:"+ ";color:var(--faint)}
+details[open] summary:before{content:"- "}
+details .body{padding:0 15px 14px;font-size:12.5px;color:var(--ash)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{background:var(--sunken);border:1px solid var(--ruleSoft);border-radius:5px;
+  padding:3px 7px;font-size:11.5px;color:var(--ash);
+  font-family:ui-monospace,monospace}
+footer{margin-top:46px;padding-top:18px;border-top:1px solid var(--rule);
+  color:var(--faint);font-size:12.5px;max-width:80ch}
+"""
+
+JS = """
+document.querySelectorAll('tr.row').forEach(function(row){
+  row.addEventListener('click', function(){
+    var detail = document.getElementById('d-' + row.dataset.i);
+    if (detail) detail.classList.toggle('open');
+  });
+});
+"""
+
+
+def _e(value) -> str:
+    return html.escape(str(value if value is not None else ""))
+
+
+def _tone_class(tone: Optional[str]) -> str:
+    return f"t-{tone or 'none'}"
+
+
+def _score_colour(score: Optional[float]) -> str:
+    if score is None:
+        return "var(--faint)"
+    if score >= 60:
+        return "var(--acc)"
+    if score >= 45:
+        return "var(--ash)"
+    if score >= 33:
+        return "var(--warn)"
+    return "var(--dist)"
+
+
+def _money(value: Optional[float]) -> str:
+    if value is None:
+        return "—"
+    for cut, suffix in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "k")):
+        if abs(value) >= cut:
+            return f"{value / cut:,.1f}{suffix}"
+    return f"{value:,.0f}"
+
+
+def _component_block(component: dict) -> str:
+    family = component["family"]
+    if component["available"]:
+        score = component["score"]
+        value = f'<span class="val mono">{score:.0f}</span>'
+        bar = (f'<div class="bar fam-{family}"><i style="width:{max(2, score):.0f}%">'
+               f'</i></div>')
+        reading = f'<div class="read">{_e(component.get("reading"))}</div>'
+    else:
+        word = "refused" if component["refused"] else "not read"
+        value = f'<span class="val off">{word}</span>'
+        bar = ""
+        reading = f'<div class="read">{_e(component.get("reason"))}</div>'
+    return f"""<div class="comp">
+      <div class="top"><span class="lab">{_e(component['label'])}</span>{value}</div>
+      <div class="meta">{_e(FAMILY_WORD[family])} &middot; {_e(component['evidence'])}
+        evidence &middot; weight {component['baseWeight']:.1f}</div>
+      {bar}{reading}
+    </div>"""
+
+
+FAMILY_WORD = {"price": "price and volume", "filings": "the filings"}
+
+
+def _detail(index: int, entry: dict) -> str:
+    components = "".join(_component_block(c) for c in entry["components"])
+
+    families = entry["families"]
+    family_lines = []
+    for key in ("price", "filings"):
+        family = families.get(key)
+        if family:
+            family_lines.append(
+                f'<div>{_e(FAMILY_WORD[key]).capitalize()}: '
+                f'<b>{family["score"]:.0f}</b> '
+                f'<span class="op">from {", ".join(family["members"])}</span></div>')
+        else:
+            family_lines.append(
+                f'<div class="op">{_e(FAMILY_WORD[key]).capitalize()}: never read</div>')
+
+    raw = entry["rawScore"]
+    shrunk = entry["shrunkScore"]
+    final = entry["score"]
+    arithmetic = "".join(family_lines)
+    if raw is not None:
+        arithmetic += (
+            f'<div><span class="op">the two families, equally weighted</span> '
+            f'&rarr; <b>{raw:.1f}</b></div>'
+            f'<div><span class="op">&times; {entry["shrink"]["combined"]:.2f} '
+            f'evidence shrinkage</span> &rarr; <b>{shrunk:.1f}</b></div>')
+        if entry["penaltyTotal"]:
+            arithmetic += (f'<div><span class="op">&minus; '
+                           f'{entry["penaltyTotal"]:.1f} pre-trade flags</span> '
+                           f'&rarr; <b>{final:.1f}</b></div>')
+
+    gates = ""
+    for gate in entry["gates"]:
+        gates += (f'<div class="blk gate"><div class="h">Gate &mdash; '
+                  f'{_e(gate["action"].replace("_", " ").lower())}</div>'
+                  f'<p><b>{_e(gate["label"])}.</b> {_e(gate["detail"])}</p></div>')
+
+    penalties = ""
+    if entry["penalties"]:
+        rows = "".join(
+            f'<div class="pen"><span>{_e(p["label"])}<br>'
+            f'<span style="color:var(--faint)">{_e(p["why"])}</span></span>'
+            f'<b>-{p["points"]:.1f}</b></div>'
+            for p in entry["penalties"])
+        capped = ('<p style="color:var(--faint);font-size:11.5px;margin-top:8px">'
+                  'Total capped: flags are correlated and an uncapped sum would '
+                  'count one underlying fact several times.</p>'
+                  if entry["penaltyCapped"] else "")
+        penalties = (f'<div class="blk"><div class="h">Pre-trade flags that fired'
+                     f'</div>{rows}{capped}</div>')
+
+    sizing = entry["sizing"]
+    if sizing.get("applicable"):
+        sizing_html = (
+            f'<div class="blk"><div class="h">Mechanical size</div>'
+            f'<p><b class="mono">{sizing["weight"] * 100:.1f}%</b> of the sleeve'
+            f'{" (capped)" if sizing["capped"] else ""}.</p>'
+            f'<p style="color:var(--ash);font-size:12px">{_e(sizing["basis"])}</p></div>')
+    else:
+        sizing_html = ""
+
+    # The agreement sentence already has its own block six lines up. Repeating it
+    # verbatim as the first bullet is the kind of duplication that teaches a
+    # reader to skim the list. It stays in the JSON, where the list is consumed
+    # on its own.
+    agreement_text = entry["agreement"]["text"]
+    why = "".join(f"<li>{_e(reason)}</li>" for reason in entry["reasons"]
+                  if reason != agreement_text)
+
+    return f"""<tr class="detail" id="d-{index}"><td colspan="8"><div class="det">
+      <div>
+        <h3>The five components</h3>
+        {components}
+      </div>
+      <div>
+        {gates}
+        <div class="blk"><div class="h">How the score was built</div>
+          <div class="arith">{arithmetic}</div>
+        </div>
+        <div class="blk"><div class="h">Cross-check</div>
+          <p>{_e(entry['agreement']['text'])}</p>
+          <p style="color:var(--ash);font-size:12px">
+            {_e(entry['shrink']['text'])}</p>
+        </div>
+        {penalties}{sizing_html}
+        <div class="blk"><div class="h">In order</div>
+          <ul class="why">{why}</ul>
+        </div>
+      </div>
+    </div></td></tr>"""
+
+
+def _row(index: int, entry: dict) -> str:
+    score = entry["score"]
+    score_html = ("&mdash;" if score is None else
+                  f'<span class="score mono" style="color:{_score_colour(score)}">'
+                  f'{score:.1f}</span>')
+    held = '<span class="held">HELD</span>' if entry.get("held") else ""
+    size = entry["sizing"]
+    size_html = (f'{size["weight"] * 100:.1f}%' if size.get("applicable") else
+                 '<span style="color:var(--faint)">&mdash;</span>')
+    # The cross-check cell is the one column that says whether the app's central
+    # claim applies to this row at all. A BUY with "one lens only" beside it is a
+    # different statement from a BUY with "both", and the table must not make
+    # them look alike.
+    cross_html = ('<span class="cross yes" title="Both the price record and the '
+                  'filings returned a reading">both</span>'
+                  if entry.get("crossChecked") else
+                  '<span class="cross no" title="Only one body of data returned a '
+                  'reading, so nothing cross-checked this score">one lens only</span>')
+    return f"""<tr class="row" data-i="{index}">
+      <td><span class="tick mono">{_e(entry['ticker'])}</span>{held}
+          <div class="nm">{_e((entry.get('name') or '')[:44])}</div></td>
+      <td class="num">{score_html}</td>
+      <td><span class="pill {_tone_class(entry['tone'])}">
+          {_e(entry['actionLabel'])}</span></td>
+      <td><span class="conv {_e(entry['conviction'])}">{_e(entry['conviction'])}</span></td>
+      <td>{cross_html}</td>
+      <td class="num mono">{entry['rank'] or '&mdash;'}</td>
+      <td class="num mono">{entry['coverage'] * 100:.0f}%</td>
+      <td class="num mono">{size_html}</td>
+    </tr>"""
+
+
+def render(report: dict) -> str:
+    counts = report["counts"]
+    universe = report["universe"]
+    provenance = report["provenance"]
+    settings = report["settings"]
+
+    body_rows = "".join(_row(i, v) + _detail(i, v)
+                        for i, v in enumerate(report["verdicts"]))
+
+    tally: dict[str, int] = {}
+    for entry in report["verdicts"]:
+        tally[entry["actionLabel"]] = tally.get(entry["actionLabel"], 0) + 1
+    one_family_count = sum(1 for v in report["verdicts"] if not v.get("crossChecked"))
+    # The selection warning is true of a shortlist run and false of a full one.
+    # Printing it either way would train the reader to skip it on the runs where
+    # it is load-bearing.
+    selection_note = (
+        f'<p><b>The deepened set was pre-selected on the price rank.</b> These '
+        f'{counts["deepened"]} names got the four lenses <i>because</i> they already '
+        f'ranked in the top of {counts["tradeable"]} tradeable on price and volume, so '
+        f'that component is high for nearly all of them by construction. It is not what '
+        f'separates these rows from each other &mdash; the other four are.</p>'
+        if counts["deepened"] < counts["tradeable"] else
+        f'<p><b>Every tradeable name was deepened.</b> All {counts["deepened"]} names '
+        f'that cleared the turnover and tick floors got all four lenses, so nothing in '
+        f'this table was pre-selected on its price rank &mdash; the ordering below is '
+        f'the blend, not the rank. Rank and score genuinely disagree here, which is the '
+        f'point of running the other four.</p>')
+    tally_html = " &nbsp;&middot;&nbsp; ".join(
+        f"{k}: <b style='color:var(--chalk)'>{v}</b>" for k, v in tally.items())
+
+    stale = universe.get("staleness") or {}
+    stale_html = (f'<p class="note{" stale" if stale.get("stale") else ""}">'
+                  f'{_e(stale.get("text"))}</p>' if stale.get("text") else "")
+
+    rejected: dict[str, int] = counts.get("rejectedByReason", {})
+    reject_words = {
+        "history": "too little price history for a 252-day cross-sectional window",
+        "illiquid": "below the turnover floor",
+        "turnoverUnknown": "no usable volume history, so tradeability is unmeasured",
+        "tickFloor": "resting on the exchange's minimum tick",
+    }
+    reject_rows = "".join(
+        f'<div class="pen"><span>{_e(reject_words.get(k, k))}</span>'
+        f'<b style="color:var(--ash)">{v}</b></div>'
+        for k, v in sorted(rejected.items(), key=lambda kv: -kv[1]))
+
+    not_deepened = report.get("notDeepened") or []
+    not_deepened_chips = "".join(
+        f'<span class="chip">{_e(r["ticker"])} #{r["rank"]}</span>'
+        for r in not_deepened[:120])
+
+    overlap = report.get("signalOverlap") or {}
+    overlap_html = (f'<p>{_e(overlap.get("reading"))}</p>'
+                    if overlap.get("available") else
+                    f'<p>{_e(overlap.get("reason", "Not measured on this scan."))}</p>')
+
+    return f"""<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{_e(report['market'])} scan &mdash; {_e(report['generatedAt'][:10])}</title>
+<style>{CSS}</style>
+<div class="wrap">
+  <h1>{_e(report['market'])} market scan</h1>
+  <p class="sub">{_e(report['generatedAt'].replace('T', ' '))} &middot;
+    {_e(universe.get('label'))} &middot; {report['elapsedSeconds']}s</p>
+
+  <div class="provenance">
+    <h3>What this ordering is worth &mdash; read before the table</h3>
+    <p>{_e(provenance.get('headline'))}</p>
+    {f"<p>That measurement applies to {_e(provenance.get('appliesTo'))}</p>"
+     if provenance.get('appliesTo') else ""}
+    <p class="stamp">Measured {_e(provenance.get('measuredOn'))} over
+      {_e(provenance.get('years'))} years, {_e(provenance.get('tests'))} tests,
+      {_e(provenance.get('significant'))} significant after correction.</p>
+  </div>
+
+  <div class="funnel">
+    <div><div class="n">{counts['requested']}</div><div class="k">listed</div>
+      <div class="w">{_e(universe.get('label'))}</div></div>
+    <div><div class="n">{counts['fetched']}</div><div class="k">fetched</div>
+      <div class="w">returned usable price history</div></div>
+    <div><div class="n">{counts['tradeable']}</div><div class="k">tradeable</div>
+      <div class="w">cleared a {_money(settings['turnoverFloor'])} daily turnover
+        floor and the tick floor</div></div>
+    <div><div class="n">{counts['deepened']}</div><div class="k">deepened</div>
+      <div class="w">got all four lenses, one fetch at a time</div></div>
+  </div>
+  {stale_html}
+  <p class="note">{tally_html}</p>
+
+  <h2>Ranked</h2>
+  <div class="blk" style="max-width:82ch">
+    <div class="h">Two things about this table before you compare rows</div>
+    {selection_note}
+    <p><b>{one_family_count} of these rest on one body of data.</b> Where a listing
+      publishes no usable statements &mdash; common among IDX small caps &mdash; the
+      value and quality lenses go quiet and the whole verdict comes from price
+      history. Those rows are marked <span class="cross no">one lens only</span>, and
+      their scores are already pulled toward neutral for it. This app exists to
+      cross-check two independent bodies of data; on those rows it could not.</p>
+  </div>
+  <p class="note">Click any row for the arithmetic behind its score &mdash; the five
+    components, both family readings, the shrinkage, every flag and every gate.</p>
+  <div class="tablewrap">
+  <table>
+    <thead><tr>
+      <th>Name</th><th class="num">Score</th><th>Action</th><th>Conviction</th>
+      <th>Cross-check</th><th class="num">Rank</th><th class="num">Coverage</th>
+      <th class="num">Size</th>
+    </tr></thead>
+    <tbody>{body_rows}</tbody>
+  </table>
+  </div>
+
+  <details><summary>How much of this table is one opinion wearing seven labels</summary>
+    <div class="body">{overlap_html}</div></details>
+
+  <details><summary>{counts['rejected']}
+    {"name" if counts['rejected'] == 1 else "names"} never reached the ranking</summary>
+    <div class="body">
+      <p>Dropped before any scoring, for reasons that are facts about the order book
+         rather than judgements about the company. An absent name is not a bad name.</p>
+      {reject_rows}
+    </div></details>
+
+  <details><summary>{len(not_deepened)} ranked but not deepened
+    {"(showing the first 120)" if len(not_deepened) > 120 else ""}</summary>
+    <div class="body">
+      <p>These cleared every tradeability gate and were ranked on price signals, but
+         the four filings-and-flow lenses were never run on them &mdash; the scan
+         deepens a shortlist because each name costs its own fetch. Their absence
+         from the table above says nothing about them.</p>
+      <div class="chips">{not_deepened_chips}</div>
+    </div></details>
+
+  <footer>
+    <p><b>Not investment advice.</b> This is a private research tool. Every score above
+       is a blend of measurements taken from price history and the last published
+       filing, ordered by a formula written by its user. It does not know what this
+       company does, who runs it, what it announced this morning, or anything else
+       that decides what a share is worth. The one predictive claim it could be read
+       as making has been measured, and the measurement is at the top of this page.</p>
+    <p>Universe as of {_e(universe.get('asOf') or 'unknown')}. Prices and filings from
+       Yahoo Finance, an unofficial source with no service guarantee.</p>
+  </footer>
+</div>
+<script>{JS}</script>
+"""
+
+
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path
+    source = Path(sys.argv[1])
+    target = source.with_suffix(".html")
+    target.write_text(render(json.loads(source.read_text())))
+    print(target)

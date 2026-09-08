@@ -793,3 +793,123 @@ def risk_free_rate(market_code: str, fallback: float) -> tuple[float, str]:
 def base_symbol(symbol: str) -> str:
     """Re-exported so callers need not import `symbols` for this alone."""
     return symbols.base_code(symbol)
+
+
+# --------------------------------------------------------------------------- #
+# The listed universe — who is actually on the exchange today
+#
+# WHY THIS LIVES HERE AND NOT IN A HARDCODED LIST.
+#
+# `universes.py` refuses to ship an S&P 500 constituent list from memory, and
+# the argument it makes is exactly right: 500 symbols is past the length where
+# recitation stays correct, and a wrong ticker is not inert — it produces a
+# plausible ranking row for a company nobody asked about. The Indonesia Stock
+# Exchange has around 840 listings. Reciting that from memory would be the same
+# error at nearly twice the length, and it would be the FIRST list in this
+# codebase whose errors nobody could check.
+#
+# So the whole-market universe is FETCHED from a source that maintains one, the
+# way that file says a universe should arrive. Yahoo's equity screener is that
+# source: it is the same provider every other number in this app comes from, so
+# a name it lists is a name the rest of the pipeline can actually fetch — which
+# a scrape of the exchange's own site would not guarantee.
+#
+# WHAT IT IS NOT. It is not the exchange's official register, it carries no
+# board classification, and it will include names that have stopped trading
+# until the provider notices. It is a snapshot with a date on it, and every
+# caller is required to carry that date — same contract as `universes.AS_OF`.
+# --------------------------------------------------------------------------- #
+
+# Yahoo's screener region codes, by this app's market code. Only the two markets
+# the rest of the app resolves symbols for; anything else is a caller error
+# rather than a silent empty scan.
+SCREENER_REGION = {"US": "us", "ID": "id"}
+
+# One screener page. 250 is the provider's own ceiling per request — asking for
+# more returns 250 anyway, so paging is not optional at IDX's ~840 names.
+SCREENER_PAGE = 250
+
+# A stop on the paging loop that does not depend on the provider's `total` being
+# honest. At 250 a page this allows 10,000 names, which is an order of magnitude
+# past any market this app resolves symbols for, and it means a `total` that
+# never decrements cannot spin here forever.
+SCREENER_MAX_PAGES = 40
+
+
+def listed_equities(market_code: str = "ID") -> list[dict]:
+    """Every common equity the provider currently lists for one market.
+
+    Ordered by market capitalisation, largest first, because that is the order
+    in which a truncated scan loses the least: stopping at 300 names drops the
+    small end, which is the end a personal account cannot trade anyway.
+
+    Each row carries only what a universe needs — symbol, name, capitalisation,
+    currency, exchange. The screener returns eighty-odd fields per name and
+    almost all of them are quote data this app fetches properly elsewhere;
+    keeping them would create a second, staler source for prices that
+    `ohlcv` already owns, which is the precise failure this module exists to
+    prevent.
+
+    `quoteType` is filtered to EQUITY. The screener's region filter alone also
+    returns rights, warrants and the occasional fund, and those fetch happily —
+    a warrant has a full OHLCV history — so nothing downstream would notice
+    them. They would simply appear in a ranking of companies.
+
+    Raises `MarketDataError` when the provider returns nothing at all, because a
+    zero-length universe and a failed request look identical to the caller and
+    only one of them should be scanned.
+    """
+    region = SCREENER_REGION.get((market_code or "").strip().upper())
+    if region is None:
+        raise MarketDataError(
+            f"No listed-equity source for market '{market_code}'. "
+            f"Known markets: {', '.join(sorted(SCREENER_REGION))}.")
+
+    query = yf.EquityQuery("eq", ["region", region])
+    rows: dict[str, dict] = {}
+    failures = 0
+
+    for page in range(SCREENER_MAX_PAGES):
+        offset = page * SCREENER_PAGE
+        try:
+            response = yf.screen(query, offset=offset, size=SCREENER_PAGE,
+                                 sortField="intradaymarketcap", sortAsc=False)
+        except Exception:
+            # ONE BAD PAGE IS NOT A BAD SCAN, but a run of them is. A single
+            # transient failure loses 250 names silently, which is worse than
+            # the truncation it hides, so the loop stops after two rather than
+            # limping to the end of the market with a hole in the middle.
+            failures += 1
+            if failures >= 2:
+                break
+            continue
+
+        quotes = (response or {}).get("quotes") or []
+        if not quotes:
+            break
+
+        for quote in quotes:
+            symbol = (quote.get("symbol") or "").strip().upper()
+            if not symbol or quote.get("quoteType") != "EQUITY":
+                continue
+            # First writer wins. Pages can overlap when the provider re-sorts
+            # between requests, and a duplicate must not become two rows in a
+            # universe whose length is reported to the reader.
+            rows.setdefault(symbol, {
+                "symbol": symbol,
+                "name": quote.get("longName") or quote.get("shortName") or symbol,
+                "marketCap": _safe_float(quote.get("marketCap"), default=None),
+                "currency": quote.get("currency") or None,
+                "exchange": quote.get("fullExchangeName") or quote.get("exchange") or None,
+            })
+
+        if len(quotes) < SCREENER_PAGE:
+            break
+
+    if not rows:
+        raise MarketDataError(
+            f"The listed-equity screener returned nothing for market "
+            f"'{market_code}'. That is a failed request, not an empty market.")
+
+    return sorted(rows.values(),
+                  key=lambda r: (r["marketCap"] is None, -(r["marketCap"] or 0.0)))

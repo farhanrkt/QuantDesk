@@ -20,6 +20,7 @@ import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { TickerBar } from "@/components/TickerBar";
 import { ManualRescue } from "@/components/ValuationControls";
 import { ValuationPanel } from "@/components/ValuationPanel";
+import { VerdictPanel } from "@/components/VerdictPanel";
 import { Card, CardBody } from "@/components/ui/card";
 import { ApplyButton } from "@/components/ui/controls";
 import { DetailProvider, DetailToggle, useDetailLevel } from "@/components/ui/explain";
@@ -28,7 +29,7 @@ import { PanelSkeleton } from "@/components/ui/skeleton";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import {
   useEngines, useEventStudy, useExposureScan, usePeers, usePortfolio,
-  useUniverses, type RunOptions,
+  useUniverses, useVerdict, type RunOptions,
 } from "@/lib/api";
 import type { Engine, EngineFailure } from "@/lib/types";
 
@@ -63,6 +64,14 @@ const TABS = [
   // has been read.
   { id: "thesis", label: "Thesis", accent: "#A78BFA" },
   { id: "screen", label: "Scan & rank", accent: "#A78BFA" },
+  // THE PRIVATE TIER, AND LAST FOR A REASON THAT IS NOT MODESTY. This is the
+  // one tab that returns a verdict rather than a description, and the whole app
+  // is arranged so a reader meets the evidence before anything compresses it.
+  // Putting it first would make every tab before it look like working. Its
+  // accent is deliberately outside the four lens hues: it is not a lens, it is
+  // an aggregate OF the lenses, and colouring it like one would imply it reads
+  // data of its own.
+  { id: "verdict", label: "Score it", accent: "#7C8FA6" },
 ];
 
 /**
@@ -165,6 +174,7 @@ export default function Home() {
   // moved would be the panel forgetting something the reader did not.
   const { state: universes } = useUniverses();
   const { state: exposureScan, scan: scanExposure } = useExposureScan();
+  const { state: verdict, score: scoreVerdict, reset: resetVerdict } = useVerdict();
   // The ticker bar is controlled from here so the screener can drive it too.
   const [opts, setOpts] = useState<RunOptions>(INITIAL);
   // The last SUBMITTED symbol, which is not what is currently typed in the box.
@@ -207,6 +217,10 @@ export default function Home() {
     // A comparison belongs to the candidate it was run for; carrying one across
     // would put another company's correlations under this company's header.
     resetPortfolio();
+    // And a verdict most of all. A stale score is the one output here that
+    // looks identical to a fresh one — a number under a new ticker's header,
+    // with no visible mark saying which company it was computed for.
+    resetVerdict();
     run(cleaned);
   };
 
@@ -433,6 +447,12 @@ export default function Home() {
                   onScan={scanExposure}
                   highlight={resolvedTicker}
                 />
+              </TabPanel>
+              <TabPanel id="verdict" active={tab}>
+                <VerdictPanel state={verdict} ticker={resolvedTicker}
+                              onScore={() => scoreVerdict({
+                                ticker: opts.ticker, market: opts.market,
+                              })} />
               </TabPanel>
               <TabPanel id="screen" active={tab}>
                 <div className="space-y-8">

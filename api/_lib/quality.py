@@ -401,6 +401,38 @@ def analyze(company: dict, symbol: Optional[str] = None,
     balance = company.get("balance")
     cashflow = company.get("cashflow")
 
+    # AN UNKNOWN SECTOR IS NOT A NON-FINANCIAL SECTOR, and the difference is a
+    # wrong answer rather than a missing one.
+    #
+    # Found on a whole-market IDX scan. Yahoo throttles the `.info` scrape long
+    # before it throttles the statement endpoints, so a fetch can return complete
+    # financial statements with an EMPTY sector and industry. `is_financial("",
+    # "")` is False, so the refusal below never fires, and the lens goes on to
+    # report a Piotroski F-score, an Altman band and a Beneish reading for a
+    # bank — the exact arithmetic-without-meaning this whole branch exists to
+    # decline. Observed on BBCA.JK, whose sector reads "Financial Services" on
+    # any unthrottled fetch.
+    #
+    # There is no way to tell that outcome from a genuine non-financial firm by
+    # looking at it, which is what makes it worth its own branch: the score looks
+    # ordinary, and it is a score for a company the models cannot describe. IDX
+    # is heavily weighted toward banks, so on this market it is not a rare case.
+    if not sector and not industry:
+        return {
+            "applicable": False,
+            "cause": "unknown-sector",
+            "reason": (
+                "No sector or industry came back for this listing, so there is no way "
+                "to tell whether Piotroski, Altman and Beneish apply to it. They were "
+                "built on non-financial firms and do not transfer to a bank or "
+                "insurer, and scoring first and asking afterwards is how a bank gets "
+                "an F-score. This is a refusal to guess, not a finding about the "
+                "company — a repeat fetch will usually resolve it."
+            ),
+            "sector": None, "industry": None,
+            "piotroski": None, "altman": None, "beneish": None,
+        }
+
     if is_financial(sector, industry):
         return {
             "applicable": False,

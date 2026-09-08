@@ -54,14 +54,41 @@ A neighbouring product could copy the four lenses. It could not truthfully copy
 
 These are durable product facts. Future work preserves them; none is a style preference.
 
-1. **No composite buy/hold/sell.** Not a number, letter, traffic light or sortable
-   "conviction" column. Guarded by `tests/test_synthesis.py` and `tests/test_pretrade.py`.
-   This is the direction any change toward "easier to interpret" will drift, and it is
-   permanently refused.
+1. **No composite buy/hold/sell — on the published single-company view.** Not a number,
+   letter, traffic light or sortable "conviction" column. Guarded by
+   `tests/test_synthesis.py` and `tests/test_pretrade.py`. This is the direction any
+   change toward "easier to interpret" will drift, and it is permanently refused *there*.
 
    *Confirmed boundary for v2 (29 Aug 2026):* per-lens status chips driven by the existing
    `explain.tone` are permitted — four chips side by side, one word each. They are **never
    summed, averaged, counted or ordered by strength**. Nothing may aggregate them.
+
+   *Scoped by the owner, 8 September 2026.* This constraint previously read as absolute,
+   and the private market scanner (`api/_lib/verdict.py`, `scripts/scan_market.py`,
+   `GET /api/verdict`) produces exactly the composite it refuses: one 0-100 score and one
+   action per name. The two are not in conflict, and saying why is the point of this
+   paragraph rather than a footnote.
+
+   The refusal was always an answer to a specific question. **"What is and is not known
+   about this one company"** must not be compressed to a verdict, because the reader is
+   forming their own view and a number takes that from them. The scanner asks a different
+   question — **"of 837 Indonesian listings, which forty deserve my attention this
+   week"** — which is not answerable without ordering. Refusing to order there is not
+   restraint; it is refusing to answer.
+
+   What holds the line, and is enforced rather than intended:
+
+   - **The published surfaces cannot reach it.** `explain.for_synthesis` and
+     `pretrade.assess` do not import `verdict`, and `tests/test_verdict.py` asserts the
+     import direction by AST. Their own aggregate guards are untouched and still pass.
+   - **`/api/confluence` is unchanged.** The single-company view has no score, no
+     ordering and no new field.
+   - **Every score ships with the null result.** `verdict.provenance()` returns the
+     measured finding that this app's price ranking shows no detectable relationship to
+     subsequent returns, and it is the first block on the report, above the table. Where
+     the artifact is missing it gets *louder*, not quieter.
+   - **The scanner is private.** It writes to `reports/`, which is gitignored. It is not
+     linked from the app.
 
 2. **No predictive claim that isn't measured.** If a feature implies something predicts
    returns, it is measured offline and published including nulls, or it does not ship.
@@ -154,4 +181,14 @@ decision behind a choice.
 - Whether Guided and Full eventually become two genuinely distinct designs rather than one
   design with elements hidden. Not now; v2 keeps one design with Guided as the default.
 - IDX fundamentals curation — the largest single effort, and blocked on an architectural
-  decision about where curated figures live relative to `market_data.py`.
+  decision about where curated figures live relative to `market_data.py`. **The market
+  scanner has now measured the size of this gap rather than assuming it:** on a full
+  sweep, seven of the top forty-five IDX names by price rank had no usable statements at
+  all, so both filings lenses went quiet and the whole verdict rested on price history.
+  Those rows are marked `crossChecked: false` and their scores are shrunk for it, but a
+  shrunk score is a workaround, not a fix.
+- Whether the scanner's own composite should be backtested the way the price ranking was.
+  It has not been, and `verdict.provenance()` says so in as many words: the measured null
+  covers the price component only. Measuring the five-component blend needs point-in-time
+  fundamentals, which this data source does not provide — so the honest position for now
+  is the stated absence, not a number.

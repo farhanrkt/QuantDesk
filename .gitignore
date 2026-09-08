@@ -41,3 +41,13 @@ Thumbs.db
 # --- logs ---
 *.log
 npm-debug.log*
+
+# --- the market scanner's private output ---
+# Both are outputs of `scripts/scan_market.py` and both are deliberately
+# untracked. `reports/` holds one buy/sell ranking per run — the most personal
+# thing this repository can produce and the one file in it that is about the
+# owner rather than about a company, which is the same argument that keeps the
+# thesis journal in the browser. `.scan_cache/` is a per-day copy of provider
+# data, regenerable and large.
+.scan_cache/
+reports/

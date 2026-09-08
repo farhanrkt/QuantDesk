@@ -411,6 +411,70 @@ as data.
 
 ---
 
+## The market scanner (private)
+
+Everything above reads **one** company and refuses to tell you what to do about it. That
+refusal is right for that surface and it is not an answer to a different question: *of 837
+Indonesian listings, which forty deserve an hour this week?* You cannot answer that without
+ordering, and there is no honest way to order without a score.
+
+So there is a second, private tier — not linked from the app, writing to a gitignored
+`reports/` directory — that sweeps a whole market and scores every name it can reach.
+
+```bash
+python scripts/refresh_listings.py --market ID     # once, then when it goes stale
+python scripts/scan_market.py --market ID --deepen 45 --hold BBCA,TLKM
+```
+
+**The universe is fetched, not remembered.** `universes.py` refuses to ship an S&P 500 list
+from memory because a misremembered ticker produces a plausible row for a company nobody
+asked about. IDX has ~840 listings — the same error at twice the length. So the whole-market
+list comes from the provider's own equity screener, is written to disk with the date it was
+taken, and every report prints how many days old it is.
+
+**The funnel narrows in a deliberate order.** Universe → batched price history → **the
+turnover floor** → cross-sectional rank → four lenses on a shortlist → verdict. Tradeability
+is filtered *second*, not last, and that placement is the single most consequential decision
+in the scanner: most of IDX cannot absorb a personal order, thin names carry the most extreme
+percentiles on every price signal, and a scan that ranked first would spend its whole
+fundamentals budget on names it was about to discard. On a real sweep, **837 listed → 243
+tradeable**.
+
+**The score is two family scores, not five component scores.** Price rank, long-horizon trend
+and order flow are one weighted mean; value and accounting quality are another. The two are
+then weighted *equally*, because four lenses over two bodies of data are not four opinions —
+the same argument `explain._family_votes` has made since it shipped. Averaging all five would
+hand the price record three votes to the filings' two purely because it is cheaper to compute.
+
+**Then it is shrunk toward 50 by how much evidence there actually was.** Families that
+disagree, a family that never read, components that were missing — each pulls the result
+toward neutral instead of being silently dropped. A 78 from two agreeing families and a 78
+from one family with three gaps are different claims and must not print the same. Nothing is
+ever imputed: a lens that did not return has its weight removed, not filled with a 50.
+
+**Gates are facts, not opinions, and they override the score.** Below the turnover floor,
+resting on the exchange's Rp 50 tick, fewer than two components reading, Altman distress
+alongside flagged accruals — each returns *no action* whatever the score, and the score is
+still shown so you can see what you would be overriding.
+
+**Every report opens with the null result.** `backtest_results.json` reports that this app's
+own price ranking showed no relationship to subsequent returns surviving correction for
+multiple testing. That paragraph is the first and largest block on the page, above the table,
+because the table means something different depending on it. Where the artifact is missing
+the warning gets *louder*, not quieter.
+
+Click any row in the HTML report for the arithmetic: five components with their evidence
+grades, both family readings, the shrinkage, every pre-trade flag with its measured firing
+rate, and every gate. A score with no decomposition cannot be argued with, which is exactly
+why `technical.long_term_view` refuses to ship one.
+
+`GET /api/verdict?ticker=BBCA&market=ID` does the same for a single name in about eight
+seconds. **The published single-company view is untouched** — `/api/confluence` has no score
+and no ordering, and `tests/test_verdict.py` asserts by AST that neither `explain` nor
+`pretrade` can import the scoring module at all.
+
+---
+
 ## Why these particular models
 
 The short version: every number in the app should be traceable to something published, and
@@ -530,7 +594,8 @@ Interactive docs at `/api/docs`.
 | `GET /api/quality` | Quality: F-Score, Z''-score, M-Score |
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
-| `GET /api/rank/universes` | The predefined lists, each with its as-of date |
+| `GET /api/rank/universes` | The predefined lists and the fetched whole-market lists, each with its as-of date |
+| `GET /api/verdict` | **The private scanner's score and action for one name** — five components, both families, the shrinkage, the gates, and the null result that calibrates all of it |
 | `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. The one POST, and the one `no-store` |
 | `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
 | `GET /api/rank/deepen` | Quality + valuation for a shortlist of up to 8 |
@@ -547,9 +612,9 @@ curl "http://localhost:8000/api/confluence?ticker=BBCA.JK&market=ID"
 Each leg of `/api/confluence` reports its own success or failure, so a company with no
 dividend history still returns its other three panels.
 
-**Limits.** Per-IP rate limiting (40/min default; 3/min for the screener and the ranking
-scan; 2/min for shortlist deepening, which is the one route that does *not* batch; 6/min for
-the event study). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
+**Limits.** Per-IP rate limiting (40/min default; 3/min for the screener, the ranking scan
+and the verdict, which runs a universe scan *and* four lenses; 2/min for shortlist deepening,
+which is the one route that does *not* batch; 6/min for the event study). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
 8. These exist because each of those requests fans out to upstream calls — the caps are sized
 to what actually batches.
 

@@ -1,0 +1,472 @@
+"""The private scanner's score, action and gates.
+
+WHAT THESE TESTS PROTECT, IN ORDER OF HOW BADLY IT WOULD HURT TO LOSE IT
+
+1. THE PUBLISHED SURFACES STAY CLEAN. `verdict.py` produces exactly the
+   composite `PRODUCT.md` constraint 1 refuses for the single-company view, and
+   the only thing keeping that refusal true is that nothing on that path imports
+   this module. That is asserted here rather than trusted, because it is a
+   one-line mistake to make and nothing else would catch it.
+
+2. NOTHING IS EVER IMPUTED. A lens that did not return removes its weight from
+   the blend; it never contributes a 50. The difference is invisible in the
+   output — both produce a score — and it is the difference between a
+   measurement and a guess.
+
+3. A REFUSAL IS NOT A GAP. Quality on a bank comes back `refused`, not
+   `unavailable`, and never as a low score. IDX is roughly a third banks by
+   index weight, so getting this wrong would systematically mark down the
+   largest names in the market for a screen that was never applicable to them.
+
+4. GATES OVERRIDE THE SCORE, ALWAYS. Tradeability is a fact about the order
+   book. No quantity of good signal makes an untradeable name tradeable, and a
+   100-scoring name below the turnover floor must still come back NO ACTION.
+
+5. LESS EVIDENCE MEANS A SCORE CLOSER TO NEUTRAL. Disagreeing families, a
+   missing family and missing components each shrink the result. A 78 from two
+   agreeing families and a 78 from one family with three gaps are different
+   claims and must not print the same.
+
+6. THE NULL RESULT SHIPS WITH THE SCORE. `provenance()` carries the measured
+   finding that the price composite has no detectable edge, and it degrades to
+   a LOUDER warning when the artifact is missing, never to silence.
+
+The wording is free to change. Those six are not.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from _lib import verdict as V
+
+
+# --------------------------------------------------------------------------- #
+# Payload builders — the confluence leg shapes the readers consume
+# --------------------------------------------------------------------------- #
+def leg(data, ok=True, error="boom"):
+    return {"ok": ok, "data": data} if ok else {"ok": False, "error": error}
+
+
+def anomaly(bias="Accumulation", recent=3, days=10, regime="accumulation"):
+    return leg({
+        "stats": {"recentCount": recent, "recentDays": days,
+                  "recentFlowBias": bias, "anomalyCount": 12},
+        "accumulation": {"current": {"direction": regime} if regime else None},
+    })
+
+
+def technical(passed=7, scored=8, verdict_word="CONSTRUCTIVE", has_long=True):
+    return leg({
+        "hasLongTerm": has_long,
+        "longTerm": {"view": {"verdict": verdict_word, "tone": "bull",
+                              "passed": passed, "scored": scored}},
+        "summary": {"trend": "Bullish", "trend_tone": "bull"},
+    })
+
+
+def valuation(prob=0.80, terminal=0.35, verdict_word="UNDERVALUED"):
+    return leg({
+        "engine": "DCF", "price": 1000.0, "priceLabel": "Rp 1,000",
+        "verdict": verdict_word,
+        "monteCarlo": {"probUndervalued": prob, "p50": 1400.0, "p50Label": "Rp 1,400"},
+        "baseCase": {"terminalShare": terminal},
+    })
+
+
+def quality(applicable=True, score=8, altman="safe", beneish="clean",
+            cause="financial"):
+    if not applicable:
+        reasons = {
+            "financial": "Piotroski, Altman and Beneish were all built on "
+                         "non-financial firms.",
+            "no-statements": "No financial statements came back for this listing.",
+            "unknown-sector": "No sector or industry came back for this listing, so "
+                              "there is no way to tell whether the models apply.",
+        }
+        return leg({"applicable": False, "cause": cause,
+                    "reason": reasons.get(cause, "unavailable")})
+    return leg({
+        "applicable": True,
+        "piotroski": {"score": score, "maxScore": 9, "band": "strong"},
+        "altman": {"score": 6.2, "band": altman},
+        "beneish": {"score": -2.6, "band": beneish},
+    })
+
+
+def legs(**overrides):
+    base = {"anomaly": anomaly(), "technical": technical(),
+            "valuation": valuation(), "quality": quality()}
+    base.update(overrides)
+    return base
+
+
+def rank_row(composite=80.0, coverage=1.0, rank=1):
+    return {"ticker": "T.JK", "composite": composite, "coverage": coverage,
+            "rank": rank, "signalsAvailable": 7, "signalsTotal": 7,
+            "signals": {"lowVolatility": {"raw": 0.30}}}
+
+
+def liquid(turnover=5.0e10):
+    return {"medianDollarVolume": turnover}
+
+
+def scored(**kwargs):
+    """A fully specified, tradeable, everything-available call."""
+    payload = {"legs": legs(), "rank_row": rank_row(), "liquidity": liquid(),
+               "market": "ID", "latest_close": 1000.0, "annual_volatility": 0.30}
+    payload.update(kwargs)
+    return V.score("T.JK", **payload)
+
+
+# ============================================================================ #
+# 1. The published surfaces must not be able to reach this module
+# ============================================================================ #
+def test_the_published_synthesis_does_not_import_the_composite():
+    """`PRODUCT.md` constraint 1 holds because of exactly this.
+
+    `explain.for_synthesis` and `pretrade.assess` are the two payloads the
+    single-company view renders, and both are guarded against aggregates by
+    their own suites. Those guards are worth nothing if either module starts
+    reading a score from here, so the import direction is asserted directly.
+    """
+    import ast
+    import inspect
+
+    from _lib import explain, pretrade
+
+    # AST, not a substring search: both modules use the word "verdict" in prose
+    # constantly — it is the app's own term for a lens's reading — so a text
+    # match would fail on a docstring. What must not exist is an IMPORT.
+    for module in (explain, pretrade):
+        tree = ast.parse(inspect.getsource(module))
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name.split(".")[-1] for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                imported.update(alias.name for alias in node.names)
+                if node.module:
+                    imported.add(node.module.split(".")[-1])
+        assert "verdict" not in imported, (
+            f"{module.__name__} imports `verdict`. The private scanner's composite "
+            f"must never reach a published surface - see PRODUCT.md constraint 1.")
+
+
+def test_the_verdict_carries_its_own_refusal_of_advice():
+    result = scored()
+    assert "not investment advice" in result["caveat"].lower()
+    assert "not a forecast" in result["caveat"].lower()
+
+
+# ============================================================================ #
+# 2. Nothing is imputed
+# ============================================================================ #
+def test_a_missing_lens_removes_its_weight_rather_than_scoring_fifty():
+    """The failure this prevents is invisible in the output.
+
+    Imputing 50 for a lens that did not return produces a score, a coverage of
+    100% and no complaint. The name is then dragged toward the middle of the
+    pack for the crime of having a filing gap, and the report calls that a
+    measurement — the exact failure `ranking.py` names about median imputation.
+    """
+    with_flow = scored()
+    without_flow = scored(legs=legs(anomaly=leg(None, ok=False)))
+
+    flow = next(c for c in without_flow["components"] if c["key"] == "flow")
+    assert flow["available"] is False
+    assert flow["score"] is None
+    assert flow["effectiveWeight"] == 0.0
+    assert without_flow["coverage"] < with_flow["coverage"]
+    assert without_flow["componentsRead"] == with_flow["componentsRead"] - 1
+
+
+def test_coverage_is_the_share_of_intended_weight_that_actually_read():
+    result = scored(legs=legs(quality=leg(None, ok=False)))
+    intended = sum(c["weight"] for c in V.COMPONENTS)
+    # `coverage` is rounded to three places on the wire, so the tolerance is the
+    # rounding and not a fudge factor.
+    assert result["coverage"] == pytest.approx(
+        (intended - V.COMPONENT_BY_KEY["quality"]["weight"]) / intended, abs=5e-4)
+
+
+def test_a_family_with_no_readable_component_is_absent_not_neutral():
+    result = scored(legs=legs(valuation=leg(None, ok=False),
+                              quality=leg(None, ok=False)))
+    assert result["families"]["filings"] is None
+    assert result["agreement"]["state"] == "single"
+
+
+# ============================================================================ #
+# 3. A refusal is not a gap
+# ============================================================================ #
+def test_quality_on_a_bank_is_refused_and_never_a_low_score():
+    """IDX is heavily weighted toward banks. Scoring a refusal as a zero — or as
+    a neutral 50 — would systematically misprice the largest names in the market
+    for a screen that was never applicable to them."""
+    result = scored(legs=legs(quality=quality(applicable=False)))
+    component = next(c for c in result["components"] if c["key"] == "quality")
+
+    assert component["available"] is False
+    assert component["refused"] is True
+    assert component["score"] is None
+    assert "non-financial firms" in component["reason"]
+    assert any("Refused" in reason for reason in result["reasons"])
+
+
+def test_a_coverage_gap_is_not_dressed_up_as_the_bank_refusal():
+    """The wrong answer this prevents was found on the first real IDX scan.
+
+    Seven small caps - a tape manufacturer, a hotel operator, a chocolate maker -
+    came back `applicable: false` because Yahoo returned no statements for them,
+    and the report said "the models do not transfer to a bank or insurer". That
+    is a plausible sentence about the wrong company. `quality.analyze` carries
+    `cause` so the two never have to be told apart by reading the prose.
+    """
+    gap = scored(legs=legs(quality=quality(applicable=False, cause="no-statements")))
+    component = next(c for c in gap["components"] if c["key"] == "quality")
+    assert component["available"] is False
+    assert component["refused"] is False
+    assert "bank or insurer" not in (component["reason"] or "")
+    assert "statements" in component["reason"]
+
+
+def test_an_unknown_sector_is_a_gap_and_never_the_bank_refusal():
+    """`quality.analyze` declines to guess when the sector lookup came back
+    empty, because on a throttled fetch a bank otherwise gets an F-score. That
+    refusal-to-guess is a coverage problem and must not read as the designed
+    one, which says something true about the models."""
+    unknown = scored(legs=legs(quality=quality(applicable=False,
+                                               cause="unknown-sector")))
+    component = next(c for c in unknown["components"] if c["key"] == "quality")
+    assert component["available"] is False
+    assert component["refused"] is False
+
+
+def test_a_failed_lens_is_reported_as_not_read_rather_than_refused():
+    result = scored(legs=legs(quality=leg(None, ok=False)))
+    component = next(c for c in result["components"] if c["key"] == "quality")
+    assert component["available"] is False
+    assert component["refused"] is False
+
+
+def test_distress_caps_the_quality_component_instead_of_subtracting_from_it():
+    """Solvency is not a gradient a good trading record can offset.
+
+    Eight of nine health checks passing inside the distress zone is still inside
+    the distress zone. A subtraction would let the F-score buy its way out.
+    """
+    healthy = V.read_quality(legs(quality=quality(score=9, altman="safe")))
+    distressed = V.read_quality(legs(quality=quality(score=9, altman="distress")))
+    assert healthy["score"] == pytest.approx(100.0)
+    assert distressed["score"] <= 25.0
+
+
+# ============================================================================ #
+# 4. Gates override the score
+# ============================================================================ #
+def test_an_illiquid_name_is_no_action_however_well_it_scores():
+    result = scored(rank_row=rank_row(composite=99.0),
+                    liquidity=liquid(turnover=1.0e6))
+    assert result["action"] == "NO_ACTION"
+    assert any(gate["id"] == "illiquid" for gate in result["gates"])
+    # The score itself is NOT suppressed. A reader who overrides the gate has to
+    # be able to see what they are overriding.
+    assert result["score"] is not None and result["score"] > 60
+
+
+def test_unmeasured_turnover_gates_exactly_as_hard_as_measured_illiquidity():
+    """Unmeasured is not clear. The two states have different explanations and
+    the same consequence, which is the point."""
+    result = scored(liquidity=None)
+    assert result["action"] == "NO_ACTION"
+    assert any(gate["id"] == "turnoverUnknown" for gate in result["gates"])
+
+
+def test_a_name_resting_on_the_tick_floor_is_gated():
+    result = scored(latest_close=50.0)
+    assert result["action"] == "NO_ACTION"
+    assert any(gate["id"] == "tickFloor" for gate in result["gates"])
+
+
+def test_one_lens_is_not_a_composite():
+    result = scored(legs={"anomaly": anomaly()}, rank_row=None)
+    assert result["action"] == "NO_ACTION"
+    assert any(gate["id"] == "insufficientEvidence" for gate in result["gates"])
+
+
+def test_distress_alone_caps_at_hold_and_with_flagged_accruals_at_avoid():
+    capped = scored(legs=legs(quality=quality(altman="distress")))
+    assert capped["action"] == "HOLD"
+
+    both = scored(legs=legs(quality=quality(altman="distress", beneish="flagged")))
+    assert both["action"] == "AVOID"
+
+
+@pytest.mark.parametrize("gate_action", ["NO_ACTION", "AVOID", "HOLD"])
+def test_a_gate_never_raises_an_action(gate_action):
+    """A gate is a ceiling. One that could promote a name would be a
+    recommendation dressed as a safety check."""
+    order = V.ACTION_ORDER
+    for action in order:
+        capped = V._cap_action(action, gate_action if gate_action != "NO_ACTION"
+                               else "AVOID")
+        assert order.index(capped) <= order.index(action)
+
+
+# ============================================================================ #
+# 5. Less evidence means a score closer to neutral
+# ============================================================================ #
+def test_disagreeing_families_are_pulled_harder_toward_neutral_than_agreeing_ones():
+    agreeing = scored()
+    disagreeing = scored(legs=legs(valuation=valuation(prob=0.05,
+                                                       verdict_word="OVERVALUED"),
+                                    quality=quality(score=1)))
+    assert agreeing["agreement"]["state"] == "agree"
+    assert disagreeing["agreement"]["state"] == "disagree"
+    assert disagreeing["shrink"]["agreement"] < agreeing["shrink"]["agreement"]
+    assert abs(disagreeing["shrunkScore"] - 50) < abs(agreeing["shrunkScore"] - 50)
+
+
+def test_a_single_family_cannot_reach_high_conviction():
+    result = scored(legs=legs(valuation=leg(None, ok=False),
+                              quality=leg(None, ok=False)))
+    assert result["conviction"] == "low"
+    assert result["action"] != "STRONG_BUY"
+
+
+def test_strong_buy_requires_high_conviction_as_well_as_the_score():
+    """A 74 assembled from one family with two gaps is not a strong anything,
+    and shrinkage alone does not always drag it under the band."""
+    result = scored()
+    if result["score"] >= V.BANDS[0][0]:
+        assert result["conviction"] == "high"
+    for conviction in ("low", "medium"):
+        assert conviction != V.STRONG_BUY_REQUIRES
+
+
+def test_shrinkage_never_flips_the_side_of_the_score():
+    """Pulling toward 50 is not the same as changing the answer. A raw 70 must
+    never shrink to below 50, whatever the deficiency."""
+    for kwargs in ({}, {"legs": legs(quality=leg(None, ok=False))},
+                   {"legs": legs(valuation=leg(None, ok=False),
+                                 quality=leg(None, ok=False))}):
+        result = scored(**kwargs)
+        raw, shrunk = result["rawScore"], result["shrunkScore"]
+        assert (raw - 50) * (shrunk - 50) >= 0
+        assert abs(shrunk - 50) <= abs(raw - 50) + 1e-9
+
+
+def test_the_two_families_are_weighted_equally_not_by_component_count():
+    """Three price components and two filings ones are still two bodies of data.
+    Letting the count decide would give the price record more say purely because
+    it is cheaper to compute."""
+    result = scored()
+    price = result["families"]["price"]["score"]
+    filings = result["families"]["filings"]["score"]
+    assert result["rawScore"] == pytest.approx((price + filings) / 2, abs=0.06)
+
+
+# ============================================================================ #
+# 6. The null result ships with the score
+# ============================================================================ #
+def test_provenance_carries_the_measured_null_result():
+    provenance = V.provenance()
+    assert provenance["available"] is True
+    assert provenance["significant"] == 0
+    assert provenance["headline"]
+    assert "price-and-volume composite" in provenance["appliesTo"]
+
+
+def test_a_missing_backtest_artifact_gets_louder_not_quieter(monkeypatch):
+    from _lib import ranking
+
+    monkeypatch.setattr(ranking, "validation", lambda universe_id=None:
+                        {"available": False})
+    provenance = V.provenance()
+    assert provenance["available"] is False
+    assert "NOT been measured" in provenance["headline"]
+
+
+# ============================================================================ #
+# Penalties — calibrated, or they do not count
+# ============================================================================ #
+def flag(check_id="x", rate=0.05, band="bad", classification="flag"):
+    return {"id": check_id, "classification": classification, "firingRate": rate,
+            "universeLabel": "the IDX30", "where": "Quality",
+            "explain": {"label": f"Check {check_id}", "band": band,
+                        "reading": "fired"}}
+
+
+def test_a_rare_flag_costs_more_than_a_common_one():
+    rare = V._penalties({"flags": [flag(rate=0.02)]})
+    common = V._penalties({"flags": [flag(rate=0.30)]})
+    assert rare[0]["points"] > common[0]["points"]
+
+
+def test_a_base_condition_costs_nothing():
+    """`pretrade.py`'s own argument: a condition firing on a third of a universe
+    describes the equity market, and charging a company for it manufactures a
+    finding out of a base rate."""
+    assert V._penalties({"baseConditions": [flag(rate=0.40)]}) == []
+    assert V._penalties({"flags": [flag(rate=0.40, classification="base")]}) == []
+
+
+def test_an_uncalibrated_condition_can_never_cost_points():
+    unmeasured = {"id": "y", "classification": "flag", "explain": {"label": "Y"}}
+    assert V._penalties({"flags": [unmeasured]}) == []
+
+
+def test_the_penalty_total_is_capped_because_flags_are_correlated():
+    many = {"flags": [flag(check_id=str(i), rate=0.01) for i in range(10)]}
+    result = scored(pretrade_result=many)
+    assert result["penaltyTotal"] == V.MAX_TOTAL_PENALTY
+    assert result["penaltyCapped"] is True
+
+
+# ============================================================================ #
+# Degradation — the empty case must be a sentence, not an exception
+# ============================================================================ #
+def test_nothing_at_all_returns_a_stated_no_action():
+    result = V.score("EMPTY.JK")
+    assert result["action"] == "NO_ACTION"
+    assert result["score"] is None
+    assert result["conviction"] == "none"
+    assert result["reasons"]
+    assert result["sizing"]["applicable"] is False
+
+
+def test_every_component_reader_survives_a_junk_payload():
+    """A reader that raises takes down a whole scan row. Each one is handed the
+    shapes a failed upstream actually produces."""
+    for payload in ({}, {"anomaly": {"ok": True, "data": None}},
+                    {"technical": leg({"longTerm": {}})},
+                    {"valuation": leg({"monteCarlo": {}})},
+                    {"quality": leg({"applicable": True, "piotroski": {}})}):
+        for reader in (V.read_trend, V.read_flow, V.read_value, V.read_quality):
+            outcome = reader(payload)
+            assert "available" in outcome
+    assert V.read_price_rank({"composite": None})["available"] is False
+    assert V.read_price_rank(None)["available"] is False
+
+
+# ============================================================================ #
+# Sizing is arithmetic and says so
+# ============================================================================ #
+def test_a_calmer_name_is_sized_larger_at_the_same_risk_budget():
+    calm = scored(annual_volatility=0.15)
+    wild = scored(annual_volatility=0.60)
+    assert calm["sizing"]["weight"] > wild["sizing"]["weight"]
+    assert calm["sizing"]["weight"] <= 0.10
+
+
+def test_sizing_is_not_computed_for_anything_outside_the_buy_bands():
+    result = scored(rank_row=rank_row(composite=2.0),
+                    legs=legs(valuation=valuation(prob=0.01,
+                                                   verdict_word="OVERVALUED"),
+                              quality=quality(score=0),
+                              technical=technical(passed=0, scored=8),
+                              anomaly=anomaly(bias="Distribution",
+                                              regime="distribution")))
+    assert result["action"] in {"AVOID", "REDUCE"}
+    assert result["sizing"]["applicable"] is False

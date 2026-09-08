@@ -10,6 +10,7 @@ import type {
   Synthesis, TechnicalResponse,
   UniversesResponse,
   ValuationResponse,
+  VerdictResponse,
 } from "./types";
 
 /** Drops undefined/null/empty/NaN so optional params never reach the API as "". */
@@ -670,4 +671,50 @@ export function usePeers() {
   }, []);
 
   return { state, compare, reset };
+}
+
+/**
+ * The private scanner's verdict for one name.
+ *
+ * A SEPARATE, DELIBERATE REQUEST, for the same reason `usePeers` is one: the
+ * route runs a whole universe scan for the percentile AND four per-symbol
+ * lenses on top, about eight seconds, sharing the ranking tier's per-IP cap.
+ * That cost belongs to a reader who asked for it rather than to every ticker
+ * run — and it is a question most readers of the single-company view are not
+ * asking, which is the more important half.
+ *
+ * Nothing here caches. The verdict is a function of today's price and the last
+ * filing, and a stale one is the failure mode this app is least equipped to
+ * notice — it looks identical to a fresh one.
+ */
+export function useVerdict() {
+  const [state, setState] = useState<Engine<VerdictResponse>>({ status: "idle" });
+  const seq = useRef(0);
+  const inflight = useRef<AbortController | null>(null);
+
+  const score = useCallback((o: { ticker: string; market: Market; universe?: string }) => {
+    inflight.current?.abort();
+    const controller = new AbortController();
+    inflight.current = controller;
+    const token = (seq.current += 1);
+    const live = () => seq.current === token;
+
+    setState({ status: "loading" });
+    get<VerdictResponse>("/api/verdict", {
+      ticker: o.ticker, market: o.market, universe: o.universe,
+    }, controller.signal)
+      .then((data) => { if (live()) setState({ status: "ready", data }); })
+      .catch((err) => {
+        if (isAbort(err) || !live()) return;
+        setState({ status: "error", failure: asFailure(err) });
+      });
+  }, []);
+
+  const reset = useCallback(() => {
+    inflight.current?.abort();
+    seq.current += 1;
+    setState({ status: "idle" });
+  }, []);
+
+  return { state, score, reset };
 }

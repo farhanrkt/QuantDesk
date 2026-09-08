@@ -1058,3 +1058,126 @@ export interface ExposureScanResponse {
                   rawOneYear?: Record<string, number | null> };
   explain?: ExplainMap;
 }
+
+
+/* --------------------------------------------------------------------------- *
+ * The private scanner's verdict
+ *
+ * ONE SCORE AND ONE ACTION PER NAME — the composite the published
+ * single-company view refuses. It is a separate surface answering a separate
+ * question, and `PRODUCT.md` constraint 1 records why the two coexist. Nothing
+ * here is read by the confluence rail, the synthesis or the pre-trade panel.
+ *
+ * `provenance` is not optional and must not be rendered away. It carries the
+ * measured finding that this app's price ranking shows no detectable
+ * relationship to subsequent returns, which is what calibrates every number
+ * beside it.
+ * --------------------------------------------------------------------------- */
+
+export type VerdictAction =
+  | "STRONG_BUY" | "BUY" | "HOLD" | "REDUCE" | "AVOID" | "NO_ACTION";
+
+export interface VerdictComponent {
+  key: string;
+  label: string;
+  /** "price" or "filings" — which body of data this reads. */
+  family: string;
+  evidence: string;
+  detail: string;
+  baseWeight: number;
+  /** Zero when the component did not read. Never imputed. */
+  effectiveWeight: number;
+  score: number | null;
+  available: boolean;
+  /** True only for a DESIGNED refusal, never for a coverage gap. */
+  refused: boolean;
+  reason: string | null;
+  reading: string | null;
+}
+
+export interface VerdictFamily {
+  family: string;
+  label: string;
+  score: number;
+  /** +1, -1 or 0. Zero is the neutral band, not a missing reading. */
+  side: number;
+  members: string[];
+  weight: number;
+}
+
+export interface VerdictGate {
+  id: string;
+  /** The ceiling this gate imposes. Never a promotion. */
+  action: VerdictAction;
+  label: string;
+  detail: string;
+}
+
+export interface VerdictPenalty {
+  id: string;
+  label: string;
+  band: string;
+  where?: string;
+  firingRate: number;
+  points: number;
+  reading?: string | null;
+  why: string;
+}
+
+export interface VerdictResponse {
+  ticker: string;
+  name: string;
+  market: string;
+  action: VerdictAction;
+  actionLabel: string;
+  /** `explain.tone`. The only permitted input to colour. */
+  tone: string;
+  score: number | null;
+  rawScore: number | null;
+  shrunkScore: number | null;
+  conviction: "high" | "medium" | "low" | "none";
+  /** Whether BOTH bodies of data returned a reading at all. */
+  crossChecked: boolean;
+  familiesRead: number;
+  coverage: number;
+  componentsRead: number;
+  componentsTotal: number;
+  components: VerdictComponent[];
+  families: { price: VerdictFamily | null; filings: VerdictFamily | null };
+  agreement: { state: string; shrink: number; conviction: string; text: string };
+  shrink: { agreement: number; coverage: number; combined: number; text: string };
+  penalties: VerdictPenalty[];
+  penaltyTotal: number;
+  penaltyCapped: boolean;
+  gates: VerdictGate[];
+  gatedBy: string[];
+  latestClose: number | null;
+  turnover: number | null;
+  sizing: {
+    applicable: boolean;
+    reason?: string;
+    annualVolatility?: number;
+    riskBudget?: number;
+    uncappedWeight?: number;
+    weight?: number;
+    capped?: boolean;
+    basis?: string;
+  };
+  reasons: string[];
+  caveat: string;
+  rank: number | null;
+  universe: {
+    id: string; name: string; asOf: string; count: number;
+    scanned: number; ranked: boolean; note: string;
+  } | null;
+  /** The measured null result. Never render the score without it. */
+  provenance: {
+    available: boolean;
+    headline: string;
+    measuredOn?: string | null;
+    years?: number | null;
+    tests?: number | null;
+    significant?: number | null;
+    appliesTo?: string;
+  };
+}

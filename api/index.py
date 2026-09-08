@@ -57,9 +57,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from _lib import (accumulation, eventstudy, explain, exposure, market_data,
-                  microstructure, news, portfolio, pretrade, quality, ranking,
-                  riskmodel, symbols, technical, universes, valuation)
+from _lib import (accumulation, eventstudy, explain, exposure, listings,
+                  market_data, microstructure, news, portfolio, pretrade, quality,
+                  ranking, riskmodel, symbols, technical, universes, valuation,
+                  verdict)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -134,6 +135,9 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # Runs the identical universe scan and keeps one row of it, so it carries
     # the identical cost and the identical cap.
     "/api/peers": (3, 60),
+    # Same class as `/api/peers` and for the same reason: it runs a whole
+    # universe scan for the percentile, then four per-symbol lenses on top.
+    "/api/verdict": (3, 60),
     # One batch download of the whole book plus the candidate. Same shape of
     # cost as the ranking scan, same cap.
     "/api/portfolio": (3, 60),
@@ -612,7 +616,18 @@ def rank_universes():
     fetches, so a stale list ranks a slightly wrong universe and reports no
     error. See `_lib/universes.py` for why there is no S&P 500 here.
     """
-    return ok({"universes": universes.catalogue(), "asOf": universes.AS_OF,
+    # The whole-market lists are appended rather than written into
+    # `universes.UNIVERSES` deliberately. Those five entries are hardcoded and
+    # their membership is what four stamped measurement artifacts were taken
+    # against; adding a fetched, dated, market-sized list to that dict would
+    # make "the universes this app knows" mean two different things at once and
+    # would put a moving population inside the constant the artifacts cite.
+    catalogue = list(universes.catalogue())
+    for market in ("ID", "US"):
+        entry = listings.catalogue_entry(market, limit=RANK_MAX_UNIVERSE)
+        if entry is not None:
+            catalogue.append(entry)
+    return ok({"universes": catalogue, "asOf": universes.AS_OF,
                "maxUniverse": RANK_MAX_UNIVERSE, "maxDeepen": DEEPEN_MAX})
 
 
@@ -638,6 +653,14 @@ def rank(
     """
     if universe:
         entry = universes.get(universe)
+        if entry is None:
+            # A whole-market id resolves through the cached listing instead. It
+            # is checked SECOND so a predefined index can never be shadowed by a
+            # fetched list that happens to share its id.
+            entry = next(
+                (candidate for candidate in
+                 (listings.as_universe(m, limit=RANK_MAX_UNIVERSE) for m in ("ID", "US"))
+                 if candidate is not None and candidate["id"] == universe), None)
         if entry is None:
             raise HTTPException(
                 status_code=404,
@@ -752,6 +775,155 @@ def peers(
         "benchmark": result.get("benchmark"),
         "explain": explain.for_peers(row, context, result["signals"],
                                      result.get("correlation")),
+    })
+
+
+# --------------------------------------------------------------------------- #
+# The private scanner's verdict for one name
+#
+# THIS ROUTE IS NOT PART OF THE PUBLISHED SINGLE-COMPANY VIEW AND MUST NOT
+# BECOME PART OF IT. `PRODUCT.md` constraint 1 refuses a composite buy/hold/sell
+# on that surface permanently, and `/api/confluence` still honours it: its
+# `synthesis` and `preTrade` blocks aggregate nothing, and their suites still
+# assert that they cannot. This is a separate endpoint answering a separate
+# question — "of a whole market, what deserves my attention" — which cannot be
+# answered without ordering, and where refusing to order means refusing to
+# answer. Keeping the two apart is what lets both be honest.
+#
+# It exists so a single name can be checked without running `scan_market.py`
+# over a universe. The heavy path — hundreds of names — stays a script, because
+# it costs minutes and this function has sixty seconds.
+# --------------------------------------------------------------------------- #
+@app.get("/api/verdict")
+async def name_verdict(
+    ticker: str = Query(..., pattern=TICKER_PATTERN),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+    universe: Optional[str] = Query(
+        None, pattern="^[a-z0-9]{1,24}$",
+        description="Peer group for the price percentile. Defaults to the largest "
+                    "predefined universe this ticker belongs to."),
+    risk_budget: float = Query(0.02, gt=0.0, le=0.25),
+    max_weight: float = Query(0.10, gt=0.0, le=1.0),
+):
+    """One name scored on every lens, with the arithmetic and the null result.
+
+    THE PERCENTILE NEEDS A POPULATION, and that is the one input this route
+    cannot derive from the ticker alone. A cross-sectional rank is a claim about
+    a universe on a date — `ranking.py` argues this at length — so the peer
+    group is chosen the same way `/api/peers` chooses it, echoed in the response,
+    and named in the payload. A name in no predefined universe is scored WITHOUT
+    the price component rather than against a borrowed one, and says so.
+
+    Every response carries `provenance`: the measured finding that this app's
+    price ranking showed no detectable relationship to subsequent returns. A
+    caller rendering the score without it is misrepresenting what it is.
+    """
+    symbol, market = resolved_with_market(ticker, market)
+
+    entry = None
+    if universe:
+        entry = universes.get(universe)
+        if entry is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown peer group '{universe}'. See /api/rank/universes.")
+    else:
+        candidates = universes.containing(symbol)
+        if candidates:
+            entry = universes.get(candidates[0]["id"])
+
+    async def leg(name, fn):
+        try:
+            return name, {"ok": True, "data": await asyncio.to_thread(fn)}
+        except HTTPException as exc:
+            return name, {"ok": False, "error": exc.detail}
+        except Exception as exc:
+            return name, {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+    # THE UNIVERSE SCAN RUNS BEFORE THE LENSES AND NOT BESIDE THEM. This was
+    # written the other way first, on the obvious reasoning that the batched
+    # download is the slowest leg and overlapping it with the other four is free.
+    # It is not free: it hangs.
+    #
+    # `ranking.scan` reaches `yf.download(..., threads=True)`, which spawns its
+    # own worker threads, and the four lenses reach `Ticker` on the same
+    # process-wide yfinance session. Run together, the batch download never
+    # returned — measured twice at over four minutes against 3.6 seconds on its
+    # own, while the four lenses beside it finished in 3.4. Every other
+    # concurrent route in this file (`/api/confluence`, `/api/screener`) fans out
+    # over PER-SYMBOL fetches only, which is why nothing had hit this before.
+    #
+    # Sequential costs about four seconds and completes: 8.2s end to end against
+    # a sixty-second budget. A route that is four seconds slower is a cost; a
+    # route that hangs is an outage.
+    scan = None
+    if entry is not None:
+        scan = await asyncio.to_thread(ranking.scan, entry["tickers"], entry["market"])
+
+    results = await asyncio.gather(
+        leg("anomaly", lambda: whale_payload(symbol)),
+        leg("technical", lambda: technical_payload(symbol, range_key="2y",
+                                                   market_code=market.upper())),
+        leg("valuation", lambda: valuation_payload(
+            symbol, **_valuation_kwargs(market=market))),
+        leg("quality", lambda: quality_payload(symbol)),
+    )
+    legs = dict(results)
+
+    row = None
+    universe_context = None
+    if scan is not None and entry is not None:
+        row = next((r for r in scan["rows"] if r["ticker"] == symbol), None)
+        universe_context = {
+            "id": entry["id"], "name": entry["name"], "asOf": entry["asOf"],
+            "count": entry["count"], "scanned": scan["ranked"],
+            "ranked": row is not None,
+            "note": (entry["note"] if row is not None else
+                     f"{symbol} did not rank against {entry['name']} — it needs at "
+                     f"least {ranking.MIN_BARS} trading days of history. The price "
+                     f"component is absent rather than guessed."),
+        }
+
+    # Liquidity and volatility come from the technical leg's own frame where it
+    # returned, so the gate reads the same bars the chart drew. Where it did not,
+    # they are absent and the gate says "unmeasured" — which is not the same as
+    # "liquid" and is treated as harshly.
+    liquidity = None
+    latest_close = None
+    annual_volatility = None
+    technical_data = legs["technical"].get("data") if legs["technical"]["ok"] else None
+    if technical_data:
+        latest_close = (technical_data.get("latest") or {}).get("close")
+    if row is not None:
+        annual_volatility = ((row.get("signals") or {}).get("lowVolatility")
+                             or {}).get("raw")
+    try:
+        frame = market_data.ohlcv(symbol, period="1y")
+        liquidity = microstructure.liquidity_profile(frame)
+        latest_close = latest_close or float(frame["Close"].iloc[-1])
+    except Exception:
+        liquidity = None
+
+    checks = pretrade.assess(legs, market=symbols.market_of(symbol))
+    scored = verdict.score(
+        symbol, legs=legs, rank_row=row, pretrade_result=checks,
+        liquidity=liquidity, market=symbols.market_of(symbol),
+        # The company name comes from the cached listing where there is one.
+        # A report that prints "BBCA.JK" and one that prints "PT Bank Central
+        # Asia Tbk" are the same data and not the same document.
+        name=listings.names_for(symbols.market_of(symbol)).get(symbol),
+        annual_volatility=annual_volatility, latest_close=latest_close,
+        risk_budget=risk_budget, max_weight=max_weight,
+    )
+
+    return ok({
+        **scored,
+        "rank": (row or {}).get("rank"),
+        "universe": universe_context,
+        # THE NULL RESULT TRAVELS WITH THE SCORE, in the same response, so a
+        # client cannot render one without having been handed the other.
+        "provenance": verdict.provenance(),
+        "preTrade": checks,
     })
 
 

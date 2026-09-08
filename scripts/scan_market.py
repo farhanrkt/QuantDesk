@@ -1,0 +1,528 @@
+#!/usr/bin/env python3
+"""
+scan_market.py
+==============
+Score a whole market and rank it by what to do about each name.
+
+    python scripts/scan_market.py --market ID --deepen 40
+    python scripts/scan_market.py --market ID --deepen all --hold BBCA,TLKM
+    python scripts/scan_market.py --market ID --universe lq45 --deepen 45
+
+WHY THIS IS A SCRIPT AND NOT A ROUTE
+------------------------------------
+The funnel below costs, for a full IDX sweep, about 17 batched price requests
+plus one fundamentals fetch per deepened name at several seconds each. That is
+minutes, and the serverless function this app deploys as has sixty seconds. The
+breadth half of the funnel already ships as `/api/rank` because it fits; the
+depth half already ships as `/api/rank/deepen` capped at a handful of names
+because that is what fits. Scanning 837 listings and deepening forty of them
+does not fit, and pretending otherwise would produce a route that times out on
+exactly the input it was built for.
+
+So it runs here, on a laptop, with a cache and a written report — which is also
+the honest shape for a tool one person uses.
+
+THE FUNNEL, AND WHY IT NARROWS IN THIS ORDER
+--------------------------------------------
+1. UNIVERSE. Every listing the provider knows about, from `listings.py`, with
+   the date it was taken. Not recited from memory — see that module.
+
+2. PRICE HISTORY, in batch. `market_data.ohlcv_batch` is what makes 837 names
+   affordable: one request per fifty symbols rather than one per name.
+
+3. TRADEABILITY, before anything expensive. This is deliberately the SECOND
+   filter and not the last. Most of the Indonesian market cannot absorb a
+   personal order, thin names carry the most extreme percentiles on every price
+   signal, and a scan that ranked first and filtered afterwards would spend all
+   its fundamentals budget on names it was about to discard. Filtering here also
+   means the cross-sectional percentiles in step 4 are taken across the
+   TRADEABLE universe, which is the only population the answer is about.
+
+4. BREADTH RANK. `ranking.rank_universe` over the survivors: seven price signals,
+   cross-sectional percentiles, one composite each.
+
+5. DEPTH. The four lenses, one symbol at a time, on a shortlist — plus anything
+   named with `--hold`, because a name already owned needs a reading whatever
+   its rank, and a scan that only deepens its own favourites can never tell its
+   owner to sell.
+
+6. VERDICT. `verdict.py` blends what came back, shrinks it by how much evidence
+   there actually was, subtracts calibrated pre-trade flags, and applies the
+   gates. Then the report prints the published measurement of whether any of
+   this predicts anything, at the top, before the table.
+
+WHAT THE CACHE IS FOR
+---------------------
+The deepen step is the expensive one and its inputs move once a quarter. The
+cache is keyed by symbol AND date, so re-running the scan on the same day to
+change a threshold costs no network at all, and running it tomorrow refetches.
+Delete `.scan_cache/` to force a cold run.
+"""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+from typing import Optional
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "api"))
+
+import numpy as np                                                  # noqa: E402
+import pandas as pd                                                 # noqa: E402
+
+from _lib import (listings, market_data, microstructure, pretrade,   # noqa: E402
+                  ranking, symbols, universes, verdict)
+from _lib.jsonsafe import clean                                      # noqa: E402
+
+# The four lens payloads are imported from the route module rather than
+# reimplemented, so a scan computes byte-for-byte what the app's own pages show.
+# A second implementation would drift, and the drift would be invisible: two
+# plausible valuations for one company, one in the report and one on screen.
+from index import (quality_payload, technical_payload,               # noqa: E402
+                   valuation_payload, whale_payload, _valuation_kwargs)
+
+CACHE_DIR = ROOT / ".scan_cache"
+REPORT_DIR = ROOT / "reports"
+
+# How much history to pull per name. `ranking.MIN_BARS` needs 280 bars and the
+# long-horizon lens wants years, so this is generous — it is one batched request
+# either way and the marginal cost of more history is bytes, not round trips.
+HISTORY_DAYS = 900
+
+# Turnover is measured over the same window `microstructure.liquidity_profile`
+# uses, so the cheap pre-filter and the full gate cannot disagree about whether
+# a name trades.
+TURNOVER_WINDOW = 21
+
+
+# --------------------------------------------------------------------------- #
+# Stage 1-2: universe and prices
+# --------------------------------------------------------------------------- #
+def resolve_universe(args) -> tuple[list[str], dict]:
+    """The symbols to scan, and a description of where they came from."""
+    # Company names come from the cached listing whatever the universe is. A
+    # report that prints bare codes for an index scan and full names for a
+    # whole-market one would be two different documents, and "ADRO.JK" is not a
+    # name anybody reads at a glance. Empty when nothing is cached — a missing
+    # name degrades to the ticker rather than to an error.
+    known_names = listings.names_for(args.market)
+
+    if args.tickers:
+        raw = [t.strip() for t in args.tickers.replace("\n", ",").split(",") if t.strip()]
+        picked = [symbols.resolve(t, args.market) for t in raw]
+        return picked, {"kind": "custom", "label": f"{len(picked)} pasted symbols",
+                        "asOf": None, "staleness": None, "names": known_names}
+
+    if args.universe:
+        entry = universes.get(args.universe)
+        if entry is None:
+            raise SystemExit(f"Unknown universe '{args.universe}'. "
+                             f"Known: {', '.join(u['id'] for u in universes.catalogue())}")
+        return entry["tickers"], {"kind": "index", "label": entry["name"],
+                                  "asOf": entry["asOf"], "note": entry["note"],
+                                  "staleness": None, "names": known_names}
+
+    payload = listings.load(args.market)
+    if payload is None:
+        raise SystemExit(
+            f"No listed universe cached for {args.market}. Run:\n"
+            f"    python scripts/refresh_listings.py --market {args.market}")
+    picked = listings.symbols_for(args.market, limit=args.limit)
+    return picked, {
+        "kind": "wholeMarket",
+        "label": f"Every {args.market} listing the provider knows",
+        "asOf": payload["asOf"],
+        "source": payload.get("source"),
+        "listed": payload["count"],
+        "staleness": listings.staleness(payload),
+        "names": known_names,
+    }
+
+
+def turnover_of(frame: pd.DataFrame, window: int = TURNOVER_WINDOW) -> Optional[float]:
+    """Median daily turnover in the listing's own currency, or None.
+
+    The cheap half of `microstructure.liquidity_profile`, computed inline
+    because the full profile fits three spread estimators per name and the
+    pre-filter runs on hundreds of names to answer one question.
+    """
+    if frame is None or len(frame) < 5:
+        return None
+    values = (frame["Close"].astype("float64")
+              * frame["Volume"].astype("float64")).tail(window)
+    if values.empty:
+        return None
+    median = float(values.median())
+    return median if np.isfinite(median) else None
+
+
+# --------------------------------------------------------------------------- #
+# Stage 5: the four lenses for one name, cached by symbol and date
+# --------------------------------------------------------------------------- #
+def cache_path(symbol: str, day: str) -> Path:
+    return CACHE_DIR / day / f"{symbol.replace('/', '_')}.json"
+
+
+def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
+    """Every per-symbol lens, in the `/api/confluence` leg shape.
+
+    Each leg carries its own `ok` flag, so one failed lens becomes a stated gap
+    in the verdict rather than a lost name. That contract is what lets the scan
+    score a company whose dividend history is missing without discarding
+    everything else known about it.
+    """
+    path = cache_path(symbol, day)
+    if use_cache and path.exists():
+        try:
+            return json.loads(path.read_text())
+        except ValueError:
+            pass
+
+    def leg(fn):
+        try:
+            return {"ok": True, "data": fn()}
+        except Exception as exc:
+            detail = getattr(exc, "detail", None)
+            return {"ok": False, "error": str(detail or f"{type(exc).__name__}: {exc}")}
+
+    legs = {
+        "anomaly": leg(lambda: whale_payload(symbol, period="2y")),
+        "technical": leg(lambda: technical_payload(symbol, range_key="2y",
+                                                   market_code=market)),
+        "valuation": leg(lambda: valuation_payload(
+            symbol, **_valuation_kwargs(market=market))),
+        "quality": leg(lambda: quality_payload(symbol)),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(clean(legs)))
+    return legs
+
+
+# --------------------------------------------------------------------------- #
+# The scan
+# --------------------------------------------------------------------------- #
+def run(args) -> dict:
+    started = time.time()
+    market = args.market.upper()
+    day = dt.date.today().isoformat()
+
+    picked, provenance_universe = resolve_universe(args)
+    def say(*parts):
+        # `flush=True` is not cosmetic. Python line-buffers a tty and block-
+        # buffers a pipe, so `scan_market.py > log` showed nothing for minutes
+        # while the scan ran — indistinguishable from a hang, on the one command
+        # here that legitimately takes minutes.
+        if not args.quiet:
+            print(*parts, flush=True)
+
+    say(f"\nUniverse: {provenance_universe['label']} — {len(picked)} symbols")
+    if provenance_universe.get("staleness"):
+        say(f"  {provenance_universe['staleness']['text']}")
+
+    # --- prices, in batch ---------------------------------------------------
+    end = dt.date.today()
+    start = end - dt.timedelta(days=HISTORY_DAYS)
+    say(f"Fetching {len(picked)} price histories in batches of "
+        f"{market_data.CHUNK_SIZE} ...")
+    frames = market_data.ohlcv_batch(picked, start, end)
+    say(f"  {len(frames)} returned usable history; {len(picked) - len(frames)} did not")
+
+    # --- tradeability, BEFORE the ranking ----------------------------------
+    floor = args.turnover_floor
+    if floor is None:
+        floor = verdict.TURNOVER_FLOOR.get(market, 0.0)
+    tick = verdict.TICK_FLOOR.get(market, 0.0)
+
+    tradeable: dict[str, pd.DataFrame] = {}
+    rejected: list[dict] = []
+    for symbol, frame in frames.items():
+        turnover = turnover_of(frame)
+        close = float(frame["Close"].iloc[-1])
+        if len(frame) < ranking.MIN_BARS:
+            rejected.append({"ticker": symbol, "why": "history",
+                             "detail": f"{len(frame)} bars, needs {ranking.MIN_BARS}"})
+        elif turnover is None:
+            rejected.append({"ticker": symbol, "why": "turnoverUnknown",
+                             "detail": "no usable volume history"})
+        elif turnover < floor:
+            rejected.append({"ticker": symbol, "why": "illiquid",
+                             "detail": f"{turnover:,.0f} median daily turnover",
+                             "turnover": turnover})
+        elif close <= tick:
+            rejected.append({"ticker": symbol, "why": "tickFloor",
+                             "detail": f"resting at {close:,.0f}"})
+        else:
+            tradeable[symbol] = frame
+
+    say(f"Tradeable after the turnover floor ({floor:,.0f}) and the tick floor: "
+        f"{len(tradeable)} of {len(frames)}")
+    by_reason: dict[str, int] = {}
+    for entry in rejected:
+        by_reason[entry["why"]] = by_reason.get(entry["why"], 0) + 1
+    for reason, count in sorted(by_reason.items(), key=lambda kv: -kv[1]):
+        say(f"  dropped {count:>4} for {reason}")
+
+    if not tradeable:
+        raise SystemExit("Nothing in this universe cleared the tradeability floor.")
+
+    # --- breadth rank, across the TRADEABLE population ----------------------
+    say(f"Ranking {len(tradeable)} names on seven price signals ...")
+    benchmark_symbol = ranking.riskmodel.MARKET_INDEX.get(market, "^GSPC")
+    index_frames = market_data.ohlcv_batch([benchmark_symbol], start, end)
+    benchmark = (index_frames[benchmark_symbol]["Close"].astype("float64")
+                 if benchmark_symbol in index_frames else None)
+    ranked = ranking.rank_universe(tradeable, benchmark=benchmark)
+    rows_by_ticker = {row["ticker"]: row for row in ranked["rows"]}
+    say(f"  {len(ranked['rows'])} ranked against {benchmark_symbol}")
+    if ranked["correlation"].get("available"):
+        say(f"  {ranked['correlation']['reading']}")
+
+    # --- who gets deepened --------------------------------------------------
+    held = [symbols.resolve(t.strip(), market)
+            for t in (args.hold or "").replace("\n", ",").split(",") if t.strip()]
+    order = [row["ticker"] for row in ranked["rows"]]
+    # `args.deepen is None` means every tradeable name. `order[:None]` is the
+    # whole list, which is why this reads as a plain slice rather than a branch.
+    shortlist = list(dict.fromkeys(
+        order[:args.deepen]
+        + (order[-args.deepen_bottom:] if args.deepen_bottom else [])
+        + [h for h in held if h in rows_by_ticker]))
+    missing_holdings = [h for h in held if h not in rows_by_ticker]
+
+    say(f"\nDeepening {len(shortlist)} names with the four lenses "
+        f"({args.workers} at a time). This is the slow part.")
+    if missing_holdings:
+        say(f"  NOTE: {', '.join(missing_holdings)} could not be deepened — not in the "
+            f"tradeable ranked set. See the report's rejected list for why.")
+
+    legs_by_ticker: dict[str, dict] = {}
+    done = 0
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        futures = {pool.submit(deepen, s, market, day, not args.no_cache): s
+                   for s in shortlist}
+        for future in as_completed(futures):
+            symbol = futures[future]
+            done += 1
+            try:
+                legs_by_ticker[symbol] = future.result()
+            except Exception as exc:
+                legs_by_ticker[symbol] = {}
+                say(f"  [{done}/{len(shortlist)}] {symbol} FAILED: {exc}")
+                continue
+            ok_count = sum(1 for leg in legs_by_ticker[symbol].values()
+                           if isinstance(leg, dict) and leg.get("ok"))
+            say(f"  [{done}/{len(shortlist)}] {symbol}: {ok_count}/4 lenses")
+
+    # --- verdicts -----------------------------------------------------------
+    say("\nScoring ...")
+    names = provenance_universe.get("names") or {}
+    verdicts = []
+    for symbol in shortlist:
+        row = rows_by_ticker.get(symbol)
+        legs = legs_by_ticker.get(symbol) or {}
+        frame = tradeable[symbol]
+        liquidity = microstructure.liquidity_profile(frame, window=TURNOVER_WINDOW)
+        checks = pretrade.assess(legs, market=symbols.market_of(symbol))
+        volatility = ((row or {}).get("signals", {}).get("lowVolatility", {}) or {}).get("raw")
+        result = verdict.score(
+            symbol,
+            legs=legs,
+            rank_row=row,
+            pretrade_result=checks,
+            liquidity=liquidity,
+            market=market,
+            name=names.get(symbol),
+            annual_volatility=volatility,
+            latest_close=float(frame["Close"].iloc[-1]),
+            risk_budget=args.risk_budget,
+            max_weight=args.max_weight,
+            turnover_floor=floor,
+        )
+        result["rank"] = (row or {}).get("rank")
+        result["held"] = symbol in held
+        result["preTrade"] = {"flags": len(checks.get("flags") or []),
+                              "baseConditions": len(checks.get("baseConditions") or []),
+                              "notChecked": len(checks.get("notChecked") or [])}
+        verdicts.append(result)
+
+    verdicts.sort(key=lambda v: (v["score"] is None, -(v["score"] or 0.0)))
+
+    return {
+        "generatedAt": dt.datetime.now().isoformat(timespec="seconds"),
+        "market": market,
+        "elapsedSeconds": round(time.time() - started, 1),
+        "universe": {k: v for k, v in provenance_universe.items() if k != "names"},
+        "counts": {
+            "requested": len(picked),
+            "fetched": len(frames),
+            "tradeable": len(tradeable),
+            "ranked": len(ranked["rows"]),
+            "deepened": len(shortlist),
+            "rejected": len(rejected),
+            "rejectedByReason": by_reason,
+        },
+        "settings": {
+            "turnoverFloor": floor,
+            "tickFloor": tick,
+            "deepenTop": args.deepen if args.deepen is not None else "all",
+            "deepenBottom": args.deepen_bottom,
+            "riskBudget": args.risk_budget,
+            "maxWeight": args.max_weight,
+            "benchmark": benchmark_symbol if benchmark is not None else None,
+            "historyDays": HISTORY_DAYS,
+        },
+        "provenance": verdict.provenance(),
+        "signalOverlap": ranked["correlation"],
+        "verdicts": verdicts,
+        "rejected": sorted(rejected, key=lambda r: r["why"]),
+        "notDeepened": [
+            {"ticker": row["ticker"], "rank": row["rank"], "composite": row["composite"]}
+            for row in ranked["rows"] if row["ticker"] not in set(shortlist)
+        ],
+        "missingHoldings": missing_holdings,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Terminal summary
+# --------------------------------------------------------------------------- #
+ACTION_ORDER = ["STRONG_BUY", "BUY", "HOLD", "REDUCE", "AVOID", "NO_ACTION"]
+
+
+def print_summary(report: dict) -> None:
+    print("\n" + "=" * 78)
+    print("WHAT THIS ORDERING IS WORTH, BEFORE YOU READ IT")
+    print("=" * 78)
+    print(_wrap(report["provenance"].get("headline", ""), 78))
+    if report["provenance"].get("appliesTo"):
+        print("\nApplies to " + _wrap(report["provenance"]["appliesTo"], 78))
+
+    print("\n" + "=" * 78)
+    counts = report["counts"]
+    print(f"{report['market']} scan — {counts['requested']} listed, "
+          f"{counts['tradeable']} tradeable, {counts['deepened']} deepened, "
+          f"{report['elapsedSeconds']}s")
+    print("=" * 78)
+
+    print(f"{'':2}{'TICKER':<11}{'SCORE':>6}{'ACT':>12}{'CONV':>8}{'RK':>5}"
+          f"{'COV':>6}{'X':>3}  NAME")
+    print("-" * 78)
+    for entry in report["verdicts"]:
+        score = "  -  " if entry["score"] is None else f"{entry['score']:5.1f}"
+        mark = "*" if entry["held"] else " "
+        # "X" is the cross-check column: whether both bodies of data read at all.
+        # A blank here on a BUY means the whole verdict came from price history.
+        crossed = "y" if entry.get("crossChecked") else "-"
+        print(f"{mark} {entry['ticker']:<11}{score:>6}"
+              f"{entry['actionLabel']:>12}{entry['conviction']:>8}"
+              f"{entry['rank'] or 0:>5}{entry['coverage'] * 100:>5.0f}%{crossed:>3}  "
+              f"{(entry['name'] or '')[:26]}")
+
+    tally: dict[str, int] = {}
+    for entry in report["verdicts"]:
+        tally[entry["action"]] = tally.get(entry["action"], 0) + 1
+    print("-" * 78)
+    print("  " + "   ".join(f"{a.replace('_', ' ').title()}: {tally[a]}"
+                            for a in ACTION_ORDER if a in tally))
+    one_family = [v for v in report["verdicts"] if not v.get("crossChecked")]
+    print("  * = a name you told the scan you hold; X = both bodies of data read")
+    if one_family:
+        print(f"  {len(one_family)} of these rest on ONE body of data "
+              f"({', '.join(v['ticker'] for v in one_family[:8])}"
+              f"{'...' if len(one_family) > 8 else ''}) — usually no published "
+              f"statements.")
+    # ONLY TRUE WHEN A SHORTLIST WAS TAKEN. With `--deepen all` every tradeable
+    # name got the lenses, there is no selection, and printing the warning anyway
+    # would teach the reader to ignore it on the runs where it matters.
+    if report["counts"]["deepened"] < report["counts"]["tradeable"]:
+        print(f"  The {report['counts']['deepened']} deepened names were PRE-SELECTED "
+              f"on the price rank out of")
+        print(f"  {report['counts']['tradeable']} tradeable, so that component is high "
+              f"for nearly all of them by")
+        print("  construction. What separates these rows is mostly the other four.")
+
+
+def _wrap(text: str, width: int) -> str:
+    import textwrap
+    return "\n".join(textwrap.wrap(text or "", width))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--market", default="ID", choices=["ID", "US"])
+    parser.add_argument("--universe", default=None,
+                        help="A named index instead of the whole market "
+                             "(idx30, lq45, dow30, nasdaq100, idxresources).")
+    parser.add_argument("--tickers", default=None,
+                        help="A comma-separated list instead of a universe.")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Scan only the N largest listings by market cap.")
+    parser.add_argument("--deepen", default="40",
+                        help="How many top-ranked names get the four lenses (default 40), "
+                             "or 'all' for every tradeable name. 'all' costs one "
+                             "fundamentals fetch per name — a few minutes for IDX — and "
+                             "is cached per day, so the second run is free.")
+    parser.add_argument("--deepen-bottom", type=int, default=0,
+                        help="Also deepen the N worst-ranked names, to see what a "
+                             "genuinely bad reading looks like (default 0).")
+    parser.add_argument("--hold", default=None,
+                        help="Names you already own. Always deepened whatever their "
+                             "rank, because a scan that only examines its own favourites "
+                             "can never tell you to sell.")
+    parser.add_argument("--turnover-floor", type=float, default=None,
+                        help="Median daily turnover, in the listing's currency, below "
+                             "which a name is untradeable. Defaults to "
+                             f"{verdict.TURNOVER_FLOOR}.")
+    parser.add_argument("--risk-budget", type=float, default=0.02,
+                        help="Annualised risk contribution per position, for sizing.")
+    parser.add_argument("--max-weight", type=float, default=0.10,
+                        help="Cap on any one position's suggested weight.")
+    parser.add_argument("--workers", type=int, default=4,
+                        help="Concurrent deepen fetches. Above ~6 the provider throttles.")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Ignore today's cached lens payloads and refetch.")
+    parser.add_argument("--quiet", action="store_true")
+    parser.add_argument("--out", default=None,
+                        help="Report path without extension. Defaults to "
+                             "reports/scan-<market>-<date>.")
+    args = parser.parse_args()
+
+    raw = str(args.deepen).strip().lower()
+    if raw in {"all", "-1"}:
+        # None means "no ceiling"; the slice below reads it as the whole list.
+        args.deepen = None
+    else:
+        try:
+            args.deepen = max(0, int(raw))
+        except ValueError:
+            parser.error(f"--deepen takes a whole number or 'all', not {args.deepen!r}")
+
+    report = run(args)
+
+    stem = args.out or str(REPORT_DIR / f"scan-{args.market.upper()}-"
+                                        f"{dt.date.today().isoformat()}")
+    json_path = Path(f"{stem}.json")
+    html_path = Path(f"{stem}.html")
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(clean(report), indent=1))
+
+    from render_scan import render
+    html_path.write_text(render(report))
+
+    if not args.quiet:
+        print_summary(report)
+        print(f"\n  {json_path}")
+        print(f"  {html_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    raise SystemExit(main())
