@@ -425,6 +425,7 @@ So there is a second, private tier — not linked from the app, writing to a git
 python scripts/refresh_listings.py --market ID     # once, then when it goes stale
 python scripts/calibrate_tape.py                   # the tape baselines
 python scripts/calibrate_patterns.py               # what the chart patterns predicted
+python scripts/backtest_verdict.py --market ID     # what the blend is worth
 python scripts/scan_market.py --market ID --deepen all --hold BBCA,TLKM
 ```
 
@@ -545,6 +546,83 @@ measured.
 **Reporting soon.** The next scheduled results date rides along free with the share-register
 fetch. Buying inside a fortnight of a report makes the position partly a bet on an
 announcement nothing here has read. Context, not points.
+
+**Is the buy list one bet?** The scanner ranks each name on its own merits and then sizes
+them by inverse volatility — the right arithmetic for *independent* positions. Whether
+they are independent is a property of the set, invisible from any row, and
+`scripts/scan_market.py` now measures it.
+
+It caught an error of mine on its first run. A sixteen-name IDX buy list contained three
+palm oil producers, a coal miner, a nickel miner and four more commodity names; reading
+those labels, the obvious conclusion is that sixteen tickets are one bet in disguise.
+Measured, those names span about **eight independent bets** — mean pairwise correlation
++0.23, highest pair +0.58, the two palm oil producers at 0.53. Real overlap, and nowhere
+near what the labels implied. Half the list's length is repetition and half is genuine
+diversification.
+
+Quoted on **weekly** returns, because non-synchronous trading attenuates daily
+correlations between thin names and would flatter exactly the concentration the
+measurement exists to find — the same list reads 9.2 bets daily against 7.8 weekly. The
+diversification ratio sits beside it: how much of the available spread the weights
+actually capture.
+
+**What a round trip costs.** The measured effects here are small — the pattern study's
+−3% over a quarter, the tape's less — and a round trip on a thin Indonesian listing can be
+more than that. Every row now carries the estimated cost of crossing the spread twice,
+and where the estimate sits at the estimator's own noise floor it says *unmeasured*
+rather than *cheap*.
+
+**Against its own sector.** A coal miner in the top decile of a coal rally and one in the
+top decile of the whole market are different findings. Sectors with fewer than eight
+scanned names get no percentile at all, because ranking four names produces a number that
+looks like the others and means far less.
+
+**And what the blend is worth.** `provenance()` has always carried the backtest of the
+seven-signal price composite — one component of nine — and admitted that the blend itself
+had never been tested. `scripts/backtest_verdict.py` closes as much of that as the data
+allows: a monthly walk-forward that reconstructs the score from truncated history, ranks
+the universe, and measures the information coefficient and quintile spread against what
+happened next, corrected across horizons.
+
+It covers **about 40% of the score's intended evidence**, and the artifact says so in
+every field. Four components can be reconstructed without reading the future — price rank,
+tape, formations, share issuance. Five cannot, and the two that matter are *unobtainable*
+rather than expensive: this data source publishes no point-in-time filings, so
+reconstructing a discounted cash flow or a Piotroski score on a 2023 date would read
+numbers published in 2026.
+
+Two things that would have made it wrong are guarded and named in the script: the tape's
+baseline is recomputed from the cross-section available at each date rather than borrowed
+from today's calibration, and the pattern component is scored by presence with a fixed
+sign rather than by the study's surviving patterns — which were selected using the whole
+sample, so feeding them back would be circular.
+
+Where a surviving coefficient is contradicted by its own quintile spread, the report says
+so. A rank correlation that lives in the middle of the distribution while the top and
+bottom fifths go the other way is not a finding anybody can act on.
+
+**Everything is quoted gross until it is quoted net — and the cost cannot be measured
+well, which is itself the finding.** A quintile spread is gross, and a personal account
+pays the spread on every rebalance. The obvious move is to subtract a measured cost; that
+was tried and it does not survive scrutiny. `microstructure` resolves a spread only where
+its estimate clears its own noise floor, which happens for the *widest* names and almost
+nowhere else — on 200 Indonesian listings it resolved for **eleven**. The median of those
+eleven is the median of the eleven widest, not of the market, and deducting it turned a
++2.19% monthly gross spread into −3.31% net on the strength of a badly selected sample.
+
+So the artifact reports a **breakeven** instead: the round trip at which each gross spread
+reaches zero. That is a number this data can support. The 21-day spread survives if a
+round trip costs under about 2.2%; the reader's own dealing costs settle it. Whether the
+result lives or dies turns on a quantity nobody here can pin down, and saying that plainly
+is more useful than a confident deduction from eleven names.
+
+**And the half that cannot be backtested at all** is written down instead. Every scan
+appends what it said — ticker, action, score, conviction, the price on the day — to a
+local, gitignored log. `scanlog.summarise` refuses to compute a hit rate under thirty
+resolved calls, because the first ten resolved calls of anything are noise and reading
+them is how a method gets abandoned or trusted for no reason. It is a slow instrument and
+produces nothing for months; it is also the only honest way the value and quality
+components will ever be measured.
 
 **Then it is shrunk toward 50 by how much evidence there actually was.** Families that
 disagree, a family that never read, components that were missing — each pulls the result
@@ -669,6 +747,12 @@ scripts/
                       Do the chart formations predict anything? An event
                       study on every detection, corrected across all of
                       them. Every survivor came out NEGATIVE
+  backtest_verdict.py A monthly walk-forward on the blended score, over
+                      the four components that can be reconstructed
+                      without reading the future. Scope stated, not implied,
+                      and every spread quoted net of its own trading costs
+  review_scanlog.py   What the scanner said and what happened since —
+                      the prospective half, which needs months to speak
   scan_market.py      The private scanner: sweep a market, score every
                       tradeable name, write a report
   render_scan.py      That report as one self-contained HTML file
@@ -707,7 +791,7 @@ Interactive docs at `/api/docs`.
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
 | `GET /api/rank/universes` | The predefined lists and the fetched whole-market lists, each with its as-of date |
-| `GET /api/verdict` | **The private scanner's score and action for one name** — nine components across three families, the tape reading and the chart-formation study with their market-wide firing rates, the share register, where the trade is wrong, the market regime, the shrinkage, the gates, and the null result that calibrates all of it |
+| `GET /api/verdict` | **The private scanner's score and action for one name** — nine components across three families, the tape reading and the chart-formation study with their market-wide firing rates, the share register, where the trade is wrong, what a round trip costs, the market regime, the shrinkage, the gates, and the two backtests that calibrate all of it |
 | `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. The one POST, and the one `no-store` |
 | `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
 | `GET /api/rank/deepen` | Quality + valuation for a shortlist of up to 8 |

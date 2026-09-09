@@ -973,6 +973,10 @@ async def name_verdict(
         "register": register_result,
         "patterns": pattern_result,
         "structure": structure_result,
+        # What one buy and one sell actually cost, beside the effects this page
+        # asks the reader to act on. The measured effects here are a few percent
+        # and a round trip on a thin listing can be more than that.
+        "costs": structure.round_trip_cost(liquidity),
         "regime": market_regime,
         "patternStudy": patterns.calibration_for(symbols.market_of(symbol)),
         # WHAT THE TAPE TEST IS WORTH IN THIS MARKET, beside its reading. On US
@@ -982,6 +986,7 @@ async def name_verdict(
         # THE NULL RESULT TRAVELS WITH THE SCORE, in the same response, so a
         # client cannot render one without having been handed the other.
         "provenance": verdict.provenance(),
+        "blendBacktest": verdict.blend_validation(symbols.market_of(symbol)),
         "preTrade": checks,
     })
 

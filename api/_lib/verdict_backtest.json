@@ -1,0 +1,119 @@
+{
+ "measuredOn": "2026-09-09",
+ "rebalanceDays": 21,
+ "horizons": [
+  21,
+  63,
+  126
+ ],
+ "alpha": 0.1,
+ "scope": "A SUBSET OF THE LIVE SCORE. Four of nine components can be reconstructed without reading the future; the other five cannot, and the two that matter most \u2014 value and quality \u2014 are unobtainable rather than merely expensive, because this data source publishes no point-in-time filings. The remaining half is measured prospectively by _lib/scanlog.py, which takes months to say anything.",
+ "markets": {
+  "ID": {
+   "names": 200,
+   "population": "the Indonesian listed market",
+   "measuredOn": "2026-09-09",
+   "years": 6,
+   "benchmark": "^JKSE",
+   "rebalanceDays": 21,
+   "horizons": [
+    21,
+    63,
+    126
+   ],
+   "alpha": 0.1,
+   "dates": 62,
+   "observations": 11077,
+   "components": [
+    "priceRank",
+    "tape",
+    "patterns",
+    "issuance"
+   ],
+   "componentsTotal": 9,
+   "weightCovered": 2.2,
+   "weightIntended": 5.4,
+   "coverage": 0.40740740740740744,
+   "excluded": {
+    "value": "the discounted cash flow reads the latest statements; this source serves no point-in-time filings",
+    "quality": "the same \u2014 reconstructing Piotroski on a past date would read numbers published years later",
+    "trend": "needs the full technical pipeline per symbol per date",
+    "flow": "needs an Isolation Forest fit per symbol per date",
+    "float": "the insider-held share arrives as one current figure with no history at all"
+   },
+   "tests": [
+    {
+     "horizonDays": 21,
+     "dates": 62,
+     "observations": 11077,
+     "icMean": 0.0413964864807632,
+     "icT": 2.412798572762649,
+     "icP": 0.018851282311214475,
+     "spreadMean": 0.021895009132987118,
+     "spreadP": 0.040682065853814064,
+     "signsAgree": true,
+     "icQ": 0.03770256462242895,
+     "icSurvived": true,
+     "spreadQ": 0.0610230987807211,
+     "spreadSurvived": true,
+     "rebalancesPerHorizon": 1.0,
+     "breakevenRoundTrip": 0.021895009132987118,
+     "costUpperBound": 0.05495379773560494,
+     "spreadNetUpperBound": -0.03305878860261782,
+     "survivesUpperBound": false
+    },
+    {
+     "horizonDays": 63,
+     "dates": 62,
+     "observations": 11077,
+     "icMean": 0.04873992223339078,
+     "icT": 3.3536864984701698,
+     "icP": 0.0013747636533617761,
+     "spreadMean": 0.016644821528250465,
+     "spreadP": 0.3391931792530055,
+     "signsAgree": true,
+     "icQ": 0.004124290960085328,
+     "icSurvived": true,
+     "spreadQ": 0.33919317925300546,
+     "spreadSurvived": false,
+     "rebalancesPerHorizon": 3.0,
+     "breakevenRoundTrip": 0.005548273842750155,
+     "costUpperBound": 0.1648613932068148,
+     "spreadNetUpperBound": -0.14821657167856434,
+     "survivesUpperBound": false
+    },
+    {
+     "horizonDays": 126,
+     "dates": 62,
+     "observations": 11077,
+     "icMean": 0.0525478786977557,
+     "icT": 4.759156259264305,
+     "icP": 1.2349839429255708e-05,
+     "spreadMean": -0.03311242245579753,
+     "spreadP": 0.2886996624918542,
+     "signsAgree": false,
+     "icQ": 7.409903657553425e-05,
+     "icSurvived": true,
+     "spreadQ": 0.33919317925300546,
+     "spreadSurvived": false,
+     "rebalancesPerHorizon": 6.0,
+     "breakevenRoundTrip": null,
+     "costUpperBound": 0.3297227864136296,
+     "spreadNetUpperBound": -0.36283520886942716,
+     "survivesUpperBound": false
+    }
+   ],
+   "survived": 3,
+   "contradicted": 1,
+   "rawHits": 4,
+   "expectedByChance": 0.3,
+   "medianRoundTrip": 0.05495379773560494,
+   "roundTripResolved": 11,
+   "roundTripAttempted": 200,
+   "roundTripResolvedShare": 0.055,
+   "roundTripIsUpperBound": true,
+   "survivesUpperBound": 0,
+   "headline": "3 of 6 tests survived correction across 11077 observations and 62 rebalance dates. 21d IC +0.041 (q=0.038); 63d IC +0.049 (q=0.004); 126d IC +0.053 (q=0.000). READ THAT WITH THE NEXT SENTENCE. At 126 sessions the rank correlation is +0.053 while the top-minus-bottom quintile spread is -3.3% \u2014 they point OPPOSITE ways, so the relationship is not monotone. The correlation lives in the middle of the distribution and the extremes, which are the only part anybody would act on, go the other way. A surviving coefficient with a contradicting spread is not a tradeable finding. Those are gross, before trading: the 21d spread of +2.19% survives only if a round trip costs under 2.19%. The spread could only be resolved for 11 of 200 names \u2014 the estimator clears its noise floor on the widest ones and almost nowhere else \u2014 and the median of those was 5.50%. That is an UPPER BOUND on a typical cost rather than a measurement of one, and at it nothing here survives. Whether the result lives or dies therefore turns on a quantity this data cannot pin down; a reader who knows their own dealing costs can settle it against the breakeven above. Measured on 41% of the score's intended evidence (priceRank, tape, patterns, issuance); the value and quality components cannot be reconstructed at all because this data source publishes no point-in-time filings."
+  }
+ }
+}

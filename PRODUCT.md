@@ -41,15 +41,18 @@ spends real effort establishing how much that agreement is actually worth — pu
 measurement whichever way it comes out. Five stamped artifacts already do this
 (`backtest_results.json`, `check_calibration.json`, `correlation_stability.json`,
 `lens_agreement.json`, `exposure_stability.json`, `tape_calibration.json`,
-`patterns_calibration.json`), including a backtest that reports its own ranking has **no
-detectable edge**, a beta study that refuses one of the four factors it tested, a tape
-calibration that reports the signal it calibrates **does not exist on US markets** — 4.2%
-of names firing against 5% expected by chance — and a chart-pattern study whose every
-surviving formation predicted the **opposite** of what the textbooks claim for it.
+`patterns_calibration.json`, `verdict_backtest.json`), including a backtest that reports
+its own ranking has **no detectable edge**, a beta study that refuses one of the four
+factors it tested, a tape calibration that reports the signal it calibrates **does not
+exist on US markets** — 4.2% of names firing against 5% expected by chance — a
+chart-pattern study whose every surviving formation predicted the **opposite** of what the
+textbooks claim for it, and a walk-forward on the scanner's own blended score that
+publishes its own **40% coverage** rather than implying it measured the whole thing.
 
 *The count said "three" while listing four, from before `lens_agreement.json`
 existed. Corrected 31 August 2026 along with the fifth. A sixth landed 8 September
-2026 with the market scanner, and a seventh on 9 September with the chart patterns.*
+2026 with the market scanner; a seventh and an eighth on 9 September with the chart
+patterns and the blend walk-forward.*
 
 A neighbouring product could copy the four lenses. It could not truthfully copy
 "we measured whether our own signal works and published the null result".
@@ -174,13 +177,14 @@ These are durable product facts. Future work preserves them; none is a style pre
 - Measured artifacts, each stamped with its date, in `api/_lib/*.json`.
 - `docs/field-manual.html` — beginner's guide; its glossary is **generated** from
   `api/_lib/explain.py` and CI fails if a metric is added without regenerating.
-- Nine network scripts in `scripts/` deliberately outside CI. Re-run after touching what
+- Eleven network scripts in `scripts/` deliberately outside CI. Re-run after touching what
   they measure; a stale stamped number is worse than none. Two arrived with the market
   scanner: `refresh_listings.py` fetches the whole-market universe, and
   `calibrate_tape.py` measures the per-market baselines the tape reading is tested
   against — without which it has no null to test and reports no direction at all. A
   third, `calibrate_patterns.py`, decides whether any chart formation is allowed to
-  score.
+  score. A fourth, `backtest_verdict.py`, is the only one that measures the scanner's
+  own blended score — partially, and it says by how much.
 
 ## Accessibility
 
@@ -220,8 +224,24 @@ decision behind a choice.
   all, so both filings lenses went quiet and the whole verdict rested on price history.
   Those rows are marked `crossChecked: false` and their scores are shrunk for it, but a
   shrunk score is a workaround, not a fix.
-- Whether the scanner's own composite should be backtested the way the price ranking was.
-  It has not been, and `verdict.provenance()` says so in as many words: the measured null
-  covers the price component only. Measuring the five-component blend needs point-in-time
-  fundamentals, which this data source does not provide — so the honest position for now
-  is the stated absence, not a number.
+- ~~Whether the scanner's own composite should be backtested~~ **Partly answered,
+  9 September 2026.** `scripts/backtest_verdict.py` runs a monthly walk-forward over the
+  four components that can be reconstructed without reading the future — about 40% of the
+  intended evidence — and publishes that coverage rather than implying it measured the
+  whole score. The other five cannot be reconstructed at all: this data source has no
+  point-in-time filings, so a historical value or quality reading would use numbers
+  published years later. That half is now measured **prospectively** instead, by
+  `_lib/scanlog.py`, which records what the scanner said on the day it said it and
+  refuses to quote a rate under thirty resolved calls. It will say nothing useful for
+  months, which is the nature of the instrument rather than a fault in it.
+- What a round trip actually costs. The scanner reports one per name and the blend
+  backtest reports a breakeven, but the estimator resolves a spread for only about one
+  IDX listing in twenty — it clears its own noise floor on the widest names and almost
+  nowhere else. So the app can say "this survives if a round trip costs under 2.2%" and
+  cannot say what a round trip costs. That gap decides whether the only surviving result
+  in the whole private tier is real, and closing it needs a data source with quoted
+  spreads rather than an estimator.
+- Whether the scanner should ever act on its own concentration measurement. It reports
+  that a buy list spans fewer bets than names and stops there — dropping the most
+  redundant name would be portfolio construction, which needs to know what is already
+  owned and how much the holder has, and the app knows neither.

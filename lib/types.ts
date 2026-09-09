@@ -1271,6 +1271,69 @@ export interface MarketRegime {
   reading?: string;
 }
 
+/**
+ * The walk-forward on the BLEND, from `verdict_backtest.json`.
+ *
+ * Distinct from `provenance`, which measures the seven-signal price composite —
+ * one component of nine. This measures the blend, on the four components that
+ * can be reconstructed without reading the future, and carries its own coverage
+ * so that partial scope is never mistaken for the whole score.
+ */
+export interface BlendBacktest {
+  available: boolean;
+  reason?: string;
+  measuredOn?: string | null;
+  scope?: string;
+  headline?: string;
+  components?: string[];
+  /** Share of the score's intended evidence this covers. Around 0.4. */
+  coverage?: number | null;
+  /** Why each excluded component could not be reconstructed. */
+  excluded?: Record<string, string>;
+  observations?: number;
+  dates?: number;
+  survived?: number;
+  /** Survivors whose IC and quintile spread point opposite ways. */
+  contradicted?: number;
+  /**
+   * Median round trip across the names whose spread RESOLVED. The estimator
+   * clears its noise floor on the widest spreads and almost nowhere else, so
+   * this is an upper bound on a typical cost, never a measurement of one —
+   * `roundTripResolved` over `roundTripAttempted` says how selected it is.
+   */
+  medianRoundTrip?: number | null;
+  roundTripResolved?: number;
+  roundTripAttempted?: number;
+  roundTripResolvedShare?: number | null;
+  roundTripIsUpperBound?: boolean;
+  /** Surviving spreads still positive at that upper bound. */
+  survivesUpperBound?: number;
+  tests?: {
+    horizonDays: number;
+    icMean: number; icT: number; icQ: number; icSurvived: boolean;
+    spreadMean: number; spreadQ: number; spreadSurvived: boolean;
+    signsAgree: boolean;
+    /** The round trip at which this spread reaches zero — the number to compare
+     *  against your own dealing costs. */
+    breakevenRoundTrip?: number | null;
+    rebalancesPerHorizon?: number;
+    costUpperBound?: number; spreadNetUpperBound?: number;
+    survivesUpperBound?: boolean;
+    dates: number; observations: number;
+  }[];
+}
+
+/** What one buy and one sell cost, from the estimated spread. */
+export interface RoundTripCost {
+  available: boolean;
+  reason?: string;
+  /** False when the estimate sits at the estimator's own noise floor. */
+  resolved?: boolean;
+  spread?: number;
+  roundTrip?: number;
+  reading?: string;
+}
+
 /** One market's measured tape baselines, from `tape_calibration.json`. */
 export interface TapeCalibration {
   names: number;
@@ -1336,6 +1399,9 @@ export interface VerdictResponse {
   /** Where the trade is wrong. Deliberately not a scoring component. */
   structure: VerdictStructure | null;
   regime: MarketRegime | null;
+  costs: RoundTripCost | null;
+  /** The measurement that is about this score, not just its price component. */
+  blendBacktest: BlendBacktest | null;
   /** Null where this market has never been calibrated. */
   tapeCalibration: TapeCalibration | null;
   agreement: { state: string; shrink: number; conviction: string; text: string };

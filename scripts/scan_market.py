@@ -76,9 +76,9 @@ sys.path.insert(0, str(ROOT / "api"))
 import numpy as np                                                  # noqa: E402
 import pandas as pd                                                 # noqa: E402
 
-from _lib import (listings, market_data, microstructure, ownership,  # noqa: E402
-                  patterns, pretrade, ranking, structure, symbols, tape,
-                  universes, verdict)
+from _lib import (basket, listings, market_data, microstructure,     # noqa: E402
+                  ownership, patterns, pretrade, ranking, scanlog, structure,
+                  symbols, tape, universes, verdict)
 from _lib.jsonsafe import clean                                      # noqa: E402
 
 # The four lens payloads are imported from the route module rather than
@@ -144,6 +144,48 @@ def resolve_universe(args) -> tuple[list[str], dict]:
         "staleness": listings.staleness(payload),
         "names": known_names,
     }
+
+
+# Below this many names a within-sector percentile is arithmetic on noise: a
+# "top quartile" among four is one name, and the rank changes if any of the
+# other three had a different Tuesday.
+MIN_SECTOR_NAMES = 8
+
+
+def _rank_within_sector(verdicts: list[dict], say) -> None:
+    """Add each name's percentile inside its own sector, in place.
+
+    Groups smaller than `MIN_SECTOR_NAMES` get None rather than a percentile,
+    and the row says so. Ranking four names against each other produces a
+    number that looks like the others and means far less.
+    """
+    groups: dict[str, list[dict]] = {}
+    for entry in verdicts:
+        sector = entry.get("sector")
+        if sector and entry.get("score") is not None:
+            groups.setdefault(sector, []).append(entry)
+
+    ranked = 0
+    for sector, members in groups.items():
+        if len(members) < MIN_SECTOR_NAMES:
+            for entry in members:
+                entry["sectorRank"] = {
+                    "sector": sector, "names": len(members), "percentile": None,
+                    "reason": (f"only {len(members)} scanned names in {sector}, under "
+                               f"the {MIN_SECTOR_NAMES} a percentile needs")}
+            continue
+        order = sorted(members, key=lambda e: e["score"])
+        for position, entry in enumerate(order):
+            entry["sectorRank"] = {
+                "sector": sector, "names": len(members),
+                "percentile": 100.0 * (position + 1) / len(order),
+                "rank": len(order) - position,
+            }
+        ranked += len(members)
+    if ranked:
+        say(f"  Ranked within sector where the group was large enough: {ranked} names "
+            f"across {sum(1 for m in groups.values() if len(m) >= MIN_SECTOR_NAMES)} "
+            f"sectors.")
 
 
 def turnover_of(frame: pd.DataFrame, window: int = TURNOVER_WINDOW) -> Optional[float]:
@@ -405,6 +447,13 @@ def run(args) -> dict:
         )
         result["rank"] = (row or {}).get("rank")
         result["held"] = symbol in held
+        # The sector comes off the quality leg, which already read it from the
+        # company record. Fetching it again would be a second source for one
+        # string.
+        quality_leg = legs.get("quality") or {}
+        result["sector"] = ((quality_leg.get("data") or {}).get("sector")
+                            if quality_leg.get("ok") else None)
+        result["costs"] = structure.round_trip_cost(liquidity)
         result["tape"] = tape_result
         result["register"] = register_result
         result["patterns"] = pattern_result
@@ -414,6 +463,24 @@ def run(args) -> dict:
         verdicts.append(result)
 
     verdicts.sort(key=lambda v: (v["score"] is None, -(v["score"] or 0.0)))
+
+    # --- where each name sits inside its OWN sector -------------------------
+    # A coal miner in the top decile of a coal rally and one in the top decile
+    # of the whole market are different findings, and the second is the one the
+    # overall rank reports. This adds the first without touching any score:
+    # sector membership is not evidence about a company, and percentile-ing
+    # inside a group of four would be arithmetic on noise.
+    _rank_within_sector(verdicts, say)
+
+    # --- is this buy list one bet? ------------------------------------------
+    buys = [v for v in verdicts if v["action"] in ("BUY", "STRONG_BUY")]
+    concentration = basket.analyse(
+        tradeable,
+        [v["ticker"] for v in buys],
+        weights={v["ticker"]: (v["sizing"] or {}).get("weight") for v in buys},
+        sectors={v["ticker"]: v.get("sector") for v in buys})
+    if concentration.get("available"):
+        say(f"\n  {concentration['reading'].split('. ')[0]}.")
 
     return {
         "generatedAt": dt.datetime.now().isoformat(timespec="seconds"),
@@ -440,6 +507,11 @@ def run(args) -> dict:
             "historyDays": HISTORY_DAYS,
         },
         "provenance": verdict.provenance(),
+        # THE SECOND MEASUREMENT, and the one that is actually about the score
+        # this report prints. `provenance` covers the price composite; this
+        # covers the blend, on the four components that can be reconstructed
+        # without reading the future.
+        "blendBacktest": verdict.blend_validation(market),
         "regime": market_regime,
         "signalOverlap": ranked["correlation"],
         # WHETHER THE THREE FAMILIES ARE ACTUALLY THREE SOURCES. The score
@@ -447,6 +519,10 @@ def run(args) -> dict:
         # this is the measurement that checks it rather than the assertion that
         # assumes it. See `verdict.family_overlap`.
         "familyOverlap": verdict.family_overlap(verdicts),
+        # WHETHER THE BUY LIST IS ONE BET. A property of the SET, invisible from
+        # any row, and the only place it can be computed is here — after the
+        # list exists.
+        "concentration": concentration,
         # How often the tape test fired against how often chance predicts it
         # would. One name's p-value needs no correction; a scan of hundreds does,
         # and this is the count that makes the correction legible.
@@ -597,6 +673,14 @@ def main() -> int:
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json.dumps(clean(report), indent=1))
 
+    # WHAT THE SCANNER SAID, WRITTEN DOWN ON THE DAY IT SAID IT. The value and
+    # quality components cannot be reconstructed as they stood on a past date —
+    # this data source has no point-in-time filings — so a prospective log is
+    # the only honest way they will ever be measured. It produces nothing
+    # useful for months and that is the nature of the instrument, not a fault.
+    logged = scanlog.record(REPORT_DIR, args.market.upper(), report["verdicts"],
+                            regime=report.get("regime"))
+
     from render_scan import render
     html_path.write_text(render(report))
 
@@ -604,6 +688,8 @@ def main() -> int:
         print_summary(report)
         print(f"\n  {json_path}")
         print(f"  {html_path}")
+        print(f"  {logged['path']} — {logged['added']} calls recorded, "
+              f"{logged['total']} in the log")
     return 0
 
 

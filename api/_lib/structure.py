@@ -232,6 +232,48 @@ def _reading(price: float, support: Optional[float], resistance: Optional[float]
     return where + upside + tail + at
 
 
+def round_trip_cost(liquidity: Optional[dict]) -> dict:
+    """What one buy and one sell would cost, from the spread already estimated.
+
+    THE NUMBER THAT DECIDES WHETHER ANY OF THIS IS ACTIONABLE. The measured
+    effects in this app are small — the chart-pattern study found about -3% over
+    a quarter, the tape reading less — and a round trip on a thin Indonesian
+    listing can cost more than that. A scanner that ranks names without saying
+    what trading them costs is quoting a gross number as though it were net.
+
+    `microstructure.liquidity_profile` already estimates the spread and, more
+    usefully, already knows when its own estimate is beneath the estimator's
+    noise floor. An unresolved spread is reported as unmeasured rather than as
+    cheap — the same rule the turnover gate follows.
+    """
+    if not isinstance(liquidity, dict):
+        return {"available": False, "reason": "no liquidity profile for this name"}
+
+    spread = liquidity.get("spread")
+    resolved = bool(liquidity.get("spreadResolved"))
+    try:
+        value = float(spread)
+    except (TypeError, ValueError):
+        value = None
+
+    if value is None or not np.isfinite(value) or value <= 0:
+        return {"available": False,
+                "reason": "no usable spread estimate for this listing"}
+    if not resolved:
+        return {"available": False, "resolved": False, "spread": value,
+                "reason": ("the spread estimate sits at the estimator's own noise "
+                           "floor, so the cost could not be measured — which is not "
+                           "the same as it being small")}
+
+    # One round trip crosses the spread twice: once buying, once selling.
+    cost = 2.0 * value
+    return {"available": True, "resolved": True, "spread": value,
+            "roundTrip": cost,
+            "reading": (f"A round trip costs about {cost * 100:.2f}% at the estimated "
+                        f"spread — crossed twice, once each way. Compare that against "
+                        f"any effect on this page before treating one as actionable.")}
+
+
 # ============================================================================ #
 # The market the name trades in
 #

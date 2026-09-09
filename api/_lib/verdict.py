@@ -113,6 +113,8 @@ what makes a full-market scan mean anything at all.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Optional
 
 from . import explain as E
@@ -329,6 +331,18 @@ BANDS = [
 STRONG_BUY_REQUIRES = "high"
 
 ACTION_ORDER = ["AVOID", "REDUCE", "HOLD", "BUY", "STRONG_BUY"]
+
+# How far the presence of ANY chart formation moves the score inside
+# `scripts/backtest_verdict.py`, which cannot use the live path.
+#
+# The live component scores only formations whose forward returns survived a
+# correction — and those survivors were chosen using the whole sample, so
+# feeding them back into a backtest of that same sample would be circular. The
+# backtest therefore scores presence alone with a fixed sign and a fixed size.
+# Eight points is roughly what a -3% measured effect earns through
+# `PATTERN_POINTS_PER_PCT`, so the two paths are the same order of magnitude
+# without the second one selecting on its own answer.
+PATTERN_BACKTEST_POINTS = 8.0
 
 # --------------------------------------------------------------------------- #
 # Tradeability gates, per market
@@ -1389,6 +1403,56 @@ def _overlap_reading(strongest: dict, pairs: list[dict]) -> str:
 # ============================================================================ #
 # Provenance — the measurement that says what this ordering is worth
 # ============================================================================ #
+_BLEND_BACKTEST_PATH = Path(__file__).with_name("verdict_backtest.json")
+_BLEND_CACHE: Optional[dict] = None
+
+
+def blend_validation(market: Optional[str] = None) -> dict:
+    """What the walk-forward found about the BLEND, not just the price rank.
+
+    `provenance()` quotes `backtest_results.json`, which measures the seven-signal
+    price composite — one component of nine. This reads the second artifact,
+    which measures the four components that can be reconstructed without reading
+    the future, and carries its own scope so the coverage is never mistaken for
+    the whole score.
+
+    Returns `available: False` on a checkout that has never run
+    `scripts/backtest_verdict.py`, which reads as unmeasured rather than as
+    passed.
+    """
+    global _BLEND_CACHE
+    if _BLEND_CACHE is None:
+        try:
+            _BLEND_CACHE = json.loads(_BLEND_BACKTEST_PATH.read_text())
+        except (OSError, ValueError):
+            _BLEND_CACHE = {}
+    if not _BLEND_CACHE.get("markets"):
+        return {"available": False,
+                "reason": ("The blend has never been backtested on this checkout. "
+                           "Run scripts/backtest_verdict.py.")}
+
+    row = _BLEND_CACHE["markets"].get((market or "").strip().upper())
+    if row is None:
+        return {"available": False,
+                "reason": (f"The blend has been backtested, but not on "
+                           f"{(market or '?').upper()}. A result measured on another "
+                           f"market is not evidence about this one.")}
+    return {
+        "available": True,
+        "measuredOn": row.get("measuredOn"),
+        "scope": _BLEND_CACHE.get("scope"),
+        "headline": row.get("headline"),
+        "components": row.get("components"),
+        "coverage": row.get("coverage"),
+        "excluded": row.get("excluded"),
+        "observations": row.get("observations"),
+        "dates": row.get("dates"),
+        "survived": row.get("survived"),
+        "contradicted": row.get("contradicted"),
+        "tests": row.get("tests"),
+    }
+
+
 def provenance() -> dict:
     """The published null result, for a caller that must print it.
 
@@ -1422,10 +1486,13 @@ def provenance() -> dict:
         # a while after the component list grew to eight — a small wrongness in
         # the one paragraph whose whole job is to be exact about what has and has
         # not been measured.
+        # THE COUNT IS DERIVED, NOT WRITTEN, and so is the claim about the
+        # blend. This sentence read "the blend of them has never been
+        # backtested at all" until `backtest_verdict.py` existed; now it says
+        # what that measured and what it could not reach.
         "appliesTo": (f"the price-and-volume composite, which is one of "
-                      f"{len(COMPONENTS)} components below and the only one whose "
-                      f"predictive power this app has measured at all. The other "
-                      f"{len(COMPONENTS) - 1} have not been backtested individually and "
-                      f"the blend of them has never been backtested at all, so nothing "
-                      f"here claims they add up to an edge."),
+                      f"{len(COMPONENTS)} components below. The blend itself is "
+                      f"measured separately and partially — see `blendBacktest` — "
+                      f"because five of the nine components cannot be reconstructed on "
+                      f"a past date without reading filings published years later."),
     }

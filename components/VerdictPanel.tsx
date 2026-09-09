@@ -1,14 +1,15 @@
 "use client";
 
 import {
-  AlertTriangle, Crosshair, Gauge, Lock, Shapes, ShieldAlert, TrendingDown, Users, Waves,
+  AlertTriangle, Coins, Crosshair, FlaskConical, Gauge, Lock, Shapes, ShieldAlert,
+  TrendingDown, Users, Waves,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import { TONE_FIELD, TONE_HEX } from "@/components/ui/explain";
 import type {
-  Engine, TapeCalibration, VerdictComponent, VerdictPatterns, VerdictRegister,
-  VerdictResponse, VerdictStructure, VerdictTape,
+  BlendBacktest, Engine, RoundTripCost, TapeCalibration, VerdictComponent,
+  VerdictPatterns, VerdictRegister, VerdictResponse, VerdictStructure, VerdictTape,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -249,6 +250,25 @@ function EntryReading({ site }: { site: VerdictStructure }) {
 }
 
 /**
+ * What one buy and one sell cost, beside the effects the page asks you to act
+ * on. The measured effects in this app are a few percent; a round trip on a
+ * thin listing can be more than that, and a gross number presented as though it
+ * were net is the quietest way to mislead somebody.
+ */
+function CostReading({ costs }: { costs: RoundTripCost }) {
+  return (
+    <div>
+      <div className="eyebrow mb-1 flex items-center gap-1.5">
+        <Coins aria-hidden className="h-3 w-3" /> What a round trip costs
+      </div>
+      <p className="prose-col text-meta leading-relaxed text-ash">
+        {costs.available ? costs.reading : costs.reason}
+      </p>
+    </div>
+  );
+}
+
+/**
  * Chart formations, and the measurement that decides whether they count.
  *
  * THE SENTENCE THIS BLOCK EXISTS FOR is the one about the sign. On both markets
@@ -294,6 +314,76 @@ function PatternReading({ patterns }: { patterns: VerdictPatterns }) {
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * The measurement that is about THIS score rather than one of its components.
+ *
+ * The provenance block below covers the seven-signal price composite. This
+ * covers the blend — and covers less than half of it, because five of the nine
+ * components cannot be reconstructed on a past date without reading filings
+ * published years later. The coverage is stated as a percentage rather than
+ * implied, and where a surviving coefficient is contradicted by its own
+ * quintile spread the panel says so: a rank correlation that lives in the
+ * middle of the distribution while the extremes go the other way is not a
+ * finding anybody can act on.
+ */
+function BlendReading({ blend }: { blend: BlendBacktest }) {
+  if (!blend.available) {
+    return (
+      <Card tone="warn">
+        <CardBody className="py-3">
+          <div className="eyebrow mb-1 text-warn">The blend has not been backtested</div>
+          <p className="prose-col text-meta leading-relaxed text-body">
+            {blend.reason} Until it has, the score below is an ordering of evidence with
+            no established relationship to returns.
+          </p>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  const contradicted = (blend.contradicted ?? 0) > 0;
+  return (
+    <Card>
+      <CardBody className="py-3">
+        <div className="eyebrow mb-1 flex items-center gap-1.5">
+          <FlaskConical aria-hidden className="h-3 w-3" />
+          And what the blend is worth — measured on{" "}
+          {((blend.coverage ?? 0) * 100).toFixed(0)}% of it
+        </div>
+        <p className="prose-col text-meta leading-relaxed text-body">{blend.headline}</p>
+        {blend.medianRoundTrip !== null && blend.medianRoundTrip !== undefined && (
+          <p className="prose-col mt-1.5 text-meta leading-relaxed text-faint">
+            A quintile spread is gross. The spread estimator resolved for only{" "}
+            {blend.roundTripResolved} of {blend.roundTripAttempted} names — it clears its
+            own noise floor on the widest spreads and almost nowhere else — so the{" "}
+            {(blend.medianRoundTrip * 100).toFixed(2)}% median of those is an upper bound
+            on a typical cost, not a measurement of one. Each result carries the round
+            trip at which it reaches zero; compare that against your own dealing costs.
+          </p>
+        )}
+
+        {contradicted && (
+          <p className="prose-col mt-1.5 text-meta leading-relaxed text-warn">
+            One surviving result is contradicted by its own quintile spread — the rank
+            correlation and the top-minus-bottom gap point opposite ways, so the
+            relationship is not monotone and the extremes, which are the only part
+            anybody would act on, go the other way.
+          </p>
+        )}
+        {blend.excluded && (
+          <Explainer summary={`Why ${Object.keys(blend.excluded).length} of the nine could not be measured at all`}>
+            <ul className="list-disc space-y-1.5 pl-4">
+              {Object.entries(blend.excluded).map(([key, reason]) => (
+                <li key={key}><span className="text-body">{key}</span> — {reason}</li>
+              ))}
+            </ul>
+          </Explainer>
+        )}
+      </CardBody>
+    </Card>
   );
 }
 
@@ -363,6 +453,8 @@ export function VerdictPanel({
       {/* THE MEASUREMENT COMES FIRST. Not a footnote under the number — the
           number means something different depending on this paragraph, so it
           cannot come after it. */}
+      {data.blendBacktest && <BlendReading blend={data.blendBacktest} />}
+
       <Card tone="warn">
         <CardBody className="py-4">
           <div className="eyebrow mb-1.5 flex items-center gap-1.5 text-warn">
@@ -542,6 +634,7 @@ export function VerdictPanel({
           )}
 
           {data.structure?.available && <EntryReading site={data.structure} />}
+          {data.costs && <CostReading costs={data.costs} />}
           {data.patterns?.available && <PatternReading patterns={data.patterns} />}
           {data.tape?.available && <TapeReading tape={data.tape}
                                                 calibration={data.tapeCalibration} />}

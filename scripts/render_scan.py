@@ -306,6 +306,40 @@ def _detail(index: int, entry: dict) -> str:
             f'<p style="color:var(--ash)">{_e(site.get("reason"))} Unmeasured is not '
             f'the same as clear.</p></div>')
 
+    # WHAT TRADING IT COSTS, beside the effects it is being compared against.
+    # The measured effects in this app are a few percent; a round trip on a thin
+    # Indonesian listing can be more than that, and a gross number presented as
+    # though it were net is the quietest way to mislead somebody.
+    costs = entry.get("costs") or {}
+    if costs.get("available"):
+        costs_html = (
+            f'<div class="blk"><div class="h">What a round trip costs</div>'
+            f'<p>{_e(costs.get("reading"))}</p></div>')
+    elif costs:
+        costs_html = (
+            f'<div class="blk"><div class="h">What a round trip costs</div>'
+            f'<p style="color:var(--ash)">{_e(costs.get("reason"))}</p></div>')
+    else:
+        costs_html = ""
+
+    sector = entry.get("sectorRank") or {}
+    if sector.get("percentile") is not None:
+        sector_html = (
+            f'<div class="blk"><div class="h">Against its own sector</div>'
+            f'<p>Ranks {sector["rank"]} of {sector["names"]} scanned '
+            f'{_e(sector["sector"])} names &mdash; the '
+            f'{sector["percentile"]:.0f}th percentile of its own group. The overall '
+            f'rank compares it against the whole market; this asks whether it is '
+            f'strong, or in a strong sector.</p></div>')
+    elif sector.get("reason"):
+        sector_html = (
+            f'<div class="blk"><div class="h">Against its own sector</div>'
+            f'<p style="color:var(--ash)">{_e(sector["reason"])}. Ranking inside a '
+            f'group that small produces a number that looks like the others and means '
+            f'far less.</p></div>')
+    else:
+        sector_html = ""
+
     earnings = ((entry.get("register") or {}).get("earnings") or {})
     earnings_html = ""
     if earnings.get("available") and earnings.get("soon"):
@@ -346,7 +380,7 @@ def _detail(index: int, entry: dict) -> str:
           <p style="color:var(--ash);font-size:12px">
             {_e(entry['shrink']['text'])}</p>
         </div>
-        {structure_html}{earnings_html}{penalties}{sizing_html}
+        {structure_html}{costs_html}{sector_html}{earnings_html}{penalties}{sizing_html}
         <div class="blk"><div class="h">In order</div>
           <ul class="why">{why}</ul>
         </div>
@@ -458,6 +492,62 @@ def render(report: dict) -> str:
     # THE MARKET THIS LIST WAS PRODUCED IN. A ranked table produced in a falling
     # market looks identical to one produced in a rising one, because every score
     # in it is cross-sectional — the top of a falling market is still a top.
+    # THE MEASUREMENT THAT IS ACTUALLY ABOUT THIS TABLE. The provenance block
+    # above covers the price composite — one component of nine. This covers the
+    # blend, on the part of it that can be reconstructed without reading the
+    # future, and carries its own scope so the coverage is never mistaken for
+    # the whole score.
+    blend = report.get("blendBacktest") or {}
+    if blend.get("available"):
+        rows = "".join(
+            f'<div class="pen"><span>{t["horizonDays"]}d &mdash; '
+            f'IC {t["icMean"]:+.3f} (q={t["icQ"]:.3f}), quintile spread '
+            f'{t["spreadMean"] * 100:+.1f}% (q={t["spreadQ"]:.3f})'
+            + (f', breakeven round trip {t["breakevenRoundTrip"] * 100:.2f}%'
+               if t.get("breakevenRoundTrip") else '')
+            + ('' if t.get("signsAgree", True)
+               else ' <span style="color:var(--warn)">&mdash; signs disagree</span>')
+            + '</span><b style="color:'
+            + ("var(--warn)" if (t["icSurvived"] or t["spreadSurvived"])
+               else "var(--faint)") + '">'
+            + ("survived" if (t["icSurvived"] or t["spreadSurvived"]) else "null")
+            + '</b></div>'
+            for t in (blend.get("tests") or []))
+        cost = blend.get("medianRoundTrip")
+        resolved = blend.get("roundTripResolved")
+        attempted = blend.get("roundTripAttempted")
+        net = ""
+        if cost is not None:
+            net = (f'<p class="stamp">A quintile spread is gross. The spread estimator '
+                   f'resolved for only {resolved} of {attempted} names &mdash; it clears '
+                   f'its own noise floor on the widest ones and almost nowhere else '
+                   f'&mdash; so the {cost * 100:.2f}% median of those is an UPPER BOUND '
+                   f'on a typical cost rather than a measurement of one. The breakeven '
+                   f'round trip beside each result is the number this data can support; '
+                   f'compare it against your own dealing costs.</p>')
+        excluded = "".join(
+            f'<div class="pen"><span>{_e(k)}</span>'
+            f'<span style="color:var(--faint)">{_e(v)}</span></div>'
+            for k, v in (blend.get("excluded") or {}).items())
+        blend_html = (
+            f'<div class="provenance" style="border-left-color:var(--tech)">'
+            f'<h3 style="color:var(--tech)">And what the BLEND is worth &mdash; '
+            f'measured on {(blend.get("coverage") or 0) * 100:.0f}% of it</h3>'
+            f'<p>{_e(blend.get("headline"))}</p>'
+            f'{rows}'
+            f'{net}'
+            f'<p class="stamp">Five of the nine components cannot be reconstructed on '
+            f'a past date at all:</p>{excluded}'
+            f'<p class="stamp">The rest is measured prospectively by the scan log '
+            f'beside this report, which takes months to say anything.</p></div>')
+    else:
+        blend_html = (
+            f'<div class="provenance" style="border-left-color:var(--tech)">'
+            f'<h3 style="color:var(--tech)">The blend has not been backtested</h3>'
+            f'<p>{_e(blend.get("reason", "No blend backtest on this checkout."))} '
+            f'Until it has, the score below is an ordering of evidence with no '
+            f'established relationship to returns.</p></div>')
+
     market = report.get("regime") or {}
     regime_html = ""
     if market.get("available"):
@@ -468,6 +558,42 @@ def render(report: dict) -> str:
             f'<div class="h" style="color:{tone}">The market this list was produced in '
             f'&mdash; {_e(market.get("state"))}</div>'
             f'<p>{_e(market.get("reading"))}</p></div>')
+
+    # HOW MANY BETS THE BUY LIST ACTUALLY IS. A property of the SET, invisible
+    # from any row, and the thing a reader is most likely to get wrong by
+    # reading sector labels off the table.
+    bets = report.get("concentration") or {}
+    if bets.get("available"):
+        groups = [g for g in (bets.get("clusters") or []) if len(g) > 1]
+        cluster_html = ""
+        if groups:
+            cluster_html = "".join(
+                f'<div class="pen"><span>{" &middot; ".join(_e(n) for n in g)}</span>'
+                f'<b style="color:var(--ash)">moves together</b></div>' for g in groups)
+        concentration_html = (
+            f'<div class="blk" style="max-width:82ch">'
+            f'<div class="h">Is this buy list one bet?</div>'
+            f'<p>{_e(bets.get("reading"))}</p>'
+            f'{cluster_html}'
+            f'<p style="color:var(--faint)">Quoted on weekly returns, because '
+            f'non-synchronous trading attenuates daily correlations between thin names '
+            f'and would flatter exactly the concentration this is here to find. On '
+            f'daily returns the same list reads '
+            f'{bets.get("effectiveBetsDaily", 0):.1f} bets against '
+            f'{bets.get("effectiveBets", 0):.1f} weekly. Grouping uses a '
+            f'{bets.get("clusterLink", 0):.2f} link, which is a drawn line rather than '
+            f'a measured one &mdash; at '
+            + ", ".join(f"{k} it would be {v} group{'' if v == 1 else 's'}"
+                        for k, v in (bets.get("clusterSensitivity") or {}).items())
+            + '. The bet count uses no threshold at all, which is why it is the '
+              'headline.</p></div>')
+    elif bets:
+        concentration_html = (
+            f'<div class="blk" style="max-width:82ch">'
+            f'<div class="h">Is this buy list one bet?</div>'
+            f'<p style="color:var(--ash)">{_e(bets.get("reason"))}</p></div>')
+    else:
+        concentration_html = ""
 
     stale = universe.get("staleness") or {}
     stale_html = (f'<p class="note{" stale" if stale.get("stale") else ""}">'
@@ -591,6 +717,8 @@ def render(report: dict) -> str:
 
   {regime_html}
 
+  {blend_html}
+
   <div class="funnel">
     <div><div class="n">{counts['requested']}</div><div class="k">listed</div>
       <div class="w">{_e(universe.get('label'))}</div></div>
@@ -605,6 +733,7 @@ def render(report: dict) -> str:
   </div>
   {stale_html}
   <p class="note">{tally_html}</p>
+  {concentration_html}
 
   <h2>Ranked</h2>
   <div class="blk" style="max-width:82ch">
