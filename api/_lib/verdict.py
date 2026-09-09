@@ -174,6 +174,20 @@ COMPONENTS: list[dict] = [
                    "on 4% of US large caps, which IS chance."),
     },
     {
+        "key": "patterns",
+        "label": "Chart formations",
+        "family": "price",
+        "evidence": "weak",
+        "weight": 0.4,
+        "detail": ("Head-and-shoulders, broadening, triangle, rectangle and double "
+                   "formations, defined by Lo, Mamaysky and Wang's kernel-regression "
+                   "method so two implementations agree. Scored ONLY where a formation's "
+                   "forward return survived a correction across every pattern and horizon "
+                   "tested — and scored by the measured sign, not the textbook one. On "
+                   "both markets measured, the survivors all predicted UNDERperformance "
+                   "whichever way the chart books read them."),
+    },
+    {
         "key": "value",
         "label": "Value against the model",
         "family": "filings",
@@ -619,6 +633,39 @@ def read_tape(tape_result: Optional[dict]) -> dict:
             "weightScale": 1.0, "detail": tape_result.get("reading")}
 
 
+def read_patterns(pattern_result: Optional[dict]) -> dict:
+    """Chart formations, which contribute nothing until they have been measured.
+
+    `patterns.read` sets `usable` only when at least one detected formation has
+    a forward return that survived a false-discovery correction across every
+    pattern and horizon tested. Anything else — no formation, no calibration, or
+    formations whose measurement came out null — is UNAVAILABLE rather than
+    neutral, because "we looked and found nothing that predicts" and "we found a
+    shape that predicts nothing" are the same contribution and it is zero.
+    """
+    if not isinstance(pattern_result, dict):
+        return _unavailable("chart formations were not read for this name")
+    if not pattern_result.get("available"):
+        return _unavailable(pattern_result.get("reason")
+                            or "not enough history to read formations")
+    if not pattern_result.get("calibrated"):
+        return _unavailable(
+            "this market has no measured pattern study, so a formation cannot be "
+            "scored — run scripts/calibrate_patterns.py")
+    if not pattern_result.get("usable"):
+        found = len(pattern_result.get("detections") or [])
+        return _unavailable(
+            f"{found} formation{'' if found == 1 else 's'} found, none with a forward "
+            f"return that survived correction on this market"
+            if found else "no formation completed in the scanned window")
+
+    score = _finite(pattern_result.get("score"))
+    if score is None:
+        return _unavailable("the formations produced no usable score")
+    return {"score": score, "available": True, "reason": None, "refused": False,
+            "weightScale": 1.0, "detail": pattern_result.get("reading")}
+
+
 def read_float(register_result: Optional[dict]) -> dict:
     """How much of the company is actually for sale."""
     if not isinstance(register_result, dict) or not register_result.get("available"):
@@ -667,6 +714,7 @@ READERS = {
     "trend": lambda ctx: read_trend(ctx.get("legs") or {}),
     "flow": lambda ctx: read_flow(ctx.get("legs") or {}),
     "tape": lambda ctx: read_tape(ctx.get("tape")),
+    "patterns": lambda ctx: read_patterns(ctx.get("patterns")),
     "value": lambda ctx: read_value(ctx.get("legs") or {}),
     "quality": lambda ctx: read_quality(ctx.get("legs") or {}),
     "float": lambda ctx: read_float(ctx.get("register")),
@@ -842,7 +890,8 @@ def _gates(liquidity: Optional[dict], price: Optional[float], market: str,
            legs: dict, available: int,
            turnover_floor: Optional[float] = None,
            register_result: Optional[dict] = None,
-           tape_result: Optional[dict] = None) -> list[dict]:
+           tape_result: Optional[dict] = None,
+           structure_result: Optional[dict] = None) -> list[dict]:
     market = (market or "US").upper()
     floor = turnover_floor if turnover_floor is not None else TURNOVER_FLOOR.get(market, 0.0)
     gates: list[dict] = []
@@ -949,6 +998,28 @@ def _gates(liquidity: Optional[dict], price: Optional[float], market: str,
                          f"days everyone else also wants to trade."),
         })
 
+    # --- the entry, as distinct from the asset -----------------------------
+    # THE ONLY GATE HERE THAT IS ABOUT THE PRICE ON THE SCREEN RATHER THAN THE
+    # COMPANY, and it is worded to say so. Everything else in this function is a
+    # fact about the security or the register; this one says the company may be
+    # perfectly sound and that buying it at today's price is still a poor trade,
+    # because the nearest ceiling is three times closer than the floor whose
+    # failure would mean the reason for the trade was wrong.
+    entry = structure_result if isinstance(structure_result, dict) else {}
+    if entry.get("available") and entry.get("band") == "bad":
+        ratio = _finite(entry.get("rewardRisk"))
+        gates.append({
+            "id": "poorEntry", "action": "HOLD",
+            "label": "Poor entry at this price",
+            "detail": (f"The nearest resistance is {(_finite(entry.get('rewardToResistance')) or 0) * 100:.1f}% "
+                       f"overhead while the nearest support sits "
+                       f"{(_finite(entry.get('riskToSupport')) or 0) * 100:.1f}% below — "
+                       f"about {ratio:.2f} to 1 against"
+                       if ratio is not None else "the structure is against the buyer here")
+                      + ". This is a statement about the price, not the company: the "
+                        "score above is unchanged and a different price would clear this.",
+        })
+
     quality = _leg(legs, "quality") or {}
     altman = (quality.get("altman") or {}).get("band")
     beneish = (quality.get("beneish") or {}).get("band")
@@ -1029,7 +1100,9 @@ def score(ticker: str,
           max_weight: float = 0.10,
           turnover_floor: Optional[float] = None,
           tape_result: Optional[dict] = None,
-          register_result: Optional[dict] = None) -> dict:
+          register_result: Optional[dict] = None,
+          pattern_result: Optional[dict] = None,
+          structure_result: Optional[dict] = None) -> dict:
     """One name's score, action and the arithmetic that produced both.
 
     `legs` is the `/api/confluence` shape — each leg carrying its own `ok` flag —
@@ -1047,7 +1120,7 @@ def score(ticker: str,
     # key here and a row in `COMPONENTS` — not editing every reader's arguments,
     # which is how the fifth one would silently get handed the fourth one's data.
     context = {"legs": legs, "rank_row": rank_row, "tape": tape_result,
-               "register": register_result}
+               "register": register_result, "patterns": pattern_result}
 
     components: list[dict] = []
     for spec in COMPONENTS:
@@ -1097,7 +1170,7 @@ def score(ticker: str,
 
     gates = _gates(liquidity, latest_close, market, legs, len(available),
                    turnover_floor=turnover_floor, register_result=register_result,
-                   tape_result=tape_result)
+                   tape_result=tape_result, structure_result=structure_result)
 
     if final is None:
         action, action_label, tone = "NO_ACTION", "No action", "none"
@@ -1163,6 +1236,11 @@ def score(ticker: str,
         "gatedBy": gate_reasons,
         "latestClose": _finite(latest_close),
         "turnover": _finite((liquidity or {}).get("medianDollarVolume")),
+        # WHERE THE TRADE IS WRONG, beside the verdict rather than a tab away.
+        # It is deliberately NOT a component: the score answers "is this worth
+        # owning" and this answers "is now a sensible moment", and blending them
+        # would let a tidy entry make a poor company look better.
+        "structure": structure_result,
         "sizing": _sizing(action, annual_volatility, risk_budget, max_weight),
         "reasons": _reasons(components, agreement, penalties, gates, action),
         "caveat": (

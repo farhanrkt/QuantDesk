@@ -1019,6 +1019,7 @@ def _register_uncached(ticker: str) -> dict:
         "shares": None,
         "recommendations": None,
         "earningsSurprises": None,
+        "nextEarnings": None,
     }
     try:
         handle = yf.Ticker(ticker)
@@ -1084,23 +1085,41 @@ def _register_uncached(ticker: str) -> dict:
     # Earnings surprises. `earnings_dates` mixes future scheduled dates, which
     # carry no actual, with past ones; the surprise column only means anything
     # where a figure was reported.
+    # ONE FETCH, TWO ANSWERS. `earnings_dates` carries both the past results and
+    # the scheduled future ones, so the next reporting date costs nothing on top
+    # of the surprise history — which matters because "is this company reporting
+    # next week" is a real reason to wait, and paying a second round trip per
+    # name for it across a whole market would not be worth it.
     try:
         rows = handle.earnings_dates
-        if rows is not None and len(rows) and "Surprise(%)" in rows.columns:
-            surprises = pd.to_numeric(rows["Surprise(%)"], errors="coerce").dropna()
-            records = []
-            for stamp, value in surprises.sort_index().items():
+        if rows is not None and len(rows):
+            if "Surprise(%)" in rows.columns:
+                surprises = pd.to_numeric(rows["Surprise(%)"], errors="coerce").dropna()
+                records = []
+                for stamp, value in surprises.sort_index().items():
+                    try:
+                        date = pd.Timestamp(stamp).date().isoformat()
+                    except (TypeError, ValueError):
+                        continue
+                    records.append({"date": date, "surprisePct": float(value)})
+                if records:
+                    out["earningsSurprises"] = records
+
+            today = pd.Timestamp(dt.date.today())
+            upcoming = []
+            for stamp in rows.index:
                 try:
-                    date = pd.Timestamp(stamp).date().isoformat()
-                except (TypeError, ValueError):
+                    when = pd.Timestamp(stamp).tz_localize(None)
+                except (TypeError, ValueError, AttributeError):
                     continue
-                records.append({"date": date, "surprisePct": float(value)})
-            if records:
-                out["earningsSurprises"] = records
+                if pd.notna(when) and when >= today:
+                    upcoming.append(when)
+            if upcoming:
+                out["nextEarnings"] = min(upcoming).date().isoformat()
     except Exception:
         pass
 
     out["ok"] = any(out[field] is not None for field in (
         "insidersPercentHeld", "institutionsPercentHeld", "shares",
-        "recommendations", "earningsSurprises"))
+        "recommendations", "earningsSurprises", "nextEarnings"))
     return out

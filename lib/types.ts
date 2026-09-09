@@ -1162,6 +1162,15 @@ export interface VerdictRegister {
     institutionsHeld?: number | null;
     institutionsCount?: number | null;
   };
+  /** Scheduled reporting date. Context only — it scores nothing. */
+  earnings?: {
+    available: boolean;
+    reason?: string;
+    date?: string;
+    calendarDays?: number;
+    soon?: boolean;
+    reading?: string;
+  };
   issuance?: {
     available: boolean;
     reason?: string;
@@ -1182,6 +1191,84 @@ export interface VerdictRegister {
   reading?: string;
   /** Reported and deliberately never scored. */
   institutions?: { percentHeld: number | null; count: number | null; note: string };
+}
+
+/** A chart formation found by the Lo-Mamaysky-Wang method, with its measurement. */
+export interface VerdictPatternDetection {
+  pattern: string;
+  label: string;
+  /** The direction a chart book attaches to the shape. Measured, it carries no
+   *  information — a formation and its mirror image predicted the same thing —
+   *  so it is carried for display and never scored. */
+  bias: string;
+  note: string;
+  completedAt: string;
+  detectedAt: string;
+  priceAtDetection: number;
+  /** Share of names showing this in a quarter, on the measured population. */
+  firingRate?: number | null;
+  observations?: number | null;
+  /** Null unless this formation's forward return survived correction. */
+  forward?: { horizonDays: number; meanExcess: number; qValue: number;
+              months?: number } | null;
+  significant: boolean;
+  verdict?: string | null;
+}
+
+export interface VerdictPatterns {
+  available: boolean;
+  reason?: string;
+  bandwidth?: number;
+  window?: number;
+  sessions?: number;
+  detections?: VerdictPatternDetection[];
+  /** False where this market has never been measured. Nothing scores then. */
+  calibrated?: boolean;
+  measuredOn?: string | null;
+  /** True only where at least one detection survived correction. */
+  usable?: boolean;
+  score?: number | null;
+  survivors?: string[];
+  lookback?: number;
+  reading?: string;
+  /** Named and declined, with the reason. An absent pattern is never silent. */
+  refused?: { name: string; reason: string }[];
+}
+
+/** Where the price sits against defended levels — the entry, not the asset. */
+export interface VerdictStructure {
+  available: boolean;
+  reason?: string;
+  horizon?: string;
+  price?: number;
+  atr?: number | null;
+  support?: number | null;
+  resistance?: number | null;
+  riskToSupport?: number | null;
+  rewardToResistance?: number | null;
+  rewardRisk?: number | null;
+  unboundedUpside?: boolean;
+  noSupport?: boolean;
+  atSupport?: boolean;
+  atResistance?: boolean;
+  band?: "fine" | "poor" | "bad" | "unbounded" | "noSupport" | "riskTooWide"
+       | "unmeasured";
+  reading?: string;
+}
+
+/** Where the index itself is. Context: it scores nothing and gates nothing. */
+export interface MarketRegime {
+  available: boolean;
+  reason?: string;
+  symbol?: string | null;
+  state?: string;
+  tone?: string;
+  aboveSlow?: boolean;
+  slowRising?: boolean | null;
+  distanceToSlow?: number | null;
+  drawdownFromYearHigh?: number | null;
+  scores?: boolean;
+  reading?: string;
 }
 
 /** One market's measured tape baselines, from `tape_calibration.json`. */
@@ -1245,6 +1332,10 @@ export interface VerdictResponse {
   };
   tape: VerdictTape | null;
   register: VerdictRegister | null;
+  patterns: VerdictPatterns | null;
+  /** Where the trade is wrong. Deliberately not a scoring component. */
+  structure: VerdictStructure | null;
+  regime: MarketRegime | null;
   /** Null where this market has never been calibrated. */
   tapeCalibration: TapeCalibration | null;
   agreement: { state: string; shrink: number; conviction: string; text: string };

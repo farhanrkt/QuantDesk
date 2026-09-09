@@ -67,6 +67,7 @@ Amihud, Y., Mendelson, H., & Uno, J. (1999). "Number of Shareholders and Stock
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Optional
 
 import numpy as np
@@ -149,12 +150,62 @@ def _share_series(records) -> Optional[pd.Series]:
     return pd.Series(counts, index=pd.DatetimeIndex(dates)).sort_index()
 
 
+# Inside this many sessions, a scheduled report is close enough that buying now
+# is partly a bet on it. Ten trading days is a fortnight — long enough to be
+# worth naming, short enough that it is not true of every name all the time.
+EARNINGS_SOON_DAYS = 14
+
+
 def _finite(value) -> Optional[float]:
     try:
         out = float(value)
     except (TypeError, ValueError):
         return None
     return out if np.isfinite(out) else None
+
+
+def earnings_proximity(register: Optional[dict],
+                       today: Optional[dt.date] = None) -> dict:
+    """How long until the next scheduled report, and whether that is soon.
+
+    CONTEXT, NOT A SCORE AND NOT A GATE. Buying a week before a result is a
+    different bet from buying a month after one — the position is partly a wager
+    on an announcement nothing in this app has read. But whether that is good or
+    bad is not something anybody here has measured, and turning "reports on
+    Tuesday" into points would be inventing a direction for a fact that has
+    none.
+
+    A provider's scheduled date is also an estimate that moves. `estimated` is
+    not distinguishable from `confirmed` in this feed, so the reading says
+    "scheduled" and never "will".
+    """
+    when = (register or {}).get("nextEarnings")
+    if not when:
+        return {"available": False,
+                "reason": "no scheduled reporting date came back for this listing"}
+    try:
+        date = dt.date.fromisoformat(str(when))
+    except (TypeError, ValueError):
+        return {"available": False, "reason": f"unreadable reporting date {when!r}"}
+
+    days = (date - (today or dt.date.today())).days
+    soon = 0 <= days <= EARNINGS_SOON_DAYS
+    return {
+        "available": True,
+        "date": date.isoformat(),
+        "calendarDays": days,
+        "soon": soon,
+        "scores": False,
+        "reading": (
+            f"Scheduled to report on {date.isoformat()}, {days} day"
+            f"{'' if days == 1 else 's'} away. Buying inside a fortnight of a result "
+            f"makes the position partly a bet on that announcement, which nothing here "
+            f"has read. Reported as context: whether it is a reason to wait is not "
+            f"something this app has measured."
+            if soon else
+            f"Next scheduled report {date.isoformat()}, {days} days away — far enough "
+            f"that today's price is not mostly a wager on it."),
+    }
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 100.0) -> float:
@@ -392,6 +443,9 @@ def read(register: Optional[dict], median_volume: Optional[float] = None,
         "floatTurnover": turnover,
         "daysToTradeFloat": (1.0 / turnover) if turnover and turnover > 0 else None,
         "reading": _reading(notes, floats, issued, turnover),
+        # Context that rides along with the register because it came from the
+        # same fetch. It scores nothing — see `earnings_proximity`.
+        "earnings": earnings_proximity(register),
         # Reported, never scored. See the module docstring for why.
         "institutions": {
             "percentHeld": floats.get("institutionsHeld") if floats["available"] else None,

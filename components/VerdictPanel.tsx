@@ -1,12 +1,14 @@
 "use client";
 
-import { AlertTriangle, Gauge, Lock, ShieldAlert, Users, Waves } from "lucide-react";
+import {
+  AlertTriangle, Crosshair, Gauge, Lock, Shapes, ShieldAlert, TrendingDown, Users, Waves,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import { TONE_FIELD, TONE_HEX } from "@/components/ui/explain";
 import type {
-  Engine, TapeCalibration, VerdictComponent, VerdictRegister, VerdictResponse,
-  VerdictTape,
+  Engine, TapeCalibration, VerdictComponent, VerdictPatterns, VerdictRegister,
+  VerdictResponse, VerdictStructure, VerdictTape,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -197,11 +199,98 @@ function RegisterReading({ register }: { register: VerdictRegister }) {
       {/* The turnover sentence lives in `register.reading`, which the server
           assembles. Repeating it here printed it twice on every name that had
           one — the same duplication the reasons list already had to drop. */}
+      {register.earnings?.available && register.earnings.soon && (
+        <p className="prose-col mt-1.5 text-meta leading-relaxed text-warn">
+          {register.earnings.reading}
+        </p>
+      )}
+
       {institutions && institutions.percentHeld !== null && (
         <p className="prose-col mt-1.5 text-meta leading-relaxed text-faint">
           {(institutions.percentHeld * 100).toFixed(1)}% sits with
           {institutions.count !== null ? ` ${institutions.count.toFixed(0)}` : ""}{" "}
           institutions. {institutions.note}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Where the trade is wrong — the entry, as distinct from the asset.
+ *
+ * IT IS NOT A COMPONENT AND MUST NOT BECOME ONE. The score answers "is this
+ * worth owning"; this answers "is now a sensible moment, and where would I be
+ * wrong". Blending them would let a tidy entry make a poor company look better,
+ * which is the confusion a composite is most prone to — so this renders beside
+ * the score and feeds only a gate.
+ */
+function EntryReading({ site }: { site: VerdictStructure }) {
+  const band = site.band;
+  const alarming = band === "bad" || band === "poor" || band === "riskTooWide";
+  return (
+    <div>
+      <div className="eyebrow mb-1 flex items-center gap-1.5">
+        <Crosshair aria-hidden className="h-3 w-3" /> Where the trade is wrong
+      </div>
+      <p className={cn("prose-col text-meta leading-relaxed",
+                       alarming ? "text-warn" : "text-ash")}>
+        {site.reading}
+      </p>
+      {site.rewardRisk !== null && site.rewardRisk !== undefined && (
+        <p className="prose-col mt-1.5 text-meta leading-relaxed text-faint">
+          Reward to risk against structure: {site.rewardRisk.toFixed(2)} to 1. Measured to
+          the nearest level either side, never to a target chosen to make the ratio look
+          better — and it is not a forecast, only a description of what is in front of it.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Chart formations, and the measurement that decides whether they count.
+ *
+ * THE SENTENCE THIS BLOCK EXISTS FOR is the one about the sign. On both markets
+ * measured, every formation that survived a false-discovery correction
+ * predicted UNDERperformance — a head-and-shoulders and its bullish mirror image
+ * measured the same. A reader who has seen a chart book will expect the
+ * opposite, and the panel has to say so rather than let the number pass.
+ */
+function PatternReading({ patterns }: { patterns: VerdictPatterns }) {
+  const found = patterns.detections ?? [];
+  const labels = Array.from(new Set(found.map((d) => d.label))).sort();
+
+  return (
+    <div>
+      <div className="eyebrow mb-1 flex items-center gap-1.5">
+        <Shapes aria-hidden className="h-3 w-3" /> Chart formations
+      </div>
+      <p className="prose-col text-meta leading-relaxed text-ash">{patterns.reading}</p>
+
+      {labels.length > 0 && (
+        <div className="mt-2 space-y-1.5">
+          {found.map((detection, i) => (
+            <div key={`${detection.pattern}-${i}`}
+                 className="flex flex-wrap items-baseline justify-between gap-x-3">
+              <span className="text-meta text-body">
+                {detection.label}
+                <span className="text-faint"> completed {detection.completedAt}</span>
+              </span>
+              <span className="text-meta text-faint">
+                {detection.significant && detection.forward
+                  ? `${(detection.forward.meanExcess * 100).toFixed(1)}% over ${detection.forward.horizonDays}d`
+                  : "measured null"}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(patterns.refused ?? []).length > 0 && (
+        <p className="prose-col mt-2 text-meta leading-relaxed text-faint">
+          Still refused, by name: {(patterns.refused ?? []).map((r) => r.name).join(", ")}.
+          None has a numeric definition that survives two stocks of different volatility.
         </p>
       )}
     </div>
@@ -290,6 +379,20 @@ export function VerdictPanel({
           )}
         </CardBody>
       </Card>
+
+      {data.regime?.available && (
+        <Card>
+          <CardBody className="py-3">
+            <div className="eyebrow mb-1 flex items-center gap-1.5">
+              <TrendingDown aria-hidden className="h-3 w-3" />
+              The market this reading was taken in &mdash; {data.regime.state}
+            </div>
+            <p className="prose-col text-meta leading-relaxed text-ash">
+              {data.regime.reading}
+            </p>
+          </CardBody>
+        </Card>
+      )}
 
       <Card tone={data.tone}>
         <CardHeader>
@@ -438,6 +541,8 @@ export function VerdictPanel({
             </div>
           )}
 
+          {data.structure?.available && <EntryReading site={data.structure} />}
+          {data.patterns?.available && <PatternReading patterns={data.patterns} />}
           {data.tape?.available && <TapeReading tape={data.tape}
                                                 calibration={data.tapeCalibration} />}
           {data.register?.available && <RegisterReading register={data.register} />}

@@ -116,6 +116,37 @@ def tape_payload(direction="accumulation", score=80.0, top_five=0.10,
 # fixture whose default lands in the neutral band would make the strongest
 # branch of `_agreement` unreachable from most tests, which is how the branch
 # that matters most ends up untested.
+def pattern_payload(usable=True, score=42.0, calibrated=True, available=True,
+                    detections=1):
+    """A `patterns.read` payload. `usable` is the field that decides whether the
+    component reads at all — it is true only where a detected formation's
+    forward return survived correction."""
+    if not available:
+        return {"available": False, "reason": "not enough history"}
+    return {
+        "available": True, "calibrated": calibrated, "usable": usable,
+        "score": score if usable else None,
+        "detections": [{"pattern": "headAndShoulders", "label": "Head and shoulders",
+                        "bias": "down", "significant": usable,
+                        "firingRate": 0.22, "observations": 1475,
+                        "forward": {"horizonDays": 63, "meanExcess": -0.032}}
+                       for _ in range(detections)],
+        "survivors": ["headAndShoulders"] if usable else [],
+        "reading": "one formation", "refused": [],
+    }
+
+
+def structure_payload(band="fine", reward_risk=2.4, available=True):
+    if not available:
+        return {"available": False, "reason": "no usable support or resistance"}
+    return {"available": True, "band": band, "price": 1000.0, "atr": 25.0,
+            "support": 960.0, "resistance": 1096.0,
+            "riskToSupport": 0.04, "rewardToResistance": 0.04 * reward_risk,
+            "rewardRisk": reward_risk, "unboundedUpside": False,
+            "noSupport": False, "atSupport": False, "atResistance": False,
+            "reading": "structure reading"}
+
+
 def register_payload(free=0.55, annualised=-0.06, observations=20, band="retiring",
                      available=True, float_ok=True, issuance_ok=True):
     """An `ownership.read` payload."""
@@ -160,7 +191,9 @@ def scored(**kwargs):
     """A fully specified, tradeable, everything-available call."""
     payload = {"legs": legs(), "rank_row": rank_row(), "liquidity": liquid(),
                "market": "ID", "latest_close": 1000.0, "annual_volatility": 0.30,
-               "tape_result": tape_payload(), "register_result": register_payload()}
+               "tape_result": tape_payload(), "register_result": register_payload(),
+               "pattern_result": pattern_payload(),
+               "structure_result": structure_payload()}
     payload.update(kwargs)
     return V.score("T.JK", **payload)
 
@@ -350,7 +383,7 @@ def test_a_name_resting_on_the_tick_floor_is_gated():
 
 def test_one_lens_is_not_a_composite():
     result = scored(legs={"anomaly": anomaly()}, rank_row=None,
-                    tape_result=None, register_result=None)
+                    tape_result=None, register_result=None, pattern_result=None)
     assert result["action"] == "NO_ACTION"
     assert any(gate["id"] == "insufficientEvidence" for gate in result["gates"])
 

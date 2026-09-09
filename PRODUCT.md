@@ -40,15 +40,16 @@ Most research tools give one opinion. This gives four that share no inputs, and 
 spends real effort establishing how much that agreement is actually worth — publishing the
 measurement whichever way it comes out. Five stamped artifacts already do this
 (`backtest_results.json`, `check_calibration.json`, `correlation_stability.json`,
-`lens_agreement.json`, `exposure_stability.json`, `tape_calibration.json`), including a
-backtest that reports its own ranking has **no detectable edge**, a beta study that
-refuses one of the four factors it tested, and a tape calibration that reports the
-signal it calibrates **does not exist on US markets** — 4.2% of names firing against
-5% expected by chance.
+`lens_agreement.json`, `exposure_stability.json`, `tape_calibration.json`,
+`patterns_calibration.json`), including a backtest that reports its own ranking has **no
+detectable edge**, a beta study that refuses one of the four factors it tested, a tape
+calibration that reports the signal it calibrates **does not exist on US markets** — 4.2%
+of names firing against 5% expected by chance — and a chart-pattern study whose every
+surviving formation predicted the **opposite** of what the textbooks claim for it.
 
 *The count said "three" while listing four, from before `lens_agreement.json`
 existed. Corrected 31 August 2026 along with the fifth. A sixth landed 8 September
-2026 with the market scanner.*
+2026 with the market scanner, and a seventh on 9 September with the chart patterns.*
 
 A neighbouring product could copy the four lenses. It could not truthfully copy
 "we measured whether our own signal works and published the null result".
@@ -104,8 +105,30 @@ These are durable product facts. Future work preserves them; none is a style pre
    Python has no interpretation to offer (a day's price change, the seasonality grid).
 
 5. **Existing refusals stay.** `applicable: false` for financials on the accounting
-   screens; the candlestick firewall; the declined multi-bar chart patterns; the
-   `unavailable` band.
+   screens; the candlestick firewall; the `unavailable` band.
+
+   *Scoped by the owner, 9 September 2026, for the multi-bar chart patterns only.*
+   `swing.py` declines head-and-shoulders, flags, wedges, cups and double tops on three
+   arguments, and two of them were always empirical claims rather than principles: that
+   two honest implementations disagree, and that a matcher fires on noise. The private
+   scanner answers the first by using Lo, Mamaysky and Wang's own kernel-regression
+   definitions — inequalities on five extrema, no thresholds picked by eye — and the
+   second by measuring the firing rate and publishing it.
+
+   The third argument, that LMW found no demonstrated net edge, is not answered and is
+   not waved away: `patterns.py` scores **nothing** until `calibrate_patterns.py` has
+   run, and then only for formations whose forward returns survived a false-discovery
+   correction across every pattern and horizon tested.
+
+   **The published single-company view is unchanged.** `swing.UNDETECTABLE_PATTERNS`
+   still renders and still names every refused shape. Flags, pennants, wedges and
+   cup-and-handle stay refused everywhere, because LMW never defined them either.
+
+   What the measurement found is worth recording here because it is a product fact:
+   every formation that survived correction predicted **underperformance**, on both
+   markets, whichever way the chart books read it. A head-and-shoulders and its bullish
+   mirror image measured the same. The scanner therefore scores the presence of a
+   formation by its measured sign and never by its textbook one.
 
 6. **One data module, one serverless function, no server state, a generated glossary,
    offline tests against planted ground truth.** The thesis journal and holdings never
@@ -151,11 +174,13 @@ These are durable product facts. Future work preserves them; none is a style pre
 - Measured artifacts, each stamped with its date, in `api/_lib/*.json`.
 - `docs/field-manual.html` — beginner's guide; its glossary is **generated** from
   `api/_lib/explain.py` and CI fails if a metric is added without regenerating.
-- Eight network scripts in `scripts/` deliberately outside CI. Re-run after touching what
+- Nine network scripts in `scripts/` deliberately outside CI. Re-run after touching what
   they measure; a stale stamped number is worse than none. Two arrived with the market
   scanner: `refresh_listings.py` fetches the whole-market universe, and
   `calibrate_tape.py` measures the per-market baselines the tape reading is tested
-  against — without which it has no null to test and reports no direction at all.
+  against — without which it has no null to test and reports no direction at all. A
+  third, `calibrate_patterns.py`, decides whether any chart formation is allowed to
+  score.
 
 ## Accessibility
 

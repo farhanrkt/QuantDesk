@@ -77,7 +77,8 @@ import numpy as np                                                  # noqa: E402
 import pandas as pd                                                 # noqa: E402
 
 from _lib import (listings, market_data, microstructure, ownership,  # noqa: E402
-                  pretrade, ranking, symbols, tape, universes, verdict)
+                  patterns, pretrade, ranking, structure, symbols, tape,
+                  universes, verdict)
 from _lib.jsonsafe import clean                                      # noqa: E402
 
 # The four lens payloads are imported from the route module rather than
@@ -282,6 +283,20 @@ def run(args) -> dict:
     index_frames = market_data.ohlcv_batch([benchmark_symbol], start, end)
     benchmark = (index_frames[benchmark_symbol]["Close"].astype("float64")
                  if benchmark_symbol in index_frames else None)
+    # THE MARKET THIS LIST WAS PRODUCED IN, from the same benchmark the relative
+    # strength is measured against. It scores nothing and gates nothing — see
+    # `structure.regime` — but a ranked table produced in a falling market looks
+    # identical to one produced in a rising one, and that is worth a sentence at
+    # the top rather than a discovery later.
+    market_regime = structure.regime(
+        index_frames.get(benchmark_symbol), symbol=benchmark_symbol)
+    if market_regime.get("available"):
+        # The first SENTENCE, not the text before the first full stop — the
+        # reading opens with "9.1% below its 200-day average" and splitting on
+        # "." truncated it to "^JKSE is declining: 9."
+        first = market_regime["reading"].split(". ")[0].rstrip(".")
+        say(f"  Market regime: {first}.")
+
     ranked = ranking.rank_universe(tradeable, benchmark=benchmark)
     rows_by_ticker = {row["ticker"]: row for row in ranked["rows"]}
     say(f"  {len(ranked['rows'])} ranked against {benchmark_symbol}")
@@ -352,6 +367,14 @@ def run(args) -> dict:
             tape_tested += 1
             tape_fired += int(bool(tape_result.get("significant")))
 
+        # Both of these read data already in hand — the batched price frame and
+        # the assembled technical leg — so a whole-market sweep gets them for
+        # nothing. Neither costs a fetch.
+        pattern_result = patterns.read(frame, market_code=symbols.market_of(symbol))
+        technical_leg = legs.get("technical") or {}
+        structure_result = structure.read(
+            technical=technical_leg.get("data") if technical_leg.get("ok") else None)
+
         register_leg = legs.get("register") or {}
         register_raw = register_leg.get("data") if register_leg.get("ok") else None
         # No share count is passed: `ownership.read` takes the last observation
@@ -377,11 +400,14 @@ def run(args) -> dict:
             turnover_floor=floor,
             tape_result=tape_result,
             register_result=register_result,
+            pattern_result=pattern_result,
+            structure_result=structure_result,
         )
         result["rank"] = (row or {}).get("rank")
         result["held"] = symbol in held
         result["tape"] = tape_result
         result["register"] = register_result
+        result["patterns"] = pattern_result
         result["preTrade"] = {"flags": len(checks.get("flags") or []),
                               "baseConditions": len(checks.get("baseConditions") or []),
                               "notChecked": len(checks.get("notChecked") or [])}
@@ -414,6 +440,7 @@ def run(args) -> dict:
             "historyDays": HISTORY_DAYS,
         },
         "provenance": verdict.provenance(),
+        "regime": market_regime,
         "signalOverlap": ranked["correlation"],
         # WHETHER THE THREE FAMILIES ARE ACTUALLY THREE SOURCES. The score
         # weights them equally on the argument that they read different data;
@@ -423,6 +450,7 @@ def run(args) -> dict:
         # How often the tape test fired against how often chance predicts it
         # would. One name's p-value needs no correction; a scan of hundreds does,
         # and this is the count that makes the correction legible.
+        "patternStudy": patterns.calibration_for(market),
         "tapeSignificance": {
             "tested": tape_tested,
             "fired": tape_fired,

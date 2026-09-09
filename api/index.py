@@ -58,9 +58,9 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from _lib import (accumulation, eventstudy, explain, exposure, listings,
-                  market_data, microstructure, news, ownership, portfolio,
-                  pretrade, quality, ranking, riskmodel, symbols, tape,
-                  technical, universes, valuation, verdict)
+                  market_data, microstructure, news, ownership, patterns,
+                  portfolio, pretrade, quality, ranking, riskmodel, structure,
+                  symbols, tape, technical, universes, valuation, verdict)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -913,8 +913,16 @@ async def name_verdict(
     except Exception:
         liquidity = None
 
+    pattern_result = None
     if frame is not None:
         tape_result = tape.read(frame, market_code=symbols.market_of(symbol))
+        pattern_result = patterns.read(frame, market_code=symbols.market_of(symbol))
+
+    # WHERE THE TRADE IS WRONG, read off the levels the trend lens already
+    # computed rather than recomputed here — same rule the synthesis follows, so
+    # the numbers beside the verdict are the numbers the chart drew.
+    structure_result = structure.read(
+        technical=legs["technical"].get("data") if legs["technical"]["ok"] else None)
 
     # The share register is the third body of data, and its own fetch. It is
     # sequential rather than gathered with the four lenses for the reason the
@@ -939,7 +947,20 @@ async def name_verdict(
         annual_volatility=annual_volatility, latest_close=latest_close,
         risk_budget=risk_budget, max_weight=max_weight,
         tape_result=tape_result, register_result=register_result,
+        pattern_result=pattern_result, structure_result=structure_result,
     )
+
+    # THE MARKET THIS READING WAS TAKEN IN. Every percentile above is
+    # cross-sectional, so the top of a falling market is still a top. Free: the
+    # benchmark frame is already in `riskmodel`'s day cache from the scan.
+    market_regime = {"available": False, "reason": "no benchmark history"}
+    try:
+        benchmark_symbol = riskmodel.MARKET_INDEX.get(symbols.market_of(symbol), "^GSPC")
+        market_regime = structure.regime(
+            await asyncio.to_thread(market_data.ohlcv, benchmark_symbol, period="2y"),
+            symbol=benchmark_symbol)
+    except Exception:
+        pass
 
     return ok({
         **scored,
@@ -950,6 +971,10 @@ async def name_verdict(
         # than only the one-line summary the component carries.
         "tape": tape_result,
         "register": register_result,
+        "patterns": pattern_result,
+        "structure": structure_result,
+        "regime": market_regime,
+        "patternStudy": patterns.calibration_for(symbols.market_of(symbol)),
         # WHAT THE TAPE TEST IS WORTH IN THIS MARKET, beside its reading. On US
         # listings the measured firing rate is chance, and a reader must not have
         # to go looking for that.

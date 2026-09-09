@@ -108,6 +108,8 @@ td.num{text-align:right}
 .t-none{color:var(--faint);border-color:var(--ruleSoft);background:transparent}
 .conv{font-size:12px;color:var(--ash)}
 .conv.high{color:var(--acc)} .conv.low{color:var(--warn)}
+.entry{font-size:11.5px;font-family:ui-monospace,monospace;white-space:nowrap}
+.entry.ok{color:var(--ash)} .entry.poor{color:var(--warn)} .entry.bad{color:var(--dist)}
 .cross{font-size:11.5px;letter-spacing:.02em}
 .cross.yes{color:var(--ash)}
 .cross.no{color:var(--warn)}
@@ -292,6 +294,25 @@ def _detail(index: int, entry: dict) -> str:
         penalties = (f'<div class="blk"><div class="h">Pre-trade flags that fired'
                      f'</div>{rows}{capped}</div>')
 
+    site = entry.get("structure") or {}
+    structure_html = ""
+    if site.get("available"):
+        structure_html = (
+            f'<div class="blk"><div class="h">Where the trade is wrong</div>'
+            f'<p>{_e(site.get("reading"))}</p></div>')
+    elif site:
+        structure_html = (
+            f'<div class="blk"><div class="h">Where the trade is wrong</div>'
+            f'<p style="color:var(--ash)">{_e(site.get("reason"))} Unmeasured is not '
+            f'the same as clear.</p></div>')
+
+    earnings = ((entry.get("register") or {}).get("earnings") or {})
+    earnings_html = ""
+    if earnings.get("available") and earnings.get("soon"):
+        earnings_html = (
+            f'<div class="blk"><div class="h">Reporting soon</div>'
+            f'<p>{_e(earnings.get("reading"))}</p></div>')
+
     sizing = entry["sizing"]
     if sizing.get("applicable"):
         sizing_html = (
@@ -310,7 +331,7 @@ def _detail(index: int, entry: dict) -> str:
     why = "".join(f"<li>{_e(reason)}</li>" for reason in entry["reasons"]
                   if reason != agreement_text)
 
-    return f"""<tr class="detail" id="d-{index}"><td colspan="8"><div class="det">
+    return f"""<tr class="detail" id="d-{index}"><td colspan="9"><div class="det">
       <div>
         <h3>The five components</h3>
         {components}
@@ -325,7 +346,7 @@ def _detail(index: int, entry: dict) -> str:
           <p style="color:var(--ash);font-size:12px">
             {_e(entry['shrink']['text'])}</p>
         </div>
-        {penalties}{sizing_html}
+        {structure_html}{earnings_html}{penalties}{sizing_html}
         <div class="blk"><div class="h">In order</div>
           <ul class="why">{why}</ul>
         </div>
@@ -346,6 +367,23 @@ def _row(index: int, entry: dict) -> str:
     # claim applies to this row at all. A BUY with "one lens only" beside it is a
     # different statement from a BUY with "both", and the table must not make
     # them look alike.
+    # THE ENTRY, AS DISTINCT FROM THE ASSET. A name the evidence likes reads
+    # identically here whether it is sitting on support or two percent under a
+    # ceiling it has failed at three times, and those are not the same trade.
+    site = entry.get("structure") or {}
+    band = site.get("band") if site.get("available") else None
+    ratio = site.get("rewardRisk")
+    entry_html = {
+        None: '<span style="color:var(--faint)">&mdash;</span>',
+        "fine": f'<span class="entry ok">{ratio:.1f}:1</span>' if ratio else "",
+        "poor": f'<span class="entry poor">{ratio:.1f}:1</span>' if ratio else "",
+        "bad": f'<span class="entry bad">{ratio:.2f}:1</span>' if ratio else "",
+        "unbounded": '<span class="entry ok">no ceiling</span>',
+        "noSupport": '<span class="entry poor">no floor</span>',
+        "riskTooWide": '<span class="entry poor">stop too far</span>',
+        "unmeasured": '<span style="color:var(--faint)">&mdash;</span>',
+    }.get(band, '<span style="color:var(--faint)">&mdash;</span>')
+
     cross_html = ('<span class="cross yes" title="Both the price record and the '
                   'filings returned a reading">both</span>'
                   if entry.get("crossChecked") else
@@ -359,6 +397,7 @@ def _row(index: int, entry: dict) -> str:
           {_e(entry['actionLabel'])}</span></td>
       <td><span class="conv {_e(entry['conviction'])}">{_e(entry['conviction'])}</span></td>
       <td>{cross_html}</td>
+      <td>{entry_html}</td>
       <td class="num mono">{entry['rank'] or '&mdash;'}</td>
       <td class="num mono">{entry['coverage'] * 100:.0f}%</td>
       <td class="num mono">{size_html}</td>
@@ -416,6 +455,20 @@ def render(report: dict) -> str:
     tally_html = " &nbsp;&middot;&nbsp; ".join(
         f"{k}: <b style='color:var(--chalk)'>{v}</b>" for k, v in tally.items())
 
+    # THE MARKET THIS LIST WAS PRODUCED IN. A ranked table produced in a falling
+    # market looks identical to one produced in a rising one, because every score
+    # in it is cross-sectional — the top of a falling market is still a top.
+    market = report.get("regime") or {}
+    regime_html = ""
+    if market.get("available"):
+        tone = {"good": "var(--acc)", "warn": "var(--warn)",
+                "bad": "var(--dist)"}.get(market.get("tone"), "var(--ash)")
+        regime_html = (
+            f'<div class="blk" style="max-width:82ch;border-color:{tone}44">'
+            f'<div class="h" style="color:{tone}">The market this list was produced in '
+            f'&mdash; {_e(market.get("state"))}</div>'
+            f'<p>{_e(market.get("reading"))}</p></div>')
+
     stale = universe.get("staleness") or {}
     stale_html = (f'<p class="note{" stale" if stale.get("stale") else ""}">'
                   f'{_e(stale.get("text"))}</p>' if stale.get("text") else "")
@@ -458,6 +511,50 @@ def render(report: dict) -> str:
         family_html = (f'<p>{_e(family.get("reason", "Not measured on this scan."))}</p>'
                        if family else "<p>Not measured on this scan.</p>")
 
+    study = report.get("patternStudy") or {}
+    if study.get("patterns"):
+        rows = []
+        for spec in study["patterns"].values():
+            best = spec.get("forward")
+            if best:
+                verdict_cell = (f'<b style="color:var(--dist)">'
+                                f'{best["meanExcess"] * 100:+.1f}%</b> over '
+                                f'{best["horizonDays"]}d')
+            else:
+                verdict_cell = '<span style="color:var(--faint)">no surviving horizon</span>'
+            rate = spec.get("firingRate")
+            rows.append(
+                f'<div class="pen"><span>{_e(spec["label"])}'
+                + (f' <span style="color:var(--faint)">&mdash; present in '
+                   f'{rate * 100:.0f}% of names in a quarter</span>' if rate is not None
+                   else "")
+                + f'</span><span>{verdict_cell}</span></div>')
+        survived = study.get("survived", 0)
+        negative = [p for p in study["patterns"].values()
+                    if (p.get("forward") or {}).get("meanExcess", 0) < 0]
+        finding = ""
+        if survived and len(negative) == survived:
+            finding = (
+                '<p><b>Every formation that survived predicted UNDERperformance</b>, '
+                'whichever way the chart books read it &mdash; a head-and-shoulders and '
+                'its bullish mirror image measured the same. What a five-point pattern '
+                'needs is five turning points in thirty-five sessions, which only a stock '
+                'going nowhere provides. The shape is a marker of chop, not a forecast, '
+                'and this scanner scores it by the measured sign rather than the '
+                'textbook one.</p>')
+        pattern_html = (
+            f'<p>Measured across {study.get("names")} names over {study.get("years")} '
+            f'years in {_e(study.get("population"))}: {study.get("detections")} '
+            f'detections, {study.get("tests")} tests, '
+            f'<b style="color:var(--chalk)">{survived}</b> surviving a '
+            f'false-discovery correction &mdash; against '
+            f'{study.get("expectedByChance")} expected by chance before it.</p>'
+            f'{finding}{"".join(rows)}')
+    else:
+        pattern_html = ('<p>No pattern study has been run for this market. Formations are '
+                        'detected and score nothing. Run '
+                        '<code>scripts/calibrate_patterns.py</code>.</p>')
+
     tape_stats = report.get("tapeSignificance") or {}
     if tape_stats.get("tested"):
         fired, expected = tape_stats["fired"], tape_stats["expectedByChance"]
@@ -492,6 +589,8 @@ def render(report: dict) -> str:
       {_e(provenance.get('significant'))} significant after correction.</p>
   </div>
 
+  {regime_html}
+
   <div class="funnel">
     <div><div class="n">{counts['requested']}</div><div class="k">listed</div>
       <div class="w">{_e(universe.get('label'))}</div></div>
@@ -501,7 +600,8 @@ def render(report: dict) -> str:
       <div class="w">cleared a {_money(settings['turnoverFloor'])} daily turnover
         floor and the tick floor</div></div>
     <div><div class="n">{counts['deepened']}</div><div class="k">deepened</div>
-      <div class="w">got all four lenses, one fetch at a time</div></div>
+      <div class="w">got all four lenses and the share register, one fetch at a
+        time</div></div>
   </div>
   {stale_html}
   <p class="note">{tally_html}</p>
@@ -518,8 +618,8 @@ def render(report: dict) -> str:
   <table>
     <thead><tr>
       <th>Name</th><th class="num">Score</th><th>Action</th><th>Conviction</th>
-      <th>Cross-check</th><th class="num">Rank</th><th class="num">Coverage</th>
-      <th class="num">Size</th>
+      <th>Cross-check</th><th>Entry</th><th class="num">Rank</th>
+      <th class="num">Coverage</th><th class="num">Size</th>
     </tr></thead>
     <tbody>{body_rows}</tbody>
   </table>
@@ -537,6 +637,19 @@ def render(report: dict) -> str:
          is printed in the filings, and what is actually true is only that no filings
          lens reads it.</p>
       {family_html}
+    </div></details>
+
+  <details><summary>What the chart formations actually predicted</summary>
+    <div class="body">
+      <p>Head-and-shoulders, broadening, triangle, rectangle and double formations,
+         defined by Lo, Mamaysky and Wang's kernel-regression method so that two
+         implementations agree rather than by thresholds somebody picked. Detected in a
+         rolling window with a confirmation lag, so nothing at day t uses a price from
+         day t+1.</p>
+      {pattern_html}
+      <p style="color:var(--faint)">Flags, pennants, wedges and cup-and-handle are
+         still refused: none has a numeric definition that survives two stocks of
+         different volatility, and Lo, Mamaysky and Wang never gave them one.</p>
     </div></details>
 
   <details><summary>How many of the heavy-day readings are real</summary>

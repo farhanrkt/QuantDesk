@@ -423,7 +423,8 @@ So there is a second, private tier — not linked from the app, writing to a git
 
 ```bash
 python scripts/refresh_listings.py --market ID     # once, then when it goes stale
-python scripts/calibrate_tape.py                   # measures the tape baselines
+python scripts/calibrate_tape.py                   # the tape baselines
+python scripts/calibrate_patterns.py               # what the chart patterns predicted
 python scripts/scan_market.py --market ID --deepen all --hold BBCA,TLKM
 ```
 
@@ -442,12 +443,12 @@ percentiles on every price signal, and a scan that ranked first would spend its 
 fundamentals budget on names it was about to discard. On a real sweep, **837 listed → 243
 tradeable**.
 
-**The score is three family scores, not eight component scores.** Price rank, long-horizon
-trend, order flow and the tape reading are one weighted mean; value and accounting quality
-are another; free float and share-count trend are a third. The three are then weighted
-*equally*, because eight measurements over three bodies of data are not eight opinions — the
-same argument `explain._family_votes` has made since it shipped. Averaging all eight would
-hand the price record four votes to the filings' two purely because price signals are cheaper
+**The score is three family scores, not nine component scores.** Price rank, long-horizon
+trend, order flow, the tape reading and chart formations are one weighted mean; value and
+accounting quality are another; free float and share-count trend are a third. The three are then weighted
+*equally*, because nine measurements over three bodies of data are not nine opinions — the
+same argument `explain._family_votes` has made since it shipped. Averaging all nine would
+hand the price record five votes to the filings' two purely because price signals are cheaper
 to compute. A family that read only half its evidence casts only half a vote.
 
 **A third body of data: the share register.** The app's cross-check always rested on price
@@ -492,6 +493,59 @@ Volume concentration rides along and deliberately **never scores**. A stock that
 quarter of its year in five sessions is not thereby good or bad, it is unsizeable — so it
 gates rather than costing points.
 
+**Chart patterns, and the finding nobody expected.** `swing.py` has always declined
+head-and-shoulders, flags, wedges and cups *by name*, on three arguments: two honest
+implementations disagree, a fixed-threshold matcher fires on noise, and Lo, Mamaysky & Wang
+(2000) found distributional information rather than an edge. All three are answerable, and
+`patterns.py` answers them rather than waving them away.
+
+*Reproducibility* is answered by using LMW's own method — kernel-regression smoothing, then
+each shape defined as inequalities on five consecutive extrema. Nothing there is a judgement
+call. *Noise-firing* and *no edge* are measurable, so `scripts/calibrate_patterns.py`
+measures both: how often each formation appears in a quarter, and what happened next.
+
+Detection runs in a **rolling window with a confirmation lag**, because a kernel regression
+is two-sided — smoothing a whole series and finding a shape in the middle of it builds the
+pattern partly out of the returns it is about to claim to predict. Nothing at day *t* uses a
+price from day *t+1*.
+
+The measurement went through three wrong answers before it produced a right one, and each is
+recorded in the script: pooled observations turned a handful of market episodes into
+hundreds of "independent" ones; a null of zero ignored that the unconditional 63-day excess
+return in the sample was **+13.4%**, which made every pattern look brilliant; and a firing
+rate measured over six years said 97% where the quarter that actually matters said 22%.
+
+What survived, on both markets, is the opposite of the chart books:
+
+> **Every formation that survived correction predicted UNDERperformance** — a
+> head-and-shoulders and its bullish mirror image measured the same, around −3% abnormal over
+> a quarter on IDX and −1% on US large caps. A five-point pattern needs five turning points
+> in thirty-five sessions, which only a stock going nowhere provides. The shape is a marker
+> of chop, not a forecast.
+
+So the scanner scores the *presence* of a formation by the measured sign and ignores the
+textbook one, which it carries beside it as the claim the data declined to support. Flags,
+pennants, wedges and cup-and-handle remain refused — LMW never defined them either.
+
+**Where the trade is wrong.** A scanner that says BUY and stops has answered half the
+question: the same name reads identically whether it is sitting on support just defended or
+two percent under a ceiling it has failed at three times. `structure.py` reports the nearest
+support below and resistance above, both from levels the market actually defended, and the
+reward-to-risk between them. It is deliberately **not a scoring component** — the score
+answers "is this worth owning" and this answers "is now a sensible moment", and blending
+them would let a tidy entry make a poor company look better. It feeds a gate when the
+ceiling is three times closer than the floor, and the numbers, and nothing else.
+
+**The market the list was produced in.** Every score here is cross-sectional, so the top of a
+falling market is still a top — and a ranked table produced during a 27% drawdown looks
+identical to one produced at a high. The benchmark's own regime prints at the top of every
+report. It scores nothing and gates nothing: market timing is a claim nobody here has
+measured.
+
+**Reporting soon.** The next scheduled results date rides along free with the share-register
+fetch. Buying inside a fortnight of a report makes the position partly a bet on an
+announcement nothing here has read. Context, not points.
+
 **Then it is shrunk toward 50 by how much evidence there actually was.** Families that
 disagree, a family that never read, components that were missing — each pulls the result
 toward neutral instead of being silently dropped. A 78 from two agreeing families and a 78
@@ -509,9 +563,9 @@ multiple testing. That paragraph is the first and largest block on the page, abo
 because the table means something different depending on it. Where the artifact is missing
 the warning gets *louder*, not quieter.
 
-Click any row in the HTML report for the arithmetic: eight components with their evidence
+Click any row in the HTML report for the arithmetic: nine components with their evidence
 grades, all three family readings and how much of a vote each one earned, the shrinkage,
-every pre-trade flag with its measured firing rate, and every gate. A score with no decomposition cannot be argued with, which is exactly
+where the trade is wrong, every pre-trade flag with its measured firing rate, and every gate. A score with no decomposition cannot be argued with, which is exactly
 why `technical.long_term_view` refuses to ship one.
 
 `GET /api/verdict?ticker=BBCA&market=ID` does the same for a single name in about ten
@@ -611,6 +665,10 @@ scripts/
   calibrate_tape.py   The per-market baselines the heavy-session test is
                       tested against, and the firing rate that says
                       whether the signal exists in that market at all
+  calibrate_patterns.py
+                      Do the chart formations predict anything? An event
+                      study on every detection, corrected across all of
+                      them. Every survivor came out NEGATIVE
   scan_market.py      The private scanner: sweep a market, score every
                       tradeable name, write a report
   render_scan.py      That report as one self-contained HTML file
@@ -649,7 +707,7 @@ Interactive docs at `/api/docs`.
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
 | `GET /api/rank/universes` | The predefined lists and the fetched whole-market lists, each with its as-of date |
-| `GET /api/verdict` | **The private scanner's score and action for one name** — eight components across three families, the tape reading with its market-wide firing rate, the share register, the shrinkage, the gates, and the null result that calibrates all of it |
+| `GET /api/verdict` | **The private scanner's score and action for one name** — nine components across three families, the tape reading and the chart-formation study with their market-wide firing rates, the share register, where the trade is wrong, the market regime, the shrinkage, the gates, and the null result that calibrates all of it |
 | `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. The one POST, and the one `no-store` |
 | `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
 | `GET /api/rank/deepen` | Quality + valuation for a shortlist of up to 8 |
@@ -725,6 +783,14 @@ for every name in four universes, which is why it is a script rather than a requ
 
 ```bash
 .venv/bin/python scripts/measure_lens_agreement.py
+```
+
+The chart formations score nothing at all until they have been measured, and the
+measurement is the point rather than a formality — it came out backwards from every chart
+book. Re-run it after changing the window, the confirmation lag, or any pattern definition:
+
+```bash
+.venv/bin/python scripts/calibrate_patterns.py
 ```
 
 The tape reading has no null to test against until its baselines are measured, and without

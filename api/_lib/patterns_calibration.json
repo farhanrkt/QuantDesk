@@ -1,0 +1,1166 @@
+{
+ "measuredOn": "2026-09-09",
+ "window": 35,
+ "confirmLag": 3,
+ "horizons": [
+  10,
+  21,
+  63
+ ],
+ "alpha": 0.1,
+ "headline": "Chart patterns, measured rather than assumed: 7 of 30 tests survived correction across 8929 detections in the Indonesian listed market (9 cleared p<0.05 before correction, against 1.5 expected by chance); 5 of 30 tests survived correction across 5255 detections in the Nasdaq-100 and the Dow (8 cleared p<0.05 before correction, against 1.5 expected by chance). A pattern that did not survive contributes nothing to any score.",
+ "refused": [
+  {
+   "name": "Flags and pennants",
+   "reason": "needs a 'flagpole' \u2014 a move sharp enough to count \u2014 and no threshold for that survives two stocks of different volatility. Lo, Mamaysky and Wang never defined one either."
+  },
+  {
+   "name": "Wedges",
+   "reason": "two converging trend lines fit almost any twenty bars once you are allowed to choose which highs and lows to use."
+  },
+  {
+   "name": "Cup and handle",
+   "reason": "a shape defined by how it looks, with no numeric definition different practitioners agree on."
+  }
+ ],
+ "markets": {
+  "ID": {
+   "names": 249,
+   "unconditionalMeanExcess": {
+    "10": 0.011420958247025527,
+    "21": 0.0250073976654675,
+    "63": 0.08836812524335894
+   },
+   "population": "the Indonesian listed market",
+   "measuredOn": "2026-09-09",
+   "years": 6,
+   "benchmark": "^JKSE",
+   "horizons": [
+    10,
+    21,
+    63
+   ],
+   "alpha": 0.1,
+   "detections": 8929,
+   "tests": 30,
+   "rawHits": 9,
+   "expectedByChance": 1.5,
+   "survived": 7,
+   "patterns": {
+    "headAndShoulders": {
+     "label": "Head and shoulders",
+     "textbookBias": "down",
+     "namesFired": 241,
+     "everFiredRate": 0.9678714859437751,
+     "firingRate": 0.22088353413654618,
+     "namesRecent": 55,
+     "recentWindow": 63,
+     "perNameYear": 1.1496021268626004,
+     "observations": 1475,
+     "tested": [
+      {
+       "pattern": "headAndShoulders",
+       "horizonDays": 10,
+       "meanExcess": -0.007243234880596593,
+       "pValue": 0.00486330620807015,
+       "months": 71,
+       "observations": 1475,
+       "rawExcess": 0.004769745473643045,
+       "medianAbnormal": -0.012924025097572662,
+       "qValue": 0.03803428550016327,
+       "survived": true
+      },
+      {
+       "pattern": "headAndShoulders",
+       "horizonDays": 21,
+       "meanExcess": -0.013234716629154772,
+       "pValue": 0.0017623141993288434,
+       "months": 71,
+       "observations": 1465,
+       "rawExcess": 0.011432158352801633,
+       "medianAbnormal": -0.02621293609790061,
+       "qValue": 0.026434712989932652,
+       "survived": true
+      },
+      {
+       "pattern": "headAndShoulders",
+       "horizonDays": 63,
+       "meanExcess": -0.03189051209318614,
+       "pValue": 0.009839275512807725,
+       "months": 69,
+       "observations": 1434,
+       "rawExcess": 0.04895043376405486,
+       "medianAbnormal": -0.07098850426992671,
+       "qValue": 0.04775156157042467,
+       "survived": true
+      }
+     ],
+     "significant": true,
+     "forward": {
+      "horizonDays": 63,
+      "meanExcess": -0.03189051209318614,
+      "pValue": 0.009839275512807725,
+      "qValue": 0.04775156157042467,
+      "months": 69,
+      "rawExcess": 0.04895043376405486,
+      "medianAbnormal": -0.07098850426992671
+     },
+     "verdict": "Survived correction: -3.19% against the market over 63 sessions, averaged across 69 separate months (q = 0.048). Present in 22% of names in a given quarter."
+    },
+    "inverseHeadAndShoulders": {
+     "label": "Inverse head and shoulders",
+     "textbookBias": "up",
+     "namesFired": 241,
+     "everFiredRate": 0.9678714859437751,
+     "firingRate": 0.27309236947791166,
+     "namesRecent": 68,
+     "recentWindow": 63,
+     "perNameYear": 1.0291164566907525,
+     "observations": 1320,
+     "tested": [
+      {
+       "pattern": "inverseHeadAndShoulders",
+       "horizonDays": 10,
+       "meanExcess": -0.004960492429277586,
+       "pValue": 0.08101086026798138,
+       "months": 71,
+       "observations": 1320,
+       "rawExcess": 0.005329131607633782,
+       "medianAbnormal": -0.016710446955534263,
+       "qValue": 0.18694813907995703,
+       "survived": false
+      },
+      {
+       "pattern": "inverseHeadAndShoulders",
+       "horizonDays": 21,
+       "meanExcess": -0.008379965283153244,
+       "pValue": 0.06700645147610447,
+       "months": 71,
+       "observations": 1309,
+       "rawExcess": 0.015550334345378754,
+       "medianAbnormal": -0.023366776024735122,
+       "qValue": 0.1827448676621031,
+       "survived": false
+      },
+      {
+       "pattern": "inverseHeadAndShoulders",
+       "horizonDays": 63,
+       "meanExcess": -0.015443173757600567,
+       "pValue": 0.2930620432929146,
+       "months": 68,
+       "observations": 1269,
+       "rawExcess": 0.06098352480747287,
+       "medianAbnormal": -0.06838179344497144,
+       "qValue": 0.3996300590357926,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 27% of names in a given quarter."
+    },
+    "broadeningTop": {
+     "label": "Broadening top",
+     "textbookBias": "down",
+     "namesFired": 217,
+     "everFiredRate": 0.8714859437751004,
+     "firingRate": 0.08433734939759036,
+     "namesRecent": 21,
+     "recentWindow": 63,
+     "perNameYear": 0.42285098257763204,
+     "observations": 541,
+     "tested": [
+      {
+       "pattern": "broadeningTop",
+       "horizonDays": 10,
+       "meanExcess": -0.0067921676935952194,
+       "pValue": 0.08022844945273964,
+       "months": 70,
+       "observations": 541,
+       "rawExcess": 0.00616649475413635,
+       "medianAbnormal": -0.014266765719731567,
+       "qValue": 0.18694813907995703,
+       "survived": false
+      },
+      {
+       "pattern": "broadeningTop",
+       "horizonDays": 21,
+       "meanExcess": -0.009686282222836884,
+       "pValue": 0.19769432287701014,
+       "months": 69,
+       "observations": 535,
+       "rawExcess": 0.0164742116076784,
+       "medianAbnormal": -0.029047111147352745,
+       "qValue": 0.3037279283375825,
+       "survived": false
+      },
+      {
+       "pattern": "broadeningTop",
+       "horizonDays": 63,
+       "meanExcess": -0.02819929766552081,
+       "pValue": 0.15038082257035118,
+       "months": 68,
+       "observations": 524,
+       "rawExcess": 0.05512680767457728,
+       "medianAbnormal": -0.0800610241724816,
+       "qValue": 0.2660654143002563,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 8% of names in a given quarter."
+    },
+    "broadeningBottom": {
+     "label": "Broadening bottom",
+     "textbookBias": "up",
+     "namesFired": 200,
+     "everFiredRate": 0.8032128514056225,
+     "firingRate": 0.05622489959839357,
+     "namesRecent": 14,
+     "recentWindow": 63,
+     "perNameYear": 0.4443388727993629,
+     "observations": 573,
+     "tested": [
+      {
+       "pattern": "broadeningBottom",
+       "horizonDays": 10,
+       "meanExcess": -0.010942301527603157,
+       "pValue": 0.04270442063106616,
+       "months": 71,
+       "observations": 573,
+       "rawExcess": 0.0038966489207209773,
+       "medianAbnormal": -0.01549976665352887,
+       "qValue": 0.14234806877022052,
+       "survived": false
+      },
+      {
+       "pattern": "broadeningBottom",
+       "horizonDays": 21,
+       "meanExcess": -0.010481945888730426,
+       "pValue": 0.18993292907167467,
+       "months": 70,
+       "observations": 571,
+       "rawExcess": 0.012423020580470375,
+       "medianAbnormal": -0.03145042382538925,
+       "qValue": 0.3037279283375825,
+       "survived": false
+      },
+      {
+       "pattern": "broadeningBottom",
+       "horizonDays": 63,
+       "meanExcess": -0.028271149739699016,
+       "pValue": 0.15077040143681192,
+       "months": 68,
+       "observations": 558,
+       "rawExcess": 0.050353826373285046,
+       "medianAbnormal": -0.07733734168917997,
+       "qValue": 0.2660654143002563,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 6% of names in a given quarter."
+    },
+    "triangleTop": {
+     "label": "Triangle top",
+     "textbookBias": "down",
+     "namesFired": 235,
+     "everFiredRate": 0.9437751004016064,
+     "firingRate": 0.18875502008032127,
+     "namesRecent": 47,
+     "recentWindow": 63,
+     "perNameYear": 0.6369624601441644,
+     "observations": 814,
+     "tested": [
+      {
+       "pattern": "triangleTop",
+       "horizonDays": 10,
+       "meanExcess": -0.01077963356059141,
+       "pValue": 0.007954057663858002,
+       "months": 71,
+       "observations": 814,
+       "rawExcess": 0.003115304108093824,
+       "medianAbnormal": -0.013643291163396614,
+       "qValue": 0.047724345983148016,
+       "survived": true
+      },
+      {
+       "pattern": "triangleTop",
+       "horizonDays": 21,
+       "meanExcess": -0.01422885039697234,
+       "pValue": 0.05962078887942071,
+       "months": 70,
+       "observations": 805,
+       "rawExcess": 0.01089288294404273,
+       "medianAbnormal": -0.03046675434580871,
+       "qValue": 0.17886236663826213,
+       "survived": false
+      },
+      {
+       "pattern": "triangleTop",
+       "horizonDays": 63,
+       "meanExcess": -0.04716706394657808,
+       "pValue": 0.01114203103309909,
+       "months": 69,
+       "observations": 775,
+       "rawExcess": 0.036275995507193515,
+       "medianAbnormal": -0.08611789753398374,
+       "qValue": 0.04775156157042467,
+       "survived": true
+      }
+     ],
+     "significant": true,
+     "forward": {
+      "horizonDays": 63,
+      "meanExcess": -0.04716706394657808,
+      "pValue": 0.01114203103309909,
+      "qValue": 0.04775156157042467,
+      "months": 69,
+      "rawExcess": 0.036275995507193515,
+      "medianAbnormal": -0.08611789753398374
+     },
+     "verdict": "Survived correction: -4.72% against the market over 63 sessions, averaged across 69 separate months (q = 0.048). Present in 19% of names in a given quarter."
+    },
+    "triangleBottom": {
+     "label": "Triangle bottom",
+     "textbookBias": "up",
+     "namesFired": 231,
+     "everFiredRate": 0.927710843373494,
+     "firingRate": 0.30522088353413657,
+     "namesRecent": 76,
+     "recentWindow": 63,
+     "perNameYear": 0.6315904875887317,
+     "observations": 811,
+     "tested": [
+      {
+       "pattern": "triangleBottom",
+       "horizonDays": 10,
+       "meanExcess": 0.009877181473396992,
+       "pValue": 0.20595816443387313,
+       "months": 71,
+       "observations": 811,
+       "rawExcess": 0.024185773272633285,
+       "medianAbnormal": -0.016802910194075246,
+       "qValue": 0.3037279283375825,
+       "survived": false
+      },
+      {
+       "pattern": "triangleBottom",
+       "horizonDays": 21,
+       "meanExcess": 0.017008636541765643,
+       "pValue": 0.21260954983630773,
+       "months": 71,
+       "observations": 794,
+       "rawExcess": 0.04612364077118669,
+       "medianAbnormal": -0.028960704075966206,
+       "qValue": 0.3037279283375825,
+       "survived": false
+      },
+      {
+       "pattern": "triangleBottom",
+       "horizonDays": 63,
+       "meanExcess": 0.023182481374827354,
+       "pValue": 0.31446740127613065,
+       "months": 68,
+       "observations": 744,
+       "rawExcess": 0.10954346201284448,
+       "medianAbnormal": -0.0773674853094534,
+       "qValue": 0.4101748712297356,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 31% of names in a given quarter."
+    },
+    "rectangleTop": {
+     "label": "Rectangle top",
+     "textbookBias": "down",
+     "namesFired": 185,
+     "everFiredRate": 0.7429718875502008,
+     "firingRate": 0.08433734939759036,
+     "namesRecent": 21,
+     "recentWindow": 63,
+     "perNameYear": 0.44740857140246726,
+     "observations": 574,
+     "tested": [
+      {
+       "pattern": "rectangleTop",
+       "horizonDays": 10,
+       "meanExcess": -0.002144850098730692,
+       "pValue": 0.7210436194928235,
+       "months": 70,
+       "observations": 574,
+       "rawExcess": 0.004422425526577374,
+       "medianAbnormal": -0.009975030412279578,
+       "qValue": 0.8011595772142484,
+       "survived": false
+      },
+      {
+       "pattern": "rectangleTop",
+       "horizonDays": 21,
+       "meanExcess": -0.004241227420390764,
+       "pValue": 0.6519907721287665,
+       "months": 69,
+       "observations": 564,
+       "rawExcess": 0.013148885370631563,
+       "medianAbnormal": -0.01633354319426403,
+       "qValue": 0.7823889265545199,
+       "survived": false
+      },
+      {
+       "pattern": "rectangleTop",
+       "horizonDays": 63,
+       "meanExcess": 0.00810589360350954,
+       "pValue": 0.8448801667165715,
+       "months": 68,
+       "observations": 560,
+       "rawExcess": 0.05991616485838855,
+       "medianAbnormal": -0.06286598142340658,
+       "qValue": 0.9052287500534695,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 8% of names in a given quarter."
+    },
+    "rectangleBottom": {
+     "label": "Rectangle bottom",
+     "textbookBias": "up",
+     "namesFired": 197,
+     "everFiredRate": 0.7911646586345381,
+     "firingRate": 0.08433734939759036,
+     "namesRecent": 21,
+     "recentWindow": 63,
+     "perNameYear": 0.49805859835369,
+     "observations": 640,
+     "tested": [
+      {
+       "pattern": "rectangleBottom",
+       "horizonDays": 10,
+       "meanExcess": -0.011110672859748148,
+       "pValue": 0.0013175995015297524,
+       "months": 71,
+       "observations": 640,
+       "rawExcess": 0.0007184879802245904,
+       "medianAbnormal": -0.013852534434042869,
+       "qValue": 0.026434712989932652,
+       "survived": true
+      },
+      {
+       "pattern": "rectangleBottom",
+       "horizonDays": 21,
+       "meanExcess": -0.016021312991395552,
+       "pValue": 0.0050712380666884365,
+       "months": 71,
+       "observations": 634,
+       "rawExcess": 0.006543610612318869,
+       "medianAbnormal": -0.02204313041668826,
+       "qValue": 0.03803428550016327,
+       "survived": true
+      },
+      {
+       "pattern": "rectangleBottom",
+       "horizonDays": 63,
+       "meanExcess": -0.002761699826009196,
+       "pValue": 0.9066988770197373,
+       "months": 68,
+       "observations": 626,
+       "rawExcess": 0.07415461409699435,
+       "medianAbnormal": -0.055719586417433464,
+       "qValue": 0.9379643555376592,
+       "survived": false
+      }
+     ],
+     "significant": true,
+     "forward": {
+      "horizonDays": 21,
+      "meanExcess": -0.016021312991395552,
+      "pValue": 0.0050712380666884365,
+      "qValue": 0.03803428550016327,
+      "months": 71,
+      "rawExcess": 0.006543610612318869,
+      "medianAbnormal": -0.02204313041668826
+     },
+     "verdict": "Survived correction: -1.60% against the market over 21 sessions, averaged across 71 separate months (q = 0.038). Present in 8% of names in a given quarter."
+    },
+    "doubleTop": {
+     "label": "Double top",
+     "textbookBias": "down",
+     "namesFired": 228,
+     "everFiredRate": 0.9156626506024096,
+     "firingRate": 0.20481927710843373,
+     "namesRecent": 51,
+     "recentWindow": 63,
+     "perNameYear": 0.7520761577605797,
+     "observations": 965,
+     "tested": [
+      {
+       "pattern": "doubleTop",
+       "horizonDays": 10,
+       "meanExcess": -0.006102962648100082,
+       "pValue": 0.03953571584218337,
+       "months": 71,
+       "observations": 965,
+       "rawExcess": 0.005056517727623492,
+       "medianAbnormal": -0.013919313319863003,
+       "qValue": 0.14234806877022052,
+       "survived": false
+      },
+      {
+       "pattern": "doubleTop",
+       "horizonDays": 21,
+       "meanExcess": -0.010348160693680953,
+       "pValue": 0.11923993183268129,
+       "months": 70,
+       "observations": 957,
+       "rawExcess": 0.01066766566107334,
+       "medianAbnormal": -0.024565235319206492,
+       "qValue": 0.23847986366536258,
+       "survived": false
+      },
+      {
+       "pattern": "doubleTop",
+       "horizonDays": 63,
+       "meanExcess": -0.02832575898375251,
+       "pValue": 0.09330386339441382,
+       "months": 69,
+       "observations": 923,
+       "rawExcess": 0.050793143085148124,
+       "medianAbnormal": -0.06128581182472709,
+       "qValue": 0.19993685013088675,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 20% of names in a given quarter."
+    },
+    "doubleBottom": {
+     "label": "Double bottom",
+     "textbookBias": "up",
+     "namesFired": 235,
+     "everFiredRate": 0.9437751004016064,
+     "firingRate": 0.14457831325301204,
+     "namesRecent": 36,
+     "recentWindow": 63,
+     "perNameYear": 0.8403299925998313,
+     "observations": 1080,
+     "tested": [
+      {
+       "pattern": "doubleBottom",
+       "horizonDays": 10,
+       "meanExcess": 0.0007813809998558037,
+       "pValue": 0.9391179839393876,
+       "months": 71,
+       "observations": 1080,
+       "rawExcess": 0.004624832992117831,
+       "medianAbnormal": -0.01433241921475899,
+       "qValue": 0.9391179839393876,
+       "survived": false
+      },
+      {
+       "pattern": "doubleBottom",
+       "horizonDays": 21,
+       "meanExcess": -0.004711292790948716,
+       "pValue": 0.7134518762722979,
+       "months": 71,
+       "observations": 1075,
+       "rawExcess": 0.00964641799081745,
+       "medianAbnormal": -0.02570655243624147,
+       "qValue": 0.8011595772142484,
+       "survived": false
+      },
+      {
+       "pattern": "doubleBottom",
+       "horizonDays": 63,
+       "meanExcess": -0.01154792331653785,
+       "pValue": 0.49265865012750776,
+       "months": 68,
+       "observations": 1053,
+       "rawExcess": 0.06425278633453199,
+       "medianAbnormal": -0.06546815344225781,
+       "qValue": 0.6158233126593847,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 14% of names in a given quarter."
+    }
+   }
+  },
+  "US": {
+   "names": 120,
+   "unconditionalMeanExcess": {
+    "10": 0.0017349210871550355,
+    "21": 0.003682784490009153,
+    "63": 0.010067907762271275
+   },
+   "population": "the Nasdaq-100 and the Dow",
+   "measuredOn": "2026-09-09",
+   "years": 6,
+   "benchmark": "^GSPC",
+   "horizons": [
+    10,
+    21,
+    63
+   ],
+   "alpha": 0.1,
+   "detections": 5255,
+   "tests": 30,
+   "rawHits": 8,
+   "expectedByChance": 1.5,
+   "survived": 5,
+   "patterns": {
+    "headAndShoulders": {
+     "label": "Head and shoulders",
+     "textbookBias": "down",
+     "namesFired": 118,
+     "everFiredRate": 0.9833333333333333,
+     "firingRate": 0.275,
+     "namesRecent": 33,
+     "recentWindow": 63,
+     "perNameYear": 1.279302500196115,
+     "observations": 902,
+     "tested": [
+      {
+       "pattern": "headAndShoulders",
+       "horizonDays": 10,
+       "meanExcess": -0.006816493472563431,
+       "pValue": 0.011505444850611862,
+       "months": 71,
+       "observations": 902,
+       "rawExcess": -0.003278964344581674,
+       "medianAbnormal": -0.00614365564470045,
+       "qValue": 0.08629083637958897,
+       "survived": true
+      },
+      {
+       "pattern": "headAndShoulders",
+       "horizonDays": 21,
+       "meanExcess": -0.009703124100793915,
+       "pValue": 0.011017921608897523,
+       "months": 71,
+       "observations": 897,
+       "rawExcess": -0.004344761726065888,
+       "medianAbnormal": -0.013124066029337363,
+       "qValue": 0.08629083637958897,
+       "survived": true
+      },
+      {
+       "pattern": "headAndShoulders",
+       "horizonDays": 63,
+       "meanExcess": -0.014886086916867056,
+       "pValue": 0.03116822497948868,
+       "months": 69,
+       "observations": 871,
+       "rawExcess": -0.004387526112177494,
+       "medianAbnormal": -0.015502112861807808,
+       "qValue": 0.1335781070549515,
+       "survived": false
+      }
+     ],
+     "significant": true,
+     "forward": {
+      "horizonDays": 21,
+      "meanExcess": -0.009703124100793915,
+      "pValue": 0.011017921608897523,
+      "qValue": 0.08629083637958897,
+      "months": 71,
+      "rawExcess": -0.004344761726065888,
+      "medianAbnormal": -0.013124066029337363
+     },
+     "verdict": "Survived correction: -0.97% against the market over 21 sessions, averaged across 71 separate months (q = 0.086). Present in 28% of names in a given quarter."
+    },
+    "inverseHeadAndShoulders": {
+     "label": "Inverse head and shoulders",
+     "textbookBias": "up",
+     "namesFired": 118,
+     "everFiredRate": 0.9833333333333333,
+     "firingRate": 0.25833333333333336,
+     "namesRecent": 31,
+     "recentWindow": 63,
+     "perNameYear": 1.2722423318727367,
+     "observations": 898,
+     "tested": [
+      {
+       "pattern": "inverseHeadAndShoulders",
+       "horizonDays": 10,
+       "meanExcess": -0.007079085914670764,
+       "pValue": 0.0075688761532456544,
+       "months": 70,
+       "observations": 898,
+       "rawExcess": -0.005258438480261398,
+       "medianAbnormal": -0.009781552961052762,
+       "qValue": 0.08629083637958897,
+       "survived": true
+      },
+      {
+       "pattern": "inverseHeadAndShoulders",
+       "horizonDays": 21,
+       "meanExcess": -0.008838871945303731,
+       "pValue": 0.014893880041104875,
+       "months": 70,
+       "observations": 894,
+       "rawExcess": -0.006238291903348017,
+       "medianAbnormal": -0.014268023909472684,
+       "qValue": 0.08936328024662925,
+       "survived": true
+      },
+      {
+       "pattern": "inverseHeadAndShoulders",
+       "horizonDays": 63,
+       "meanExcess": -0.009644589655737711,
+       "pValue": 0.20166356246305428,
+       "months": 68,
+       "observations": 870,
+       "rawExcess": -0.0038545781514305504,
+       "medianAbnormal": -0.020716524580191336,
+       "qValue": 0.5826057967704632,
+       "survived": false
+      }
+     ],
+     "significant": true,
+     "forward": {
+      "horizonDays": 21,
+      "meanExcess": -0.008838871945303731,
+      "pValue": 0.014893880041104875,
+      "qValue": 0.08936328024662925,
+      "months": 70,
+      "rawExcess": -0.006238291903348017,
+      "medianAbnormal": -0.014268023909472684
+     },
+     "verdict": "Survived correction: -0.88% against the market over 21 sessions, averaged across 70 separate months (q = 0.089). Present in 26% of names in a given quarter."
+    },
+    "broadeningTop": {
+     "label": "Broadening top",
+     "textbookBias": "down",
+     "namesFired": 119,
+     "everFiredRate": 0.9916666666666667,
+     "firingRate": 0.3,
+     "namesRecent": 36,
+     "recentWindow": 63,
+     "perNameYear": 0.7159010679905411,
+     "observations": 503,
+     "tested": [
+      {
+       "pattern": "broadeningTop",
+       "horizonDays": 10,
+       "meanExcess": -0.0038603029548646647,
+       "pValue": 0.24629506068073853,
+       "months": 68,
+       "observations": 503,
+       "rawExcess": 0.0008110924940317078,
+       "medianAbnormal": -0.0006125724718810594,
+       "qValue": 0.6157376517018464,
+       "survived": false
+      },
+      {
+       "pattern": "broadeningTop",
+       "horizonDays": 21,
+       "meanExcess": -0.006780022053101897,
+       "pValue": 0.29446008188990674,
+       "months": 68,
+       "observations": 491,
+       "rawExcess": -0.0009384964991189321,
+       "medianAbnormal": -0.009081826058285072,
+       "qValue": 0.630985889764086,
+       "survived": false
+      },
+      {
+       "pattern": "broadeningTop",
+       "horizonDays": 63,
+       "meanExcess": -0.008632651361157819,
+       "pValue": 0.5529853545457863,
+       "months": 66,
+       "observations": 471,
+       "rawExcess": 0.002519595144625675,
+       "medianAbnormal": -0.02390293222233879,
+       "qValue": 0.8379628437318473,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 30% of names in a given quarter."
+    },
+    "broadeningBottom": {
+     "label": "Broadening bottom",
+     "textbookBias": "up",
+     "namesFired": 118,
+     "everFiredRate": 0.9833333333333333,
+     "firingRate": 0.2,
+     "namesRecent": 24,
+     "recentWindow": 63,
+     "perNameYear": 0.641063283762733,
+     "observations": 454,
+     "tested": [
+      {
+       "pattern": "broadeningBottom",
+       "horizonDays": 10,
+       "meanExcess": 0.002035759890184815,
+       "pValue": 0.7752179306408835,
+       "months": 71,
+       "observations": 454,
+       "rawExcess": 0.004161448146473018,
+       "medianAbnormal": -0.004090177008924786,
+       "qValue": 0.846754382616582,
+       "survived": false
+      },
+      {
+       "pattern": "broadeningBottom",
+       "horizonDays": 21,
+       "meanExcess": -0.0027018141315866863,
+       "pValue": 0.7697463421394889,
+       "months": 71,
+       "observations": 451,
+       "rawExcess": 0.007203557048386284,
+       "medianAbnormal": -0.004393434699494055,
+       "qValue": 0.846754382616582,
+       "survived": false
+      },
+      {
+       "pattern": "broadeningBottom",
+       "horizonDays": 63,
+       "meanExcess": 0.0033526329033206352,
+       "pValue": 0.7475120465445544,
+       "months": 69,
+       "observations": 430,
+       "rawExcess": 0.014767777785164889,
+       "medianAbnormal": -0.004562824261771823,
+       "qValue": 0.846754382616582,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 20% of names in a given quarter."
+    },
+    "triangleTop": {
+     "label": "Triangle top",
+     "textbookBias": "down",
+     "namesFired": 117,
+     "everFiredRate": 0.975,
+     "firingRate": 0.175,
+     "namesRecent": 21,
+     "recentWindow": 63,
+     "perNameYear": 0.6565956540741649,
+     "observations": 464,
+     "tested": [
+      {
+       "pattern": "triangleTop",
+       "horizonDays": 10,
+       "meanExcess": 0.008846828166671978,
+       "pValue": 0.09649867635374013,
+       "months": 71,
+       "observations": 464,
+       "rawExcess": 0.007247676062463272,
+       "medianAbnormal": 0.0014161907174642416,
+       "qValue": 0.3216622545124671,
+       "survived": false
+      },
+      {
+       "pattern": "triangleTop",
+       "horizonDays": 21,
+       "meanExcess": 0.003343031511906984,
+       "pValue": 0.6131233273926997,
+       "months": 71,
+       "observations": 457,
+       "rawExcess": 0.005160822149354577,
+       "medianAbnormal": 0.0003700312664469173,
+       "qValue": 0.8379628437318473,
+       "survived": false
+      },
+      {
+       "pattern": "triangleTop",
+       "horizonDays": 63,
+       "meanExcess": 0.00860733784927411,
+       "pValue": 0.3278845943755684,
+       "months": 69,
+       "observations": 444,
+       "rawExcess": 0.01787834461499075,
+       "medianAbnormal": -0.002652197336937688,
+       "qValue": 0.6557691887511368,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 18% of names in a given quarter."
+    },
+    "triangleBottom": {
+     "label": "Triangle bottom",
+     "textbookBias": "up",
+     "namesFired": 118,
+     "everFiredRate": 0.9833333333333333,
+     "firingRate": 0.15833333333333333,
+     "namesRecent": 19,
+     "recentWindow": 63,
+     "perNameYear": 0.7144890343258654,
+     "observations": 502,
+     "tested": [
+      {
+       "pattern": "triangleBottom",
+       "horizonDays": 10,
+       "meanExcess": 0.0005330913606159908,
+       "pValue": 0.8787951853276346,
+       "months": 70,
+       "observations": 502,
+       "rawExcess": 0.001338820039687464,
+       "medianAbnormal": -0.0035931561885127533,
+       "qValue": 0.9090984675803117,
+       "survived": false
+      },
+      {
+       "pattern": "triangleBottom",
+       "horizonDays": 21,
+       "meanExcess": -0.002137531616227105,
+       "pValue": 0.6145060854033546,
+       "months": 69,
+       "observations": 499,
+       "rawExcess": 0.002296360273521288,
+       "medianAbnormal": -0.007107418872175037,
+       "qValue": 0.8379628437318473,
+       "survived": false
+      },
+      {
+       "pattern": "triangleBottom",
+       "horizonDays": 63,
+       "meanExcess": 0.00240827008735792,
+       "pValue": 0.7903040904421432,
+       "months": 68,
+       "observations": 487,
+       "rawExcess": 0.010242582690763174,
+       "medianAbnormal": -0.008700415799172877,
+       "qValue": 0.846754382616582,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 16% of names in a given quarter."
+    },
+    "rectangleTop": {
+     "label": "Rectangle top",
+     "textbookBias": "down",
+     "namesFired": 79,
+     "everFiredRate": 0.6583333333333333,
+     "firingRate": 0.05,
+     "namesRecent": 6,
+     "recentWindow": 63,
+     "perNameYear": 0.2682863962883685,
+     "observations": 189,
+     "tested": [
+      {
+       "pattern": "rectangleTop",
+       "horizonDays": 10,
+       "meanExcess": -0.0022102878461043576,
+       "pValue": 0.6781071198513223,
+       "months": 60,
+       "observations": 189,
+       "rawExcess": -0.00016351631772137766,
+       "medianAbnormal": -0.004773570986285463,
+       "qValue": 0.846754382616582,
+       "survived": false
+      },
+      {
+       "pattern": "rectangleTop",
+       "horizonDays": 21,
+       "meanExcess": -0.0037405528287316353,
+       "pValue": 0.6613705108909229,
+       "months": 60,
+       "observations": 189,
+       "rawExcess": -0.0035892835290501934,
+       "medianAbnormal": -0.010960022586390315,
+       "qValue": 0.846754382616582,
+       "survived": false
+      },
+      {
+       "pattern": "rectangleTop",
+       "horizonDays": 63,
+       "meanExcess": -0.011417589844935613,
+       "pValue": 0.3546387311728364,
+       "months": 59,
+       "observations": 184,
+       "rawExcess": 0.0011483380686612879,
+       "medianAbnormal": -0.02297379412236849,
+       "qValue": 0.6649476209490682,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 5% of names in a given quarter."
+    },
+    "rectangleBottom": {
+     "label": "Rectangle bottom",
+     "textbookBias": "up",
+     "namesFired": 85,
+     "everFiredRate": 0.7083333333333334,
+     "firingRate": 0.03333333333333333,
+     "namesRecent": 4,
+     "recentWindow": 63,
+     "perNameYear": 0.3007631705759078,
+     "observations": 211,
+     "tested": [
+      {
+       "pattern": "rectangleBottom",
+       "horizonDays": 10,
+       "meanExcess": 0.00397679774953957,
+       "pValue": 0.42143965373242254,
+       "months": 60,
+       "observations": 211,
+       "rawExcess": 0.0065477973674072055,
+       "medianAbnormal": -0.0024901144780419392,
+       "qValue": 0.7297036741730517,
+       "survived": false
+      },
+      {
+       "pattern": "rectangleBottom",
+       "horizonDays": 21,
+       "meanExcess": -0.008268170741337797,
+       "pValue": 0.21362212548250317,
+       "months": 59,
+       "observations": 210,
+       "rawExcess": 0.0013614839753146907,
+       "medianAbnormal": -0.0012002873204717546,
+       "qValue": 0.5826057967704632,
+       "survived": false
+      },
+      {
+       "pattern": "rectangleBottom",
+       "horizonDays": 63,
+       "meanExcess": -0.019853904049408486,
+       "pValue": 0.04486122561212729,
+       "months": 58,
+       "observations": 209,
+       "rawExcess": -0.00990610095921073,
+       "medianAbnormal": -0.03752266272166771,
+       "qValue": 0.16822959604547735,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 3% of names in a given quarter."
+    },
+    "doubleTop": {
+     "label": "Double top",
+     "textbookBias": "down",
+     "namesFired": 119,
+     "everFiredRate": 0.9916666666666667,
+     "firingRate": 0.14166666666666666,
+     "namesRecent": 17,
+     "recentWindow": 63,
+     "perNameYear": 0.7342575056313242,
+     "observations": 518,
+     "tested": [
+      {
+       "pattern": "doubleTop",
+       "horizonDays": 10,
+       "meanExcess": 6.927615514885e-05,
+       "pValue": 0.9845937539197931,
+       "months": 71,
+       "observations": 518,
+       "rawExcess": 0.0017007095801311405,
+       "medianAbnormal": -0.008308870734956075,
+       "qValue": 0.9845937539197931,
+       "survived": false
+      },
+      {
+       "pattern": "doubleTop",
+       "horizonDays": 21,
+       "meanExcess": -0.005009838487509823,
+       "pValue": 0.2826551979859382,
+       "months": 70,
+       "observations": 515,
+       "rawExcess": -0.0006365676949933994,
+       "medianAbnormal": -0.005421028406435343,
+       "qValue": 0.630985889764086,
+       "survived": false
+      },
+      {
+       "pattern": "doubleTop",
+       "horizonDays": 63,
+       "meanExcess": -0.007414943217345046,
+       "pValue": 0.437822204503831,
+       "months": 69,
+       "observations": 502,
+       "rawExcess": -0.00020248255538064813,
+       "medianAbnormal": -0.007546214458823095,
+       "qValue": 0.7297036741730517,
+       "survived": false
+      }
+     ],
+     "significant": false,
+     "forward": null,
+     "verdict": "No forward return that survives correcting for every pattern and horizon tested, once detections are collapsed by month so that one market episode counts once. Present in 14% of names in a given quarter."
+    },
+    "doubleBottom": {
+     "label": "Double bottom",
+     "textbookBias": "up",
+     "namesFired": 119,
+     "everFiredRate": 0.9916666666666667,
+     "firingRate": 0.20833333333333334,
+     "namesRecent": 25,
+     "recentWindow": 63,
+     "perNameYear": 0.8373359631526447,
+     "observations": 590,
+     "tested": [
+      {
+       "pattern": "doubleBottom",
+       "horizonDays": 10,
+       "meanExcess": -0.007376512097537785,
+       "pValue": 0.0085301811473986,
+       "months": 71,
+       "observations": 590,
+       "rawExcess": -0.004826661124535394,
+       "medianAbnormal": -0.005594405514806283,
+       "qValue": 0.08629083637958897,
+       "survived": true
+      },
+      {
+       "pattern": "doubleBottom",
+       "horizonDays": 21,
+       "meanExcess": -0.012353224032508183,
+       "pValue": 0.028986977766767168,
+       "months": 71,
+       "observations": 588,
+       "rawExcess": -0.004929776604499777,
+       "medianAbnormal": -0.011919343299957762,
+       "qValue": 0.1335781070549515,
+       "survived": false
+      },
+      {
+       "pattern": "doubleBottom",
+       "horizonDays": 63,
+       "meanExcess": -0.005866465697506261,
+       "pValue": 0.5917605463441505,
+       "months": 69,
+       "observations": 566,
+       "rawExcess": 0.007500843708594989,
+       "medianAbnormal": -0.018226406980739452,
+       "qValue": 0.8379628437318473,
+       "survived": false
+      }
+     ],
+     "significant": true,
+     "forward": {
+      "horizonDays": 10,
+      "meanExcess": -0.007376512097537785,
+      "pValue": 0.0085301811473986,
+      "qValue": 0.08629083637958897,
+      "months": 71,
+      "rawExcess": -0.004826661124535394,
+      "medianAbnormal": -0.005594405514806283
+     },
+     "verdict": "Survived correction: -0.74% against the market over 10 sessions, averaged across 71 separate months (q = 0.086). Present in 21% of names in a given quarter."
+    }
+   }
+  }
+ }
+}
