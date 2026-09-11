@@ -357,6 +357,46 @@ def test_distress_caps_the_quality_component_instead_of_subtracting_from_it():
 # ============================================================================ #
 # 4. Gates override the score
 # ============================================================================ #
+
+
+def test_a_stop_too_far_below_gates_as_hard_as_a_lopsided_ratio():
+    """THE WORST ENTRY STATE MUST NOT BE THE ONE THAT ESCAPES THE GATE.
+
+    `structure._band` returns the first state that matches and tests the risk
+    DISTANCE before the ratio, so `riskTooWide` and `bad` are mutually exclusive
+    labels rather than points on a scale. The gate originally read `== "bad"`,
+    which meant a name whose only defended floor was 35% below took the more
+    severe diagnosis and sailed through, while a name with a merely lopsided
+    ratio was stopped.
+
+    Found on the highest-scoring name in a full IDX sweep: SRSN read STRONG_BUY
+    at 74.6 with its nearest support 35.2% underneath and no gate at all.
+    """
+    wide = scored(structure_result={
+        **structure_payload(band="riskTooWide", reward_risk=0.73),
+        "riskToSupport": 0.352, "rewardToResistance": 0.258})
+    gate = next((g for g in wide["gates"] if g["id"] == "poorEntry"), None)
+    assert gate is not None, "a stop 35% away did not gate"
+    assert gate["action"] == "HOLD"
+    assert wide["action"] not in ("BUY", "STRONG_BUY")
+    # The wording has to name the actual problem, which is not a bad ratio.
+    assert "too far to be a stop" in gate["detail"]
+    assert "35.2%" in gate["detail"]
+
+
+def test_a_lopsided_ratio_still_gates_and_still_says_why():
+    bad = scored(structure_result=structure_payload(band="bad", reward_risk=0.2))
+    gate = next((g for g in bad["gates"] if g["id"] == "poorEntry"), None)
+    assert gate is not None
+    assert "overhead" in gate["detail"] and "0.20 to 1 against" in gate["detail"]
+
+
+def test_a_sound_entry_does_not_gate():
+    for band in ("fine", "poor", "unbounded"):
+        result = scored(structure_result=structure_payload(band=band))
+        assert not any(g["id"] == "poorEntry" for g in result["gates"]), band
+
+
 def test_an_illiquid_name_is_no_action_however_well_it_scores():
     result = scored(rank_row=rank_row(composite=99.0),
                     liquidity=liquid(turnover=1.0e6))

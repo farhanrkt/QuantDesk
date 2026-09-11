@@ -535,7 +535,15 @@ support below and resistance above, both from levels the market actually defende
 reward-to-risk between them. It is deliberately **not a scoring component** — the score
 answers "is this worth owning" and this answers "is now a sensible moment", and blending
 them would let a tidy entry make a poor company look better. It feeds a gate when the
-ceiling is three times closer than the floor, and the numbers, and nothing else.
+ceiling is three times closer than the floor **or when the floor is more than 35% below**,
+and the numbers, and nothing else.
+
+That second clause was missing until a full sweep exposed it. `_band` returns the first
+state that matches and tests the risk *distance* before the ratio, so `riskTooWide` and
+`bad` are mutually exclusive labels rather than points on a scale — and the gate read only
+`bad`. The result was that the worst entry state was the one state that did not gate: the
+top-scoring name in the market read STRONG_BUY with its only defended floor 35% beneath
+it, which is not a stop but a second opinion about the whole thesis.
 
 **The market the list was produced in.** Every score here is cross-sectional, so the top of a
 falling market is still a top — and a ranked table produced during a 27% drawdown looks

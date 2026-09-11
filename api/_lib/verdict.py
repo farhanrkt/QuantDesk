@@ -1019,19 +1019,41 @@ def _gates(liquidity: Optional[dict], price: Optional[float], market: str,
     # perfectly sound and that buying it at today's price is still a poor trade,
     # because the nearest ceiling is three times closer than the floor whose
     # failure would mean the reason for the trade was wrong.
+    #
+    # `riskTooWide` GATES TOO, AND LEAVING IT OUT WAS A REAL BUG. `structure._band`
+    # returns the FIRST state that matches and tests the risk distance BEFORE the
+    # ratio, so `riskTooWide` and `bad` are mutually exclusive labels rather than
+    # a scale — which meant a name whose nearest floor was 35% below took the
+    # more severe diagnosis and escaped the gate entirely, while a name with a
+    # merely lopsided ratio was stopped.
+    #
+    # It was found on the highest-scoring name in a full IDX sweep: SRSN read
+    # STRONG_BUY at 74.6 with its only defended floor 35.2% underneath, and
+    # nothing fired. `MAX_USEFUL_RISK` exists precisely because past that
+    # distance "the risk being measured is the whole thesis rather than a level",
+    # which is not a milder problem than a poor ratio — it is the same problem
+    # with no number left to describe it.
     entry = structure_result if isinstance(structure_result, dict) else {}
-    if entry.get("available") and entry.get("band") == "bad":
+    if entry.get("available") and entry.get("band") in ("bad", "riskTooWide"):
         ratio = _finite(entry.get("rewardRisk"))
+        risk = (_finite(entry.get("riskToSupport")) or 0) * 100
+        reward = (_finite(entry.get("rewardToResistance")) or 0) * 100
+        if entry.get("band") == "riskTooWide":
+            detail = (f"The nearest defended floor is {risk:.1f}% below, which is too far "
+                      f"to be a stop — past that distance what is being risked is the "
+                      f"whole reason for the trade rather than a level, and there is no "
+                      f"sensible size for the position")
+        else:
+            detail = (f"The nearest resistance is {reward:.1f}% overhead while the "
+                      f"nearest support sits {risk:.1f}% below"
+                      + (f" — about {ratio:.2f} to 1 against" if ratio is not None
+                         else ""))
         gates.append({
             "id": "poorEntry", "action": "HOLD",
             "label": "Poor entry at this price",
-            "detail": (f"The nearest resistance is {(_finite(entry.get('rewardToResistance')) or 0) * 100:.1f}% "
-                       f"overhead while the nearest support sits "
-                       f"{(_finite(entry.get('riskToSupport')) or 0) * 100:.1f}% below — "
-                       f"about {ratio:.2f} to 1 against"
-                       if ratio is not None else "the structure is against the buyer here")
-                      + ". This is a statement about the price, not the company: the "
-                        "score above is unchanged and a different price would clear this.",
+            "detail": detail + ". This is a statement about the price, not the "
+                               "company: the score above is unchanged and a different "
+                               "price would clear this.",
         })
 
     quality = _leg(legs, "quality") or {}
