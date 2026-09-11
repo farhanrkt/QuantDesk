@@ -1235,6 +1235,39 @@ export interface VerdictPatterns {
   refused?: { name: string; reason: string }[];
 }
 
+/**
+ * Where the year's trade happened — the full histogram, beside the bands the
+ * chart draws from it.
+ *
+ * DESCRIPTION, NEVER SUPPORT, unless `usable` says the measurement licensed it.
+ * On IDX it did not: shelves held no better than ordinary bands at the same
+ * distance once corrected across distance buckets.
+ */
+export interface VerdictVolumeProfile {
+  available: boolean;
+  reason?: string;
+  sessions?: number;
+  price?: number;
+  binWidth?: number;
+  binWidthAtr?: number;
+  bins?: number;
+  profile?: { low: number; high: number; mid: number; share: number }[];
+  pointOfControl?: { low: number; high: number; mid: number; share: number };
+  valueArea?: { low: number; high: number; share: number };
+  insideValueArea?: boolean;
+  shelves?: { low: number; high: number; mid: number; share: number; bins: number;
+              peakMultiple: number; side: string; distanceAtr: number;
+              distancePct: number }[];
+  market?: string | null;
+  /** False where this market has never been measured. Nothing reads a shelf then. */
+  calibrated?: boolean;
+  measuredOn?: string | null;
+  /** True only where a shelf was shown to hold better than an ordinary band. */
+  usable?: boolean;
+  calibrationReading?: string | null;
+  reading?: string;
+}
+
 /** Where the price sits against defended levels — the entry, not the asset. */
 export interface VerdictStructure {
   available: boolean;
@@ -1460,6 +1493,25 @@ export interface ChartTrade {
 }
 
 /**
+ * Where the year's trade actually happened, as bands on the price axis.
+ *
+ * DESCRIPTION, NOT SUPPORT. `scripts/calibrate_volume_profile.py` tested whether
+ * price arriving at a high-volume band behaves differently from price arriving
+ * at an ordinary band the same distance away, and `structure.py` reads the
+ * answer. Never treat a shelf as a stop unless that artifact says so.
+ */
+export interface ChartVolumeProfile {
+  pointOfControl: { low: number | null; high: number | null; share: number | null };
+  valueArea: { low: number | null; high: number | null; share: number | null };
+  insideValueArea: boolean;
+  shelves: { low: number | null; high: number | null; share: number | null;
+             side: string; distanceAtr: number | null }[];
+  binWidth: number | null;
+  sessions?: number;
+  reading?: string;
+}
+
+/**
  * Every reading the scanner took, positioned for drawing.
  *
  * NOTHING HERE IS NEW ANALYSIS. Each layer was decided by the module that owns
@@ -1479,6 +1531,8 @@ export interface VerdictChart {
   levels?: ChartLevel[];
   trade?: ChartTrade | null;
   patterns?: ChartPattern[];
+  /** Null where the profile could not be built, never an empty shape. */
+  volumeProfile?: ChartVolumeProfile | null;
   crossovers?: { date: string; type: string; price: number | null;
                  description: string }[];
   extremes?: {
@@ -1527,6 +1581,8 @@ export interface VerdictResponse {
   structure: VerdictStructure | null;
   /** The same readings, positioned for drawing. Never a separate analysis. */
   chart: VerdictChart | null;
+  /** Where the trade happened. Scores nothing, gates nothing — see `usable`. */
+  volumeProfile: VerdictVolumeProfile | null;
   regime: MarketRegime | null;
   costs: RoundTripCost | null;
   /** The measurement that is about this score, not just its price component. */

@@ -280,6 +280,43 @@ def _patterns(frame: pd.DataFrame, found: Optional[dict],
     return out
 
 
+def _profile(volume_profile: Optional[dict]) -> Optional[dict]:
+    """The volume profile reduced to the bands a price chart can draw exactly.
+
+    THE FULL HISTOGRAM IS NOT DRAWN ON THE PRICE PANE, and that is a decision
+    rather than an omission. A volume-at-price histogram is a horizontal chart
+    sharing the price axis, and the only ways to put one inside a recharts
+    time-series are to overlay it on the candles — obscuring the thing it is
+    meant to annotate — or to render it as a second element whose y-scale is
+    matched to the first by hand, which stays aligned until the first margin
+    changes and then silently does not.
+
+    The bands below are y-ranges, so they draw exactly and cannot drift. The
+    full `profile` array still travels in the verdict payload for anyone who
+    wants the histogram itself.
+    """
+    if not isinstance(volume_profile, dict) or not volume_profile.get("available"):
+        return None
+    control = volume_profile.get("pointOfControl") or {}
+    area = volume_profile.get("valueArea") or {}
+    return {
+        "pointOfControl": {"low": _finite(control.get("low")),
+                           "high": _finite(control.get("high")),
+                           "share": _finite(control.get("share"))},
+        "valueArea": {"low": _finite(area.get("low")), "high": _finite(area.get("high")),
+                      "share": _finite(area.get("share"))},
+        "insideValueArea": bool(volume_profile.get("insideValueArea")),
+        "shelves": [{"low": _finite(shelf.get("low")), "high": _finite(shelf.get("high")),
+                     "share": _finite(shelf.get("share")),
+                     "side": shelf.get("side"),
+                     "distanceAtr": _finite(shelf.get("distanceAtr"))}
+                    for shelf in (volume_profile.get("shelves") or [])],
+        "binWidth": _finite(volume_profile.get("binWidth")),
+        "sessions": volume_profile.get("sessions"),
+        "reading": volume_profile.get("reading"),
+    }
+
+
 def _heavy_note(marks: dict) -> str:
     if not marks.get("available"):
         return marks.get("reason") or "the heavy-session split could not be read"
@@ -294,6 +331,7 @@ def build(frame: Optional[pd.DataFrame], *,
           structure_result: Optional[dict] = None,
           pattern_result: Optional[dict] = None,
           tape_result: Optional[dict] = None,
+          volume_profile: Optional[dict] = None,
           ticker: Optional[str] = None,
           currency: Optional[str] = None,
           plot_sessions: int = PLOT_SESSIONS) -> dict:
@@ -361,6 +399,7 @@ def build(frame: Optional[pd.DataFrame], *,
     shapes = _patterns(frame, pattern_result, first_index)
     levels = _levels(resolved, site)
     trade = _trade(site)
+    profile = _profile(volume_profile)
 
     return {
         "available": True,
@@ -373,6 +412,10 @@ def build(frame: Optional[pd.DataFrame], *,
         "levels": levels,
         "trade": trade,
         "patterns": shapes,
+        # WHERE THE TRADE HAPPENED, as distinct from where the price turned.
+        # Bands on the price axis only — every figure here is a y-range, so it
+        # draws exactly rather than being aligned by eye against a second chart.
+        "volumeProfile": profile,
         "crossovers": crossovers,
         "extremes": extremes,
         "tape": {
@@ -395,13 +438,14 @@ def build(frame: Optional[pd.DataFrame], *,
                 (tape_result or {}).get("ordinaryMeanLocation")),
             "significant": bool((tape_result or {}).get("significant")),
         },
-        "legend": _legend(levels, trade, shapes, marks),
+        "legend": _legend(levels, trade, shapes, marks, profile, volume_profile),
         "caption": _caption(shapes, levels, trade),
     }
 
 
 def _legend(levels: list[dict], trade: Optional[dict], shapes: list[dict],
-            marks: dict) -> list[dict]:
+            marks: dict, profile: Optional[dict] = None,
+            volume_profile: Optional[dict] = None) -> list[dict]:
     """One line per layer: what it is, and what it is not.
 
     Part of the payload rather than a frontend constant, so a client cannot
@@ -440,6 +484,34 @@ def _legend(levels: list[dict], trade: Optional[dict], shapes: list[dict],
             "note": ("The curve is refitted on the window that was available when the "
                      "shape completed — never smoothed with hindsight. No target is "
                      "projected: the textbook direction did not survive measurement."),
+        })
+    if profile:
+        # THE STATUS OF THE CLAIM IS THE NOTE. A shaded band labelled "most
+        # traded" reads as a support level to anyone who has seen one before,
+        # and the measurement is the only thing standing between a description
+        # and a recommendation.
+        measured = (volume_profile or {})
+        if not measured.get("calibrated"):
+            verdict_text = ("Whether price holds at one of these better than at an "
+                            "ordinary band has not been measured on this market, so "
+                            "none of it is read as support.")
+        elif measured.get("usable"):
+            verdict_text = ("Measured on this market, price does hold at these more "
+                            "often than at an ordinary band the same distance away.")
+        else:
+            verdict_text = ("Measured on this market, price does NOT hold at these "
+                            "reliably better than at an ordinary band the same distance "
+                            "away — so they are drawn as description and nothing here "
+                            "treats them as support.")
+        out.append({
+            "key": "volumeProfile",
+            "label": (f"Volume at price · {len(profile.get('shelves') or [])} "
+                      f"shelf{'' if len(profile.get('shelves') or []) == 1 else 'ves'}"),
+            "note": ("Where the last year's shares actually changed hands, as opposed to "
+                     "where the price turned. Built by spreading each daily bar's volume "
+                     "evenly across its own range, which is the best this data supports "
+                     "and is why every band is a band rather than a price. "
+                     + verdict_text),
         })
     out.append({"key": "heavy", "label": "Heavy sessions", "note": _heavy_note(marks)})
     return out

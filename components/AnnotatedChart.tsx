@@ -63,6 +63,9 @@ const ORDINARY = "#2A3846";
 const PATTERN = "#A78BFA";
 const GUIDE = "#E7EEF5";
 const SUPPORT = "#80CBC4";
+// Identity, like every other hue here. A volume shelf is this colour whether the
+// price is above it or below it.
+const PROFILE = "#4DD0E1";
 const RESISTANCE = "#EF9A9A";
 
 type Row = ChartBar & {
@@ -144,6 +147,7 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
   const [showLevels, setShowLevels] = useState(true);
   const [showTrade, setShowTrade] = useState(true);
   const [showBands, setShowBands] = useState(true);
+  const [showProfile, setShowProfile] = useState(true);
 
   const bars = useMemo(() => chart.bars ?? [], [chart.bars]);
   const shapes = useMemo(() => chart.patterns ?? [], [chart.patterns]);
@@ -195,6 +199,14 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
       if (showBands && bar.bbLower != null) values.push(bar.bbLower);
     }
     if (showLevels) for (const level of chart.levels ?? []) values.push(level.price);
+    // The profile routinely sits well below a name that has run, so leaving it
+    // out of the domain would clip exactly the band a reader most wants to see.
+    if (showProfile && chart.volumeProfile) {
+      for (const edge of [chart.volumeProfile.valueArea.low,
+                          chart.volumeProfile.valueArea.high]) {
+        if (edge != null) values.push(edge);
+      }
+    }
     if (showTrade && chart.trade) {
       for (const price of [chart.trade.stop, chart.trade.target, chart.trade.entry]) {
         if (price != null) values.push(price);
@@ -205,7 +217,8 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
     const high = Math.max(...values);
     const pad = (high - low) * 0.04 || high * 0.02;
     return [low - pad, high + pad] as [number, number];
-  }, [bars, chart.levels, chart.trade, showBands, showLevels, showTrade]);
+  }, [bars, chart.levels, chart.trade, chart.volumeProfile,
+      showBands, showLevels, showTrade, showProfile]);
 
   if (!chart.available || rows.length === 0) {
     return (
@@ -223,6 +236,7 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
   }
 
   const trade = chart.trade ?? null;
+  const profile = chart.volumeProfile ?? null;
   const tape = chart.tape;
   const heavyDrawn = rows.filter((row) => row.heavyLocation != null);
 
@@ -245,6 +259,10 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
                   hue={PRICE_UP}>Stop &amp; ceiling</Toggle>
           <Toggle on={showBands} onClick={() => setShowBands(!showBands)}
                   hue={BAND}>Bollinger</Toggle>
+          {chart.volumeProfile && (
+            <Toggle on={showProfile} onClick={() => setShowProfile(!showProfile)}
+                    hue={PROFILE}>Volume at price</Toggle>
+          )}
           {ordered.map((shape, i) => (
             <Toggle key={`${shape.pattern}-${shape.detectedAt}`} on={drawn === i}
                     hue={PATTERN}
@@ -267,6 +285,37 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
                    width={60} tick={{ fontSize: 10, fill: "#7387A0" }}
                    tickFormatter={(value: number) => num(value)} />
             <Tooltip content={<PriceTooltip />} />
+
+            {/* WHERE THE YEAR'S TRADE HAPPENED. Bands on the price axis only —
+                every figure is a y-range, so it draws exactly and cannot drift
+                out of alignment the way a second chart matched by hand would.
+                Drawn before the candles so it sits behind them. */}
+            {showProfile && profile?.valueArea.low != null
+              && profile.valueArea.high != null && (
+              <ReferenceArea y1={profile.valueArea.low} y2={profile.valueArea.high}
+                             fill={PROFILE} fillOpacity={0.05}
+                             ifOverflow="extendDomain" />
+            )}
+            {showProfile && profile?.pointOfControl.low != null
+              && profile.pointOfControl.high != null && (
+              <ReferenceArea y1={profile.pointOfControl.low}
+                             y2={profile.pointOfControl.high}
+                             fill={PROFILE} fillOpacity={0.30}
+                             ifOverflow="extendDomain"
+                             label={{ value: "most traded", position: "insideLeft",
+                                      fontSize: 9, fill: PROFILE }} />
+            )}
+            {showProfile && (profile?.shelves ?? []).map((shelf, i) => (
+              shelf.low != null && shelf.high != null ? (
+                <ReferenceArea key={`shelf-${i}`} y1={shelf.low} y2={shelf.high}
+                               fill={PROFILE} fillOpacity={0.12}
+                               ifOverflow="extendDomain"
+                               label={{
+                                 value: `${((shelf.share ?? 0) * 100).toFixed(0)}% of the year`,
+                                 position: "insideTopLeft", fontSize: 9, fill: PROFILE,
+                               }} />
+              ) : null
+            ))}
 
             {/* The pattern's own window, so the five points are read in context. */}
             {active?.fromDate && active?.toDate && (

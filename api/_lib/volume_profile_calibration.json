@@ -1,0 +1,96 @@
+{
+ "measuredOn": "2026-09-11",
+ "markets": {
+  "ID": {
+   "market": "ID",
+   "population": "the Indonesian listed market",
+   "names": 250,
+   "measuredOn": "2026-09-11",
+   "years": 6,
+   "touches": 64969,
+   "sampleEvery": 21,
+   "touchWindow": 63,
+   "holdHorizon": 21,
+   "breakAtr": 0.5,
+   "shelfMultiple": 2.0,
+   "controlMultiple": 0.5,
+   "minMonths": 24,
+   "buckets": [
+    {
+     "bucket": "0.5-2",
+     "lowAtr": 0.5,
+     "highAtr": 2.0,
+     "shelf": {
+      "months": 72,
+      "holdRate": 0.6942592621958155,
+      "sd": 0.13541077082051262
+     },
+     "control": {
+      "months": 72,
+      "holdRate": 0.6796720723694073,
+      "sd": 0.13786831335040764
+     },
+     "difference": 0.014792643204244862,
+     "usable": true,
+     "pairedMonths": 71,
+     "tStat": 1.045350938631548,
+     "pValue": 0.29945724683241504,
+     "significant": false,
+     "qValue": 0.29945724683241504,
+     "survived": false
+    },
+    {
+     "bucket": "2-5",
+     "lowAtr": 2.0,
+     "highAtr": 5.0,
+     "shelf": {
+      "months": 71,
+      "holdRate": 0.7178071603559513,
+      "sd": 0.14776913197523053
+     },
+     "control": {
+      "months": 71,
+      "holdRate": 0.6966590962645283,
+      "sd": 0.13847748965033876
+     },
+     "difference": 0.02114806409142298,
+     "usable": true,
+     "pairedMonths": 71,
+     "tStat": 1.1188683801977515,
+     "pValue": 0.2670211243857196,
+     "significant": false,
+     "qValue": 0.29945724683241504,
+     "survived": false
+    },
+    {
+     "bucket": "5-10",
+     "lowAtr": 5.0,
+     "highAtr": 10.0,
+     "shelf": {
+      "months": 69,
+      "holdRate": 0.7425662098462004,
+      "sd": 0.21114697035058758
+     },
+     "control": {
+      "months": 72,
+      "holdRate": 0.6686482101566513,
+      "sd": 0.2214506277593393
+     },
+     "difference": 0.052069211070856165,
+     "usable": true,
+     "pairedMonths": 65,
+     "tStat": 1.8826465117870665,
+     "pValue": 0.06429526873588959,
+     "significant": false,
+     "qValue": 0.19288580620766876,
+     "survived": false
+    }
+   ],
+   "pooledDifference": 0.029053577476819515,
+   "alpha": 0.1,
+   "usable": false,
+   "survivors": [],
+   "reading": "0.5-2 ATR below: shelves held 69% against 68% for ordinary bands (+1.5 points paired, p=0.299, q=0.299, 71 months); 2-5 ATR below: shelves held 72% against 70% for ordinary bands (+2.1 points paired, p=0.267, q=0.299, 71 months); 5-10 ATR below: shelves held 74% against 67% for ordinary bands (+5.2 points paired, p=0.064, q=0.193, 65 months). Weighted across buckets the difference is +2.9 points and every bucket leans the same way, but no bucket survives a false-discovery correction across the three \u2014 and the buckets share names and months, so a consistent sign across them is close to one result repeated rather than three. A shelf is therefore DRAWN but is not read as support: the histogram is a description of where trade happened, and `structure.py` goes on finding its levels the way it always has."
+  }
+ }
+}

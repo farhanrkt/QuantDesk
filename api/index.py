@@ -61,7 +61,7 @@ from _lib import (accumulation, chartlayers, eventstudy, explain, exposure,
                   listings, market_data, microstructure, news, ownership,
                   patterns, portfolio, pretrade, quality, ranking, riskmodel,
                   structure, symbols, tape, technical, universes, valuation,
-                  verdict)
+                  verdict, volumeprofile)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -915,9 +915,15 @@ async def name_verdict(
         liquidity = None
 
     pattern_result = None
+    profile_result = None
     if frame is not None:
         tape_result = tape.read(frame, market_code=symbols.market_of(symbol))
         pattern_result = patterns.read(frame, market_code=symbols.market_of(symbol))
+        # WHERE THE TRADE HAPPENED, from the frame already in hand. Free: no
+        # fetch, and it scores nothing and gates nothing — see the module's
+        # docstring for the measurement that decided that.
+        profile_result = volumeprofile.build(
+            frame, market_code=symbols.market_of(symbol))
 
     # WHERE THE TRADE IS WRONG, read off the levels the trend lens already
     # computed rather than recomputed here — same rule the synthesis follows, so
@@ -974,6 +980,8 @@ async def name_verdict(
         "register": register_result,
         "patterns": pattern_result,
         "structure": structure_result,
+        # The full histogram, beside the bands the chart draws from it.
+        "volumeProfile": profile_result,
         # THE SAME READINGS, POSITIONED FOR DRAWING. Nothing new is measured
         # here: every level, formation and heavy session below was decided by
         # the module that owns it, and a reader who can see the five points a
@@ -981,7 +989,8 @@ async def name_verdict(
         # difference between a chart and an assertion.
         "chart": chartlayers.build(
             frame, technical=technical_data, structure_result=structure_result,
-            pattern_result=pattern_result, tape_result=tape_result, ticker=symbol,
+            pattern_result=pattern_result, tape_result=tape_result,
+            volume_profile=profile_result, ticker=symbol,
             currency=(technical_data or {}).get("currency")),
         # What one buy and one sell actually cost, beside the effects this page
         # asks the reader to act on. The measured effects here are a few percent

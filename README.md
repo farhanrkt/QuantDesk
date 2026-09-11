@@ -586,6 +586,24 @@ so the arrow every chart book ends with would assert something this app's own st
 declined. The measured excess and the textbook bias sit side by side instead, labelled,
 and where they disagree the panel says so.
 
+**Where the trade happened, which is not where the price turned.** Every level in this
+app came from one mechanism: prices the market *turned* at, clustered and counted. A sweep
+showed what that costs — 46 of 251 tradeable names had no usable floor, either none at all
+or one so close that the reward-to-risk ratio is withheld. `volumeprofile.py` adds the
+other mechanism, volume at price, from the OHLCV already in hand.
+
+Then it was measured, and the measurement said no. Across 250 names, six years and 64,969
+touches, price arriving at a high-volume band held 69.4% of the time against 68.0% at an
+ordinary band the same distance away; further out the gap widens, but **no distance bucket
+survives a false-discovery correction** and the nearest bucket — the only one where a level
+could serve as a stop — flipped sign between a 60-name sample and a 250-name one.
+
+So the profile draws and nothing reads it. The point of control, the value area and the
+shelves are shaded on the chart as a description of where the year's positions were
+opened, every level is a band rather than a price because daily bars cannot support more,
+and `structure.py` finds its levels the way it always has. The gap that motivated the
+module is still open, and the module says so.
+
 **Is the buy list one bet?** The scanner ranks each name on its own merits and then sizes
 them by inverse volatility — the right arithmetic for *independent* positions. Whether
 they are independent is a property of the set, invisible from any row, and
@@ -779,6 +797,9 @@ api/
                                 their measured sign and never the textbook one
               structure.py      Where the trade is wrong: nearest floor, first
                                 ceiling, reward-risk, round-trip cost
+              volumeprofile.py  Where the year's trade actually happened, as
+                                bands. Measured and found NOT to be support,
+                                so it draws and nothing reads it
               chartlayers.py    Those readings positioned for drawing. Computes
                                 nothing new; refits each formation's curve on
                                 the window that existed when it completed, and
@@ -806,6 +827,10 @@ scripts/
                       Do the chart formations predict anything? An event
                       study on every detection, corrected across all of
                       them. Every survivor came out NEGATIVE
+  calibrate_volume_profile.py
+                      Does price hold at a volume shelf better than at an
+                      ordinary band the same distance away? Paired within
+                      month, corrected across distance buckets. It does not
   backtest_verdict.py A monthly walk-forward on the blended score, over
                       the four components that can be reconstructed
                       without reading the future. Scope stated, not implied,

@@ -106,6 +106,20 @@ These are durable product facts. Future work preserves them; none is a style pre
 2. **No predictive claim that isn't measured.** If a feature implies something predicts
    returns, it is measured offline and published including nulls, or it does not ship.
 
+   *Worked example, 11 September 2026.* `volumeprofile.py` was built to fix an observed
+   gap: a full IDX sweep left 46 of 251 names with no usable floor, and volume-at-price
+   is a second, independent way to find one. The measurement asked whether price arriving
+   at a high-volume band holds more often than price arriving at an ordinary band the
+   same distance away — 250 names, six years, 64,969 touches, paired within calendar
+   month. Every distance bucket leaned positive and **not one survived a false-discovery
+   correction** (q = 0.19 to 0.30); the nearest bucket, the only one where a level could
+   act as a stop, came back negative at a 60-name sample and positive at 250.
+
+   So the feature shipped as description: it draws, it reports where the year's trade
+   sat, and `structure.py` finds its levels exactly as before. The motivating gap is not
+   closed, and the module's own docstring says so. **A feature that survives its
+   measurement by being scoped down is the normal outcome here, not a failure.**
+
 3. **Absence of a flag is never evidence of quality.** An empty panel is not a clean bill
    of health and must say so in words.
 
@@ -202,14 +216,17 @@ These are durable product facts. Future work preserves them; none is a style pre
   so a session cannot be circled on one and uncounted by the other.
 - `docs/field-manual.html` — beginner's guide; its glossary is **generated** from
   `api/_lib/explain.py` and CI fails if a metric is added without regenerating.
-- Eleven network scripts in `scripts/` deliberately outside CI. Re-run after touching what
+- Twelve network scripts in `scripts/` deliberately outside CI. Re-run after touching what
   they measure; a stale stamped number is worse than none. Two arrived with the market
   scanner: `refresh_listings.py` fetches the whole-market universe, and
   `calibrate_tape.py` measures the per-market baselines the tape reading is tested
   against — without which it has no null to test and reports no direction at all. A
   third, `calibrate_patterns.py`, decides whether any chart formation is allowed to
   score. A fourth, `backtest_verdict.py`, is the only one that measures the scanner's
-  own blended score — partially, and it says by how much.
+  own blended score — partially, and it says by how much. A fifth,
+  `calibrate_volume_profile.py`, asked whether a volume shelf holds better than an
+  ordinary band and **came back null**, which is why `volumeprofile.py` draws and does
+  not gate.
 
 ## Accessibility
 

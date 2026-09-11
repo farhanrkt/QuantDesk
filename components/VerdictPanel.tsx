@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  AlertTriangle, Coins, Crosshair, FlaskConical, Gauge, Lock, Shapes, ShieldAlert,
-  TrendingDown, Users, Waves,
+  AlertTriangle, Coins, Crosshair, FlaskConical, Gauge, Layers, Lock, Shapes,
+  ShieldAlert, TrendingDown, Users, Waves,
 } from "lucide-react";
 import { AnnotatedChart } from "@/components/AnnotatedChart";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { TONE_FIELD, TONE_HEX } from "@/components/ui/explain";
 import type {
   BlendBacktest, Engine, RoundTripCost, TapeCalibration, VerdictComponent,
   VerdictPatterns, VerdictRegister, VerdictResponse, VerdictStructure, VerdictTape,
+  VerdictVolumeProfile,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -272,6 +273,44 @@ function EntryReading({ site }: { site: VerdictStructure }) {
  * thin listing can be more than that, and a gross number presented as though it
  * were net is the quietest way to mislead somebody.
  */
+/**
+ * Where the year's trade happened, which is a different question from where the
+ * price turned — and an answer this app measured and could not support.
+ *
+ * IT LEADS WITH THE STATUS, NOT THE FINDING. A shaded band labelled "most
+ * traded" reads as a support level to anybody who has seen one before, so the
+ * sentence saying it is not one has to arrive before the numbers rather than
+ * after them.
+ */
+function VolumeProfileReading({ profile }: { profile: VerdictVolumeProfile }) {
+  const shelves = profile.shelves ?? [];
+  const area = profile.valueArea;
+  return (
+    <div>
+      <div className="eyebrow mb-1 flex items-center gap-1.5">
+        <Layers aria-hidden className="h-3 w-3" /> Where the trade happened
+      </div>
+      <p className="prose-col text-meta leading-relaxed text-ash">{profile.reading}</p>
+      {area && (
+        <p className="prose-col mt-1.5 text-meta leading-relaxed text-faint">
+          {(area.share * 100).toFixed(0)}% of the last{" "}
+          {profile.sessions ?? 252} sessions&apos; volume traded between{" "}
+          <span className="num">{area.low.toLocaleString()}</span> and{" "}
+          <span className="num">{area.high.toLocaleString()}</span>, and the price is{" "}
+          {profile.insideValueArea ? "inside that band" : "outside it"}.
+          {shelves.length > 0 && (
+            <>
+              {" "}Each band is {profile.binWidthAtr?.toFixed(2)} of an average daily
+              range wide — the profile is built from daily bars, so a figure quoted to
+              the unit would be precision this data cannot support.
+            </>
+          )}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function CostReading({ costs }: { costs: RoundTripCost }) {
   return (
     <div>
@@ -660,6 +699,9 @@ export function VerdictPanel({
           )}
 
           {data.structure?.available && <EntryReading site={data.structure} />}
+          {data.volumeProfile?.available && (
+            <VolumeProfileReading profile={data.volumeProfile} />
+          )}
           {data.costs && <CostReading costs={data.costs} />}
           {data.patterns?.available && <PatternReading patterns={data.patterns} />}
           {data.tape?.available && <TapeReading tape={data.tape}
