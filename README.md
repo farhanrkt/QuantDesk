@@ -604,6 +604,14 @@ opened, every level is a band rather than a price because daily bars cannot supp
 and `structure.py` finds its levels the way it always has. The gap that motivated the
 module is still open, and the module says so.
 
+**The report draws its own charts.** Every directional row — buy, reduce or avoid, a
+hundred of them on a full Indonesian sweep — carries an inline SVG of the last nine
+months: candles, the defended levels with their touch counts, the stop and first ceiling
+as shaded bands, the latest formation's window, and the volume bands. It is rendered in
+Python from the same `chartlayers.build()` geometry the app's interactive chart consumes,
+so there is one source of every level and two renderers rather than two opinions. The
+file stays self-contained and opens from disk with no server.
+
 **Is the buy list one bet?** The scanner ranks each name on its own merits and then sizes
 them by inverse volatility — the right arithmetic for *independent* positions. Whether
 they are independent is a property of the set, invisible from any row, and
@@ -800,10 +808,14 @@ api/
               volumeprofile.py  Where the year's trade actually happened, as
                                 bands. Measured and found NOT to be support,
                                 so it draws and nothing reads it
-              chartlayers.py    Those readings positioned for drawing. Computes
-                                nothing new; refits each formation's curve on
-                                the window that existed when it completed, and
-                                projects no target
+              chartlayers.py    Those readings positioned for drawing
+              chartsvg.py       The same geometry as a standalone SVG, for
+                                the scan report — one source, two renderers
+              artifacts.py      Merging one market's measurement into a
+                                stamped file without deleting another's
+              (chartlayers computes nothing new: it refits each formation's
+                 curve on the window that existed when it completed, and
+                 projects no target)
               basket.py         How many independent bets a buy list actually is
               scanlog.py        What the scanner said, and what happened next
 docs/

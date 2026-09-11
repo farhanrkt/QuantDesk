@@ -64,7 +64,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import json
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -75,7 +74,7 @@ from scipy import stats as stats_module
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 
-from _lib import eventstudy, listings, market_data, universes, volumeprofile
+from _lib import artifacts, eventstudy, listings, market_data, universes, volumeprofile
 
 ARTIFACT = Path(__file__).resolve().parents[1] / "api" / "_lib" / "volume_profile_calibration.json"
 
@@ -406,8 +405,11 @@ def main() -> int:
         if not args.quiet:
             print("\n" + payload["markets"][market]["reading"] + "\n")
 
-    ARTIFACT.write_text(json.dumps(payload, indent=1))
-    print(f"wrote {ARTIFACT}")
+    # MERGED, NOT OVERWRITTEN. Running this for one market used to delete
+    # every other market's measurement — see `_lib/artifacts` for the day that
+    # happened and what it cost.
+    merged = artifacts.write_markets(ARTIFACT, payload)
+    print(f"wrote {ARTIFACT} — {artifacts.note(merged)}")
     return 0
 
 

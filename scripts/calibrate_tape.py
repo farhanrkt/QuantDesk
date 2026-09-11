@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import json
 import sys
 from pathlib import Path
 
@@ -51,7 +50,7 @@ import numpy as np                                                   # noqa: E40
 import pandas as pd                                                  # noqa: E402
 from scipy import stats                                              # noqa: E402
 
-from _lib import listings, market_data, tape, universes              # noqa: E402
+from _lib import artifacts, listings, market_data, tape, universes   # noqa: E402
 
 ARTIFACT = ROOT / "api" / "_lib" / "tape_calibration.json"
 
@@ -222,10 +221,13 @@ def main() -> int:
         "headline": headline(markets),
         "markets": markets,
     }
-    ARTIFACT.write_text(json.dumps(payload, indent=1))
+    # MERGED, NOT OVERWRITTEN. Running this for one market used to delete
+    # every other market's measurement — see `_lib/artifacts` for the day that
+    # happened and what it cost.
+    merged = artifacts.write_markets(ARTIFACT, payload)
     if not args.quiet:
         print(f"\n{payload['headline']}")
-        print(f"\nwritten to {ARTIFACT}")
+        print(f"\nwritten to {ARTIFACT} — {artifacts.note(merged)}")
     return 0
 
 

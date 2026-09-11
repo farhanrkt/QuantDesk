@@ -1,5 +1,5 @@
 {
- "measuredOn": "2026-09-09",
+ "measuredOn": "2026-09-11",
  "rebalanceDays": 21,
  "horizons": [
   21,
@@ -114,6 +114,103 @@
    "roundTripIsUpperBound": true,
    "survivesUpperBound": 0,
    "headline": "3 of 6 tests survived correction across 11077 observations and 62 rebalance dates. 21d IC +0.041 (q=0.038); 63d IC +0.049 (q=0.004); 126d IC +0.053 (q=0.000). READ THAT WITH THE NEXT SENTENCE. At 126 sessions the rank correlation is +0.053 while the top-minus-bottom quintile spread is -3.3% \u2014 they point OPPOSITE ways, so the relationship is not monotone. The correlation lives in the middle of the distribution and the extremes, which are the only part anybody would act on, go the other way. A surviving coefficient with a contradicting spread is not a tradeable finding. Those are gross, before trading: the 21d spread of +2.19% survives only if a round trip costs under 2.19%. The spread could only be resolved for 11 of 200 names \u2014 the estimator clears its noise floor on the widest ones and almost nowhere else \u2014 and the median of those was 5.50%. That is an UPPER BOUND on a typical cost rather than a measurement of one, and at it nothing here survives. Whether the result lives or dies therefore turns on a quantity this data cannot pin down; a reader who knows their own dealing costs can settle it against the breakeven above. Measured on 41% of the score's intended evidence (priceRank, tape, patterns, issuance); the value and quality components cannot be reconstructed at all because this data source publishes no point-in-time filings."
+  },
+  "US": {
+   "names": 120,
+   "population": "the Nasdaq-100 and the Dow",
+   "measuredOn": "2026-09-11",
+   "years": 6,
+   "benchmark": "^GSPC",
+   "rebalanceDays": 21,
+   "horizons": [
+    21,
+    63,
+    126
+   ],
+   "alpha": 0.1,
+   "dates": 65,
+   "observations": 7700,
+   "components": [
+    "priceRank",
+    "tape",
+    "patterns",
+    "issuance"
+   ],
+   "componentsTotal": 9,
+   "weightCovered": 2.2,
+   "weightIntended": 5.4,
+   "coverage": 0.40740740740740744,
+   "excluded": {
+    "value": "the discounted cash flow reads the latest statements; this source serves no point-in-time filings",
+    "quality": "the same \u2014 reconstructing Piotroski on a past date would read numbers published years later",
+    "trend": "needs the full technical pipeline per symbol per date",
+    "flow": "needs an Isolation Forest fit per symbol per date",
+    "float": "the insider-held share arrives as one current figure with no history at all"
+   },
+   "tests": [
+    {
+     "horizonDays": 21,
+     "dates": 65,
+     "observations": 7700,
+     "icMean": -0.015483001721992842,
+     "icT": -0.5876755172627008,
+     "icP": 0.5588179945402767,
+     "spreadMean": -0.00723187810523009,
+     "spreadP": 0.29615841375297747,
+     "signsAgree": true,
+     "icQ": 0.5588179945402767,
+     "icSurvived": false,
+     "spreadQ": 0.4442376206294662,
+     "spreadSurvived": false,
+     "rebalancesPerHorizon": 1.0,
+     "breakevenRoundTrip": null
+    },
+    {
+     "horizonDays": 63,
+     "dates": 65,
+     "observations": 7700,
+     "icMean": -0.02690500815284247,
+     "icT": -1.087475878056248,
+     "icP": 0.2809051298412898,
+     "spreadMean": -0.0186781586640591,
+     "spreadP": 0.11776857373774251,
+     "signsAgree": true,
+     "icQ": 0.4442376206294662,
+     "icSurvived": false,
+     "spreadQ": 0.3973833464597074,
+     "spreadSurvived": false,
+     "rebalancesPerHorizon": 3.0,
+     "breakevenRoundTrip": null
+    },
+    {
+     "horizonDays": 126,
+     "dates": 65,
+     "observations": 7700,
+     "icMean": -0.018988570877088735,
+     "icT": -0.7708008870700199,
+     "icP": 0.44366128444291875,
+     "spreadMean": -0.029847029988957805,
+     "spreadP": 0.13246111548656914,
+     "signsAgree": true,
+     "icQ": 0.5323935413315025,
+     "icSurvived": false,
+     "spreadQ": 0.3973833464597074,
+     "spreadSurvived": false,
+     "rebalancesPerHorizon": 6.0,
+     "breakevenRoundTrip": null
+    }
+   ],
+   "survived": 0,
+   "contradicted": 0,
+   "rawHits": 0,
+   "expectedByChance": 0.3,
+   "medianRoundTrip": null,
+   "roundTripResolved": 0,
+   "roundTripAttempted": 120,
+   "roundTripResolvedShare": 0.0,
+   "roundTripIsUpperBound": true,
+   "survivesUpperBound": 0,
+   "headline": "Across 6 tests over 7700 observations and 65 rebalance dates, NONE showed a relationship between the blended score and subsequent excess returns that survives correcting for having run them all. 0 cleared the conventional 5% cutoff before correction against 0.3 expected by chance. The strongest was a mean information coefficient of -0.027 at 63 sessions. Measured on 41% of the score's intended evidence (priceRank, tape, patterns, issuance); the value and quality components cannot be reconstructed at all because this data source publishes no point-in-time filings."
   }
  }
 }

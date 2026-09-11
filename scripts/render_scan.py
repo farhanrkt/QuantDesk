@@ -31,7 +31,13 @@ from __future__ import annotations
 
 import html
 import json
+import sys
+from pathlib import Path
 from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
+
+from _lib import chartsvg
 
 PALETTE = """
 :root{
@@ -121,6 +127,13 @@ td.num{text-align:right}
 tr.detail{display:none}
 tr.detail.open{display:table-row}
 tr.detail>td{background:var(--sunken);padding:0;border-bottom:1px solid var(--rule)}
+/* THE CHART SPANS THE FULL DETAIL WIDTH and sits above the two-column grid.
+   Dropped into one of those columns it would render at half width, which on a
+   180-session daily chart puts three sessions in a pixel. */
+.chart{padding:18px 22px 4px;border-bottom:1px solid var(--ruleSoft)}
+.chart svg{display:block;width:100%;height:auto;background:var(--sunken);
+  border:1px solid var(--rule);border-radius:8px}
+.chart-cap{margin:8px 0 0;font-size:12px;line-height:1.55;max-width:88ch}
 .det{padding:20px 22px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);
   gap:26px}
 @media(max-width:860px){.det{grid-template-columns:1fr}}
@@ -231,6 +244,26 @@ def _component_block(component: dict) -> str:
 FAMILY_WORD = {"price": "price and volume", "filings": "the filings",
                "register": "the share register"}
 FAMILY_ORDER = ("price", "filings", "register")
+
+
+def _chart_block(entry: dict) -> str:
+    """The tape, drawn, for a row that says to do something.
+
+    LEADS WITH THE CAPTION, NOT THE PICTURE. A chart with shaded bands on it is
+    read as a recommendation by anybody who has seen one before, and the
+    sentence saying which of those bands were measured and which are description
+    has to arrive before the eye has finished making up its mind.
+    """
+    chart = entry.get("chart")
+    drawn = chartsvg.render(chart, currency=(chart or {}).get("currency") or "")
+    if not drawn:
+        return ""
+    caption = (chart or {}).get("caption") or ""
+    profile = ((chart or {}).get("volumeProfile") or {}).get("reading") or ""
+    return (f'<div class="chart">{drawn}'
+            f'<p class="op chart-cap">{_e(caption)}</p>'
+            + (f'<p class="op chart-cap">{_e(profile)}</p>' if profile else "")
+            + "</div>")
 
 
 def _detail(index: int, entry: dict) -> str:
@@ -365,7 +398,9 @@ def _detail(index: int, entry: dict) -> str:
     why = "".join(f"<li>{_e(reason)}</li>" for reason in entry["reasons"]
                   if reason != agreement_text)
 
-    return f"""<tr class="detail" id="d-{index}"><td colspan="9"><div class="det">
+    return f"""<tr class="detail" id="d-{index}"><td colspan="9">
+      {_chart_block(entry)}
+      <div class="det">
       <div>
         <h3>The five components</h3>
         {components}

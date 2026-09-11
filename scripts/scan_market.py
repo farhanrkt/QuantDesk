@@ -76,9 +76,10 @@ sys.path.insert(0, str(ROOT / "api"))
 import numpy as np                                                  # noqa: E402
 import pandas as pd                                                 # noqa: E402
 
-from _lib import (basket, listings, market_data, microstructure,     # noqa: E402
-                  ownership, patterns, pretrade, ranking, scanlog, structure,
-                  symbols, tape, universes, verdict)
+from _lib import (basket, chartlayers, listings, market_data,        # noqa: E402
+                  microstructure, ownership, patterns, pretrade, ranking,
+                  scanlog, structure, symbols, tape, universes, verdict,
+                  volumeprofile)
 from _lib.jsonsafe import clean                                      # noqa: E402
 
 # The four lens payloads are imported from the route module rather than
@@ -100,6 +101,11 @@ HISTORY_DAYS = 900
 # uses, so the cheap pre-filter and the full gate cannot disagree about whether
 # a name trades.
 TURNOVER_WINDOW = 21
+
+# Which rows get a drawn chart in the report. Everything directional: a reader
+# who is being told to buy or to reduce is the one who needs to see the tape,
+# and HOLD is what the scanner says when it has nothing to say.
+CHARTED_ACTIONS = frozenset({"STRONG_BUY", "BUY", "REDUCE", "AVOID"})
 
 
 # --------------------------------------------------------------------------- #
@@ -416,6 +422,11 @@ def run(args) -> dict:
         technical_leg = legs.get("technical") or {}
         structure_result = structure.read(
             technical=technical_leg.get("data") if technical_leg.get("ok") else None)
+        # Also free from the batched frame. It scores nothing and gates nothing
+        # — see `volumeprofile`'s docstring for the measurement that decided
+        # that — and it is what the report's chart shades.
+        profile_result = volumeprofile.build(
+            frame, market_code=symbols.market_of(symbol))
 
         register_leg = legs.get("register") or {}
         register_raw = register_leg.get("data") if register_leg.get("ok") else None
@@ -457,6 +468,19 @@ def run(args) -> dict:
         result["tape"] = tape_result
         result["register"] = register_result
         result["patterns"] = pattern_result
+        result["volumeProfile"] = profile_result
+        # THE CHART GEOMETRY IS BUILT ONLY FOR ROWS THAT SAY TO DO SOMETHING.
+        # It is cheap per name but not free — the pattern curves are refitted
+        # per detection — and a hundred-name report carrying a chart for every
+        # Hold would be a ten-megabyte file nobody scrolls. The rows a reader
+        # acts on get one; the rest keep their numbers.
+        if result.get("action") in CHARTED_ACTIONS:
+            result["chart"] = chartlayers.build(
+                frame, technical=(technical_leg.get("data")
+                                  if technical_leg.get("ok") else None),
+                structure_result=structure_result, pattern_result=pattern_result,
+                tape_result=tape_result, volume_profile=profile_result,
+                ticker=symbol)
         result["preTrade"] = {"flags": len(checks.get("flags") or []),
                               "baseConditions": len(checks.get("baseConditions") or []),
                               "notChecked": len(checks.get("notChecked") or [])}

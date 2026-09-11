@@ -228,6 +228,14 @@ These are durable product facts. Future work preserves them; none is a style pre
   ordinary band and **came back null**, which is why `volumeprofile.py` draws and does
   not gate.
 
+  **Every per-market artifact is merged, never overwritten.** These scripts take
+  `--market` as a repeatable flag and used to write only what the current run measured,
+  so `backtest_verdict.py --market US` silently deleted the Indonesian study — which it
+  did, on 11 September 2026, printing "written to ..." and exiting zero. `_lib/artifacts`
+  now merges, keeps each market's own `measuredOn`, and every run prints what it carried
+  forward. A measurement is the only thing standing between a feature and constraint 2;
+  losing one quietly turns a measured feature back into an unmeasured one.
+
 ## Accessibility
 
 Audited and fixed 29 Aug 2026. What the audit found and what happened to it:

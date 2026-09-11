@@ -83,7 +83,6 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
-import json
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -95,9 +94,9 @@ import numpy as np                                                   # noqa: E40
 import pandas as pd                                                  # noqa: E402
 from scipy import stats                                              # noqa: E402
 
-from _lib import (eventstudy, listings, market_data, microstructure,  # noqa: E402
-                  ownership, patterns, ranking, riskmodel, structure, tape,
-                  universes, verdict)
+from _lib import (artifacts, eventstudy, listings, market_data,      # noqa: E402
+                  microstructure, ownership, patterns, ranking, riskmodel,
+                  structure, tape, universes, verdict)
 
 ARTIFACT = ROOT / "api" / "_lib" / "verdict_backtest.json"
 
@@ -673,9 +672,12 @@ def main() -> int:
                   "by _lib/scanlog.py, which takes months to say anything."),
         "markets": markets,
     }
-    ARTIFACT.write_text(json.dumps(payload, indent=1))
+    # MERGED, NOT OVERWRITTEN. Running this for one market used to delete
+    # every other market's measurement — see `_lib/artifacts` for the day that
+    # happened and what it cost.
+    merged = artifacts.write_markets(ARTIFACT, payload)
     if not args.quiet:
-        print(f"\nwritten to {ARTIFACT}")
+        print(f"\nwritten to {ARTIFACT} — {artifacts.note(merged)}")
     return 0
 
 
