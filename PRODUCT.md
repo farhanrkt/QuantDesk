@@ -115,6 +115,10 @@ These are durable product facts. Future work preserves them; none is a style pre
    correction** (q = 0.19 to 0.30); the nearest bucket, the only one where a level could
    act as a stop, came back negative at a 60-name sample and positive at 250.
 
+   The same test on the US market came out with the **opposite sign** — pooled −1.4
+   points against IDX's +2.9, nothing significant on either. Two markets disagreeing
+   about the direction of an effect neither can detect is what no effect looks like.
+
    So the feature shipped as description: it draws, it reports where the year's trade
    sat, and `structure.py` finds its levels exactly as before. The motivating gap is not
    closed, and the module's own docstring says so. **A feature that survives its

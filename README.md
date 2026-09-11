@@ -598,6 +598,11 @@ ordinary band the same distance away; further out the gap widens, but **no dista
 survives a false-discovery correction** and the nearest bucket — the only one where a level
 could serve as a stop — flipped sign between a 60-name sample and a 250-name one.
 
+Then the same test was run on the US market, and it came out the **other way**: pooled,
+a US shelf holds 1.4 points *less* often than an ordinary band, against +2.9 on IDX, with
+the 2–5 ATR bucket at −3.7 points. Two independent markets, opposite signs, nothing
+significant on either. That is what no effect looks like.
+
 So the profile draws and nothing reads it. The point of control, the value area and the
 shelves are shaded on the chart as a description of where the year's positions were
 opened, every level is a band rather than a price because daily bars cannot support more,

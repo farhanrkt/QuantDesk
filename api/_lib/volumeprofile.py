@@ -78,6 +78,19 @@ level could function as a stop, came back NEGATIVE at a 60-name sample and
 positive at 250. An effect whose sign depends on sample size is not one to build
 a stop on.
 
+THEN THE SAME TEST WAS RUN ON THE US, AND IT CAME OUT THE OTHER WAY. Across 117
+names and 34,384 touches:
+
+    0.5-2 ATR below   shelves 68.1%   ordinary 67.4%   +0.7 pts   q = 0.77
+    2-5 ATR below     shelves 66.0%   ordinary 69.7%   -3.7 pts   q = 0.41
+    5-10 ATR below    shelves 71.9%   ordinary 73.1%   -1.2 pts   q = 0.77
+
+Pooled, a US shelf holds 1.4 points LESS often than an ordinary band, against
++2.9 on IDX. Nothing survives correction there either. Two independent markets,
+opposite signs, no significance on either — which is what no effect looks like,
+and it is a far better reason to ship this as description than the single-market
+null was on its own.
+
 So the profile is DESCRIPTION. It draws, it reports where the year's trade sat,
 and `structure.py` goes on finding its levels exactly as before. The original
 motivation for this module — that a sweep found 46 of 251 names with no usable

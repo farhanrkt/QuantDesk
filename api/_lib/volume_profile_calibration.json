@@ -91,6 +91,103 @@
    "usable": false,
    "survivors": [],
    "reading": "0.5-2 ATR below: shelves held 69% against 68% for ordinary bands (+1.5 points paired, p=0.299, q=0.299, 71 months); 2-5 ATR below: shelves held 72% against 70% for ordinary bands (+2.1 points paired, p=0.267, q=0.299, 71 months); 5-10 ATR below: shelves held 74% against 67% for ordinary bands (+5.2 points paired, p=0.064, q=0.193, 65 months). Weighted across buckets the difference is +2.9 points and every bucket leans the same way, but no bucket survives a false-discovery correction across the three \u2014 and the buckets share names and months, so a consistent sign across them is close to one result repeated rather than three. A shelf is therefore DRAWN but is not read as support: the histogram is a description of where trade happened, and `structure.py` goes on finding its levels the way it always has."
+  },
+  "US": {
+   "market": "US",
+   "population": "the Nasdaq-100 and the Dow",
+   "names": 117,
+   "measuredOn": "2026-09-11",
+   "years": 6,
+   "touches": 34384,
+   "sampleEvery": 21,
+   "touchWindow": 63,
+   "holdHorizon": 21,
+   "breakAtr": 0.5,
+   "shelfMultiple": 2.0,
+   "controlMultiple": 0.5,
+   "minMonths": 24,
+   "buckets": [
+    {
+     "bucket": "0.5-2",
+     "lowAtr": 0.5,
+     "highAtr": 2.0,
+     "shelf": {
+      "months": 72,
+      "holdRate": 0.678559841548481,
+      "sd": 0.2095155595415365
+     },
+     "control": {
+      "months": 71,
+      "holdRate": 0.6734384808247517,
+      "sd": 0.16572050333740207
+     },
+     "difference": 0.007065105790203043,
+     "usable": true,
+     "pairedMonths": 70,
+     "tStat": 0.37793911932100344,
+     "pValue": 0.7066359971989277,
+     "significant": false,
+     "qValue": 0.7699266320592731,
+     "survived": false
+    },
+    {
+     "bucket": "2-5",
+     "lowAtr": 2.0,
+     "highAtr": 5.0,
+     "shelf": {
+      "months": 72,
+      "holdRate": 0.6567232097080452,
+      "sd": 0.24318496510721524
+     },
+     "control": {
+      "months": 72,
+      "holdRate": 0.6861238748450181,
+      "sd": 0.18084857851273087
+     },
+     "difference": -0.03722765745543288,
+     "usable": true,
+     "pairedMonths": 71,
+     "tStat": -1.5040858929265617,
+     "pValue": 0.13705798510693834,
+     "significant": false,
+     "qValue": 0.411173955320815,
+     "survived": false
+    },
+    {
+     "bucket": "5-10",
+     "lowAtr": 5.0,
+     "highAtr": 10.0,
+     "shelf": {
+      "months": 67,
+      "holdRate": 0.7166307214420967,
+      "sd": 0.30997044937346685
+     },
+     "control": {
+      "months": 69,
+      "holdRate": 0.7058646437446522,
+      "sd": 0.25019188677970616
+     },
+     "difference": -0.011886587347976525,
+     "usable": true,
+     "pairedMonths": 54,
+     "tStat": -0.2939731625644246,
+     "pValue": 0.7699266320592731,
+     "significant": false,
+     "qValue": 0.7699266320592731,
+     "survived": false
+    }
+   ],
+   "pooledDifference": -0.014167477038100852,
+   "alpha": 0.1,
+   "usable": false,
+   "survivors": [],
+   "reading": "0.5-2 ATR below: shelves held 68% against 67% for ordinary bands (+0.7 points paired, p=0.707, q=0.770, 70 months); 2-5 ATR below: shelves held 66% against 69% for ordinary bands (-3.7 points paired, p=0.137, q=0.411, 71 months); 5-10 ATR below: shelves held 72% against 71% for ordinary bands (-1.2 points paired, p=0.770, q=0.770, 54 months). Weighted across buckets the difference is -1.4 points but no bucket survives a false-discovery correction across the three \u2014 and the buckets share names and months, so a consistent sign across them is close to one result repeated rather than three. A shelf is therefore DRAWN but is not read as support: the histogram is a description of where trade happened, and `structure.py` goes on finding its levels the way it always has."
   }
- }
+ },
+ "measuredNow": [
+  "US"
+ ],
+ "carriedForward": [
+  "ID"
+ ]
 }

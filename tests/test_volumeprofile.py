@@ -189,11 +189,20 @@ def test_the_shipped_calibration_is_the_null_this_module_documents():
     """The measured answer on IDX was a null. If someone re-runs the script and
     it turns positive, this test should fail and the docstring should be
     rewritten — not the other way round."""
-    row = VP.calibration_for("ID")
-    if row is None:
-        pytest.skip("no calibration artifact on disk")
-    assert row["usable"] is False
-    assert row["survivors"] == []
+    for market in ("ID", "US"):
+        row = VP.calibration_for(market)
+        if row is None:
+            pytest.skip(f"no {market} calibration artifact on disk")
+        assert row["usable"] is False, market
+        assert row["survivors"] == [], market
+
+    # AND THE TWO MARKETS DISAGREE ABOUT THE SIGN. That is the strongest part of
+    # the null and the easiest thing for a future run to quietly erase: an
+    # effect that reverses across independent populations is not a weak effect,
+    # it is the absence of one.
+    id_pooled = VP.calibration_for("ID")["pooledDifference"]
+    us_pooled = VP.calibration_for("US")["pooledDifference"]
+    assert id_pooled * us_pooled < 0, (id_pooled, us_pooled)
 
 
 # ============================================================================ #
