@@ -229,7 +229,11 @@ function RegisterReading({ register }: { register: VerdictRegister }) {
  */
 function EntryReading({ site }: { site: VerdictStructure }) {
   const band = site.band;
-  const alarming = band === "bad" || band === "poor" || band === "riskTooWide";
+  // `riskInsideNoise` is alarming in the same sense the others are: it is not a
+  // verdict on the company, it is a warning that the number a reader came here
+  // for cannot be produced honestly at this price.
+  const alarming = band === "bad" || band === "poor" || band === "riskTooWide"
+    || band === "riskInsideNoise";
   return (
     <div>
       <div className="eyebrow mb-1 flex items-center gap-1.5">
@@ -244,6 +248,18 @@ function EntryReading({ site }: { site: VerdictStructure }) {
           Reward to risk against structure: {site.rewardRisk.toFixed(2)} to 1. Measured to
           the nearest level either side, never to a target chosen to make the ratio look
           better — and it is not a forecast, only a description of what is in front of it.
+        </p>
+      )}
+      {/* THE REFUSED NUMBER IS NAMED, NOT HIDDEN. A reader who has seen this
+          ratio quoted elsewhere — or in an older report of their own — needs to
+          know which figure was withheld and why, or the withholding just looks
+          like a gap in the data. */}
+      {site.ratioWithheld && site.rewardRiskRaw != null && (
+        <p className="prose-col mt-1.5 text-meta leading-relaxed text-faint">
+          The arithmetic would read {site.rewardRiskRaw.toFixed(1)} to 1. It is not quoted
+          because the floor it divides by sits inside a single session&apos;s range, so the
+          figure measures the closeness of the level rather than the quality of the trade
+          — and it gets larger the more fragile the stop becomes.
         </p>
       )}
     </div>

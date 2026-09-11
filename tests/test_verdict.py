@@ -397,6 +397,22 @@ def test_a_sound_entry_does_not_gate():
         assert not any(g["id"] == "poorEntry" for g in result["gates"]), band
 
 
+def test_a_stop_inside_the_noise_withholds_the_ratio_without_gating():
+    """WITHHOLDING A NUMBER IS NOT THE SAME AS CONDEMNING THE TRADE.
+
+    Buying a level the market has defended is a real setup; what is refused is
+    the reward-to-risk figure computed from a floor half a day's range below,
+    which grows as the stop gets more fragile. Gating it would throw away the
+    setup along with the arithmetic.
+    """
+    result = scored(structure_result={
+        **structure_payload(band="riskInsideNoise"),
+        "rewardRisk": None, "rewardRiskRaw": 15.0, "ratioWithheld": True,
+        "atSupport": True})
+    assert not any(g["id"] == "poorEntry" for g in result["gates"])
+    assert result["action"] in ("BUY", "STRONG_BUY", "HOLD")
+
+
 def test_an_illiquid_name_is_no_action_however_well_it_scores():
     result = scored(rank_row=rank_row(composite=99.0),
                     liquidity=liquid(turnover=1.0e6))

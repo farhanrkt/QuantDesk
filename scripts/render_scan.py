@@ -415,6 +415,10 @@ def _row(index: int, entry: dict) -> str:
         "unbounded": '<span class="entry ok">no ceiling</span>',
         "noSupport": '<span class="entry poor">no floor</span>',
         "riskTooWide": '<span class="entry poor">stop too far</span>',
+        # No ratio in this cell, on purpose. A sortable column of reward-to-risk
+        # would put exactly the names whose stop is a rounding error at the top
+        # of it, which is the ranking this band exists to refuse.
+        "riskInsideNoise": '<span class="entry poor">stop in noise</span>',
         "unmeasured": '<span style="color:var(--faint)">&mdash;</span>',
     }.get(band, '<span style="color:var(--faint)">&mdash;</span>')
 

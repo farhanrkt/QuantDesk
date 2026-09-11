@@ -78,6 +78,20 @@ MAX_USEFUL_RISK = 0.35
 
 # How close counts as "at" a level, in multiples of the average daily range.
 # Half a day's range: near enough that a single ordinary session reaches it.
+#
+# IT ALSO DECIDES WHEN A REWARD-TO-RISK RATIO IS WITHHELD, and the measurement
+# behind that is worth keeping because it is not a close call. On a full sweep of
+# 251 tradeable Indonesian listings, 40 had a floor inside this distance. Their
+# ratios ran to a median of 7.2 and a maximum of 84 to 1, against a median of
+# 0.73 for the other 176 — and **every one of the twelve highest ratios in the
+# market was one of the 40**. Nothing else came close: only 8 of the 176 honest
+# ratios cleared 3 to 1 at all.
+#
+# The mechanism is arithmetic and it is the wrong way round. The ratio divides by
+# the distance to the floor, so it grows without limit as the stop becomes MORE
+# fragile — the closer a stop sits to being erased by one ordinary session, the
+# more attractive the number describing it. Sorting a market by that figure
+# returns, almost exactly, a list of the names whose stops cannot be used.
 AT_LEVEL_ATR = 0.5
 
 
@@ -152,7 +166,25 @@ def read(technical: Optional[dict] = None, levels: Optional[dict] = None,
     if risk and risk > 0 and reward is not None:
         ratio = reward / risk
 
-    band = _band(ratio, risk, unbounded, support is not None)
+    # THE STOP IS INSIDE THE NOISE WHENEVER IT IS "AT" THE LEVEL, and those are
+    # deliberately the same expression and the same constant. `AT_LEVEL_ATR`
+    # already means "near enough that a single ordinary session reaches it";
+    # a floor a single ordinary session reaches is not a distance a position can
+    # be risked against, so there is nothing separate to define here.
+    at_support = bool(support and atr and (price - support) <= AT_LEVEL_ATR * atr)
+    at_resistance = bool(resistance and atr
+                         and (resistance - price) <= AT_LEVEL_ATR * atr)
+
+    band = _band(ratio, risk, unbounded, support is not None, at_support)
+
+    # THE RATIO IS WITHHELD, NOT MARKED. A suppressed figure that still travels
+    # in the payload gets printed by the next reader who checks `is not None`
+    # and forgets to check the band — which is how a 15-to-1 built on a stop
+    # 0.18 of a day's range below the price reached the top of a scan report in
+    # the first place. `rewardRiskRaw` carries the arithmetic for anyone who
+    # wants to see what was refused, under a name nobody renders by accident.
+    quoted = None if band == "riskInsideNoise" else ratio
+
     return {
         "available": True,
         "horizon": resolved.get("horizon"),
@@ -162,21 +194,37 @@ def read(technical: Optional[dict] = None, levels: Optional[dict] = None,
         "resistance": resistance,
         "riskToSupport": risk,
         "rewardToResistance": reward,
-        "rewardRisk": ratio,
+        "rewardRisk": quoted,
+        "rewardRiskRaw": ratio,
+        "ratioWithheld": band == "riskInsideNoise",
         "unboundedUpside": unbounded,
         "noSupport": support is None,
-        "atSupport": bool(support and atr and (price - support) <= AT_LEVEL_ATR * atr),
-        "atResistance": bool(resistance and atr
-                             and (resistance - price) <= AT_LEVEL_ATR * atr),
+        "atSupport": at_support,
+        "atResistance": at_resistance,
         "band": band,
-        "reading": _reading(price, support, resistance, risk, reward, ratio,
+        "reading": _reading(price, support, resistance, risk, reward, quoted,
                             unbounded, band, atr),
     }
 
 
 def _band(ratio: Optional[float], risk: Optional[float], unbounded: bool,
-          has_support: bool) -> str:
-    """Which of five states this entry is in. `unmeasured` is not `fine`."""
+          has_support: bool, at_support: bool = False) -> str:
+    """Which state this entry is in. `unmeasured` is not `fine`.
+
+    THE ORDER IS AN ARGUMENT, NOT A STYLE. "Is this ratio meaningful at all"
+    has to be settled before "is this ratio good", because a reward-to-risk
+    figure is only as real as its denominator. Both refusals therefore sit
+    above the three quality bands.
+
+    `riskTooWide` and `riskInsideNoise` are the two ways a denominator fails,
+    and they fail in opposite directions: a floor 35% below is not a stop but a
+    second opinion about the whole thesis, and a floor half a day's range below
+    is not a stop but a rounding error. Neither yields a ratio worth printing.
+
+    They cannot both be true unless a listing's average daily range exceeds 70%
+    of its price, which no real one does; `riskTooWide` is checked first anyway
+    because it is the state that gates.
+    """
     if not has_support:
         return "noSupport"
     if unbounded:
@@ -185,6 +233,8 @@ def _band(ratio: Optional[float], risk: Optional[float], unbounded: bool,
         return "unmeasured"
     if risk is not None and risk > MAX_USEFUL_RISK:
         return "riskTooWide"
+    if at_support:
+        return "riskInsideNoise"
     if ratio < BAD_REWARD_RISK:
         return "bad"
     if ratio < POOR_REWARD_RISK:
@@ -208,6 +258,20 @@ def _reading(price: float, support: Optional[float], resistance: Optional[float]
                         "or near the top of its own range — so the upside cannot be "
                         "measured against structure. Unbounded is not the same as large.")
 
+    # THE RATIO IS NOT IN THIS SENTENCE WHEN IT WAS WITHHELD. The suppression in
+    # `read` would be pointless if the prose quoted the number anyway, and prose
+    # is the half of the payload people actually read.
+    if band == "riskInsideNoise":
+        session = (f" — less than half of the {atr:,.0f} this name moves in an ordinary "
+                   f"session" if atr else "")
+        return (where
+                + f"The nearest resistance is {resistance:,.0f}, {reward * 100:.1f}% above. "
+                + f"No reward-to-risk figure is quoted: the floor is {risk * 100:.2f}% "
+                  f"below{session}, so a ratio measured against it would be dividing by "
+                  f"noise and would come back enormous for that reason alone. Sitting on "
+                  f"a defended level is a real setup; the arithmetic that flatters it is "
+                  f"not. Size this on something other than the distance to that floor.")
+
     upside = (f"The nearest resistance is {resistance:,.0f}, {reward * 100:.1f}% above, "
               f"so the structure in front of it is {ratio:.1f} to 1. ")
 
@@ -226,8 +290,6 @@ def _reading(price: float, support: Optional[float], resistance: Optional[float]
     at = ""
     if atr and resistance and (resistance - price) <= AT_LEVEL_ATR * atr:
         at = " The price is within half a day's range of that resistance."
-    elif atr and (price - support) <= AT_LEVEL_ATR * atr:
-        at = " The price is within half a day's range of that support."
 
     return where + upside + tail + at
 

@@ -1246,13 +1246,19 @@ export interface VerdictStructure {
   resistance?: number | null;
   riskToSupport?: number | null;
   rewardToResistance?: number | null;
+  /** Null when `ratioWithheld` — a ratio whose denominator is inside the
+   *  daily noise is not a smaller number, it is not a number. */
   rewardRisk?: number | null;
+  /** The arithmetic that was refused, for anyone who wants to see it. Never render
+   *  this as the ratio; that is the mistake the withholding exists to prevent. */
+  rewardRiskRaw?: number | null;
+  ratioWithheld?: boolean;
   unboundedUpside?: boolean;
   noSupport?: boolean;
   atSupport?: boolean;
   atResistance?: boolean;
   band?: "fine" | "poor" | "bad" | "unbounded" | "noSupport" | "riskTooWide"
-       | "unmeasured";
+       | "riskInsideNoise" | "unmeasured";
   reading?: string;
 }
 
@@ -1442,6 +1448,8 @@ export interface ChartTrade {
   riskPct: number | null;
   rewardPct: number | null;
   rewardRisk: number | null;
+  /** True where the ratio was withheld because the stop sits inside the noise. */
+  ratioWithheld?: boolean;
   band: string | null;
   unboundedUpside: boolean;
   noSupport: boolean;

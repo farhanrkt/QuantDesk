@@ -99,6 +99,75 @@ def test_a_stop_further_than_a_third_away_is_not_a_stop():
     assert "different investment" in result["reading"]
 
 
+def test_a_stop_inside_the_daily_noise_withholds_the_ratio():
+    """A reward-to-risk figure is only as real as its denominator.
+
+    Found on a full IDX sweep: the two best-looking ratios in the whole buy list
+    were 15:1 and 11:1, and both were built on stops 0.18 and 0.27 of an average
+    daily range below the price. The arithmetic is correct and the number is
+    meaningless — it grows as the stop becomes MORE fragile, which is exactly
+    backwards from what a reader takes it to mean.
+    """
+    result = S.read(levels=levels(price=1000.0, supports=(995.0,),
+                                  resistances=(1100.0,), atr=25.0))
+    assert result["band"] == "riskInsideNoise"
+    assert result["rewardRisk"] is None, "the ratio was quoted anyway"
+    assert result["atSupport"] is True
+
+
+def test_the_withheld_arithmetic_still_travels_under_a_name_nobody_renders():
+    result = S.read(levels=levels(price=1000.0, supports=(995.0,),
+                                  resistances=(1100.0,), atr=25.0))
+    assert result["ratioWithheld"] is True
+    assert result["rewardRiskRaw"] == pytest.approx(20.0)
+
+
+def test_the_prose_does_not_quote_the_number_the_payload_withheld():
+    """Suppressing the field and printing it in the sentence would be theatre —
+    and prose is the half of the payload people actually read."""
+    result = S.read(levels=levels(price=1000.0, supports=(995.0,),
+                                  resistances=(1100.0,), atr=25.0))
+    assert "to 1" not in result["reading"]
+    assert "20.0" not in result["reading"]
+    assert "dividing by" in result["reading"]
+
+
+def test_a_floor_just_outside_the_noise_still_gets_its_ratio():
+    """The threshold has to be a threshold, not a mood."""
+    inside = S.read(levels=levels(price=1000.0, supports=(988.0,),
+                                  resistances=(1100.0,), atr=25.0))
+    outside = S.read(levels=levels(price=1000.0, supports=(987.0,),
+                                   resistances=(1100.0,), atr=25.0))
+    assert inside["band"] == "riskInsideNoise" and inside["rewardRisk"] is None
+    assert outside["band"] == "fine" and outside["rewardRisk"] is not None
+
+
+def test_both_levels_inside_the_noise_is_unmeasurable_rather_than_bad():
+    """A price pinned between two levels a single session reaches is not a poor
+    trade with a small ratio — it is a ratio of two noise-sized numbers, and
+    calling it `bad` would be a judgement the data cannot support."""
+    result = S.read(levels=levels(price=1000.0, supports=(995.0,),
+                                  resistances=(1002.0,), atr=25.0))
+    assert result["band"] == "riskInsideNoise"
+    assert result["rewardRisk"] is None
+
+
+def test_the_real_case_that_prompted_this():
+    """GGRM on 11 September 2026, at the numbers the scan actually produced."""
+    result = S.read(levels=levels(price=19375.0, supports=(19275.0,),
+                                  resistances=(20875.0,), atr=542.0))
+    assert result["band"] == "riskInsideNoise"
+    assert result["rewardRiskRaw"] == pytest.approx(15.0, abs=0.1)
+    assert result["rewardRisk"] is None
+
+
+def test_a_wide_stop_still_outranks_a_noisy_one_in_the_band_order():
+    """`riskTooWide` is checked first because it is the state that gates, and
+    the two cannot co-occur outside a listing that moves 70% in a session."""
+    assert S._band(ratio=0.7, risk=0.40, unbounded=False, has_support=True,
+                   at_support=True) == "riskTooWide"
+
+
 # ============================================================================ #
 # 2. No ceiling is not a bad entry
 # ============================================================================ #

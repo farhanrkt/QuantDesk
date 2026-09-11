@@ -538,6 +538,16 @@ them would let a tidy entry make a poor company look better. It feeds a gate whe
 ceiling is three times closer than the floor **or when the floor is more than 35% below**,
 and the numbers, and nothing else.
 
+A reward-to-risk figure is also **withheld entirely** when the floor it divides by sits
+within half an average daily range of the price. That is not fastidiousness: on the same
+sweep, 40 of 251 names had a floor that close, their ratios ran to a median of 7.2 and a
+maximum of 84 to 1 against a median of 0.73 for everyone else, and **all twelve of the
+highest ratios in the market were among those 40**. The ratio divides by the distance to
+the floor, so it grows as the stop becomes more fragile — ranking by it returns almost
+exactly the list of names whose stops cannot be used. The setup itself is not condemned
+and nothing gates: buying a defended level is real, and it is only the arithmetic
+flattering it that is refused.
+
 That second clause was missing until a full sweep exposed it. `_band` returns the first
 state that matches and tests the risk *distance* before the ratio, so `riskTooWide` and
 `bad` are mutually exclusive labels rather than points on a scale — and the gate read only

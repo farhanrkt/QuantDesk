@@ -186,6 +186,7 @@ def _trade(site: Optional[dict]) -> Optional[dict]:
         "riskPct": _finite(site.get("riskToSupport")),
         "rewardPct": _finite(site.get("rewardToResistance")),
         "rewardRisk": _finite(site.get("rewardRisk")),
+        "ratioWithheld": bool(site.get("ratioWithheld")),
         "band": site.get("band"),
         "unboundedUpside": bool(site.get("unboundedUpside")),
         "noSupport": bool(site.get("noSupport")),
@@ -452,6 +453,15 @@ def _caption(shapes: list[dict], levels: list[dict],
         parts.append(
             f"The shaded band is the trade: {trade['rewardRisk']:.1f} to one from here, "
             f"measured to the nearest floor and the first ceiling above")
+    elif trade and trade.get("ratioWithheld"):
+        # THE BAND IS STILL DRAWN AND THE RATIO IS STILL REFUSED. The picture is
+        # the honest part here: a reader can see for themselves that the red
+        # sliver under the price is thinner than a single candle, which is
+        # precisely what makes the quotient meaningless.
+        parts.append("The red band under the price is the whole of the measured risk, and "
+                     "it is thinner than one ordinary session — no reward-to-risk figure "
+                     "is quoted, because dividing by it would return a large number for "
+                     "the wrong reason")
     elif trade and trade.get("unboundedUpside"):
         parts.append("Nothing overhead in this window — the upside is unbounded rather "
                      "than large, which is the absence of a measurement")
