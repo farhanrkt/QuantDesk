@@ -302,20 +302,32 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
                              y2={profile.pointOfControl.high}
                              fill={PROFILE} fillOpacity={0.30}
                              ifOverflow="extendDomain"
-                             label={{ value: "most traded", position: "insideLeft",
-                                      fontSize: 9, fill: PROFILE }} />
+                             label={{
+                               value: `most traded · ${
+                                 ((profile.pointOfControl.share ?? 0) * 100).toFixed(0)}%`,
+                               position: "insideLeft", fontSize: 9, fill: PROFILE,
+                             }} />
             )}
-            {showProfile && (profile?.shelves ?? []).map((shelf, i) => (
-              shelf.low != null && shelf.high != null ? (
+            {showProfile && (profile?.shelves ?? []).map((shelf, i) => {
+              if (shelf.low == null || shelf.high == null) return null;
+              // A SHELF CONTAINING THE POINT OF CONTROL GOES UNLABELLED. The two
+              // bands nest — the most-traded bin is usually inside the widest
+              // shelf — so both labels land on the same pixels and render as an
+              // unreadable overstrike. The POC's own label already names the
+              // region; a second caption on top of it adds nothing.
+              const poc = profile?.pointOfControl;
+              const nested = poc?.low != null && poc.high != null
+                && shelf.low <= poc.low && shelf.high >= poc.high;
+              return (
                 <ReferenceArea key={`shelf-${i}`} y1={shelf.low} y2={shelf.high}
                                fill={PROFILE} fillOpacity={0.12}
                                ifOverflow="extendDomain"
-                               label={{
+                               label={nested ? undefined : {
                                  value: `${((shelf.share ?? 0) * 100).toFixed(0)}% of the year`,
                                  position: "insideTopLeft", fontSize: 9, fill: PROFILE,
                                }} />
-              ) : null
-            ))}
+              );
+            })}
 
             {/* The pattern's own window, so the five points are read in context. */}
             {active?.fromDate && active?.toDate && (
