@@ -280,8 +280,20 @@ def concentration(volume: pd.Series) -> dict:
 # `explain.for_synthesis` avoids by reading the assembled payload rather than
 # recomputing it.
 # ============================================================================ #
-def statistics(frame: Optional[pd.DataFrame], window: int = WINDOW) -> dict:
-    """Every raw tape quantity for one name, or a stated refusal."""
+def _marks(frame: Optional[pd.DataFrame], window: int = WINDOW) -> dict:
+    """Which sessions were heavy, how heavy, and where each one closed.
+
+    SHARED BY `statistics` AND `sessions` SO THE CHART CANNOT DISAGREE WITH THE
+    TEST. "Heavy" is not an absolute volume — it is this name's own top fifth,
+    measured against a rolling median baseline inside a fixed window, counting
+    only the sessions old enough to have a baseline at all. Every one of those
+    choices moves which days qualify. Computing them twice is exactly how a
+    chart comes to circle a session the significance test never counted, and the
+    reader has no way to see that it happened.
+
+    Returns the classification, or a refusal in the same shape the callers
+    return, so neither has to restate the reasons.
+    """
     if frame is None or len(frame) < MIN_BARS:
         have = 0 if frame is None else len(frame)
         return {"available": False,
@@ -301,9 +313,60 @@ def statistics(frame: Optional[pd.DataFrame], window: int = WINDOW) -> dict:
                 "reason": "too few sessions with a comparable volume baseline"}
 
     cutoff = float(rvol[usable].quantile(HEAVY_QUANTILE))
-    heavy = usable & (rvol >= cutoff)
+    return {"available": True, "recent": recent, "volume": volume,
+            "baseline": baseline, "rvol": rvol, "usable": usable,
+            "cutoff": cutoff, "heavy": usable & (rvol >= cutoff),
+            "location": close_location(recent)}
 
-    location = close_location(recent)
+
+def sessions(frame: Optional[pd.DataFrame], window: int = WINDOW) -> dict:
+    """The same classification, dated, so it can be drawn.
+
+    This is the only way the tape reading becomes checkable. The panel says a
+    name's heaviest sessions closed high in their range; a reader who cannot see
+    WHICH sessions those were has to take that on faith, and the difference
+    between a signal and a single index-rebalance print is visible on a chart
+    and invisible in a mean.
+
+    THE CLASSIFICATION IS ALWAYS COMPUTED ON THE FULL `window` and never on
+    whatever stretch a caller intends to draw. Trimming first would rebase the
+    80th percentile on a shorter sample and quietly reclassify the days, so a
+    six-month chart and a two-year chart would disagree about which sessions
+    were heavy. Callers trim the returned rows themselves.
+    """
+    marks = _marks(frame, window)
+    if not marks["available"]:
+        return marks
+
+    recent, rvol = marks["recent"], marks["rvol"]
+    heavy, location = marks["heavy"], marks["location"]
+    rows = []
+    for stamp in recent.index:
+        rows.append({
+            "date": stamp.strftime("%Y-%m-%d"),
+            "relativeVolume": _finite(rvol.get(stamp)),
+            "heavy": bool(heavy.get(stamp, False)),
+            # Where it closed inside its own range, -1 at the low and +1 at the
+            # high. None on a zero-range bar: a locked session carries no
+            # information about who won it. See `close_location`.
+            "closeLocation": _finite(location.get(stamp)),
+        })
+    return {"available": True, "sessions": rows,
+            "rvolCutoff": marks["cutoff"],
+            "heavyQuantile": HEAVY_QUANTILE,
+            "window": window, "baselineWindow": RVOL_WINDOW}
+
+
+def statistics(frame: Optional[pd.DataFrame], window: int = WINDOW) -> dict:
+    """Every raw tape quantity for one name, or a stated refusal."""
+    marks = _marks(frame, window)
+    if not marks["available"]:
+        return marks
+
+    recent, volume, usable = marks["recent"], marks["volume"], marks["usable"]
+    cutoff, heavy = marks["cutoff"], marks["heavy"]
+
+    location = marks["location"]
     heavy_values = location[heavy].dropna().to_numpy(dtype="float64")
     ordinary_values = location[usable & ~heavy].dropna().to_numpy(dtype="float64")
     if len(heavy_values) < 15 or len(ordinary_values) < 30:

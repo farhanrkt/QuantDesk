@@ -89,7 +89,7 @@ def _finite(value) -> Optional[float]:
     return out if np.isfinite(out) else None
 
 
-def _levels_from(technical: Optional[dict]) -> Optional[dict]:
+def levels_from(technical: Optional[dict]) -> Optional[dict]:
     """The swing levels out of the assembled technical payload.
 
     READ, NOT RECOMPUTED. `swing.support_resistance` already ran inside the
@@ -121,7 +121,7 @@ def read(technical: Optional[dict] = None, levels: Optional[dict] = None,
     Takes either the assembled technical leg or a levels dict directly — the
     scanner has the first, tests and the calibration have the second.
     """
-    resolved = levels if isinstance(levels, dict) else _levels_from(technical)
+    resolved = levels if isinstance(levels, dict) else levels_from(technical)
     if not resolved or not resolved.get("usable"):
         return {"available": False,
                 "reason": ("no usable support or resistance — usually a listing too "

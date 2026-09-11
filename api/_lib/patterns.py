@@ -503,6 +503,118 @@ def detect(frame: Optional[pd.DataFrame], window: int = WINDOW,
 
 
 # --------------------------------------------------------------------------- #
+# Drawing what was detected
+#
+# A detection is a claim about a shape, and a shape is the one kind of claim a
+# reader can check instantly and cannot check at all from a sentence. "An
+# inverse head-and-shoulders completed on 14 August" is unfalsifiable prose
+# until the five points are on the chart.
+#
+# THE HARD PART IS NOT DRAWING IT, IT IS DRAWING THE RIGHT CURVE. Smoothing the
+# whole series and plotting that is one line of code and it is a lie: the
+# kernel is two-sided, so a whole-series fit at the pattern's location is built
+# partly from prices that came AFTER the detection — the exact look-ahead the
+# module docstring says detection avoids. The drawn curve would be smoother and
+# better-formed than anything the detector could have seen, and it would be
+# most misleading precisely where a reader looks hardest, at the right-hand
+# edge. So the curve is refitted on the same trailing window, at the same
+# bandwidth, ending on the same bar.
+# --------------------------------------------------------------------------- #
+def geometry(prices: np.ndarray, detection: dict, bandwidth: float,
+             window: int = WINDOW) -> Optional[dict]:
+    """The smoothed curve at detection time, and the five points read off it.
+
+    Returns None where the window falls outside the series — which happens when
+    a caller trims the frame after detecting. That is a missing drawing, never a
+    drawing of a different window.
+    """
+    end = int(detection.get("detectedIndex", -1)) + 1
+    start = end - window
+    if start < 0 or end > len(prices) or end <= 0:
+        return None
+
+    segment = np.asarray(prices[start:end], dtype="float64")
+    smoothed = _operator(window, float(bandwidth)) @ segment
+    positions, signs = extrema(smoothed)
+    if len(positions) < 5:
+        return None
+
+    chosen, chosen_signs = positions[-5:], signs[-5:]
+    return {
+        "startIndex": start,
+        "endIndex": end - 1,
+        "path": [{"index": start + i, "price": float(value)}
+                 for i, value in enumerate(smoothed)],
+        # BOTH PRICES, because they are two different things and the difference
+        # is the whole method. `price` is the close the inequalities in
+        # `_classify` were actually evaluated on; `smoothed` is where the fitted
+        # curve turned. Plotting the marker on the smoothed value would show a
+        # tidier pattern than the one that was tested.
+        "points": [{"index": start + int(position),
+                    "price": float(segment[position]),
+                    "smoothed": float(smoothed[position]),
+                    "kind": "peak" if int(sign) == 1 else "trough"}
+                   for position, sign in zip(chosen, chosen_signs, strict=True)],
+    }
+
+
+def guides(points: list[dict], pattern: Optional[str] = None) -> list[dict]:
+    """The construction lines the pattern's own definition implies.
+
+    Every line here is determined BY THE FIVE POINTS, with no free parameters —
+    a neckline is the line through the two inner extrema because that is what
+    the inequalities compared, not because it looked right. Nothing is
+    projected forward: a "measured move" target would be a price forecast, and
+    the measurement in this module's docstring found the textbook direction
+    carries no information, so drawing one would put a claim on the chart that
+    the data declined to support.
+    """
+    if len(points) != 5:
+        return []
+
+    outer = [points[0], points[2], points[4]]
+    inner = [points[1], points[3]]
+    tops, bottoms = ((outer, inner) if points[0]["kind"] == "peak"
+                     else (inner, outer))
+
+    def through(pair: list[dict], role: str, label: str) -> dict:
+        return {"role": role, "label": label,
+                "from": {"index": pair[0]["index"], "price": pair[0]["price"]},
+                "to": {"index": pair[-1]["index"], "price": pair[-1]["price"]}}
+
+    def level(group: list[dict], role: str, label: str) -> dict:
+        price = float(np.mean([point["price"] for point in group]))
+        return {"role": role, "label": label,
+                "from": {"index": points[0]["index"], "price": price},
+                "to": {"index": points[4]["index"], "price": price}}
+
+    if pattern in ("headAndShoulders", "inverseHeadAndShoulders"):
+        return [through(inner, "neckline", "Neckline — through the two inner turns")]
+
+    if pattern in ("doubleTop", "doubleBottom"):
+        # The intervening turn, which is the level a textbook would call the
+        # neckline. Horizontal: the two inner extrema are not both part of the
+        # two-peak definition, so a sloping line through them would draw a
+        # relationship the classifier never tested.
+        prices = [point["price"] for point in inner]
+        price = min(prices) if pattern == "doubleTop" else max(prices)
+        return [{"role": "neckline", "label": "Neckline — the turn between the two",
+                 "from": {"index": points[0]["index"], "price": price},
+                 "to": {"index": points[4]["index"], "price": price}}]
+
+    if pattern in ("rectangleTop", "rectangleBottom"):
+        return [level(tops, "upper", "Ceiling — the peaks' common level"),
+                level(bottoms, "lower", "Floor — the troughs' common level")]
+
+    if pattern in ("triangleTop", "triangleBottom",
+                   "broadeningTop", "broadeningBottom"):
+        return [through(tops, "upper", "Through the peaks"),
+                through(bottoms, "lower", "Through the troughs")]
+
+    return []
+
+
+# --------------------------------------------------------------------------- #
 # The calibrated reading
 # --------------------------------------------------------------------------- #
 def load_calibration() -> dict:

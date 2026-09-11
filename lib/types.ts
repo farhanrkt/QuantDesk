@@ -1368,6 +1368,125 @@ export interface VerdictPenalty {
   why: string;
 }
 
+/**
+ * One session, with every overlay already positioned.
+ *
+ * `heavy` is the tape test's OWN classification, not a redefinition of it —
+ * this name's top fifth of relative volume inside its own year. A chart that
+ * recomputed it would circle sessions the significance test never counted.
+ */
+export interface ChartBar {
+  date: string;
+  open: number | null; high: number | null; low: number | null;
+  close: number | null; volume: number | null;
+  sma20: number | null; sma50: number | null; sma200: number | null;
+  bbUpper: number | null; bbLower: number | null;
+  relativeVolume: number | null;
+  heavy: boolean;
+  /** -1 closed at the low, +1 at the high. Null on a zero-range session. */
+  closeLocation: number | null;
+}
+
+/** One end of a construction line, in both chart coordinates. */
+export interface ChartAnchor { index: number; date: string | null; price: number }
+
+/**
+ * A detected formation, positioned.
+ *
+ * `path` is refitted on the window available when the shape completed — never
+ * smoothed over the whole series, which would trace a curve built partly out of
+ * prices that came after it. `points` sit at the CLOSES the classifier compared;
+ * `smoothed` is carried separately and is not where the marker goes.
+ */
+export interface ChartPattern {
+  pattern: string;
+  label: string;
+  completedAt: string;
+  detectedAt: string;
+  fromDate: string | null;
+  toDate: string | null;
+  path: { date: string | null; price: number }[];
+  points: { index: number; date: string | null; price: number;
+            smoothed: number; kind: "peak" | "trough" }[];
+  /** Necklines and boundaries only. Never a projected target — see the caption. */
+  guides: { role: "neckline" | "upper" | "lower"; label: string;
+            from: ChartAnchor; to: ChartAnchor }[];
+  /** What the chart books claim. Carried for display, never scored. */
+  textbookBias: string | null;
+  /** Whether this formation's forward return survived a false-discovery correction. */
+  significant: boolean;
+  /** What it actually did on this market. Disagrees with `textbookBias`, by design. */
+  measuredExcess: number | null;
+  measuredHorizon: number | null;
+  /** Every detection the study saw. */
+  measuredObservations: number | null;
+  /** How many calendar months those fell into — the effective sample size. */
+  measuredMonths: number | null;
+  firingRate: number | null;
+}
+
+/** A defended level. `nearest` marks the two the reward-risk ratio used. */
+export interface ChartLevel {
+  price: number;
+  side: "support" | "resistance";
+  touches: number;
+  distancePct: number | null;
+  nearest: boolean;
+}
+
+/** The trade as a shape: where it is wrong, where it is entered, what is overhead. */
+export interface ChartTrade {
+  entry: number;
+  stop: number | null;
+  target: number | null;
+  riskPct: number | null;
+  rewardPct: number | null;
+  rewardRisk: number | null;
+  band: string | null;
+  unboundedUpside: boolean;
+  noSupport: boolean;
+  atr: number | null;
+  /** How close counts as "at" a level, in price. Half an average daily range. */
+  levelTolerance: number | null;
+  horizon: string | null;
+}
+
+/**
+ * Every reading the scanner took, positioned for drawing.
+ *
+ * NOTHING HERE IS NEW ANALYSIS. Each layer was decided by the module that owns
+ * it; this payload only says where to put it. `legend` ships with the data
+ * rather than living in the component, so a client cannot draw a layer without
+ * having been handed what that layer is not.
+ */
+export interface VerdictChart {
+  available: boolean;
+  reason?: string;
+  ticker?: string | null;
+  currency?: string | null;
+  sessions?: number;
+  from?: string;
+  to?: string;
+  bars?: ChartBar[];
+  levels?: ChartLevel[];
+  trade?: ChartTrade | null;
+  patterns?: ChartPattern[];
+  crossovers?: { date: string; type: string; price: number | null;
+                 description: string }[];
+  extremes?: {
+    window: number;
+    high: { date: string; price: number | null; inWindow: boolean };
+    low: { date: string; price: number | null; inWindow: boolean };
+  };
+  tape?: { available: boolean; reason?: string | null; rvolCutoff?: number | null;
+           heavyQuantile?: number | null; drawn?: number;
+           /** The two means the Welch test compared, so the test can be drawn. */
+           heavyMeanLocation?: number | null; ordinaryMeanLocation?: number | null;
+           significant?: boolean };
+  legend?: { key: string; label: string; note: string }[];
+  caption?: string;
+}
+
 export interface VerdictResponse {
   ticker: string;
   name: string;
@@ -1398,6 +1517,8 @@ export interface VerdictResponse {
   patterns: VerdictPatterns | null;
   /** Where the trade is wrong. Deliberately not a scoring component. */
   structure: VerdictStructure | null;
+  /** The same readings, positioned for drawing. Never a separate analysis. */
+  chart: VerdictChart | null;
   regime: MarketRegime | null;
   costs: RoundTripCost | null;
   /** The measurement that is about this score, not just its price component. */

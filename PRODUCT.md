@@ -96,6 +96,12 @@ These are durable product facts. Future work preserves them; none is a style pre
      the artifact is missing it gets *louder*, not quieter.
    - **The scanner is private.** It writes to `reports/`, which is gitignored. It is not
      linked from the app.
+   - **The annotated chart is part of the private surface, not the published one.**
+     `api/_lib/chartlayers.py` and `components/AnnotatedChart.tsx` draw the scanner's
+     readings — defended levels with their touch counts, the detected formations, the
+     sessions the tape test counted, the stop and the first ceiling — and they are
+     reachable from `GET /api/verdict` and nowhere else. The technical panel's own chart
+     is unchanged.
 
 2. **No predictive claim that isn't measured.** If a feature implies something predicts
    returns, it is measured offline and published including nulls, or it does not ship.
@@ -126,6 +132,22 @@ These are durable product facts. Future work preserves them; none is a style pre
    **The published single-company view is unchanged.** `swing.UNDETECTABLE_PATTERNS`
    still renders and still names every refused shape. Flags, pennants, wedges and
    cup-and-handle stay refused everywhere, because LMW never defined them either.
+
+   **No price target is ever projected from a formation.** *Added 11 September 2026, when
+   the formations were first drawn.* Every chart-pattern convention ends in a measured
+   move — the height of the head, projected from the neckline, as an arrow. It is the
+   most persuasive mark available and it is refused here for the same reason the textbook
+   direction is not scored: the measurement below found that direction carries no
+   information. What is drawn beside each formation instead is its **measured** excess
+   return with the horizon and the number of months behind it, and the textbook bias
+   beside it, labelled as textbook. Where the two disagree — a bullish shape that measured
+   negative — the panel says so in the same card.
+
+   **The curve under a formation is refitted at detection time.** Smoothing the whole
+   series once and drawing that is one line of code and is a look-ahead: a two-sided
+   kernel at a past date is fitted partly from prices that came after it, so the drawn
+   shape would be partly made of the returns it is about to be credited with predicting.
+   The drawn curve ends on the detection bar.
 
    What the measurement found is worth recording here because it is a product fact:
    every formation that survived correction predicted **underperformance**, on both
@@ -174,7 +196,10 @@ These are durable product facts. Future work preserves them; none is a style pre
 
 ## Evidence and assets
 
-- Measured artifacts, each stamped with its date, in `api/_lib/*.json`.
+- Measured artifacts, each stamped with its date, in `api/_lib/*.json`. Nothing draws its
+  own version of one: `chartlayers.py` positions readings that `structure`, `patterns` and
+  `tape` already took, and `tape._marks` is shared by the significance test and the chart
+  so a session cannot be circled on one and uncounted by the other.
 - `docs/field-manual.html` — beginner's guide; its glossary is **generated** from
   `api/_lib/explain.py` and CI fails if a metric is added without regenerating.
 - Eleven network scripts in `scripts/` deliberately outside CI. Re-run after touching what

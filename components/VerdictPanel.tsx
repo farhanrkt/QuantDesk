@@ -4,6 +4,7 @@ import {
   AlertTriangle, Coins, Crosshair, FlaskConical, Gauge, Lock, Shapes, ShieldAlert,
   TrendingDown, Users, Waves,
 } from "lucide-react";
+import { AnnotatedChart } from "@/components/AnnotatedChart";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import { TONE_FIELD, TONE_HEX } from "@/components/ui/explain";
@@ -573,6 +574,15 @@ export function VerdictPanel({
           </CardBody>
         </Card>
       )}
+
+      {/* THE PICTURE SITS BETWEEN THE VERDICT AND ITS ARITHMETIC, and the
+          position is the argument. Above it is a number and an action; below it
+          is a list of components with scores. Between them is the only thing on
+          this page a reader can DISAGREE with in a second — the five points a
+          formation was classified from, the level a stop is going under, which
+          sessions the tape test actually counted. Everything else here has to
+          be taken on trust. */}
+      {data.chart?.available && <AnnotatedChart chart={data.chart} />}
 
       <Card>
         <CardHeader>

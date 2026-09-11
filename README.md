@@ -547,6 +547,27 @@ measured.
 fetch. Buying inside a fortnight of a report makes the position partly a bet on an
 announcement nothing here has read. Context, not points.
 
+**The chart, with the analysis already on it.** Every reading above arrives as prose: a
+formation completed on a date, a stop belongs under a level, the heaviest sessions closed
+high in their range. Each of those is a claim about a *shape*, which is the one kind of
+claim a reader can check at a glance and cannot evaluate at all from a sentence — whether
+a 0.31 lift is a tendency across fifty sessions or one index-rebalance print is visible on
+a chart and invisible in a mean. So `chartlayers.py` positions what the other modules
+already measured and `AnnotatedChart.tsx` draws it: candles, the three averages, the
+Bollinger band, every defended level **with its touch count**, the stop and first ceiling
+as a shaded band, each formation's five extrema with its neckline, the volume with the
+heavy sessions marked, and a pane showing where each of those closed against the mean the
+Welch test actually compared them to.
+
+It computes nothing new, and it refuses two things it would be easy to draw. It never
+smooths with hindsight — a two-sided kernel fitted over the whole series traces a pattern
+built partly from prices that came after it, so each formation's curve is refitted on the
+window that existed when it completed and stops on the detection bar. And it never
+projects a target: the measured direction of these shapes contradicted the textbook one,
+so the arrow every chart book ends with would assert something this app's own study
+declined. The measured excess and the textbook bias sit side by side instead, labelled,
+and where they disagree the panel says so.
+
 **Is the buy list one bet?** The scanner ranks each name on its own merits and then sizes
 them by inverse volatility — the right arithmetic for *independent* positions. Whether
 they are independent is a property of the set, invisible from any row, and
@@ -726,6 +747,26 @@ api/
               symbols.py        Ticker → Yahoo symbol, resolved once
               news.py           Google News RSS
               jsonsafe.py       NaN/inf → null before serialising
+
+              — the private scanner, reachable from GET /api/verdict and
+                scripts/scan_market.py, and from nowhere the published
+                single-company view can see (PRODUCT.md constraint 1) —
+              verdict.py        Nine components, three families, one score and
+                                one action, shipped with its own null result
+              listings.py       The whole-market universe, dated
+              tape.py           Who wins the heavy sessions — the OHLCV shadow
+                                of bandarmology, and explicitly not it
+              ownership.py      Free float and share-count trend
+              patterns.py       Lo-Mamaysky-Wang chart formations, scored by
+                                their measured sign and never the textbook one
+              structure.py      Where the trade is wrong: nearest floor, first
+                                ceiling, reward-risk, round-trip cost
+              chartlayers.py    Those readings positioned for drawing. Computes
+                                nothing new; refits each formation's curve on
+                                the window that existed when it completed, and
+                                projects no target
+              basket.py         How many independent bets a buy list actually is
+              scanlog.py        What the scanner said, and what happened next
 docs/
   field-manual.html   Beginner's guide; glossary generated from _lib/explain.py
 scripts/
@@ -756,7 +797,7 @@ scripts/
   scan_market.py      The private scanner: sweep a market, score every
                       tradeable name, write a report
   render_scan.py      That report as one self-contained HTML file
-tests/        1,300 offline tests
+tests/        1,400+ offline tests
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·

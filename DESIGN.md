@@ -266,7 +266,7 @@ it *sounds* is still untested — an automated pass is a floor, not a substitute
 
 ## The rules are enforced, not just written
 
-`npm run check:frontend` enforces eight of them, and each describes a bug
+`npm run check:frontend` enforces nine of them, and each describes a bug
 that was really in this codebase:
 
 1. A heading wearing `.eyebrow` — the inverted hierarchy.
@@ -284,6 +284,17 @@ that was really in this codebase:
    `EventStudyPanel`.
 8. A text token that does not clear WCAG AA against every ground, recomputed
    from `tailwind.config.ts` rather than trusted.
+9. A recharts child wrapped in a React fragment. Recharts decides what to draw
+   by walking its own `children` and does not look inside a fragment, so
+   `{show && (<><Line/><Line/></>)}` compiles, type-checks, lints clean, throws
+   nothing — and draws nothing at all. Both Bollinger bands vanished from the
+   annotated chart this way while the toggle controlling them went on looking
+   like it worked; it was found by counting `.recharts-line-curve` nodes in the
+   rendered DOM, not by reading the source. The rule was **narrowed on its first
+   run**: the first version flagged any fragment containing a chart tag and fired
+   immediately on `LongTermPanel`, where the fragment legitimately wraps a whole
+   `ResponsiveContainer`. A fragment is only a bug when the chart children inside
+   it have no chart container between them and it.
 
 Comments are stripped before the greps — rule 7 fired on its own explanation the
 first time it ran, because `LongTermPanel`'s docstring quotes the expression it

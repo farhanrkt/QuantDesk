@@ -306,13 +306,43 @@ for (const token of TEXT_TOKENS) {
   }
 }
 
+// 9. A RECHARTS CHILD IS NEVER WRAPPED IN A FRAGMENT. Recharts decides what to
+//    draw by walking its own `children` and reading each element's type. It does
+//    NOT look inside a React fragment, so `{show && (<><Line/><Line/></>)}`
+//    compiles, type-checks, lints clean, throws nothing at runtime — and draws
+//    NOTHING. Both Bollinger bands disappeared from the annotated chart this
+//    way while the toggle that controlled them went on looking like it worked,
+//    and the only way it was caught was counting `.recharts-line-curve` nodes in
+//    the rendered DOM. Write each conditional child as its own expression.
+//
+//    NARROWED ON ITS FIRST RUN, which is the point of the note above about
+//    rules nobody trusts. The first version flagged any fragment CONTAINING a
+//    chart tag and immediately fired on `LongTermPanel`, where the fragment
+//    wraps a whole `<ResponsiveContainer>` — legitimate, because the chart
+//    children inside it have a chart to be children of. The bug is a fragment
+//    holding chart children with NO chart container between them and it.
+const CHART_CHILDREN =
+  /<(Line|Bar|Area|Scatter|ReferenceLine|ReferenceArea|ReferenceDot|XAxis|YAxis|Tooltip|CartesianGrid|Legend|Pie|Cell|ErrorBar)[\s/>]/;
+const CHART_CONTAINER =
+  /<(ResponsiveContainer|ComposedChart|LineChart|AreaChart|BarChart|PieChart|ScatterChart|RadarChart|TreeMap)[\s/>]/;
+for (const [file, src] of uiFiles) {
+  if (!/from "recharts"/.test(src)) continue;
+  for (const m of src.matchAll(/<>([\s\S]*?)<\/>/g)) {
+    if (!CHART_CHILDREN.test(m[1]) || CHART_CONTAINER.test(m[1])) continue;
+    fail(file, "A recharts child is wrapped in a React fragment.",
+         "Recharts does not traverse fragments, so this renders nothing at all "
+         + "and reports no error. Give each conditional child its own "
+         + "`{cond && <Line .../>}` expression.");
+  }
+}
+
 if (designFailures.length) {
   console.error("\nDesign-system rules broken (see DESIGN.md):\n");
   console.error(designFailures.join("\n\n"));
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 8 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 9 checked across ${uiFiles.length} UI files`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));

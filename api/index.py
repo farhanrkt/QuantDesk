@@ -57,10 +57,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from _lib import (accumulation, eventstudy, explain, exposure, listings,
-                  market_data, microstructure, news, ownership, patterns,
-                  portfolio, pretrade, quality, ranking, riskmodel, structure,
-                  symbols, tape, technical, universes, valuation, verdict)
+from _lib import (accumulation, chartlayers, eventstudy, explain, exposure,
+                  listings, market_data, microstructure, news, ownership,
+                  patterns, portfolio, pretrade, quality, ranking, riskmodel,
+                  structure, symbols, tape, technical, universes, valuation,
+                  verdict)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -973,6 +974,15 @@ async def name_verdict(
         "register": register_result,
         "patterns": pattern_result,
         "structure": structure_result,
+        # THE SAME READINGS, POSITIONED FOR DRAWING. Nothing new is measured
+        # here: every level, formation and heavy session below was decided by
+        # the module that owns it, and a reader who can see the five points a
+        # classification was made from can disagree with it, which is the whole
+        # difference between a chart and an assertion.
+        "chart": chartlayers.build(
+            frame, technical=technical_data, structure_result=structure_result,
+            pattern_result=pattern_result, tape_result=tape_result, ticker=symbol,
+            currency=(technical_data or {}).get("currency")),
         # What one buy and one sell actually cost, beside the effects this page
         # asks the reader to act on. The measured effects here are a few percent
         # and a round trip on a thin listing can be more than that.
