@@ -212,6 +212,33 @@ def turnover_of(frame: pd.DataFrame, window: int = TURNOVER_WINDOW) -> Optional[
 
 
 # --------------------------------------------------------------------------- #
+POPULATION_NOTE = """\
+WHAT --include-illiquid CHANGES, BEYOND HOW MANY ROWS YOU GET
+
+By default this scan applies the turnover floor BEFORE ranking, so every
+percentile in the output is taken across the tradeable population — the only
+population the answer is about. "83rd percentile on momentum" means 83rd of the
+names you could actually buy.
+
+With --include-illiquid the floor is applied only as a GATE, and the ranking runs
+across every listing with usable history. The same company will show a DIFFERENT
+percentile in the two runs, and neither is wrong: they answer different questions.
+
+  default            "of the names I can trade, where does this one sit"
+  --include-illiquid "of every listing on this exchange, where does this one sit"
+
+The second is a broader question and a weaker one for acting on, because the
+population it ranks against includes hundreds of names nobody can buy. Thin
+listings also carry the most extreme readings on every price signal — they gap,
+they sit still for weeks, and a percentile computed against them moves everything
+liquid toward the middle.
+
+What does NOT change: the gates. A name below the floor comes back NO ACTION with
+its score visible, whichever way the scan was run. Scanning more never means
+recommending more.
+"""
+
+
 # Stage 5: the four lenses for one name, cached by symbol and date
 # --------------------------------------------------------------------------- #
 def cache_path(symbol: str, day: str) -> Path:
@@ -288,9 +315,22 @@ def run(args) -> dict:
     say(f"  {len(frames)} returned usable history; {len(picked) - len(frames)} did not")
 
     # --- tradeability, BEFORE the ranking ----------------------------------
-    floor = args.turnover_floor
-    if floor is None:
-        floor = verdict.TURNOVER_FLOOR.get(market, 0.0)
+    # TWO THRESHOLDS THAT USED TO BE ONE, AND CONFLATING THEM WAS THE BUG.
+    #
+    # `gate_floor` is the turnover below which `verdict.score` refuses to
+    # recommend a name: a fact about whether an order can be filled. `scan_floor`
+    # is the turnover below which this script does not bother LOOKING at a name:
+    # a decision about where to spend a fetch budget.
+    #
+    # They were the same variable, so the only way to widen the sweep was
+    # `--turnover-floor 0`, which also silenced the gate — every thin listing in
+    # the market would have come back ungated, and the ones with the most extreme
+    # price percentiles are exactly the thin ones. Scanning more must never mean
+    # recommending more.
+    gate_floor = args.turnover_floor
+    if gate_floor is None:
+        gate_floor = verdict.TURNOVER_FLOOR.get(market, 0.0)
+    scan_floor = 0.0 if args.include_illiquid else gate_floor
     tick = verdict.TICK_FLOOR.get(market, 0.0)
 
     tradeable: dict[str, pd.DataFrame] = {}
@@ -304,7 +344,7 @@ def run(args) -> dict:
         elif turnover is None:
             rejected.append({"ticker": symbol, "why": "turnoverUnknown",
                              "detail": "no usable volume history"})
-        elif turnover < floor:
+        elif turnover < scan_floor:
             rejected.append({"ticker": symbol, "why": "illiquid",
                              "detail": f"{turnover:,.0f} median daily turnover",
                              "turnover": turnover})
@@ -314,8 +354,18 @@ def run(args) -> dict:
         else:
             tradeable[symbol] = frame
 
-    say(f"Tradeable after the turnover floor ({floor:,.0f}) and the tick floor: "
-        f"{len(tradeable)} of {len(frames)}")
+    if args.include_illiquid:
+        below = sum(1 for symbol in tradeable
+                    if (turnover_of(frames[symbol]) or 0.0) < gate_floor)
+        say(f"Scoring every listing with usable history: {len(tradeable)} of "
+            f"{len(frames)} — {below} of them below the {gate_floor:,.0f} turnover "
+            f"floor and therefore gated as untradeable")
+        say("  Every percentile below is taken across ALL of them, not across the "
+            "tradeable subset. A name's price rank is a claim about a population, "
+            "and this is a different population from the default scan's.")
+    else:
+        say(f"Tradeable after the turnover floor ({scan_floor:,.0f}) and the tick "
+            f"floor: {len(tradeable)} of {len(frames)}")
     by_reason: dict[str, int] = {}
     for entry in rejected:
         by_reason[entry["why"]] = by_reason.get(entry["why"], 0) + 1
@@ -450,7 +500,9 @@ def run(args) -> dict:
             latest_close=float(frame["Close"].iloc[-1]),
             risk_budget=args.risk_budget,
             max_weight=args.max_weight,
-            turnover_floor=floor,
+            # ALWAYS THE REAL FLOOR, never `scan_floor`. A name let through the
+            # funnel by --include-illiquid must still be gated by it.
+            turnover_floor=gate_floor,
             tape_result=tape_result,
             register_result=register_result,
             pattern_result=pattern_result,
@@ -521,7 +573,9 @@ def run(args) -> dict:
             "rejectedByReason": by_reason,
         },
         "settings": {
-            "turnoverFloor": floor,
+            "turnoverFloor": gate_floor,
+            "scanFloor": scan_floor,
+            "includedIlliquid": bool(args.include_illiquid),
             "tickFloor": tick,
             "deepenTop": args.deepen if args.deepen is not None else "all",
             "deepenBottom": args.deepen_bottom,
@@ -664,6 +718,15 @@ def main() -> int:
                         help="Median daily turnover, in the listing's currency, below "
                              "which a name is untradeable. Defaults to "
                              f"{verdict.TURNOVER_FLOOR}.")
+    parser.add_argument("--include-illiquid", action="store_true",
+                        help="Score every listing, including the ones below the "
+                             "turnover floor. They are still GATED as untradeable — "
+                             "this widens what gets looked at, never what gets "
+                             "recommended. Note that it also changes what every "
+                             "percentile is taken against: see --help-population.")
+    parser.add_argument("--help-population", action="store_true",
+                        help="Explain what --include-illiquid does to the percentiles, "
+                             "and exit.")
     parser.add_argument("--risk-budget", type=float, default=0.02,
                         help="Annualised risk contribution per position, for sizing.")
     parser.add_argument("--max-weight", type=float, default=0.10,
@@ -677,6 +740,10 @@ def main() -> int:
                         help="Report path without extension. Defaults to "
                              "reports/scan-<market>-<date>.")
     args = parser.parse_args()
+
+    if getattr(args, "help_population", False):
+        print(POPULATION_NOTE)
+        return 0
 
     raw = str(args.deepen).strip().lower()
     if raw in {"all", "-1"}:
