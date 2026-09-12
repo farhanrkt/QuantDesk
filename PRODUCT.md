@@ -174,7 +174,14 @@ These are durable product facts. Future work preserves them; none is a style pre
    formation by its measured sign and never by its textbook one.
 
 6. **One data module, one serverless function, no server state, a generated glossary,
-   offline tests against planted ground truth.** The thesis journal and holdings never
+   offline tests against planted ground truth.**
+
+   *Scoped 12 September 2026.* `market_data` may keep FILING-DERIVED data on local disk
+   across days, because a 9,997-name sweep cannot finish inside one. This is not server
+   state: it is off unless a caller opts in, only `scripts/scan_market.py` does, the
+   deployed function never writes it, and every record is regenerable. The price and the
+   FX rate are re-derived on every read and must stay that way — caching either would be
+   a correctness bug rather than a staleness trade-off. The thesis journal and holdings never
    reach a server; `scripts/check_frontend.mjs` fails the build if `lib/api.ts` so much as
    mentions the journal.
 

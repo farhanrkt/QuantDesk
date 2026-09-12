@@ -51,3 +51,7 @@ npm-debug.log*
 # data, regenerable and large.
 .scan_cache/
 reports/
+
+# Fundamentals cached across days so a multi-day whole-market sweep can reuse
+# the statements it already paid for. Local, regenerable, and large.
+.fundamentals_cache/

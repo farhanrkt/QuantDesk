@@ -617,6 +617,33 @@ Python from the same `chartlayers.build()` geometry the app's interactive chart 
 so there is one source of every level and two renderers rather than two opinions. The
 file stays self-contained and opens from disk with no server.
 
+**Scanning a whole exchange, across days.** The scan's own cache is keyed by calendar
+day, which is right for the four legs derived from price and wrong for the statements
+underneath them: filings move quarterly and were being refetched every morning. For 837
+Indonesian names that was waste. For the 9,997 US listings it was disqualifying — one pass
+is about twelve hours at the rate the provider tolerates, so a sweep that expired at
+midnight could never finish one.
+
+`market_data` now keeps the slow-moving half on disk for `--fundamentals-days` (7 by
+default), and two things are deliberately **re-derived on every hit**: the price, because a
+valuation compares a model against today's number, and the FX rate, because thirteen of
+the forty-six names in the IDX30 and LQ45 report in dollars and trade in rupiah. The disk
+therefore holds *unconverted* statements. Measured on live data: 1.52s a name cold against
+0.19s warm, 12KB a name on disk, and the statements come back byte-identical.
+
+That makes a full sweep resumable rather than merely faster — widen the slice each session
+and the earlier names are already paid for:
+
+```bash
+python scripts/scan_market.py --market US --limit 2000 --deepen all --workers 1
+python scripts/scan_market.py --market US --limit 5000 --deepen all --workers 1
+python scripts/scan_market.py --market US --deepen all --workers 1
+```
+
+It is off by default, because the deployed app is serverless with no persistent disk and a
+cache that silently does nothing is worse than no cache. The scan opts in; nothing else
+does.
+
 **Is the buy list one bet?** The scanner ranks each name on its own merits and then sizes
 them by inverse volatility — the right arithmetic for *independent* positions. Whether
 they are independent is a property of the set, invisible from any row, and
@@ -818,6 +845,9 @@ api/
                                 the scan report — one source, two renderers
               artifacts.py      Merging one market's measurement into a
                                 stamped file without deleting another's
+              (market_data also keeps statements on disk across days, so a
+                 multi-day whole-market sweep reuses what it paid for. Price
+                 and FX are never cached.)
               (chartlayers computes nothing new: it refits each formation's
                  curve on the window that existed when it completed, and
                  projects no target)

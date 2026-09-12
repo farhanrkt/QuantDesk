@@ -72,7 +72,10 @@ meaning into the numbers belongs in the engine that owns that meaning.
 from __future__ import annotations
 
 import datetime as dt
+import os
+import pickle
 import threading
+from pathlib import Path
 from typing import Optional, Sequence
 
 import numpy as np
@@ -426,6 +429,115 @@ def index_history(symbol: str, period: str = "2y") -> Optional[pd.DataFrame]:
 
 
 # --------------------------------------------------------------------------- #
+# Fundamentals, cached ACROSS days on disk
+#
+# WHY THIS EXISTS: A WHOLE-MARKET SWEEP IS A DAY'S WORK AND THE CACHE EXPIRED
+# OVERNIGHT
+# ---------------------------------------------------------------------------
+# `scan_market.py` caches its computed lens payloads keyed by calendar day, and
+# that is the right rule for them: four of the five legs are derived from price,
+# which moves every session. But underneath them sit four or five network calls
+# per name for STATEMENTS, which move on a filing cycle — quarterly — and those
+# were being refetched every single day along with everything else.
+#
+# For 837 Indonesian names that was merely wasteful. For the 9,997 US listings
+# it is disqualifying: at the rate the provider tolerates, one pass is about
+# twelve hours, so the sweep cannot finish inside a day and therefore cannot
+# finish at all — every run throws away the statements the last one paid for.
+#
+# WHAT IS AND IS NOT CACHED, WHICH IS THE WHOLE DESIGN
+# -----------------------------------------------------
+# Only what moves on a filing cycle: the statements, the sector and industry,
+# the dividend history, the share register. Two things are deliberately
+# RE-DERIVED on every hit, because caching them would be a correctness bug
+# rather than a staleness trade-off:
+#
+#   * THE PRICE. `company` prefers the last daily bar close, and a valuation is
+#     a comparison between that price and a model. Serving a week-old price
+#     against fresh statements would move every verdict in the report and
+#     nothing would say so.
+#
+#   * THE FX RATE. Thirteen of the forty-six names in the IDX30 and LQ45 report
+#     in dollars and trade in rupiah, so their statements are converted at the
+#     boundary. The rate moves daily. So the disk holds the UNCONVERTED
+#     statements and the conversion is applied fresh, which is why
+#     `_company_uncached` grew a `convert` flag rather than the cache storing
+#     its output directly.
+#
+# OFF BY DEFAULT. The deployed app is serverless and has no persistent disk, and
+# a cache that silently does nothing is worse than none. `scan_market.py` opts
+# in; everything else is unchanged.
+FUNDAMENTALS_DIR = Path(__file__).resolve().parents[2] / ".fundamentals_cache"
+
+# Days a cached statement set stays usable. A week: filings are quarterly, so a
+# week of staleness is small against the cycle, and it is long enough that a
+# multi-day sweep reuses its own work. Every record carries the date it was
+# fetched so a caller can say how old it is rather than having to assume.
+FUNDAMENTALS_TTL_DAYS = 7
+
+
+def fundamentals_ttl() -> int:
+    """Days to keep fundamentals on disk. 0 disables the cache entirely."""
+    raw = os.environ.get("QUANTDESK_FUNDAMENTALS_TTL_DAYS")
+    if raw is None:
+        return 0
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 0
+
+
+def _fundamentals_path(kind: str, ticker: str) -> Path:
+    safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in ticker.upper())
+    return FUNDAMENTALS_DIR / kind / f"{safe}.pickle"
+
+
+def _fundamentals_load(kind: str, ticker: str) -> Optional[dict]:
+    """A cached record still inside its TTL, or None.
+
+    PICKLE, BECAUSE THE PAYLOAD IS THREE DATAFRAMES. This is a private local
+    cache that this process wrote itself, never a wire format and never read
+    from anywhere else; JSON would need a bespoke frame encoder and would
+    round-trip dtypes badly. Any failure to read — a truncated write, a file
+    from an older layout — is treated as a miss, because the cost of a miss is
+    one refetch and the cost of trusting a bad record is a wrong valuation.
+    """
+    ttl = fundamentals_ttl()
+    if ttl <= 0:
+        return None
+    path = _fundamentals_path(kind, ticker)
+    try:
+        with path.open("rb") as handle:
+            record = pickle.load(handle)
+        fetched = dt.date.fromisoformat(record["fetchedOn"])
+    except Exception:
+        return None
+    if (dt.date.today() - fetched).days >= ttl:
+        return None
+    payload = record.get("payload")
+    return payload if isinstance(payload, dict) else None
+
+
+def _fundamentals_store(kind: str, ticker: str, payload: dict) -> None:
+    if fundamentals_ttl() <= 0 or not isinstance(payload, dict):
+        return
+    path = _fundamentals_path(kind, ticker)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Written to a temporary name and moved into place, so an interrupted
+        # sweep leaves no half-written record for the next run to trust.
+        temporary = path.with_suffix(".tmp")
+        with temporary.open("wb") as handle:
+            pickle.dump({"fetchedOn": dt.date.today().isoformat(),
+                         "payload": payload}, handle)
+        temporary.replace(path)
+    except Exception:
+        # A cache that cannot write must never break the fetch it was
+        # accelerating. A full disk is not a reason to fail a scan.
+        pass
+
+
+# --------------------------------------------------------------------------- #
 # Fundamentals, cached for the day
 # --------------------------------------------------------------------------- #
 _COMPANY_CACHE: dict[tuple[str, str], dict] = {}
@@ -532,7 +644,19 @@ def company(ticker: str) -> dict:
         if cached is not None:
             return dict(cached)
 
-        result = _company_uncached(ticker)
+        stored = _fundamentals_load("company", ticker)
+        if stored is not None:
+            # A HIT REUSES THE FILINGS AND REFETCHES THE PRICE. Everything
+            # expensive here is quarterly; the price is one cheap call that is
+            # itself cached for the day, and serving a week-old price against
+            # fresh statements would move every valuation in the report with
+            # nothing saying so.
+            result = _apply_fx(_refresh_price(dict(stored), ticker))
+        else:
+            unconverted = _company_uncached(ticker, convert=False)
+            _fundamentals_store("company", ticker, unconverted)
+            result = _apply_fx(dict(unconverted))
+
         with _COMPANY_GUARD:
             if len(_COMPANY_CACHE) > 128:
                 _COMPANY_CACHE.clear()
@@ -541,7 +665,30 @@ def company(ticker: str) -> dict:
     return dict(result)
 
 
-def _company_uncached(ticker: str) -> dict:
+def _refresh_price(out: dict, ticker: str) -> dict:
+    """Put today's price onto a record whose statements came off the disk.
+
+    `market_cap` is recomputed rather than carried, because Yahoo's own figure
+    was quoted against the price on the day the record was written and a stale
+    market capitalisation is the kind of number nobody re-checks.
+    """
+    bars = ohlcv(ticker, period="5d", allow_stale=True)
+    if bars is not None and len(bars):
+        close = _safe_float(bars["Close"].iloc[-1])
+        if np.isfinite(close) and close > 0:
+            out["price"] = close
+            out["price_source"] = "last daily close"
+            out["price_as_of"] = bars.index[-1].strftime("%Y-%m-%d")
+            shares = _safe_float(out.get("shares"))
+            if np.isfinite(shares) and shares > 0:
+                out["market_cap"] = float(close * shares)
+    return out
+
+
+def _company_uncached(ticker: str, convert: bool = True) -> dict:
+    """The full company fetch. `convert=False` leaves the statements in the
+    currency they were reported in, which is what the disk cache stores — see
+    the note above `FUNDAMENTALS_DIR` for why the FX rate may not be cached."""
     try:
         tk = yf.Ticker(ticker)
     except Exception:
@@ -681,12 +828,27 @@ def _company_uncached(ticker: str) -> dict:
     # trade in rupiah. When no rate can be fetched the statements are left alone
     # and `fx_rate` stays None, which is the signal for the valuation engine to
     # refuse rather than quietly mix the two.
+    if convert:
+        _apply_fx(out)
+
+    return out
+
+
+def _apply_fx(out: dict) -> dict:
+    """Convert the statements into the trading currency, at today's rate.
+
+    Split out of `_company_uncached` so the disk cache can store the
+    UNCONVERTED statements and re-apply a fresh rate on every hit. Caching the
+    converted figures would freeze an exchange rate for a week against
+    statements that are meant to be read in rupiah today.
+    """
+    financial_ccy = out.get("financial_currency")
+    trading_ccy = (out.get("currency") or "").upper() or None
     if financial_ccy and trading_ccy and financial_ccy != trading_ccy:
         rate = fx_rate(financial_ccy, trading_ccy)
         if rate:
             _convert_statements(out, rate)
             out["fx_rate"] = rate
-
     return out
 
 
@@ -983,7 +1145,12 @@ def share_register(ticker: str) -> dict:
         cached = _REGISTER_CACHE.get(key)
         if cached is not None:
             return dict(cached)
-        result = _register_uncached(ticker)
+        result = _fundamentals_load("register", ticker)
+        if result is None:
+            result = _register_uncached(ticker)
+            _fundamentals_store("register", ticker, result)
+        # No price lives in here — ownership, share counts and analyst counts
+        # all move on a filing cycle — so a hit needs no refreshing.
         with _REGISTER_GUARD:
             if len(_REGISTER_CACHE) > 128:
                 _REGISTER_CACHE.clear()

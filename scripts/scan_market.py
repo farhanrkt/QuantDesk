@@ -64,6 +64,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import os
 import shutil
 import sys
 import time
@@ -364,6 +365,16 @@ def run(args) -> dict:
     started = time.time()
     market = args.market.upper()
     day = dt.date.today().isoformat()
+
+    # THE FUNDAMENTALS CACHE IS OPTED INTO HERE AND NOWHERE ELSE. It is off by
+    # default in `market_data` because the deployed app is serverless and has no
+    # persistent disk. This script is the one caller that runs for hours on a
+    # machine that does, and it is the one that cannot work without it: the US
+    # universe is 9,997 listings, about twelve hours at the rate the provider
+    # tolerates, so a sweep that refetched quarterly statements every calendar
+    # day could never finish one.
+    if args.fundamentals_days > 0:
+        os.environ["QUANTDESK_FUNDAMENTALS_TTL_DAYS"] = str(args.fundamentals_days)
 
     dropped = prune_cache(keep=args.cache_days, today=day)
 
@@ -852,6 +863,13 @@ def main() -> int:
                              "Speed here is bought with data, and the trade is bad — the "
                              "missing lens is the one that marks names DOWN. Use 1 for a "
                              "full-market sweep you intend to act on.")
+    parser.add_argument("--fundamentals-days", type=int,
+                        default=market_data.FUNDAMENTALS_TTL_DAYS,
+                        help=f"Days to reuse cached STATEMENTS across runs "
+                             f"(default {market_data.FUNDAMENTALS_TTL_DAYS}, 0 to "
+                             f"disable). Filings move quarterly, so this is what "
+                             f"makes a multi-day whole-market sweep possible. The "
+                             f"price and the FX rate are always refetched.")
     parser.add_argument("--cache-days", type=int, default=CACHE_KEEP_DAYS,
                         help=f"Days of cached lens payloads to keep (default "
                              f"{CACHE_KEEP_DAYS}). A full-market sweep leaves about "

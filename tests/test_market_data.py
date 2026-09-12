@@ -74,7 +74,10 @@ def test_risk_free_failure_is_not_cached(monkeypatch):
 # --------------------------------------------------------------------------- #
 def _stub_company(monkeypatch, calls: list, delay: float = 0.0) -> None:
     """Replace the network fetch with a counter, and clear the day's cache."""
-    def fake(ticker: str) -> dict:
+    def fake(ticker: str, convert: bool = True) -> dict:
+        # `convert` exists because the disk cache stores UNCONVERTED statements
+        # and re-applies today's FX rate; the stub accepts it and ignores it,
+        # having no foreign-currency statements to convert.
         calls.append(ticker)
         if delay:
             time.sleep(delay)
