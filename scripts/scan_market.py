@@ -363,13 +363,33 @@ def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
                     continue
                 return {"ok": False, "error": message}
 
+    def quality_leg():
+        # "NO SECTOR CAME BACK" IS A THROTTLE WEARING A REFUSAL'S CLOTHES.
+        #
+        # `quality.py` cannot tell whether the models apply without a sector, so
+        # it declines — correctly. But the leg still returns ok, so the lens
+        # counter saw a success, the retry never fired, and the cache stored the
+        # decline for the day.
+        #
+        # It is a fetch failure. Measured on eight US names whose sector came
+        # back empty in a two-worker sweep — six operating companies and two
+        # closed-end funds — ALL EIGHT returned a sector on an unhurried refetch,
+        # funds included. Yahoo has the field; it was being asked too fast.
+        #
+        # Raising here puts it back on the retry path, where it belongs.
+        payload = quality_payload(symbol)
+        if (isinstance(payload, dict) and not payload.get("applicable")
+                and payload.get("cause") == "unknown-sector"):
+            raise RuntimeError("429 no sector returned — rate limited, not refused")
+        return payload
+
     legs = {
         "anomaly": leg(lambda: whale_payload(symbol, period="2y")),
         "technical": leg(lambda: technical_payload(symbol, range_key="2y",
                                                    market_code=market)),
         "valuation": leg(lambda: valuation_payload(
             symbol, **_valuation_kwargs(market=market))),
-        "quality": leg(lambda: quality_payload(symbol)),
+        "quality": leg(quality_leg),
         # The share register is the third body of data and it is fetched here
         # rather than beside the price batch because, like the filings, it is one
         # call per symbol and does not batch. It is cached with the four lenses
@@ -716,6 +736,46 @@ def run(args) -> dict:
                               "baseConditions": len(checks.get("baseConditions") or []),
                               "notChecked": len(checks.get("notChecked") or [])}
         verdicts.append(result)
+
+    # WHAT SCORED, WHICH IS NOT WHAT RETURNED.
+    #
+    # The per-lens counter above reads each leg's `ok` flag, and that misses the
+    # failure mode it was built for. `quality_payload` returns ok while declining
+    # to score — "no sector came back", which is a throttle — so a US sweep
+    # reported quality at 100% while the COMPONENT was a gap on 1,180 of 3,364
+    # names, and 175 of the 287 buys rested on its absence. The instrument said
+    # the run was healthy and the run had the same defect it was built to catch.
+    #
+    # A component that REFUSED is fine: the models genuinely do not apply to a
+    # bank. A component that is a GAP is a fetch that failed, and its weight was
+    # removed from the blend — so names it would have marked DOWN are too high.
+    scored_counts: dict[str, collections.Counter] = {}
+    for entry in verdicts:
+        for component in entry.get("components") or []:
+            state = ("scored" if component.get("available")
+                     else "refused" if component.get("refused") else "gap")
+            scored_counts.setdefault(component["key"], collections.Counter())[state] += 1
+
+    if verdicts:
+        say("\nWhat actually SCORED, per component:")
+        gapped = []
+        for key in sorted(scored_counts):
+            counts = scored_counts[key]
+            total = sum(counts.values())
+            gap_share = counts["gap"] / total if total else 0.0
+            note = ""
+            if gap_share > 1 - LENS_HEALTHY:
+                gapped.append(key)
+                note = f"   <-- {counts['gap']} GAPS (fetches that failed)"
+            elif counts["refused"]:
+                note = f"   ({counts['refused']} refused — models do not apply)"
+            say(f"  {key:12} scored {counts['scored']:>5} of {total}"
+                f" ({counts['scored'] / total * 100:4.0f}%){note}")
+        if gapped:
+            say(f"\n  WARNING: {', '.join(gapped)} is MISSING rather than refused on a "
+                f"large share of names. Its weight was removed from the blend, so any "
+                f"name it would have marked DOWN is scored too high and may appear in "
+                f"the buy list for that reason alone. Re-run with --workers 1.")
 
     verdicts.sort(key=lambda v: (v["score"] is None, -(v["score"] or 0.0)))
 
