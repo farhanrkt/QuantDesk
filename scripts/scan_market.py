@@ -64,6 +64,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import shutil
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -90,6 +91,45 @@ from index import (quality_payload, technical_payload,               # noqa: E40
                    valuation_payload, whale_payload, _valuation_kwargs)
 
 CACHE_DIR = ROOT / ".scan_cache"
+
+# How many days of cached lens payloads to keep. The cache is keyed by day so
+# that a re-run on the same afternoon is free and a run tomorrow refetches, and
+# that is the right freshness rule — but it means each day leaves a complete
+# copy behind, and a full-market sweep is about 500MB of them.
+#
+# MEASURED, NOT GUESSED: three days of Indonesian scans came to 528MB, and a
+# daily full sweep would reach the free space on this machine inside a month.
+# Old days are never read — `cache_path` only ever looks at today — so keeping
+# them is pure cost.
+CACHE_KEEP_DAYS = 4
+
+
+def prune_cache(keep: int = CACHE_KEEP_DAYS, today: str = "") -> list[str]:
+    """Delete cached lens payloads older than the most recent `keep` days.
+
+    Returns the day directories removed. Never touches today's, and never
+    touches anything it cannot parse as a date — a stray directory in here is
+    somebody's, and silently deleting it would be worse than leaving it.
+    """
+    if not CACHE_DIR.exists():
+        return []
+    days = []
+    for child in CACHE_DIR.iterdir():
+        if not child.is_dir():
+            continue
+        try:
+            dt.date.fromisoformat(child.name)
+        except ValueError:
+            continue
+        days.append(child)
+
+    removed = []
+    for stale in sorted(days, key=lambda path: path.name, reverse=True)[keep:]:
+        if stale.name == today:
+            continue
+        shutil.rmtree(stale, ignore_errors=True)
+        removed.append(stale.name)
+    return removed
 REPORT_DIR = ROOT / "reports"
 
 # How much history to pull per name. `ranking.MIN_BARS` needs 280 bars and the
@@ -241,6 +281,28 @@ recommending more.
 
 # Stage 5: the four lenses for one name, cached by symbol and date
 # --------------------------------------------------------------------------- #
+# How long to wait before retrying a leg that looks rate-limited.
+RETRY_PAUSE = 2.0
+
+# Below this share of names, a lens is reported as mostly missing and the run
+# warns that its ordering cannot be trusted. Two thirds: enough of a shortfall
+# that it is the provider rather than the filings, and not so tight that a
+# market with genuinely patchy fundamentals trips it on every run.
+LENS_HEALTHY = 0.67
+
+# The shapes a throttle arrives in. Yahoo returns 401 "Invalid Crumb" and 401
+# "User is unable to access this feature" for what is plainly rate limiting, so
+# matching on the status alone would miss half of them and matching on every
+# error would retry genuine 404s for delisted names.
+_THROTTLE_MARKERS = ("401", "429", "Invalid Crumb", "Unauthorized", "Too Many Requests",
+                     "rate limit", "temporarily unavailable")
+
+
+def _looks_throttled(message: str) -> bool:
+    text = (message or "")
+    return any(marker.lower() in text.lower() for marker in _THROTTLE_MARKERS)
+
+
 def cache_path(symbol: str, day: str) -> Path:
     return CACHE_DIR / day / f"{symbol.replace('/', '_')}.json"
 
@@ -261,11 +323,21 @@ def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
             pass
 
     def leg(fn):
-        try:
-            return {"ok": True, "data": fn()}
-        except Exception as exc:
-            detail = getattr(exc, "detail", None)
-            return {"ok": False, "error": str(detail or f"{type(exc).__name__}: {exc}")}
+        # ONE RETRY, AFTER A PAUSE, BECAUSE MOST FAILURES HERE ARE THE RATE
+        # LIMIT RATHER THAN THE DATA. Measured: 24 liquid names whose quality
+        # lens came back empty in a four-worker sweep returned it on 20 of 24
+        # when refetched one at a time. The company had not changed; the
+        # provider had been asked too fast.
+        for attempt in (0, 1):
+            try:
+                return {"ok": True, "data": fn()}
+            except Exception as exc:
+                detail = getattr(exc, "detail", None)
+                message = str(detail or f"{type(exc).__name__}: {exc}")
+                if attempt == 0 and _looks_throttled(message):
+                    time.sleep(RETRY_PAUSE)
+                    continue
+                return {"ok": False, "error": message}
 
     legs = {
         "anomaly": leg(lambda: whale_payload(symbol, period="2y")),
@@ -293,6 +365,8 @@ def run(args) -> dict:
     market = args.market.upper()
     day = dt.date.today().isoformat()
 
+    dropped = prune_cache(keep=args.cache_days, today=day)
+
     picked, provenance_universe = resolve_universe(args)
     def say(*parts):
         # `flush=True` is not cosmetic. Python line-buffers a tty and block-
@@ -301,6 +375,11 @@ def run(args) -> dict:
         # here that legitimately takes minutes.
         if not args.quiet:
             print(*parts, flush=True)
+
+    if dropped:
+        say(f"\nPruned {len(dropped)} day{'' if len(dropped) == 1 else 's'} of cached "
+            f"lens payloads ({', '.join(dropped)}); keeping the most recent "
+            f"{args.cache_days}.")
 
     say(f"\nUniverse: {provenance_universe['label']} — {len(picked)} symbols")
     if provenance_universe.get("staleness"):
@@ -441,6 +520,41 @@ def run(args) -> dict:
             # actually fetched rather than written as a literal, which is how
             # this line came to read "5/4 lenses" the day the register landed.
             say(f"  [{done}/{len(shortlist)}] {symbol}: {ok_count}/{len(fetched)} legs")
+
+    # --- did the data actually arrive? --------------------------------------
+    # THE RUN THAT PROMPTED THIS LOOKED PERFECTLY HEALTHY. It printed a tidy
+    # funnel, scored 775 names, and produced a buy list — while the quality lens
+    # had come back empty on 686 of them because the provider was throttling.
+    # Nothing in the output said so, and the effect was not neutral: a missing
+    # component has its weight REMOVED from the blend rather than imputed, so a
+    # name whose quality reading was bad gets PROMOTED when that fetch fails.
+    # NEST went from 48.1 HOLD to 67.2 BUY overnight on exactly that, its
+    # quality score of 22 having simply vanished.
+    #
+    # A degraded run must therefore announce itself. This is the cheapest
+    # possible version of that and it would have caught the whole episode.
+    lens_reads: dict[str, int] = {}
+    for legs in legs_by_ticker.values():
+        for name, payload in (legs or {}).items():
+            lens_reads[name] = lens_reads.get(name, 0) + int(bool(payload.get("ok")))
+    attempted = len(legs_by_ticker)
+    degraded = []
+    if attempted:
+        say("\nWhat actually came back, per lens:")
+        for name in sorted(lens_reads):
+            share = lens_reads[name] / attempted
+            flag = "" if share >= LENS_HEALTHY else "   <-- mostly missing"
+            if share < LENS_HEALTHY:
+                degraded.append(name)
+            say(f"  {name:10} {lens_reads[name]:>5} of {attempted} ({share * 100:4.0f}%)"
+                f"{flag}")
+        if degraded:
+            say(f"\n  WARNING: {', '.join(degraded)} came back for fewer than "
+                f"{LENS_HEALTHY * 100:.0f}% of names. This is almost always the provider "
+                f"rate-limiting rather than missing filings — a missing component has "
+                f"its weight removed from the blend, so names this lens would have "
+                f"marked DOWN are scored too high. Re-run with --workers 1 before "
+                f"trusting the ordering.")
 
     # --- verdicts -----------------------------------------------------------
     say("\nScoring ...")
@@ -731,8 +845,17 @@ def main() -> int:
                         help="Annualised risk contribution per position, for sizing.")
     parser.add_argument("--max-weight", type=float, default=0.10,
                         help="Cap on any one position's suggested weight.")
-    parser.add_argument("--workers", type=int, default=4,
-                        help="Concurrent deepen fetches. Above ~6 the provider throttles.")
+    parser.add_argument("--workers", type=int, default=2,
+                        help="Concurrent deepen fetches. MEASURED, not guessed: at 4 a "
+                             "775-name sweep got the quality lens on 10%% of names, and "
+                             "24 of those refetched one at a time returned it on 20. "
+                             "Speed here is bought with data, and the trade is bad — the "
+                             "missing lens is the one that marks names DOWN. Use 1 for a "
+                             "full-market sweep you intend to act on.")
+    parser.add_argument("--cache-days", type=int, default=CACHE_KEEP_DAYS,
+                        help=f"Days of cached lens payloads to keep (default "
+                             f"{CACHE_KEEP_DAYS}). A full-market sweep leaves about "
+                             f"500MB behind per day and older days are never read.")
     parser.add_argument("--no-cache", action="store_true",
                         help="Ignore today's cached lens payloads and refetch.")
     parser.add_argument("--quiet", action="store_true")
