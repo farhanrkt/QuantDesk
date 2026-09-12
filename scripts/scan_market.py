@@ -150,6 +150,12 @@ TURNOVER_WINDOW = 21
 # and HOLD is what the scanner says when it has nothing to say.
 CHARTED_ACTIONS = frozenset({"STRONG_BUY", "BUY", "REDUCE", "AVOID"})
 
+# How many rows keep their chart in the written report. Sixty: enough to cover a
+# buy list and the tail a reader checks for contrast, and about 700KB of SVG
+# rather than the 27MB a 2,110-name US sweep produced when every directional row
+# kept one.
+MAX_CHARTS = 60
+
 
 # --------------------------------------------------------------------------- #
 # Stage 1-2: universe and prices
@@ -713,6 +719,30 @@ def run(args) -> dict:
 
     verdicts.sort(key=lambda v: (v["score"] is None, -(v["score"] or 0.0)))
 
+    # ONLY THE ENDS OF THE LIST KEEP THEIR CHART.
+    #
+    # The geometry is attached to every directional row while scoring, because
+    # at that point there is no ranking to select on. The REPORT is a different
+    # question: on a 2,110-name US sweep, 758 rows came back directional and the
+    # resulting file was 27MB. That is not a document anybody opens — the charts
+    # stop being an aid and become the reason the page will not scroll.
+    #
+    # Both ends, not just the top. A reader checks what the scanner liked most
+    # and what it liked least; the six hundred names in the middle marked HOLD
+    # or mildly REDUCE are exactly the ones nobody expands.
+    charted = [v for v in verdicts if v.get("chart")]
+    if len(charted) > args.max_charts:
+        half = max(1, args.max_charts // 2)
+        keep = {id(v) for v in charted[:half]} | {id(v) for v in charted[-half:]}
+        dropped = 0
+        for entry in charted:
+            if id(entry) not in keep:
+                entry.pop("chart", None)
+                dropped += 1
+        say(f"  Charted the {min(half, len(charted))} highest and "
+            f"{min(half, len(charted))} lowest of {len(charted)} directional rows; "
+            f"dropped {dropped} to keep the report openable.")
+
     # --- where each name sits inside its OWN sector -------------------------
     # A coal miner in the top decile of a coal rally and one in the top decile
     # of the whole market are different findings, and the second is the one the
@@ -911,6 +941,11 @@ def main() -> int:
                              "Speed here is bought with data, and the trade is bad — the "
                              "missing lens is the one that marks names DOWN. Use 1 for a "
                              "full-market sweep you intend to act on.")
+    parser.add_argument("--max-charts", type=int, default=MAX_CHARTS,
+                        help=f"How many rows keep a drawn chart in the report "
+                             f"(default {MAX_CHARTS}, taken from both ends of the "
+                             f"ranking). Every directional row is charted until this "
+                             f"bites; 758 of them made a 27MB file.")
     parser.add_argument("--fundamentals-days", type=int,
                         default=market_data.FUNDAMENTALS_TTL_DAYS,
                         help=f"Days to reuse cached STATEMENTS across runs "
