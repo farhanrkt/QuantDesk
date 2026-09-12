@@ -63,8 +63,10 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import collections
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -297,6 +299,21 @@ LENS_HEALTHY = 0.67
 # error would retry genuine 404s for delisted names.
 _THROTTLE_MARKERS = ("401", "429", "Invalid Crumb", "Unauthorized", "Too Many Requests",
                      "rate limit", "temporarily unavailable")
+
+
+def _reason_of(error) -> str:
+    """The refusal, short enough to print beside a count.
+
+    The legs hand back whatever their engine raised — sometimes a string,
+    sometimes the `{"message": ...}` shape FastAPI's HTTPException carries — so
+    the shape is normalised here rather than at four call sites.
+    """
+    text = str(error or "").strip()
+    match = re.search(r"'message':\s*'([^']+)'", text)
+    if match:
+        text = match.group(1)
+    text = re.sub(r"\s+", " ", text)
+    return (text[:72] + "...") if len(text) > 75 else text or "no reason given"
 
 
 def _looks_throttled(message: str) -> bool:
@@ -544,28 +561,59 @@ def run(args) -> dict:
     #
     # A degraded run must therefore announce itself. This is the cheapest
     # possible version of that and it would have caught the whole episode.
+    # A SHORTFALL IS NOT AUTOMATICALLY A THROTTLE, and the first version of this
+    # warning said it was. On the sequential IDX sweep it fired on `valuation` at
+    # 48% and advised re-running with --workers 1 — which is what that run
+    # already was. All 402 failures were refusals: 205 names had no usable
+    # cash-flow statement and 194 had negative free cash flow, which a
+    # growth-multiple DCF genuinely cannot value. Nothing was rate-limited.
+    #
+    # That matters beyond tidiness. A warning that cries wolf on a lens which is
+    # working correctly is how the NEXT one gets ignored — and the next one was
+    # `quality` at 10%, which silently promoted names by losing the evidence
+    # against them. So the two are counted separately and only one of them
+    # raises an alarm.
     lens_reads: dict[str, int] = {}
+    lens_throttled: dict[str, int] = {}
+    lens_declined: dict[str, collections.Counter] = {}
     for legs in legs_by_ticker.values():
         for name, payload in (legs or {}).items():
-            lens_reads[name] = lens_reads.get(name, 0) + int(bool(payload.get("ok")))
+            lens_reads.setdefault(name, 0)
+            lens_throttled.setdefault(name, 0)
+            lens_declined.setdefault(name, collections.Counter())
+            if payload.get("ok"):
+                lens_reads[name] += 1
+            elif _looks_throttled(str(payload.get("error") or "")):
+                lens_throttled[name] += 1
+            else:
+                lens_declined[name][_reason_of(payload.get("error"))] += 1
+
     attempted = len(legs_by_ticker)
-    degraded = []
+    throttled_lenses = []
     if attempted:
         say("\nWhat actually came back, per lens:")
         for name in sorted(lens_reads):
             share = lens_reads[name] / attempted
-            flag = "" if share >= LENS_HEALTHY else "   <-- mostly missing"
-            if share < LENS_HEALTHY:
-                degraded.append(name)
+            note = ""
+            if lens_throttled[name] and lens_throttled[name] / attempted > 1 - LENS_HEALTHY:
+                throttled_lenses.append(name)
+                note = f"   <-- {lens_throttled[name]} rate-limited"
+            elif share < LENS_HEALTHY and lens_declined[name]:
+                reason, count = lens_declined[name].most_common(1)[0]
+                note = f"   declined {count}x: {reason}"
             say(f"  {name:10} {lens_reads[name]:>5} of {attempted} ({share * 100:4.0f}%)"
-                f"{flag}")
-        if degraded:
-            say(f"\n  WARNING: {', '.join(degraded)} came back for fewer than "
-                f"{LENS_HEALTHY * 100:.0f}% of names. This is almost always the provider "
-                f"rate-limiting rather than missing filings — a missing component has "
-                f"its weight removed from the blend, so names this lens would have "
-                f"marked DOWN are scored too high. Re-run with --workers 1 before "
-                f"trusting the ordering.")
+                f"{note}")
+
+        if throttled_lenses:
+            say(f"\n  WARNING: {', '.join(throttled_lenses)} was RATE-LIMITED on a "
+                f"large share of names — these are fetches that failed, not filings "
+                f"that are missing. A missing component has its weight removed from "
+                f"the blend, so names this lens would have marked DOWN are scored too "
+                f"high. Re-run with --workers 1 before trusting the ordering.")
+        elif any(lens_reads[n] / attempted < LENS_HEALTHY for n in lens_reads):
+            say("\n  The lenses below the line above DECLINED rather than failed — the "
+                "model does not apply, or the filing genuinely is not there. That is a "
+                "refusal, not a gap, and re-running will not change it.")
 
     # --- verdicts -----------------------------------------------------------
     say("\nScoring ...")
