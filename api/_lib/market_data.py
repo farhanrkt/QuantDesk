@@ -518,8 +518,42 @@ def _fundamentals_load(kind: str, ticker: str) -> Optional[dict]:
     return payload if isinstance(payload, dict) else None
 
 
+def _company_info_arrived(payload: dict, ticker: str) -> bool:
+    """Whether `.info` actually returned, as opposed to returning empty.
+
+    A THROTTLED FETCH MUST NEVER BE CACHED, AND THIS CACHE MADE THAT POSSIBLE
+    FOR THE FIRST TIME. `_company_uncached` swallows an `.info` failure and
+    carries on — deliberately, because the price and the statements come from
+    other endpoints and are worth having without it. The result is a record that
+    is `ok`, has real statements, and has no sector.
+
+    Before this cache that was a bad afternoon. With it, the bad record is
+    served for a WEEK, so a single throttled moment silently removes the quality
+    lens from a name for seven days — and a missing lens has its weight taken
+    out of the blend, which lifts exactly the names it would have marked down.
+
+    Measured: after a sustained US sweep, 1,180 of 3,367 records on disk had no
+    sector, no industry, no market capitalisation, and a name field that had
+    fallen back to the ticker. That combination is not a company with sparse
+    data; it is an empty dict.
+
+    THE TEST IS SIMPLY "IS THERE A SECTOR", and a looser first version was
+    wrong. It accepted any record carrying a name or a market capitalisation,
+    which kept 211 sector-less records out of 1,180 — and a record with no
+    sector disables `quality` for a week whatever else it contains, because the
+    sector is what decides whether Piotroski, Altman and Beneish apply at all.
+
+    A listing that genuinely has no sector is therefore refetched on every run.
+    That is a small bounded waste, against a week of a lens silently missing.
+    """
+    del ticker    # kept in the signature: the caller reads better naming it
+    return bool((payload.get("sector") or "").strip())
+
+
 def _fundamentals_store(kind: str, ticker: str, payload: dict) -> None:
     if fundamentals_ttl() <= 0 or not isinstance(payload, dict):
+        return
+    if kind == "company" and not _company_info_arrived(payload, ticker):
         return
     path = _fundamentals_path(kind, ticker)
     try:

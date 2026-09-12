@@ -128,7 +128,7 @@ def test_it_is_disabled_without_the_environment_variable(tmp_path, monkeypatch):
     monkeypatch.setattr(MD, "FUNDAMENTALS_DIR", tmp_path)
     monkeypatch.delenv("QUANTDESK_FUNDAMENTALS_TTL_DAYS", raising=False)
     assert MD.fundamentals_ttl() == 0
-    MD._fundamentals_store("company", "TEST", {"ok": True})
+    MD._fundamentals_store("company", "TEST", {"ok": True, "sector": "Energy"})
     assert MD._fundamentals_load("company", "TEST") is None
     assert not any(tmp_path.rglob("*.pickle"))
 
@@ -144,16 +144,18 @@ def test_a_bad_or_zero_ttl_disables_it(tmp_path, monkeypatch, value):
 # 4. A bad record is a miss
 # ============================================================================ #
 def test_a_record_past_its_ttl_is_a_miss(cache):
-    MD._fundamentals_store("company", "TEST", {"ok": True})
+    MD._fundamentals_store("company", "TEST", {"ok": True, "sector": "Energy"})
     path = MD._fundamentals_path("company", "TEST")
     stale = (dt.date.today() - dt.timedelta(days=9)).isoformat()
     with path.open("wb") as handle:
-        pickle.dump({"fetchedOn": stale, "payload": {"ok": True}}, handle)
+        pickle.dump({"fetchedOn": stale,
+                     "payload": {"ok": True, "sector": "Energy"}}, handle)
     assert MD._fundamentals_load("company", "TEST") is None
 
 
 def test_a_record_inside_its_ttl_is_a_hit(cache):
-    MD._fundamentals_store("company", "TEST", {"ok": True, "name": "kept"})
+    MD._fundamentals_store("company", "TEST",
+                           {"ok": True, "name": "kept", "sector": "Energy"})
     assert MD._fundamentals_load("company", "TEST")["name"] == "kept"
 
 
@@ -176,8 +178,51 @@ def test_an_unwritable_cache_never_breaks_the_fetch(cache, monkeypatch):
     """A full disk is not a reason to fail a scan."""
     monkeypatch.setattr(MD, "FUNDAMENTALS_DIR", cache / "file-not-a-dir")
     (cache / "file-not-a-dir").write_text("in the way")
-    MD._fundamentals_store("company", "TEST", {"ok": True})   # must not raise
+    MD._fundamentals_store("company", "TEST",
+                           {"ok": True, "sector": "Energy"})   # must not raise
     assert MD._fundamentals_load("company", "TEST") is None
+
+
+# ============================================================================ #
+# A throttled fetch must never be cached
+# ============================================================================ #
+def test_a_company_record_with_no_sector_is_never_stored(cache):
+    """The failure this guard exists for, and the reason it is worth a week.
+
+    `_company_uncached` swallows an `.info` failure on purpose — the price and
+    the statements come from other endpoints and are worth having without it.
+    The result is a record that is `ok`, carries real statements, and has no
+    sector. Before this cache that cost an afternoon; with it, the bad record is
+    served for seven days and `quality` is silently absent from every scan in
+    that window, lifting exactly the names it would have marked down.
+    """
+    throttled = {**statements(), "sector": "", "industry": "",
+                 "name": "TEST", "market_cap": float("nan")}
+    MD._fundamentals_store("company", "TEST", throttled)
+    assert MD._fundamentals_load("company", "TEST") is None
+    assert not any(cache.rglob("*.pickle"))
+
+
+def test_a_name_or_market_cap_is_not_enough_to_rescue_it(cache):
+    """A looser first version accepted these and kept 211 sector-less records
+    out of 1,180. A record with no sector disables the quality lens whatever
+    else it carries, because the sector is what decides whether the models
+    apply at all."""
+    partial = {**statements(), "sector": "", "industry": "",
+               "name": "A Real Company Inc", "market_cap": 5e9}
+    MD._fundamentals_store("company", "TEST", partial)
+    assert MD._fundamentals_load("company", "TEST") is None
+
+
+def test_a_record_with_a_sector_is_stored(cache):
+    MD._fundamentals_store("company", "TEST", statements())
+    assert MD._fundamentals_load("company", "TEST")["sector"] == "Energy"
+
+
+def test_the_guard_does_not_apply_to_the_register(cache):
+    """The register has no sector and never did; the guard is about `.info`."""
+    MD._fundamentals_store("register", "TEST", {"ok": True, "insidersPercentHeld": 0.1})
+    assert MD._fundamentals_load("register", "TEST")["insidersPercentHeld"] == 0.1
 
 
 # ============================================================================ #
@@ -200,8 +245,10 @@ def test_the_register_is_served_whole_because_nothing_in_it_moves_daily(cache,
 
 
 def test_symbols_with_awkward_characters_get_their_own_file(cache):
-    MD._fundamentals_store("company", "BRK.B", {"ok": True, "name": "b"})
-    MD._fundamentals_store("company", "BRK-B", {"ok": True, "name": "dash"})
+    MD._fundamentals_store("company", "BRK.B",
+                           {"ok": True, "name": "b", "sector": "Energy"})
+    MD._fundamentals_store("company", "BRK-B",
+                           {"ok": True, "name": "dash", "sector": "Energy"})
     assert MD._fundamentals_load("company", "BRK.B")["name"] == "b"
     assert MD._fundamentals_load("company", "BRK-B")["name"] == "dash"
     assert np.isfinite(1.0)
