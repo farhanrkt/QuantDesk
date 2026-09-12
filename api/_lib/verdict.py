@@ -657,21 +657,34 @@ def read_patterns(pattern_result: Optional[dict]) -> dict:
     neutral, because "we looked and found nothing that predicts" and "we found a
     shape that predicts nothing" are the same contribution and it is zero.
     """
+    # EVERY ABSENCE HERE IS A REFUSAL, NOT A GAP, AND THE DISTINCTION IS LOAD
+    # BEARING. `scan_market` warns when a component is MISSING on many names,
+    # because a failed fetch removes weight from the blend and lifts the names
+    # that lens would have marked down. It flagged `patterns` on a US sweep and
+    # was wrong: all 1,553 absences were "no formation completed in the window"
+    # or "formations found, none that survived correction" — the module working
+    # exactly as designed, on a market where most names are simply not chopping.
+    #
+    # None of these states would change if the scan ran slower, which is the
+    # test that separates the two. A false alarm on a healthy component is how
+    # the real alarm — `quality` at 56%, genuinely rate-limited — gets ignored.
     if not isinstance(pattern_result, dict):
-        return _unavailable("chart formations were not read for this name")
+        return _unavailable("chart formations were not read for this name",
+                            refused=True)
     if not pattern_result.get("available"):
         return _unavailable(pattern_result.get("reason")
-                            or "not enough history to read formations")
+                            or "not enough history to read formations", refused=True)
     if not pattern_result.get("calibrated"):
         return _unavailable(
             "this market has no measured pattern study, so a formation cannot be "
-            "scored — run scripts/calibrate_patterns.py")
+            "scored — run scripts/calibrate_patterns.py", refused=True)
     if not pattern_result.get("usable"):
         found = len(pattern_result.get("detections") or [])
         return _unavailable(
             f"{found} formation{'' if found == 1 else 's'} found, none with a forward "
             f"return that survived correction on this market"
-            if found else "no formation completed in the scanned window")
+            if found else "no formation completed in the scanned window",
+            refused=True)
 
     score = _finite(pattern_result.get("score"))
     if score is None:

@@ -413,6 +413,38 @@ def test_a_stop_inside_the_noise_withholds_the_ratio_without_gating():
     assert result["action"] in ("BUY", "STRONG_BUY", "HOLD")
 
 
+def test_an_absent_formation_is_a_refusal_not_a_gap():
+    """THE DIFFERENCE DECIDES WHETHER AN ALARM FIRES.
+
+    `scan_market` warns when a component is MISSING on many names, because a
+    failed fetch removes weight from the blend and lifts the names that lens
+    would have marked down. It flagged `patterns` on a US sweep of 3,364 names
+    and was wrong: all 1,553 absences were "no formation completed" or
+    "formations found, none surviving correction" — the module working as
+    designed on a market where most names are not chopping.
+
+    The test that separates the two is whether running slower would change it.
+    Nothing here would. A false alarm on a healthy component is how the real
+    one — `quality` at 56%, genuinely rate-limited — gets ignored.
+    """
+    for payload in (None,
+                    {"available": False, "reason": "not enough history"},
+                    {"available": True, "calibrated": False},
+                    {"available": True, "calibrated": True, "usable": False,
+                     "detections": []},
+                    {"available": True, "calibrated": True, "usable": False,
+                     "detections": [{"pattern": "doubleTop"}]}):
+        component = V.read_patterns(payload)
+        assert component["available"] is False
+        assert component["refused"] is True, payload
+
+
+def test_a_scored_formation_is_not_marked_refused():
+    component = V.read_patterns(pattern_payload(usable=True, score=38.0))
+    assert component["available"] is True
+    assert component["refused"] is False
+
+
 def test_an_illiquid_name_is_no_action_however_well_it_scores():
     result = scored(rank_row=rank_row(composite=99.0),
                     liquidity=liquid(turnover=1.0e6))
