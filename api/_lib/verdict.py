@@ -514,10 +514,51 @@ def read_flow(legs: dict) -> dict:
                          "it does not mean an institution was behind it.")}
 
 
+# What a valuation engine says when the MODEL cannot apply, as opposed to when
+# the data did not arrive. These are refusals: a growth-multiple DCF genuinely
+# cannot value a company whose free cash flow is negative, and no amount of
+# re-fetching changes that.
+#
+# THE DISTINCTION DECIDES WHETHER AN ALARM FIRES. `scan_market` warns when a
+# component is MISSING on many names, because a failed fetch removes weight from
+# the blend and lifts the names that lens would have marked down. On a full
+# Indonesian sweep it counted 404 of these as gaps — every one a modelling
+# refusal — which is the same false alarm that had already been fixed for
+# `valuation` at the leg level and for `patterns` at the component level. A
+# warning that cries wolf on a healthy component is how the real one gets
+# ignored, and this is the third place the same confusion has surfaced.
+#
+# Matched POSITIVELY, on the engine's own phrasing, rather than by excluding
+# throttle signatures: a message this module does not recognise stays a gap,
+# which errs toward warning rather than toward silence.
+_MODEL_CANNOT_APPLY = (
+    "no usable cash-flow statement",
+    "free cash flow is negative",
+    "no usable dividend data",
+    "no usable book value",
+    "negative or zero",
+)
+
+
+def _valuation_refused(legs: dict) -> bool:
+    """Whether the value lens declined on modelling grounds rather than failing."""
+    entry = (legs or {}).get("valuation")
+    if not isinstance(entry, dict) or entry.get("ok"):
+        return False
+    text = str(entry.get("error") or "").lower()
+    return any(marker in text for marker in _MODEL_CANNOT_APPLY)
+
+
 def read_value(legs: dict) -> dict:
     """The share of simulated valuation runs that came out cheap at this price."""
     data = _leg(legs, "valuation")
     if data is None:
+        if _valuation_refused(legs):
+            return _unavailable(
+                "the valuation model does not apply to this company — usually no "
+                "usable cash-flow statement, or free cash flow that is negative, "
+                "which a growth-multiple DCF cannot value",
+                refused=True)
         return _unavailable("the value lens did not return — usually a filing gap")
 
     monte = data.get("monteCarlo") or {}

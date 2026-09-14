@@ -413,6 +413,30 @@ def test_a_stop_inside_the_noise_withholds_the_ratio_without_gating():
     assert result["action"] in ("BUY", "STRONG_BUY", "HOLD")
 
 
+def test_a_valuation_the_model_cannot_apply_to_is_a_refusal():
+    """A growth-multiple DCF genuinely cannot value a company whose free cash
+    flow is negative. Re-fetching will not change it, which is the test that
+    separates a refusal from a gap — and counting these as gaps raised a false
+    alarm on 404 of 775 names in one sweep."""
+    for message in ("Yahoo returned no usable cash-flow statement for this ticker",
+                    "Base free cash flow is negative or zero. A growth-multiple DCF "
+                    "cannot value this.",
+                    "No usable dividend data returned, so a Dividend Discount Model "
+                    "has nothing to work from"):
+        component = V.read_value({"valuation": {"ok": False, "error": message}})
+        assert component["available"] is False
+        assert component["refused"] is True, message
+
+
+def test_a_valuation_that_simply_failed_stays_a_gap():
+    """A message this module does not recognise errs toward warning. A throttle
+    must keep raising the alarm the refusals no longer raise."""
+    component = V.read_value({"valuation": {"ok": False, "error": "HTTP Error 401: "
+                                                                 "Invalid Crumb"}})
+    assert component["available"] is False
+    assert component["refused"] is False
+
+
 def test_an_absent_formation_is_a_refusal_not_a_gap():
     """THE DIFFERENCE DECIDES WHETHER AN ALARM FIRES.
 
