@@ -1,12 +1,13 @@
 "use client";
 
 import { track } from "@vercel/analytics";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
   ExposureScanResponse,
   Leg, ManualInputs, EventStudyResponse, Market, NewsResponse, QualityResponse,
-  PeersResponse, PortfolioResponse, PreTrade, RankResponse, ScreenerResponse,
+  PeersResponse, PortfolioResponse, PreTrade, RankResponse, ScanResponse,
+  ScreenerResponse,
   Synthesis, TechnicalResponse,
   UniversesResponse,
   ValuationResponse,
@@ -687,6 +688,38 @@ export function usePeers() {
  * filing, and a stale one is the failure mode this app is least equipped to
  * notice — it looks identical to a fresh one.
  */
+/**
+ * The latest market scan that was run on THIS machine.
+ *
+ * READS A FILE, RUNS NOTHING. A whole-exchange sweep is about an hour; the
+ * route serves the report the script already wrote. It therefore has no busy
+ * state worth showing beyond a moment's fetch, and it comes back
+ * `available: false` wherever no scan has been run — a fresh checkout, or the
+ * deployed app, where `reports/` does not exist.
+ */
+export function useScan(market: Market) {
+  const [state, setState] = useState<Engine<ScanResponse>>({ status: "idle" });
+  const seq = useRef(0);
+
+  const load = useCallback(() => {
+    const token = (seq.current += 1);
+    setState({ status: "loading" });
+    get<ScanResponse>("/api/scan/latest", { market })
+      .then((data) => { if (seq.current === token) setState({ status: "ready", data }); })
+      .catch((err) => {
+        if (isAbort(err) || seq.current !== token) return;
+        setState({ status: "error", failure: asFailure(err) });
+      });
+  }, [market]);
+
+  // Loaded on mount and whenever the market changes, because it costs one read
+  // of a local file and the alternative is a button nobody presses — which is
+  // how the scan results went unseen for a week.
+  useEffect(() => { load(); }, [load]);
+
+  return { state, reload: load };
+}
+
 export function useVerdict() {
   const [state, setState] = useState<Engine<VerdictResponse>>({ status: "idle" });
   const seq = useRef(0);

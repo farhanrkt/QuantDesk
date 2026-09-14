@@ -1549,6 +1549,66 @@ export interface VerdictChart {
   caption?: string;
 }
 
+/** One row of a completed market scan, trimmed to what a table needs. */
+export interface ScanRow {
+  ticker: string;
+  name: string | null;
+  score: number | null;
+  action: VerdictAction;
+  actionLabel: string;
+  tone: string;
+  conviction: string;
+  coverage: number;
+  crossChecked: boolean;
+  rank: number | null;
+  sectorRank: number | null;
+  sector: string | null;
+  latestClose: number | null;
+  turnover: number | null;
+  held: boolean;
+  gates: { id: string; label: string }[];
+  entry: { band: string | null; rewardRisk: number | null; ratioWithheld: boolean };
+  /** Cheap, solid and uncovered — the screen the blend cannot reach. */
+  neglected: boolean;
+}
+
+/**
+ * A scan that already ran, read off disk.
+ *
+ * NEVER RUN FROM THE BROWSER. A whole-exchange sweep is about an hour and the
+ * serverless function has sixty seconds. This reads the report the script
+ * wrote, so `available` is false on the deployed app — `reports/` is local and
+ * gitignored — and the panel says so rather than erroring.
+ */
+export interface ScanResponse {
+  available: boolean;
+  market: string;
+  reason?: string;
+  file?: string;
+  generatedAt?: string;
+  counts?: Record<string, number>;
+  settings?: Record<string, unknown>;
+  universe?: { label?: string; asOf?: string; count?: number } | null;
+  /** The measured null result. Never render the ordering without it. */
+  provenance?: VerdictResponse["provenance"];
+  blendBacktest?: BlendBacktest | null;
+  regime?: MarketRegime | null;
+  concentration?: { reading?: string; bets?: number; names?: number } | null;
+  signalOverlap?: { reading?: string } | null;
+  neglected?: {
+    selected: number;
+    tradeable: {
+      ticker: string; name: string | null; score: number | null; action: string;
+      value: number | null; quality: number | null;
+      institutionsHeld: number | null; analysts: number | null;
+      gates: string[]; reading: string;
+    }[];
+    gated: { ticker: string; name: string | null; score: number | null }[];
+    note: string;
+  } | null;
+  rows?: ScanRow[];
+}
+
 export interface VerdictResponse {
   ticker: string;
   name: string;

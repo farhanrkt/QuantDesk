@@ -47,6 +47,7 @@ import threading
 import time
 from collections import defaultdict, deque
 
+import json
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 from typing import Optional
@@ -1007,6 +1008,107 @@ async def name_verdict(
         "provenance": verdict.provenance(),
         "blendBacktest": verdict.blend_validation(symbols.market_of(symbol)),
         "preTrade": checks,
+    })
+
+
+# --------------------------------------------------------------------------- #
+# The latest local market scan, summarised for the app
+#
+# WHY THE APP READS A FILE INSTEAD OF RUNNING THE SCAN
+# -----------------------------------------------------
+# `scripts/scan_market.py` takes about an hour for a whole exchange and this
+# function has sixty seconds, which is why the scan is a script. But the RESULT
+# is a file that already exists, and for several days the only way to look at it
+# was to open a 7MB HTML report by hand — so the owner of the tool kept being
+# told "check the file", which is not an interface.
+#
+# This route serves what that file already contains. It runs nothing.
+#
+# LOCAL ONLY, AND THAT IS THE PRIVACY BOUNDARY RATHER THAN AN OVERSIGHT.
+# `reports/` is gitignored and never deployed, so on the published app this
+# returns `available: false` and the panel that reads it does not render. The
+# scanner stays exactly as private as `PRODUCT.md` constraint 1 requires: the
+# composite is reachable by whoever ran the scan, on the machine they ran it on.
+# --------------------------------------------------------------------------- #
+SCAN_REPORTS = Path(__file__).resolve().parents[1] / "reports"
+
+# What a row needs to be listed and sorted. Everything else — the chart
+# geometry, the full component readings, the tape and register payloads — stays
+# out: a full report is 35MB and the table needs about a twentieth of it. A
+# reader who wants the detail clicks through to `/api/verdict`, which recomputes
+# that name live and is the same code the report used.
+_SCAN_ROW_FIELDS = ("ticker", "name", "score", "action", "actionLabel", "tone",
+                    "conviction", "coverage", "crossChecked", "rank", "sectorRank",
+                    "sector", "latestClose", "turnover", "held")
+
+
+def _scan_row(entry: dict) -> dict:
+    row = {key: entry.get(key) for key in _SCAN_ROW_FIELDS}
+    row["gates"] = [{"id": g.get("id"), "label": g.get("label")}
+                    for g in (entry.get("gates") or [])]
+    site = entry.get("structure") or {}
+    row["entry"] = {"band": site.get("band"),
+                    "rewardRisk": site.get("rewardRisk"),
+                    "ratioWithheld": bool(site.get("ratioWithheld"))}
+    row["neglected"] = bool((entry.get("neglect") or {}).get("selected"))
+    return row
+
+
+def _latest_scan(market: str) -> Optional[Path]:
+    pattern = f"scan-{market.upper()}-*.json"
+    try:
+        found = sorted(SCAN_REPORTS.glob(pattern))
+    except OSError:
+        return None
+    return found[-1] if found else None
+
+
+@app.get("/api/scan/latest")
+def latest_scan(market: str = Query("ID", pattern="^(US|ID|us|id)$")):
+    """The most recent local scan for this market, trimmed to a listable shape.
+
+    Returns `available: false` rather than a 404 when there is no scan: a
+    missing report is the normal state on a fresh checkout and on the deployed
+    app, and the panel says so in words instead of rendering an error.
+    """
+    market = market.upper()
+    path = _latest_scan(market)
+    if path is None:
+        return private_ok({
+            "available": False,
+            "market": market,
+            "reason": (f"No scan of the {market} market has been run on this machine. "
+                       f"Run scripts/scan_market.py --market {market} — it takes about "
+                       f"an hour for a whole exchange and writes the report this reads."),
+        })
+
+    try:
+        report = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=500,
+                            detail=f"Could not read {path.name}: {exc}") from exc
+
+    rows = [_scan_row(entry) for entry in (report.get("verdicts") or [])
+            if entry.get("score") is not None]
+
+    return private_ok({
+        "available": True,
+        "market": market,
+        "file": path.name,
+        "generatedAt": report.get("generatedAt"),
+        "counts": report.get("counts"),
+        "settings": report.get("settings"),
+        "universe": report.get("universe"),
+        # THE NULL RESULT AND THE MARKET'S OWN STATE TRAVEL WITH THE TABLE, in
+        # the same response, so a client cannot render the ordering without
+        # having been handed what the ordering is worth.
+        "provenance": report.get("provenance"),
+        "blendBacktest": report.get("blendBacktest"),
+        "regime": report.get("regime"),
+        "concentration": report.get("concentration"),
+        "signalOverlap": report.get("signalOverlap"),
+        "neglected": report.get("neglected"),
+        "rows": rows,
     })
 
 

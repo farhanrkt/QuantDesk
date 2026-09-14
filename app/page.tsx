@@ -13,6 +13,7 @@ import { PreTradePanel } from "@/components/PreTradePanel";
 import { QualityPanel } from "@/components/QualityPanel";
 import { ExposurePanel } from "@/components/ExposurePanel";
 import { RankingPanel } from "@/components/RankingPanel";
+import { ScanPanel } from "@/components/ScanPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
 import { SynthesisPanel } from "@/components/SynthesisPanel";
 import { ThesisPanel } from "@/components/ThesisPanel";
@@ -29,7 +30,7 @@ import { PanelSkeleton } from "@/components/ui/skeleton";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import {
   useEngines, useEventStudy, useExposureScan, usePeers, usePortfolio,
-  useUniverses, useVerdict, type RunOptions,
+  useScan, useUniverses, useVerdict, type RunOptions,
 } from "@/lib/api";
 import type { Engine, EngineFailure } from "@/lib/types";
 
@@ -177,6 +178,10 @@ export default function Home() {
   const { state: verdict, score: scoreVerdict, reset: resetVerdict } = useVerdict();
   // The ticker bar is controlled from here so the screener can drive it too.
   const [opts, setOpts] = useState<RunOptions>(INITIAL);
+  // Reads a local file, runs nothing. Loads on mount because it costs one read
+  // and a button nobody presses is how this went unseen in the first place.
+  // Declared AFTER `opts` because it takes the market from it.
+  const { state: scan } = useScan(opts.market);
   // The last SUBMITTED symbol, which is not what is currently typed in the box.
   const [ticker, setTicker] = useState("");
   // TREND, NOT FLOW. The first drill-down a newcomer takes should land on the
@@ -290,6 +295,14 @@ export default function Home() {
               <code className="rounded bg-sunken px-1.5 py-0.5 font-mono text-meta text-body">BTC-USD</code>.
             </p>
           </div>
+          {/* FIRST ON THE LANDING, ABOVE THE OTHER TWO MARKET-LEVEL PANELS.
+              This is the only one that already has an answer: the scan has
+              run, the names are ranked, and it needs no input at all. It sat
+              in a 7MB HTML file for a week because nothing here pointed at it,
+              and the owner had to be told "check the files yourself" — which
+              is how a feature comes to be unused rather than unwanted. */}
+          <ScanPanel state={scan} market={opts.market} onSelect={handleSelect} />
+
           <RankingPanel onSelect={handleSelect} />
           {/* REACHABLE WITHOUT A TICKER, because it needs none. This tier scans
               a whole universe and the tab that holds it lives behind the

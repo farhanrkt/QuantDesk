@@ -617,6 +617,18 @@ Python from the same `chartlayers.build()` geometry the app's interactive chart 
 so there is one source of every level and two renderers rather than two opinions. The
 file stays self-contained and opens from disk with no server.
 
+**The results are in the app, not only in a file.** The scan is a script because a whole
+exchange takes about an hour and the serverless function has sixty seconds — that
+constraint is real. But the RESULT is a JSON file that already exists, and for a week the
+only way to read it was to open a seven-megabyte HTML report by hand. `GET
+/api/scan/latest` serves the last local scan, trimmed to what a table needs (481KB for 775
+names, against 35MB with the chart geometry), and `ScanPanel` renders it on the landing
+page above the other two market-level panels. It runs nothing.
+
+It is local by construction: `reports/` is gitignored and never deployed, so the published
+app gets `available: false` and the panel says which command to run. That is the same
+privacy boundary the scanner already had, not a new one.
+
 **Scanning a whole exchange, across days.** The scan's own cache is keyed by calendar
 day, which is right for the four legs derived from price and wrong for the statements
 underneath them: filings move quarterly and were being refetched every morning. For 837
