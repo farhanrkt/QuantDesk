@@ -81,9 +81,9 @@ import numpy as np                                                  # noqa: E402
 import pandas as pd                                                 # noqa: E402
 
 from _lib import (basket, chartlayers, listings, market_data,        # noqa: E402
-                  microstructure, ownership, patterns, pretrade, ranking,
-                  scanlog, structure, symbols, tape, universes, verdict,
-                  volumeprofile)
+                  microstructure, neglect, ownership, patterns, pretrade,
+                  ranking, scanlog, structure, symbols, tape, universes,
+                  verdict, volumeprofile)
 from _lib.jsonsafe import clean                                      # noqa: E402
 
 # The four lens payloads are imported from the route module rather than
@@ -305,6 +305,47 @@ LENS_HEALTHY = 0.67
 # error would retry genuine 404s for delisted names.
 _THROTTLE_MARKERS = ("401", "429", "Invalid Crumb", "Unauthorized", "Too Many Requests",
                      "rate limit", "temporarily unavailable")
+
+
+def _neglected_summary(verdicts: list[dict]) -> dict:
+    """The screened names, split by whether a reader could actually buy them.
+
+    THE SPLIT IS THE USEFUL PART. On a full Indonesian sweep the screen selected
+    46 names and 41 of them were GATED — mostly below the turnover floor, which
+    is unsurprising: a company nobody covers is usually a company nobody trades.
+    Reporting 46 as though they were a shortlist would be a list of things that
+    cannot be bought.
+    """
+    selected = [v for v in verdicts if (v.get("neglect") or {}).get("selected")]
+    tradeable = [v for v in selected if not v.get("gates")]
+    gated = [v for v in selected if v.get("gates")]
+
+    def row(entry: dict) -> dict:
+        screen = entry["neglect"]
+        watch = screen["attention"]
+        return {"ticker": entry["ticker"], "name": entry.get("name"),
+                "score": entry.get("score"), "action": entry.get("action"),
+                "value": screen.get("value"), "quality": screen.get("quality"),
+                "institutionsHeld": watch.get("institutionsHeld"),
+                "analysts": watch.get("analysts"),
+                "gates": [g["id"] for g in (entry.get("gates") or [])],
+                "reading": screen.get("reading")}
+
+    return {
+        "selected": len(selected),
+        "tradeable": [row(v) for v in tradeable],
+        "gated": [row(v) for v in gated],
+        "thresholds": {"cheapAt": neglect.CHEAP_AT, "solidAt": neglect.SOLID_AT,
+                       "unattendedHeld": neglect.UNATTENDED_HELD,
+                       "unattendedAnalysts": neglect.UNATTENDED_ANALYSTS},
+        "note": ("Cheap by the valuation lens, solid by the accounting screens, and "
+                 "covered by nobody. This is the combination the blended score pulls "
+                 "to the middle, because the price family scores a fallen stock badly "
+                 "and falling is what makes it cheap. NOTHING HERE IS MEASURED: this "
+                 "data source has no point-in-time filings and no history of who held "
+                 "what, so the screen cannot be backtested even in principle. It is "
+                 "recorded prospectively in the scan log instead."),
+    }
 
 
 def _reason_of(error) -> str:
@@ -720,6 +761,13 @@ def run(args) -> dict:
         result["register"] = register_result
         result["patterns"] = pattern_result
         result["volumeProfile"] = profile_result
+        # THE SCREEN FOR WHAT THE BLEND CANNOT SEE. It reads components the
+        # verdict just computed and changes none of them — see `neglect.py` for
+        # the measurement that showed 82 cheap-and-solid names in one sweep and
+        # not a single buy among them.
+        result["neglect"] = neglect.screen(
+            result, register_result,
+            technical=(technical_leg.get("data") if technical_leg.get("ok") else None))
         # THE CHART GEOMETRY IS BUILT ONLY FOR ROWS THAT SAY TO DO SOMETHING.
         # It is cheap per name but not free — the pattern curves are refitted
         # per detection — and a hundred-name report carrying a chart for every
@@ -880,6 +928,12 @@ def run(args) -> dict:
                      if tape_tested else
                      "No name had a calibrated tape reading on this scan."),
         },
+        # THE BLIND SPOT, AS A LIST. Names that are cheap by the valuation lens,
+        # solid by the accounting screens, and that nobody is covering — the
+        # combination the blend's disagreement-shrink pulls to the middle. It
+        # makes no predictive claim; see `neglect.py` for why no backtest of it
+        # is possible with this data.
+        "neglected": _neglected_summary(verdicts),
         "verdicts": verdicts,
         "rejected": sorted(rejected, key=lambda r: r["why"]),
         "notDeepened": [
@@ -1047,6 +1101,32 @@ def main() -> int:
     html_path = Path(f"{stem}.html")
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(json.dumps(clean(report), indent=1))
+
+    # THE SCREEN PRINTS AFTER THE TABLE, NOT INSIDE IT. These names are, almost
+    # by definition, not near the top of the ranking — the blend has no opinion
+    # about them, which is the entire reason the screen exists. Folding them
+    # into the ordered list would hide them again.
+    neglected = report.get("neglected") or {}
+    if not args.quiet and neglected.get("selected"):
+        rows = neglected.get("tradeable") or []
+        print(f"\n  Cheap, solid and uncovered — {neglected['selected']} selected, "
+              f"{len(rows)} of them tradeable:")
+        if rows:
+            print(f"    {'ticker':10} {'score':>5} {'action':10} {'value':>5} "
+                  f"{'qual':>5} {'inst%':>6}  name")
+            for row in sorted(rows, key=lambda r: -(r.get("score") or 0)):
+                held = row.get("institutionsHeld")
+                print(f"    {row['ticker']:10} {(row.get('score') or 0):5.1f} "
+                      f"{row.get('action')!s:10} {(row.get('value') or 0):5.0f} "
+                      f"{(row.get('quality') or 0):5.0f} "
+                      f"{(held * 100 if held is not None else 0):5.1f}%  "
+                      f"{str(row.get('name'))[:30]}")
+        else:
+            print("    none of them clears the gates, which is the usual outcome: "
+                  "a company nobody covers is usually a company nobody trades.")
+        print(f"    {len(neglected.get('gated') or [])} more were selected and gated.")
+        print("    Nothing here is measured — no point-in-time filings exist to "
+              "backtest it against. Recorded in the scan log to be judged later.")
 
     # WHAT THE SCANNER SAID, WRITTEN DOWN ON THE DAY IT SAID IT. The value and
     # quality components cannot be reconstructed as they stood on a past date —
