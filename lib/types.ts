@@ -1578,7 +1578,21 @@ export interface ScanRow {
   field: {
     rank: number | null; peers: number | null; share: number | null;
     margin: number | null; leads: boolean; leader: string | null;
-    reading: string | null;
+    /** The only scanned name carrying this industry label. Its own state, not a
+     *  weaker `leads` — a specialist with no listed competition. */
+    soleListing: boolean; reading: string | null;
+  } | null;
+  /**
+   * What the filings say the business has done. Description, never a score.
+   *
+   * `everyYearProfitable` IS TRUE OF 67% OF THIS EXCHANGE. Render it with the
+   * base rate or not at all; on its own it is not a distinction.
+   */
+  record: {
+    years: number | null; yearsProfitable: number | null;
+    everyYearProfitable: boolean; operatingCashFlowPositive: boolean;
+    revenueCagr: number | null; netMargin: number | null;
+    growing: boolean; reading: string | null;
   } | null;
   latestClose: number | null;
   turnover: number | null;
@@ -1623,9 +1637,35 @@ export interface ScanResponse {
       institutionsHeld: number | null; analysts: number | null;
       industry?: string | null; summary?: string | null;
       leadsField?: boolean; fieldRank?: number | null; fieldPeers?: number | null;
+      soleListing?: boolean; profitableEveryYear?: boolean; growing?: boolean;
+      revenueCagr?: number | null;
       gates: string[]; reading: string;
     }[];
     gated: { ticker: string; name: string | null; score: number | null }[];
+    note: string;
+  } | null;
+  /**
+   * The largest — or only — scanned name in its field, profitable every year
+   * with cash behind it, growing in the market's top quartile, and uncovered.
+   *
+   * `baseRates` IS NOT DECORATION. The intersection reads as three demanding
+   * tests and one of them (uncovered) admits most of a small exchange. Render
+   * the shares with the list.
+   */
+  specialists?: {
+    selected: number;
+    baseRates: { scanned: number; specialist: number; compounding: number;
+                 unattended: number };
+    tradeable: {
+      ticker: string; name: string | null; score: number | null; action: string;
+      industry: string | null; summary: string | null;
+      soleListing: boolean; leadsField: boolean; fieldPeers: number | null;
+      revenueCagr: number | null; netMargin: number | null;
+      yearsProfitable: number | null; yearsAvailable: number | null;
+      analysts: number | null; institutionsHeld: number | null;
+      gates: string[]; recordReading: string | null; fieldReading: string | null;
+    }[];
+    gated: { ticker: string; name: string | null; industry: string | null }[];
     note: string;
   } | null;
   /**
@@ -1643,6 +1683,9 @@ export interface ScanResponse {
     thresholds?: { minPeers: number; leadMargin: number };
     leaders: { industry: string; ticker: string | null;
                peers: number | null; margin: number | null }[];
+    /** Fields holding exactly one scanned name. A large count is a thin scan,
+     *  not a market of specialists — read it against `unplaced`. */
+    soleListings?: number;
   } | null;
   rows?: ScanRow[];
 }

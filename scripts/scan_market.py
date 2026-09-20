@@ -82,8 +82,8 @@ import pandas as pd                                                 # noqa: E402
 
 from _lib import (basket, chartlayers, field, listings, market_data,  # noqa: E402
                   microstructure, neglect, ownership, patterns, pretrade,
-                  ranking, scanlog, structure, symbols, tape, universes,
-                  verdict, volumeprofile)
+                  ranking, scanlog, structure, symbols, tape, trackrecord,
+                  universes, verdict, volumeprofile)
 from _lib.jsonsafe import clean                                      # noqa: E402
 
 # The four lens payloads are imported from the route module rather than
@@ -334,6 +334,106 @@ def _place_in_field(verdicts: list[dict], say) -> dict:
     return standing
 
 
+def _specialists_summary(verdicts: list[dict]) -> dict:
+    """Profitable, growing specialists that nobody is covering.
+
+    THE INTERSECTION THE OWNER DESCRIBED, and the only one of the new readings
+    that is a shortlist rather than a column. Three conditions, each of which is
+    useless alone and each of which reports its own base rate on THIS scan
+    rather than a remembered one:
+
+      SPECIALIST — either the largest of the scanned names sharing its industry
+      label, or the only one carrying it. The second is not a weaker version of
+      the first: a company with no listed rival is the signature of a niche, and
+      it is the state the name this was built for actually occupies.
+
+      COMPOUNDING — profitable in every year the filings cover, with positive
+      operating cash flow, growing revenue at or above the market's top
+      quartile. Not "profitable", which two thirds of this exchange manages.
+
+      UNATTENDED — the same attention reading `neglect.py` uses. This is the
+      loosest of the three by a distance and is reported as such.
+
+    MEASURED, ON 729 CACHED INDONESIAN RECORDS, BEFORE IT WAS BUILT: the three
+    conditions hold together on 5. The top of that list by growth was KETR.JK —
+    the company the owner named — at 28.6% a year on an 18.5% net margin, the
+    only listed name carrying its industry label. That is not evidence the
+    screen predicts anything. It is evidence it finds the thing it was
+    described.
+
+    NO PREDICTIVE CLAIM AND NO BACKTEST. Same wall as `neglect.py`: industry
+    labels and the share register arrive as a current snapshot with no history,
+    so there is no version of "unattended and unrivalled in March" to test on.
+    `scanlog.py` records it prospectively instead.
+    """
+    def specialist(entry: dict) -> bool:
+        place = entry.get("fieldPosition") or {}
+        return bool(place.get("leads") or place.get("peers") == 1)
+
+    def compounding(entry: dict) -> bool:
+        record = entry.get("trackRecord") or {}
+        return bool(record.get("available") and record.get("everyYearProfitable")
+                    and record.get("operatingCashFlowPositive")
+                    and record.get("growing"))
+
+    def unattended(entry: dict) -> bool:
+        return bool(((entry.get("neglect") or {}).get("attention") or {})
+                    .get("unattended"))
+
+    selected = [v for v in verdicts
+                if specialist(v) and compounding(v) and unattended(v)]
+
+    def row(entry: dict) -> dict:
+        place = entry.get("fieldPosition") or {}
+        record = entry.get("trackRecord") or {}
+        watch = (entry.get("neglect") or {}).get("attention") or {}
+        return {
+            "ticker": entry["ticker"], "name": entry.get("name"),
+            "score": entry.get("score"), "action": entry.get("action"),
+            "industry": entry.get("industry"),
+            "summary": (entry.get("profile") or {}).get("summary"),
+            "soleListing": place.get("peers") == 1,
+            "leadsField": bool(place.get("leads")),
+            "fieldPeers": place.get("peers"),
+            "revenueCagr": record.get("revenueCagr"),
+            "netMargin": record.get("latestNetMargin"),
+            "yearsProfitable": record.get("yearsProfitable"),
+            "yearsAvailable": record.get("yearsAvailable"),
+            "analysts": watch.get("analysts"),
+            "institutionsHeld": watch.get("institutionsHeld"),
+            "gates": [g["id"] for g in (entry.get("gates") or [])],
+            "recordReading": record.get("reading"),
+            "fieldReading": place.get("reading"),
+        }
+
+    total = len(verdicts) or 1
+    return {
+        "selected": len(selected),
+        # EACH INGREDIENT'S OWN SHARE OF THIS SCAN. Without these the
+        # intersection looks like three demanding tests, and one of them admits
+        # most of the market.
+        "baseRates": {
+            "scanned": len(verdicts),
+            "specialist": sum(1 for v in verdicts if specialist(v)) / total,
+            "compounding": sum(1 for v in verdicts if compounding(v)) / total,
+            "unattended": sum(1 for v in verdicts if unattended(v)) / total,
+        },
+        "tradeable": sorted((row(v) for v in selected if not v.get("gates")),
+                            key=lambda r: -(r["revenueCagr"] or 0)),
+        "gated": sorted((row(v) for v in selected if v.get("gates")),
+                        key=lambda r: -(r["revenueCagr"] or 0)),
+        "note": ("The largest — or the only — scanned name carrying its industry label, "
+                 "profitable in every year its filings cover, with cash behind the "
+                 "profit and revenue growing in this market's top quartile, and nobody "
+                 "covering it. A standing among SCANNED names is not market share, and "
+                 "how many names could not be placed at all is reported beside the "
+                 "field counts. NOTHING HERE IS MEASURED against future returns: "
+                 "industry labels and the share register are a snapshot with no "
+                 "history, so this cannot be backtested even in principle. It is "
+                 "recorded in the scan log to be judged later."),
+    }
+
+
 def _neglected_summary(verdicts: list[dict]) -> dict:
     """The screened names, split by whether a reader could actually buy them.
 
@@ -366,6 +466,11 @@ def _neglected_summary(verdicts: list[dict]) -> dict:
                 "leadsField": bool(place.get("leads")),
                 "fieldRank": place.get("rank"),
                 "fieldPeers": place.get("peers"),
+                "soleListing": bool(place.get("peers") == 1),
+                "profitableEveryYear": bool((entry.get("trackRecord") or {})
+                                            .get("everyYearProfitable")),
+                "growing": bool((entry.get("trackRecord") or {}).get("growing")),
+                "revenueCagr": (entry.get("trackRecord") or {}).get("revenueCagr"),
                 "gates": [g["id"] for g in (entry.get("gates") or [])],
                 "reading": screen.get("reading")}
 
@@ -484,7 +589,12 @@ def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
                                "unknown for this run rather than unpublished")}
         return {"available": True,
                 "profile": field.profile(record),
-                "revenue": field.revenue_of(record)}
+                "revenue": field.revenue_of(record),
+                # Same record, no further fetch. Profits, cash and growth over
+                # the years the filings cover — description, never a score; see
+                # `trackrecord.py` for why "profitable" alone admits 67% of this
+                # market and is therefore not a screen.
+                "trackRecord": trackrecord.read(record)}
 
     legs = {
         "anomaly": leg(lambda: whale_payload(symbol, period="2y")),
@@ -834,10 +944,12 @@ def run(args) -> dict:
             result["profile"] = profile_data["profile"]
             result["revenue"] = profile_data["revenue"]
             result["industry"] = profile_data["profile"].get("industry")
+            result["trackRecord"] = profile_data.get("trackRecord")
         else:
             result["profile"] = None
             result["revenue"] = None
             result["industry"] = None
+            result["trackRecord"] = None
         result["costs"] = structure.round_trip_cost(liquidity)
         result["tape"] = tape_result
         result["register"] = register_result
@@ -1024,6 +1136,10 @@ def run(args) -> dict:
         # makes no predictive claim; see `neglect.py` for why no backtest of it
         # is possible with this data.
         "neglected": _neglected_summary(verdicts),
+        # THE INTERSECTION OF THE THREE NEW READINGS: a specialist, compounding,
+        # and uncovered. See `_specialists_summary` for the measurement that
+        # found five of them on 729 cached names, KETR.JK at the top.
+        "specialists": _specialists_summary(verdicts),
         # WHAT EACH COMPANY SELLS AND WHO ELSE SELLS IT. Description, not a
         # score: no verdict moves on any of it. `basis` travels inside the
         # payload because a rank of 1 rendered without it reads as market share,
@@ -1239,6 +1355,42 @@ def main() -> int:
               f"and gated.")
         print("    Nothing here is measured — no point-in-time filings exist to "
               "backtest it against. Recorded in the scan log to be judged later.")
+
+    # THE INTERSECTION, FIRST, because it is the answer to the question the rest
+    # of this report only supplies parts of. It is printed above the field
+    # leaders and the cheap-and-uncovered screen rather than below them: those
+    # two are the ingredients, and a reader who wanted the ingredients can read
+    # on.
+    specialists = report.get("specialists") or {}
+    if not args.quiet and specialists.get("selected"):
+        base = specialists.get("baseRates") or {}
+        rows = specialists.get("tradeable") or []
+        print(f"\n  Profitable specialists nobody is covering — "
+              f"{specialists['selected']} of {base.get('scanned', 0)} scanned, "
+              f"{len(rows)} tradeable:")
+        for row in rows:
+            where = "only listed name in" if row["soleListing"] else "largest in"
+            print(f"    {row['ticker']:10} {(row.get('score') or 0):5.1f} "
+                  f"{row.get('action')!s:10} "
+                  f"{(row.get('revenueCagr') or 0) * 100:6.1f}%/yr  "
+                  f"margin {(row.get('netMargin') or 0) * 100:5.1f}%  "
+                  f"{row['yearsProfitable']}/{row['yearsAvailable']} yrs  "
+                  f"{where} {str(row.get('industry'))[:26]}")
+            if row.get("summary"):
+                print(f"      {str(row['summary'])[:100]}")
+        if specialists.get("gated"):
+            print(f"    {len(specialists['gated'])} more were selected and gated as "
+                  f"untradeable.")
+        # THE BASE RATES, BECAUSE THE INTERSECTION LOOKS LIKE THREE DEMANDING
+        # TESTS AND ONE OF THEM ADMITS MOST OF THE MARKET.
+        print(f"    Ingredients on this scan: "
+              f"{base.get('specialist', 0) * 100:.0f}% are the largest or only name in "
+              f"their field, {base.get('compounding', 0) * 100:.0f}% are profitable "
+              f"every year with cash behind it and growing in the top quartile, and "
+              f"{base.get('unattended', 0) * 100:.0f}% are uncovered — which is the "
+              f"loosest of the three by a distance.")
+        print("    Nothing here is measured against future returns; see the note in "
+              "the report.")
 
     # THE FIELD LEADERS, WHETHER OR NOT ANYTHING ELSE LIKES THEM. Separate from
     # the screen above because it answers a different question: that list is

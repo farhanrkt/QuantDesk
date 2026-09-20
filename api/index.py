@@ -1061,6 +1061,20 @@ def _scan_row(entry: dict) -> dict:
     profile = entry.get("profile") or {}
     row["summary"] = profile.get("summary")
     row["summaryState"] = profile.get("summaryState")
+    # THE RECORD, FLATTENED TO WHAT A TABLE CAN SORT ON. The base rates travel
+    # with it: "profitable every year" is true of two thirds of this exchange,
+    # and a flag shown without that is a distinction the data does not support.
+    record = entry.get("trackRecord") or {}
+    row["record"] = {
+        "years": record.get("yearsAvailable"),
+        "yearsProfitable": record.get("yearsProfitable"),
+        "everyYearProfitable": bool(record.get("everyYearProfitable")),
+        "operatingCashFlowPositive": bool(record.get("operatingCashFlowPositive")),
+        "revenueCagr": record.get("revenueCagr"),
+        "netMargin": record.get("latestNetMargin"),
+        "growing": bool(record.get("growing")),
+        "reading": record.get("reading"),
+    } if record.get("available") else None
     place = entry.get("fieldPosition") or {}
     # `basis` is dropped from the ROW because it is identical on every one of
     # them and ships once at the top level. Nothing else here is: a rank
@@ -1068,6 +1082,13 @@ def _scan_row(entry: dict) -> dict:
     row["field"] = {"rank": place.get("rank"), "peers": place.get("peers"),
                     "share": place.get("share"), "margin": place.get("margin"),
                     "leads": bool(place.get("leads")),
+                    # THE ONLY LISTED NAME IN ITS FIELD IS ITS OWN STATE, not a
+                    # weaker kind of leader. `leads` refuses it, correctly —
+                    # being the largest of one is not a position — but it is
+                    # exactly the signature of a specialist with no listed
+                    # competition, which is what a niche champion is. KETR.JK,
+                    # the name this was asked for, is one.
+                    "soleListing": place.get("peers") == 1,
                     "leader": place.get("leader"),
                     "reading": place.get("reading")} if place else None
     row["gates"] = [{"id": g.get("id"), "label": g.get("label")}
@@ -1105,6 +1126,11 @@ def _scan_fields(standing: Optional[dict]) -> Optional[dict]:
             for industry in (standing.get("leaders") or [])
             if industry in fields
         ],
+        # How many fields hold exactly one scanned name. A large number here is
+        # not a market of specialists — it is a scan that placed few names, and
+        # `unplaced` above is the figure that says which.
+        "soleListings": sum(1 for block in fields.values()
+                            if block.get("peers") == 1),
     }
 
 
@@ -1162,6 +1188,11 @@ def latest_scan(market: str = Query("ID", pattern="^(US|ID|us|id)$")):
         "concentration": report.get("concentration"),
         "signalOverlap": report.get("signalOverlap"),
         "neglected": report.get("neglected"),
+        # THE SHORTLIST THIS WHOLE LINE OF WORK EXISTS FOR: the largest or only
+        # scanned name in its field, compounding, and uncovered. Shipped whole
+        # — it is a handful of rows, and its base rates are the part that stops
+        # it reading as three demanding tests when one of them is not.
+        "specialists": report.get("specialists"),
         # THE STANDINGS, WITHOUT THE PER-FIELD MEMBER LISTS. A client needs the
         # caveat, the thresholds and how many names could not be placed; the
         # full membership of 142 fields is a local-report concern.

@@ -171,7 +171,8 @@ def test_a_narrow_lead_names_nobody():
 
 
 def test_unplaced_names_are_counted_rather_than_dropped():
-    rows = entries(("A", 100.0), ("B", 20.0), ("C", 10.0)) + [
+    rows = [
+        *entries(("A", 100.0), ("B", 20.0), ("C", 10.0)),
         {"ticker": "D", "industry": "", "revenue": 500.0},
         {"ticker": "E", "industry": "Thermal Coal", "revenue": None},
     ]
@@ -191,8 +192,10 @@ def test_a_missing_peer_can_hand_over_the_lead_and_the_count_says_so():
     only thing standing between a reader and that.
     """
     full = F.standings(entries(("BIG", 900.0), ("A", 100.0), ("B", 20.0), ("C", 5.0)))
-    partial = F.standings(entries(("A", 100.0), ("B", 20.0), ("C", 5.0)) +
-                          [{"ticker": "BIG", "industry": "Thermal Coal", "revenue": None}])
+    partial = F.standings([
+        *entries(("A", 100.0), ("B", 20.0), ("C", 5.0)),
+        {"ticker": "BIG", "industry": "Thermal Coal", "revenue": None},
+    ])
     assert full["fields"]["Thermal Coal"]["leader"] == "BIG"
     assert partial["fields"]["Thermal Coal"]["leader"] == "A"
     assert partial["unplaced"] == 1
@@ -214,8 +217,8 @@ def test_runners_up_are_told_how_far_behind_rather_than_how_far_ahead():
 
 
 def test_fields_do_not_leak_into_each_other():
-    rows = (entries(("A", 100.0), ("B", 20.0), ("C", 10.0)) +
-            entries(("X", 50.0), ("Y", 5.0), ("Z", 2.0), industry="Gold"))
+    rows = [*entries(("A", 100.0), ("B", 20.0), ("C", 10.0)),
+            *entries(("X", 50.0), ("Y", 5.0), ("Z", 2.0), industry="Gold")]
     out = F.standings(rows)
     assert out["positions"]["A"]["peers"] == 3
     assert out["positions"]["X"]["industry"] == "Gold"

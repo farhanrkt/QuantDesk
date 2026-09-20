@@ -40,14 +40,20 @@ const ACTION_ORDER: Record<string, number> = {
   STRONG_BUY: 0, BUY: 1, HOLD: 2, REDUCE: 3, AVOID: 4, NO_ACTION: 5,
 };
 
-type Filter = "directional" | "buys" | "neglected" | "leaders" | "all";
+type Filter =
+  | "directional" | "buys" | "neglected" | "leaders" | "sole" | "compounding" | "all";
 
 const FILTERS: { id: Filter; label: string; hint: string }[] = [
   { id: "directional", label: "Says something", hint: "Everything but hold and gated" },
   { id: "buys", label: "Buys only", hint: "Strong buy and buy" },
   { id: "neglected", label: "Cheap & uncovered", hint: "The screen the blend cannot reach" },
   { id: "leaders", label: "Leads its field",
-    hint: "Largest of the scanned names sharing its industry label" },
+    hint: "Largest of the scanned names sharing its industry label, by 2x or more" },
+  { id: "sole", label: "No listed rival",
+    hint: "The only scanned name carrying its industry label" },
+  { id: "compounding", label: "Profitable & growing",
+    hint: "Profitable every year the filings cover, cash-backed, and growing revenue "
+        + "in this market's top quartile" },
   { id: "all", label: "Everything", hint: "Including gated and hold" },
 ];
 
@@ -80,6 +86,23 @@ function matchedSentence(text: string | null, needle: string): string | null {
   const dot = text.indexOf(". ", at + needle.length);
   const end = dot < 0 ? text.length : dot + 1;
   return text.slice(start, end).trim();
+}
+
+/**
+ * The filing record as one cell: years profitable, and the growth rate.
+ *
+ * ALWAYS "n of m", never "profitable". Two thirds of this exchange is
+ * profitable in every year its filings cover, so the bare word is not a
+ * distinction — the denominator is what makes the figure readable, and it also
+ * carries how short the window is.
+ */
+function recordLabel(row: ScanRow): string {
+  const r = row.record;
+  if (!r || r.years == null) return "—";
+  const profit = `${r.yearsProfitable ?? 0}/${r.years} yrs profitable`;
+  if (r.revenueCagr == null) return profit;
+  const sign = r.revenueCagr >= 0 ? "+" : "";
+  return `${profit} · ${sign}${(r.revenueCagr * 100).toFixed(0)}%/yr`;
 }
 
 /** The industry and the standing in it, as one line. Never the rank alone: a
@@ -120,6 +143,13 @@ export function ScanPanel({ state, market, onSelect }: {
       if (filter === "buys") return row.action === "BUY" || row.action === "STRONG_BUY";
       if (filter === "neglected") return row.neglected;
       if (filter === "leaders") return row.field?.leads === true;
+      if (filter === "sole") return row.field?.soleListing === true;
+      // THE CONJUNCTION, NOT THE FIRST CONDITION. "Profitable every year" alone
+      // is true of two thirds of this exchange; see `trackrecord.py`.
+      if (filter === "compounding") {
+        const r = row.record;
+        return !!r && r.everyYearProfitable && r.operatingCashFlowPositive && r.growing;
+      }
       return row.action !== "HOLD" && row.action !== "NO_ACTION";
     });
     return [...picked].sort((a, b) => {
@@ -172,6 +202,7 @@ export function ScanPanel({ state, market, onSelect }: {
 
   const counts = data.counts ?? {};
   const neglected = data.neglected;
+  const specialists = data.specialists;
 
   return (
     <div className="space-y-4">
@@ -224,6 +255,77 @@ export function ScanPanel({ state, market, onSelect }: {
           )}
         </CardBody>
       </Card>
+
+      {/* THE ANSWER, ABOVE THE INGREDIENTS. The two cards below and the table
+          supply the parts — what a company does, who else does it, what the
+          filings say, who is watching. This is their intersection, and it is
+          first because a reader who wants the parts can read on. */}
+      {specialists && specialists.selected > 0 && (
+        <Card accent="#C9A227">
+          <CardHeader>
+            <CardTitle>Profitable specialists nobody is covering</CardTitle>
+            <span className="font-mono text-micro text-ash">
+              {specialists.tradeable.length} tradeable of {specialists.selected}
+            </span>
+          </CardHeader>
+          <CardBody className="space-y-2.5">
+            {specialists.tradeable.length === 0 ? (
+              <p className="prose-col text-meta leading-relaxed text-ash">
+                Every name this found is gated as untradeable, which is the usual
+                outcome — a specialist nobody covers is usually a specialist nobody
+                trades.
+              </p>
+            ) : (
+              specialists.tradeable.map((row) => (
+                <button key={row.ticker} type="button"
+                        onClick={() => onSelect(row.ticker)}
+                        className="block w-full rounded border border-ruleSoft px-3 py-2.5
+                                   text-left hover:border-rule">
+                  <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span className="num text-base text-chalk">{row.ticker}</span>
+                    <span className="flex-1 truncate text-meta text-ash">{row.name}</span>
+                    <span className="num text-meta text-body">
+                      {row.revenueCagr == null
+                        ? "—"
+                        : `${row.revenueCagr >= 0 ? "+" : ""}${(row.revenueCagr * 100).toFixed(0)}%/yr`}
+                    </span>
+                  </span>
+                  <span className="mt-1 block text-micro text-faint">
+                    <span className="text-flow">
+                      {row.soleListing
+                        ? "only listed name in"
+                        : `largest of ${row.fieldPeers ?? "?"} in`}
+                    </span>
+                    {" "}{row.industry ?? "an unstated field"}
+                    {" · "}{row.yearsProfitable}/{row.yearsAvailable} yrs profitable
+                    {row.netMargin != null
+                      && ` · ${(row.netMargin * 100).toFixed(1)}% net margin`}
+                    {row.analysts != null && ` · ${row.analysts} analysts`}
+                  </span>
+                  {row.summary && (
+                    <span className="mt-1.5 block max-w-prose text-meta leading-relaxed
+                                     text-ash">
+                      {row.summary}
+                    </span>
+                  )}
+                </button>
+              ))
+            )}
+            {/* The base rates, because the intersection reads as three demanding
+                tests and one of them admits most of a small exchange. */}
+            <Note>
+              Of the {specialists.baseRates.scanned} names scanned,
+              {" "}{(specialists.baseRates.specialist * 100).toFixed(0)}% are the largest
+              or the only name in their field,
+              {" "}{(specialists.baseRates.compounding * 100).toFixed(0)}% are profitable
+              every year with cash behind it and growing in this market&apos;s top
+              quartile, and {(specialists.baseRates.unattended * 100).toFixed(0)}% are
+              uncovered — which is the loosest of the three by a distance.
+              {" "}{specialists.note}
+            </Note>
+          </CardBody>
+        </Card>
+      )}
 
       {/* The screen for what the blend cannot reach, above the table because it
           is, by construction, not near the top of it. */}
@@ -354,7 +456,7 @@ export function ScanPanel({ state, market, onSelect }: {
                   <tr className="eyebrow border-b border-rule
                                  [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Ticker</th><th className="text-right">Score</th>
-                    <th>Action</th><th>Business</th><th>Conviction</th>
+                    <th>Action</th><th>Business</th><th>Record</th><th>Conviction</th>
                     <th className="text-right">Coverage</th>
                     <th>Entry</th><th>Why not</th>
                   </tr>
@@ -403,6 +505,17 @@ export function ScanPanel({ state, market, onSelect }: {
                           </span>
                         )}
                       </td>
+                      {/* RULE 3 APPLIES HERE TOO: no colour is taken from the
+                          growth rate's sign. The only accent is on a state
+                          Python decided — `growing`, which is the market's own
+                          top quartile. */}
+                      <td className="num px-5 py-2 text-ash"
+                          title={row.record?.reading ?? undefined}>
+                        <span className="block whitespace-nowrap">{recordLabel(row)}</span>
+                        {row.record && !row.record.operatingCashFlowPositive && (
+                          <span className="text-micro text-faint">no cash from ops</span>
+                        )}
+                      </td>
                       <td className="px-5 py-2 text-ash">{row.conviction}</td>
                       <td className="num px-5 py-2 text-right text-ash">
                         {(row.coverage * 100).toFixed(0)}%
@@ -434,6 +547,19 @@ export function ScanPanel({ state, market, onSelect }: {
                 This scan was written before the app recorded what each company does,
                 so the Business column is empty rather than unknown — re-running the
                 scan fills it. Nothing else here is affected.
+              </Note>
+            </div>
+          )}
+
+          {filter === "compounding" && !needle && (
+            <div className="px-5">
+              <Note>
+                Profitable in every year the filings cover is true of about two thirds
+                of this exchange, so it is not on its own a distinction. This filter is
+                the conjunction — profitable every year, operating cash flow positive,
+                and revenue compounding at or above the market&apos;s own top quartile —
+                which about one name in seven meets. The window is whatever the filings
+                cover, typically four years, which does not span a cycle.
               </Note>
             </div>
           )}
