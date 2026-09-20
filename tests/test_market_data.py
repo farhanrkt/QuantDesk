@@ -818,3 +818,111 @@ def test_a_valuation_refuses_rather_than_mixing_currencies(monkeypatch):
         V.analyze("TEST.JK", market_code="ID")
     except V.ValuationError as exc:
         assert "exchange rate" not in exc.as_detail()["message"], exc.as_detail()["message"]
+
+
+# --------------------------------------------------------------------------- #
+# A wrong currency LABEL, which is not the same problem as a missing rate
+#
+# The test above covers the app refusing to mix currencies when no rate is
+# available. This covers the opposite failure: a rate IS available, the label
+# that asked for it is wrong, and converting produces a confident answer four
+# orders of magnitude out.
+#
+# RIGS.JK, a small Indonesian tug and barge operator, was served with
+# `financialCurrency: USD` against statements written in rupiah, so every
+# valuation and accounting screen for it ran on figures multiplied by ~16,300.
+# YPF is the same fault inverted: dollars labelled pesos, so conversion divides
+# by about a thousand. Measured across all 388 mismatched records in the local
+# cache, exactly those two fire and 100 correctly-labelled ones pass.
+# --------------------------------------------------------------------------- #
+def _statements(revenue: float) -> dict:
+    return {"income": pd.DataFrame(
+        {pd.Timestamp("2025-12-31"): {"Total Revenue": revenue}})}
+
+
+def test_a_conversion_that_makes_the_company_impossible_is_declined(monkeypatch):
+    """RIGS.JK to scale: rupiah statements labelled USD, 366bn against a 423bn cap."""
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    record = {"currency": "IDR", "financial_currency": "USD",
+              "market_cap": 423_345_324_032.0, **_statements(365_897_785_357.0)}
+
+    out = MD._apply_fx(record)
+
+    assert out.get("fx_rate") is None, "the statements must not be scaled"
+    assert out["fx_skipped"]["rateRefused"] == 16_300.0
+    assert out["fx_skipped"]["reportingCurrency"] == "USD"
+    assert "wrong label at the source" in out["fx_skipped"]["reason"]
+    # And the figures are untouched, not zeroed or dropped.
+    assert float(out["income"].iloc[0, 0]) == 365_897_785_357.0
+
+
+def test_the_same_fault_inverted_is_declined_too(monkeypatch):
+    """YPF's shape: dollars labelled pesos, so conversion divides by ~1000."""
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 0.001)
+    record = {"currency": "USD", "financial_currency": "ARS",
+              "market_cap": 5_000_000_000.0, **_statements(4_200_000_000.0)}
+
+    out = MD._apply_fx(record)
+    assert out.get("fx_rate") is None
+    assert out["fx_skipped"]["rateRefused"] == 0.001
+
+
+def test_a_correct_conversion_is_still_applied(monkeypatch):
+    """An ADR reporting in won and trading in dollars must convert as before.
+
+    Huge raw figure, sane once converted — the opposite verdict on the same
+    shape of input, which is the whole point of comparing rather than
+    thresholding.
+    """
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 0.00072)
+    record = {"currency": "USD", "financial_currency": "KRW",
+              "market_cap": 4_400_000_000.0,
+              **_statements(25_810_082_000_000.0)}
+
+    out = MD._apply_fx(record)
+    assert out["fx_rate"] == 0.00072
+    assert "fx_skipped" not in out
+    assert float(out["income"].iloc[0, 0]) == pytest.approx(
+        25_810_082_000_000.0 * 0.00072)
+
+
+def test_a_near_parity_rate_is_never_second_guessed(monkeypatch):
+    """EUR, CAD, GBP, CHF and AUD against USD — 283 of the 388 mismatches.
+
+    The test cannot discriminate at a rate near 1 and does not pretend to. A
+    mislabel there is off by less than a factor of two, not by four orders of
+    magnitude, and refusing on a guess would break far more than it fixed.
+    """
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 1.08)
+    record = {"currency": "USD", "financial_currency": "EUR",
+              "market_cap": 5_000_000_000.0, **_statements(3_000_000_000.0)}
+
+    out = MD._apply_fx(record)
+    assert out["fx_rate"] == 1.08
+    assert "fx_skipped" not in out
+
+
+def test_the_guard_never_converts_something_it_was_not_going_to(monkeypatch):
+    """One-sided by construction: it can only decline, never initiate."""
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    same = {"currency": "IDR", "financial_currency": "IDR",
+            "market_cap": 1e12, **_statements(1e12)}
+    out = MD._apply_fx(same)
+    assert out.get("fx_rate") is None and "fx_skipped" not in out
+
+
+@pytest.mark.parametrize("record", [
+    {"currency": "IDR", "financial_currency": "USD", "market_cap": None},
+    {"currency": "IDR", "financial_currency": "USD", "market_cap": 0.0},
+    {"currency": "IDR", "financial_currency": "USD", "market_cap": 1e12},
+])
+def test_without_a_yardstick_the_conversion_proceeds(monkeypatch, record):
+    """No market cap or no revenue means no independent check, so no refusal.
+
+    Declining on missing data would turn a gap into a finding — the conversion
+    is the documented default and stays it.
+    """
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    full = {**record, "income": pd.DataFrame()}
+    out = MD._apply_fx(full)
+    assert out["fx_rate"] == 16_300.0

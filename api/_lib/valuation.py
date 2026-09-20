@@ -1510,6 +1510,13 @@ def analyze(
         # Currency provenance. Null unless the accounts and the shares disagree.
         "reportingCurrency": reporting if reporting and reporting != trading else None,
         "fxRate": _nullable(data.get("fx_rate")),
+        # THE APP OVERRODE THE SOURCE'S CURRENCY LABEL ON THIS NAME. Present
+        # only when `market_data._apply_fx` could show that converting would put
+        # the company's revenue far out of line with its own market value while
+        # the unconverted figures are in line with it. It is a rare and loud
+        # thing to do, so it is said rather than done quietly — a reader must
+        # not meet it as an unexplained difference from the filing.
+        "fxLabelOverride": data.get("fx_skipped"),
         "priceSource": ("manual entry" if np.isfinite(manual_price_f) and manual_price_f > 0
                         else data.get("price_source")),
         "priceAsOf": (None if np.isfinite(manual_price_f) and manual_price_f > 0

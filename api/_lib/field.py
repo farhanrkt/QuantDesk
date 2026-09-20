@@ -326,11 +326,19 @@ def revenue_of(company: Optional[dict]) -> dict:
         return {"usable": False, "value": None, "currency": currency, "asOf": as_of,
                 "reason": "no revenue line came back on the income statement"}
 
+    # A CONVERSION DELIBERATELY DECLINED IS NOT A CONVERSION MISSING.
+    # `market_data._apply_fx` refuses to scale statements whose currency label
+    # it can show to be wrong — the figures are already in the trading currency,
+    # which is exactly the scale this ranking needs. Treating that as "no rate
+    # was applied" would drop the one case the guard exists to rescue.
+    skipped = record.get("fx_skipped")
+
     # STATEMENTS IN ANOTHER CURRENCY THAT WERE NOT CONVERTED CANNOT BE COMPARED.
     # `market_data` converts at the boundary when it has a rate; when it does
     # not, the figure is real but on a different scale from its neighbours, and
     # a ranking is exactly where that does damage.
-    if reporting and currency and reporting != currency and not converted:
+    if (reporting and currency and reporting != currency
+            and not converted and not skipped):
         return {"usable": False, "value": None, "currency": currency, "asOf": as_of,
                 "reason": (f"the statements are written in {reporting} and the shares "
                            f"trade in {currency}, and no exchange rate was applied, so "
@@ -369,7 +377,12 @@ def revenue_of(company: Optional[dict]) -> dict:
                                f"comparable with its peers")}
 
     return {"usable": True, "value": value, "currency": currency, "asOf": as_of,
-            "converted": converted, "reportingCurrency": reporting if converted else None,
+            "converted": converted,
+            "reportingCurrency": reporting if converted else None,
+            # Carried so a reader can see that the app overrode the source's own
+            # currency label on this name, rather than discovering it as an
+            # unexplained difference from the filing.
+            "labelOverridden": bool(skipped),
             "reason": None}
 
 

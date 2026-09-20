@@ -297,3 +297,26 @@ def test_a_name_with_no_industry_at_all_counts_against_no_field():
     ])
     assert out["fields"]["Thermal Coal"]["unranked"] == 0
     assert out["unplaced"] == 1
+
+
+def test_a_conversion_the_app_declined_is_still_comparable():
+    """`market_data` now refuses to scale statements whose label it can show is
+    wrong — RIGS.JK's rupiah figures labelled USD. Those figures are ALREADY in
+    the trading currency, which is the scale this ranking needs, so treating the
+    absent rate as "not converted" would drop the one name the guard rescued.
+    """
+    out = F.revenue_of({
+        **record(365_897_785_357.0, currency="IDR", financial="USD", fx=None,
+                 cap=423_345_324_032.0),
+        "fx_skipped": {"reportingCurrency": "USD", "tradingCurrency": "IDR",
+                       "rateRefused": 16_300.0, "reason": "wrong label at the source"},
+    })
+    assert out["usable"] is True
+    assert out["value"] == 365_897_785_357.0
+    assert out["labelOverridden"] is True
+
+
+def test_a_genuinely_missing_rate_is_still_refused():
+    out = F.revenue_of(record(5_000.0, currency="IDR", financial="USD", fx=None))
+    assert out["usable"] is False
+    assert "no exchange rate was applied" in out["reason"]

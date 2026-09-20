@@ -911,6 +911,68 @@ def _company_uncached(ticker: str, convert: bool = True) -> dict:
     return out
 
 
+# The price-to-sales band a converted figure is sanity-checked against.
+# Deliberately enormous — real ratios live between about 0.1 and 30 — because
+# this is a UNITS test, not a valuation screen, and the error it catches is a
+# factor of sixteen thousand. See `_conversion_looks_wrong`.
+_PLAUSIBLE_PS = (0.01, 100.0)
+
+
+def _conversion_looks_wrong(out: dict, rate: float) -> bool:
+    """Whether converting at `rate` makes this company's numbers impossible.
+
+    THE PROVIDER'S CURRENCY LABEL IS OCCASIONALLY WRONG, AND IT IS NOT A
+    HARMLESS KIND OF WRONG. RIGS.JK — a small Indonesian tug and barge operator
+    — reports revenue of 366 billion rupiah and is served with
+    `financialCurrency: USD`, so converting multiplies its whole income,
+    balance and cash-flow statement by about 16,300. Every valuation and every
+    accounting screen for that company was then computed on statements four
+    orders of magnitude too large, and nothing anywhere said so. The same thing
+    happens to YPF with the rate inverted: it reports in dollars and is labelled
+    pesos, so conversion DIVIDES by about a thousand.
+
+    The test is a comparison, not a threshold. Market capitalisation comes from
+    the quote feed and is always in the trading currency, so it is an
+    independent yardstick: if the UNCONVERTED revenue implies a sane
+    price-to-sales ratio against it and the CONVERTED one does not, the label is
+    what is wrong.
+
+    MEASURED ACROSS EVERY MISMATCHED RECORD IN THE LOCAL CACHE — 388 of them,
+    both markets — this fires on exactly two, RIGS.JK and YPF, and passes 100
+    that are correctly labelled. On the remaining 283 the rate is near 1
+    (EUR, CAD, GBP, CHF, AUD against USD) and the test cannot discriminate; it
+    does not try, and a mislabel there is off by less than a factor of two
+    rather than by four orders of magnitude.
+
+    It is deliberately ONE-SIDED. It never converts something that was not going
+    to be converted; it only declines a conversion that turns a plausible
+    company into an impossible one.
+    """
+    # Imported here rather than at module scope because `valuation` imports this
+    # module — the alias table is the single place that knows how the provider
+    # names a statement line, and forking it to avoid a cycle would be worse
+    # than a local import.
+    from .valuation import _get_row
+
+    cap = _safe_float(out.get("market_cap"))
+    if not np.isfinite(cap) or cap <= 0:
+        return False
+    series = _get_row(out.get("income"), "revenue")
+    if series is None:
+        return False
+    clean = pd.Series(series).dropna()
+    if not len(clean):
+        return False
+    revenue = _safe_float(clean.iloc[0])
+    if not np.isfinite(revenue) or revenue <= 0:
+        return False
+
+    low, high = _PLAUSIBLE_PS
+    before = revenue / cap
+    after = revenue * rate / cap
+    return bool(not (low <= after <= high) and low <= before <= high)
+
+
 def _apply_fx(out: dict) -> dict:
     """Convert the statements into the trading currency, at today's rate.
 
@@ -918,12 +980,33 @@ def _apply_fx(out: dict) -> dict:
     UNCONVERTED statements and re-apply a fresh rate on every hit. Caching the
     converted figures would freeze an exchange rate for a week against
     statements that are meant to be read in rupiah today.
+
+    A CONVERSION THAT MAKES THE COMPANY IMPOSSIBLE IS DECLINED, and the refusal
+    is recorded on the record rather than applied silently — `fx_skipped` says
+    which currencies disagreed, what rate was refused and why, so a reader is
+    never shown a number whose provenance the app quietly overrode. See
+    `_conversion_looks_wrong`.
     """
     financial_ccy = out.get("financial_currency")
     trading_ccy = (out.get("currency") or "").upper() or None
     if financial_ccy and trading_ccy and financial_ccy != trading_ccy:
         rate = fx_rate(financial_ccy, trading_ccy)
         if rate:
+            if _conversion_looks_wrong(out, rate):
+                out["fx_skipped"] = {
+                    "reportingCurrency": financial_ccy,
+                    "tradingCurrency": trading_ccy,
+                    "rateRefused": float(rate),
+                    "reason": (
+                        f"The data source labels these statements {financial_ccy} "
+                        f"while the shares trade in {trading_ccy}, but converting at "
+                        f"{rate:,.4g} would put revenue far out of line with the "
+                        f"company's own market value, and the unconverted figures are "
+                        f"in line with it. The statements appear to be in "
+                        f"{trading_ccy} already, so they are left alone. This is a "
+                        f"wrong label at the source, not a missing rate."),
+                }
+                return out
             _convert_statements(out, rate)
             out["fx_rate"] = rate
     return out
