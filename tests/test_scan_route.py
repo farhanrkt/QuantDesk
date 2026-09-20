@@ -29,6 +29,7 @@ WHAT THESE TESTS PROTECT
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -151,3 +152,66 @@ def test_a_missing_scan_is_a_reason_not_a_404(client):
 def test_the_response_is_never_cached(client, reports):
     response = client.get("/api/scan/latest?market=ID")
     assert "no-store" in response.headers.get("cache-control", "")
+
+
+# --------------------------------------------------------------------------- #
+# The payload against the type that claims to describe it
+#
+# The blank panel came from a type that was wrong about the payload. This is the
+# same comparison from the other side: a field the type REQUIRES and the server
+# never sends is `undefined` at runtime, and `row.terms.map(...)` on an absent
+# array throws exactly the way an object rendered as a child does — after tsc
+# has passed, because tsc checks the type against the code and never against the
+# server.
+# --------------------------------------------------------------------------- #
+def _declared(interface: str) -> dict[str, bool]:
+    """Top-level fields of a TS interface, mapped to whether they are optional.
+
+    THIS PARSER GUARDS ITSELF. A regex over TypeScript is fragile, and a fragile
+    parser that quietly matches nothing is a test that passes forever while
+    measuring nothing — the failure this repository keeps finding in its own
+    instruments. So a missing interface raises, and the caller asserts it found
+    a plausible number of fields.
+    """
+    source = (ROOT / "lib" / "types.ts").read_text()
+    match = re.search(rf"export interface {interface} \{{(.*?)\n\}}", source, re.S)
+    assert match, f"{interface} is not in lib/types.ts under that name"
+
+    body = re.sub(r"/\*.*?\*/", "", match.group(1), flags=re.S)
+    body = re.sub(r"//.*", "", body)
+    fields: dict[str, bool] = {}
+    depth = 0
+    for line in body.splitlines():
+        stripped = line.strip()
+        field = re.match(r"([A-Za-z_][\w]*)(\??):", stripped)
+        if depth == 0 and field:
+            fields[field.group(1)] = field.group(2) == "?"
+        depth += stripped.count("{") - stripped.count("}")
+    return fields
+
+
+def test_every_required_row_field_is_actually_sent(client, reports):
+    declared = _declared("ScanRow")
+    assert len(declared) > 15, "the parser found too few fields to be believed"
+
+    for market in ("ID", "US"):
+        body = payload(client, market)
+        if not body.get("available") or not body.get("rows"):
+            continue
+        for row in (body["rows"])[:50]:
+            missing = sorted(name for name, optional in declared.items()
+                             if not optional and name not in row)
+            assert not missing, (
+                f"{market} rows omit {missing}, which ScanRow declares as required — "
+                f"a client reading them gets undefined after tsc has passed")
+
+
+def test_the_route_sends_nothing_the_type_does_not_describe(client, reports):
+    """An undeclared field is a client reading it by luck, or not at all."""
+    declared = _declared("ScanRow")
+    for market in ("ID", "US"):
+        body = payload(client, market)
+        if not body.get("available") or not body.get("rows"):
+            continue
+        extra = sorted(set(body["rows"][0]) - set(declared))
+        assert not extra, f"{market} rows carry undeclared fields: {extra}"
