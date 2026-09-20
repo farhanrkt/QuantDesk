@@ -30,6 +30,29 @@ Both halves run from .claude/launch.json (`quantdesk-web`, `quantdesk-api`) or
 uvicorn` — a bare `uvicorn` resolves to a system Python here carrying yfinance
 1.5.2 against this project's 0.2.66.
 
+TWO BUGS FROM 20-21 SEPTEMBER, BOTH SILENT, BOTH MINE
+------------------------------------------------------
+Neither threw, neither changed a count, both exited zero. They are the shape of
+defect this codebase actually produces, so they are worth knowing before you
+add anything.
+
+1. A CACHE REFRESH THAT REPLACED ANSWERS WITH GAPS. `refresh_free_legs` rebuilds
+   the one leg that costs no fetch when its version moves on. At midnight the
+   calendar rolled, `--fundamentals-days 1` found every company record one day
+   old and expired, the rebuild came back "not in hand" for all 771 names, and
+   the function wrote that over 771 good payloads and saved them. The next
+   report had no business descriptions and an empty shortlist. A rebuild that
+   knows LESS than what it would replace is now discarded.
+
+   Related trap: `--fundamentals-days 1` means YESTERDAY's record is already
+   expired, so an overnight run and a morning run see different worlds. Use 2+
+   when replaying.
+
+2. A CSS CLAMP THAT COMPUTED CORRECTLY AND DID NOTHING. `line-clamp-3` sets
+   `display: -webkit-box`; a later `block` in the same class list overrode it.
+   The DOM read `webkitLineClamp: 3` and clamped nothing. A screenshot would not
+   have told you — reading computed style did.
+
 READ THIS BEFORE YOU TRUST A GREEN BATTERY
 ------------------------------------------
 On 20 September the scan panel was opened in a browser for the first time and
