@@ -405,6 +405,20 @@ export function ScanPanel({ state, market, onSelect }: {
                       && ` · ${(row.netMargin * 100).toFixed(1)}% net margin`}
                     {row.analysts != null && ` · ${row.analysts} analysts`}
                   </span>
+                  {/* WHERE THE PRICE IS. Context, never a criterion — the same
+                      rule the screen next door follows. A growth rate without a
+                      price misleads in exactly one direction: it reads as a
+                      bargain, and this screen has not looked at cheapness at
+                      all. */}
+                  {row.drawdown != null && (
+                    <span className="mt-0.5 block text-micro text-faint">
+                      {row.latestClose != null && `at ${row.latestClose.toLocaleString()}, `}
+                      {row.drawdown < -0.005
+                        ? `${Math.abs(row.drawdown * 100).toFixed(0)}% below its own high`
+                        : "at its own high"}
+                      {" — this screen does not ask whether that is cheap"}
+                    </span>
+                  )}
                   {/* CLAMPED, NOT TRUNCATED. The whole description is in the
                       DOM — the search reads it and a reader can select it — and
                       three lines is what keeps seven of these on one screen.

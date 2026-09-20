@@ -407,6 +407,19 @@ def _specialists_summary(verdicts: list[dict]) -> dict:
             "yearsAvailable": record.get("yearsAvailable"),
             "analysts": watch.get("analysts"),
             "institutionsHeld": watch.get("institutionsHeld"),
+            # WHERE THE PRICE IS, AS CONTEXT AND NEVER AS A CRITERION — the same
+            # rule `neglect.py` follows and for the same reason: filtering on it
+            # would reintroduce the momentum bias these screens exist to escape.
+            #
+            # It is here because a growth rate without a price is misleading in
+            # one specific direction. KETR.JK compounds revenue at 29% a year
+            # and trades at 995 against a 52-week range of 388 to 1480; a reader
+            # shown the first number and not the second could easily think the
+            # screen had found something cheap. It has not looked at cheapness
+            # at all — that is the screen next door — and the entry gate is what
+            # says so.
+            "latestClose": entry.get("latestClose"),
+            "drawdown": (entry.get("neglect") or {}).get("drawdown"),
             # THE LABELS, NOT ONLY THE IDS. Every consumer of this list shows
             # the gate beside the name rather than instead of it, and "Poor
             # entry at this price" and "Below the turnover floor" are not the

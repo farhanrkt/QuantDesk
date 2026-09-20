@@ -1589,6 +1589,10 @@ export interface SpecialistRow {
   revenueCagr: number | null; netMargin: number | null;
   yearsProfitable: number | null; yearsAvailable: number | null;
   analysts: number | null; institutionsHeld: number | null;
+  /** Context, never a criterion — see `neglect.py`. A growth rate shown without
+   *  a price misleads in one direction only: it looks like a bargain. */
+  latestClose: number | null;
+  drawdown: number | null;
   /** Labels, not ids. "Poor entry at this price" and "Below the turnover floor"
    *  are not the same news, and the card shows which. */
   gates: { id: string; label: string }[];

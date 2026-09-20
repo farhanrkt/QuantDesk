@@ -225,8 +225,15 @@ def screen(verdict_row: dict, register_result: Optional[dict] = None,
     tradeable_float = free_float is None or free_float >= MIN_FREE_FLOAT
     selected = bool(cheap and solid and watch["unattended"] and tradeable_float)
 
+    # `currentDrawdown`, NOT `current`. This read the wrong key from the day it
+    # was written, so the drawdown was always None and the sentence below that
+    # reports it — the context this module's docstring promises a reader, in the
+    # paragraph explaining why there is deliberately no momentum FILTER — has
+    # never once appeared. `longterm.py` has named it `currentDrawdown` since it
+    # was written; nothing compared the two, and a key that is simply absent
+    # reads as a company with no drawdown rather than as a typo.
     drawdown = _finite((((technical or {}).get("longTerm") or {})
-                        .get("drawdown") or {}).get("current"))
+                        .get("drawdown") or {}).get("currentDrawdown"))
 
     return {
         "available": True,

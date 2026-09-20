@@ -72,8 +72,10 @@ def verdict(ticker="T.JK", *, peers=1, leads=False, every_year=True, ocf=True,
                         "operatingCashFlowPositive": ocf, "growing": growing,
                         "revenueCagr": cagr, "latestNetMargin": 0.185,
                         "yearsProfitable": 4, "yearsAvailable": 4, "reading": "…"},
+        "latestClose": 995.0,
         "neglect": {"attention": {"unattended": unattended, "analysts": 0,
-                                  "institutionsHeld": 0.0}},
+                                  "institutionsHeld": 0.0},
+                    "drawdown": -0.33},
     }
 
 
@@ -174,3 +176,28 @@ def test_an_unmeasured_rival_weakens_the_claim_without_dropping_the_name(scan):
     assert qualified["tradeable"][0]["soleListing"] is False   # but not claimed
     assert qualified["tradeable"][0]["onlyRanked"] is True
     assert qualified["tradeable"][0]["unrankedRivals"] == 2
+
+
+def test_the_price_travels_with_the_growth_rate(scan):
+    """A growth rate without a price misleads in exactly one direction.
+
+    KETR compounds revenue at 29% a year and trades at 995 against a 52-week
+    range of 388 to 1480. A reader shown the first number and not the second
+    could reasonably think this screen had found something cheap. It has not
+    looked at cheapness at all — that is the screen next door — so the price and
+    the distance from its own high are carried as CONTEXT, never as a criterion.
+    """
+    out = scan._specialists_summary([verdict("K.JK")])
+    row = out["tradeable"][0]
+    assert row["latestClose"] == 995.0
+    assert row["drawdown"] == pytest.approx(-0.33)
+
+
+def test_the_price_is_context_and_never_a_criterion(scan):
+    """Filtering on it would reintroduce the bias these screens exist to escape."""
+    near_high = verdict("A.JK")
+    near_high["neglect"]["drawdown"] = -0.01
+    deep = verdict("B.JK")
+    deep["neglect"]["drawdown"] = -0.70
+    out = scan._specialists_summary([near_high, deep])
+    assert out["selected"] == 2, "neither the fallen nor the risen is filtered out"

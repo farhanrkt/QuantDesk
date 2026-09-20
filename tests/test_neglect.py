@@ -106,8 +106,17 @@ def test_the_thresholds_are_thresholds(value, quality, expected):
 # ============================================================================ #
 def test_a_name_deep_in_drawdown_is_still_selected():
     """Filtering on the fall would reintroduce the bias the screen escapes.
-    The drawdown is reported so a reader can judge; it is not a criterion."""
-    technical = {"longTerm": {"drawdown": {"current": -0.55}}}
+    The drawdown is reported so a reader can judge; it is not a criterion.
+
+    THIS TEST USED TO PLANT `current` AND PASS, while the app read `current` too
+    and `longterm.py` had always written `currentDrawdown`. Both sides agreed
+    with each other and neither agreed with the data, so the drawdown was always
+    None in production and the sentence below never rendered once. A fixture
+    that encodes the same assumption as the code under test measures the
+    assumption, not the behaviour — which is why this repo's standard is to
+    plant ground truth from the producing module's own field names.
+    """
+    technical = {"longTerm": {"drawdown": {"currentDrawdown": -0.55}}}
     out = N.screen(verdict_row(), flat_register(), technical=technical)
     assert out["selected"] is True
     assert out["drawdown"] == pytest.approx(-0.55)
@@ -178,3 +187,52 @@ def test_the_screen_returns_a_reading_and_changes_nothing():
     before = dict(row)
     N.screen(row, flat_register())
     assert row == before, "the screen mutated the verdict it was reading"
+
+
+# --------------------------------------------------------------------------- #
+# The drawdown context, which was silently absent from the day this was written
+#
+# This module deliberately has NO momentum filter — adding "and it has stopped
+# falling" would reintroduce the exact bias it exists to escape — and its
+# docstring says the drawdown is reported as CONTEXT instead, so a reader can
+# apply their own judgement. It read `drawdown.current`; `longterm.py` has
+# always called the field `currentDrawdown`. The value was therefore always
+# None, the sentence quoting it never rendered, and the compensation the design
+# promised for not filtering was never actually delivered.
+# --------------------------------------------------------------------------- #
+def technical_with_drawdown(current):
+    return {"longTerm": {"drawdown": {"usable": True, "currentDrawdown": current,
+                                      "maxDrawdown": -0.74}}}
+
+
+def test_the_drawdown_is_read_from_the_key_that_exists():
+    out = N.screen(verdict_row(), register_result=None,
+                   technical=technical_with_drawdown(-0.3277))
+    assert out["drawdown"] == pytest.approx(-0.3277)
+
+
+def test_a_selected_name_well_below_its_high_says_so():
+    """The sentence that had never rendered."""
+    register = {"institutions": {"percentHeld": 0.0},
+                "float": {"freeFloat": 0.8}}
+    out = N.screen(verdict_row(value=80.0, quality=80.0), register,
+                   technical=technical_with_drawdown(-0.33))
+    assert out["selected"] is True
+    assert "33% below its own high" in out["reading"]
+    assert "not evidence the fall is over" in out["reading"]
+
+
+def test_it_stays_context_and_never_becomes_a_criterion():
+    """Two names identical but for the drawdown must both select."""
+    register = {"institutions": {"percentHeld": 0.0},
+                "float": {"freeFloat": 0.8}}
+    fallen = N.screen(verdict_row(), register,
+                      technical=technical_with_drawdown(-0.70))
+    risen = N.screen(verdict_row(), register,
+                     technical=technical_with_drawdown(0.0))
+    assert fallen["selected"] is True and risen["selected"] is True
+
+
+def test_an_absent_drawdown_is_none_rather_than_zero():
+    out = N.screen(verdict_row(), register_result=None, technical={})
+    assert out["drawdown"] is None
