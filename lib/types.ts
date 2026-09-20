@@ -248,6 +248,22 @@ export interface QualityResponse {
   reason?: string;
   sector: string | null;
   industry: string | null;
+  /**
+   * What the company does, in the data source's own words. Present whether or
+   * not the screens applied — the two commonest reasons they do not are that
+   * the company is a bank and that no sector came back, and a reader looking at
+   * "these models do not transfer to a lender" is exactly the one who still
+   * wants to know what the lender does.
+   *
+   * `summaryState` is `described`, `none published`, `not returned` (nothing
+   * descriptive came back at all — a throttle signature) or `not fetched`.
+   */
+  business?: {
+    sector: string | null; industry: string | null;
+    summary: string | null; summaryShort: string | null; summaryState: string;
+    employees: number | null; country: string | null; website: string | null;
+    reading: string;
+  } | null;
   verdict?: "SOUND" | "NEUTRAL" | "CONCERNS";
   tone?: string;
   headline?: string;

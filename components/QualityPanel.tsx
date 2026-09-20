@@ -176,6 +176,47 @@ function Dimension({
  * `explain[key].tone`, decided in Python with a test named after exactly that
  * mistake (`test_beneish_and_altman_point_opposite_ways`).
  */
+/**
+ * What the company does, above whatever the screens concluded about it.
+ *
+ * DESCRIPTION, NOT A READING. Every word is the data source's; nothing here is
+ * scored, and the scanner's composite does not reach this view. It renders on
+ * both branches of this panel because the branch that DECLINES to score — a
+ * bank, or a listing whose sector never arrived — is the one where a reader is
+ * most in the dark about the company.
+ */
+function WhatItDoes({ business }: { business: QualityResponse["business"] }) {
+  if (!business) return null;
+  const { summary, summaryState, industry, sector, employees, country } = business;
+  if (summaryState === "not fetched") return null;
+
+  const where = industry ?? sector;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>What this company does</CardTitle>
+        {where && <span className="font-mono text-micro text-ash">{where}</span>}
+      </CardHeader>
+      <CardBody className="space-y-2">
+        {summary ? (
+          <p className="prose-col text-base leading-relaxed text-body">{summary}</p>
+        ) : (
+          <p className="prose-col text-base leading-relaxed text-ash">
+            {business.reading}
+          </p>
+        )}
+        {(employees != null || country) && (
+          <p className="text-meta text-faint">
+            {employees != null && `${employees.toLocaleString()} employees`}
+            {employees != null && country && " · "}
+            {country}
+          </p>
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
 export function QualityPanel({ data }: { data: QualityResponse }) {
   const detail = useDetail();
   const simple = detail === "simple";
@@ -183,7 +224,8 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
 
   if (!data.applicable) {
     return (
-      <Card className="animate-rise">
+      <div className="space-y-4 animate-rise">
+      <Card>
         <CardHeader><CardTitle>Accounting quality</CardTitle></CardHeader>
         <CardBody>
           <p className="text-base leading-relaxed text-ash">{data.reason}</p>
@@ -194,6 +236,10 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
           )}
         </CardBody>
       </Card>
+      {/* The screens declined; what the company does is unaffected by that, and
+          this is the branch where a reader knows least about it. */}
+      <WhatItDoes business={data.business} />
+      </div>
     );
   }
 
@@ -220,6 +266,8 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
           </p>
         </CardBody>
       </Card>
+
+      <WhatItDoes business={data.business} />
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         {piotroski && <ExplainedStat explain={ex.piotroski} sub={piotroski.reading} />}

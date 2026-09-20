@@ -59,7 +59,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from _lib import (accumulation, chartlayers, eventstudy, explain, exposure,
-                  listings, market_data, microstructure, news, ownership,
+                  field, listings, market_data, microstructure, news, ownership,
                   patterns, portfolio, pretrade, quality, ranking, riskmodel,
                   structure, symbols, tape, technical, universes, valuation,
                   verdict, volumeprofile)
@@ -1657,6 +1657,17 @@ def quality_payload(symbol: str) -> dict:
     # `resolved_with_market` — so this call and its neighbours cannot diverge.
     payload = quality.analyze(company, symbol=symbol,
                               market_code=symbols.market_of(symbol))
+    # WHAT THE COMPANY ACTUALLY DOES, attached HERE rather than inside
+    # `quality.analyze`, so it survives the lens declining to score.
+    #
+    # The two most common reasons this panel shows no score are that the company
+    # is a bank and that no sector came back, and BOTH of those returns exit
+    # `analyze` early. A reader looking at a panel that says "these models do
+    # not transfer to a lender" is exactly the reader who still wants to know
+    # what the lender does. It is description, not a scanner reading: no
+    # composite reaches the published single-company view, and this is the
+    # provider's own sentence about the business.
+    payload["business"] = field.profile(company)
     payload["explain"] = explain.for_quality(payload)
     return payload
 
