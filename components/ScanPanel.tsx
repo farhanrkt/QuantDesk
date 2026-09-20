@@ -358,18 +358,19 @@ export function ScanPanel({ state, market, onSelect }: {
           <CardHeader>
             <CardTitle>Profitable specialists nobody is covering</CardTitle>
             <span className="font-mono text-micro text-ash">
-              {specialists.tradeable.length} tradeable of {specialists.selected}
+              {specialists.selected} found · {specialists.tradeable.length} clear
+              every gate
             </span>
           </CardHeader>
           <CardBody className="space-y-2.5">
-            {specialists.tradeable.length === 0 ? (
-              <p className="prose-col text-meta leading-relaxed text-ash">
-                Every name this found is gated as untradeable, which is the usual
-                outcome — a specialist nobody covers is usually a specialist nobody
-                trades.
-              </p>
-            ) : (
-              specialists.tradeable.map((row) => (
+            {/* GATED NAMES ARE SHOWN, NOT HIDDEN. Panel rule 2, which this card
+                broke: on the first full Indonesian sweep ALL SEVEN selected
+                names were gated, so the card rendered one sentence and no list
+                — and the top of them was gated on "Poor entry at this price"
+                alone, which is about today rather than about the company. A
+                screen for companies nobody trades cannot hide everything nobody
+                trades. The gate shows beside the name. */}
+            {[...specialists.tradeable, ...specialists.gated].map((row) => (
                 <button key={row.ticker} type="button"
                         onClick={() => onSelect(row.ticker)}
                         className="block w-full rounded border border-ruleSoft px-3 py-2.5
@@ -410,9 +411,14 @@ export function ScanPanel({ state, market, onSelect }: {
                       {row.summary}
                     </span>
                   )}
+                  {row.gates.length > 0 && (
+                    <span className="mt-1.5 flex items-center gap-1 text-micro text-faint">
+                      <Lock aria-hidden className="h-3 w-3 shrink-0" />
+                      {row.gates.map((gate) => gate.label).join("; ")}
+                    </span>
+                  )}
                 </button>
-              ))
-            )}
+              ))}
             {/* The base rates, because the intersection reads as three demanding
                 tests and one of them admits most of a small exchange. */}
             <Note>
@@ -423,6 +429,13 @@ export function ScanPanel({ state, market, onSelect }: {
               every year with cash behind it and growing in this market&apos;s top
               quartile, and {(specialists.baseRates.unattended * 100).toFixed(0)}% are
               uncovered — which is the loosest of the three by a distance.
+              {specialists.tradeable.length === 0 && specialists.selected > 0 && (
+                <> Every name here is gated, which is the usual outcome: a specialist
+                nobody covers is usually a specialist nobody trades. The gate is
+                printed beside each one, and they are not the same news — a turnover
+                floor is about the company, a poor entry is about today&apos;s
+                price.</>
+              )}
               {" "}{specialists.note}
             </Note>
           </CardBody>

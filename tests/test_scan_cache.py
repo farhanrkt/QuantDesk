@@ -79,3 +79,97 @@ def test_nothing_stale_deletes_nothing(scan):
 def test_a_missing_cache_directory_is_not_an_error(scan, tmp_path, monkeypatch):
     monkeypatch.setattr(scan, "CACHE_DIR", tmp_path / "never-created")
     assert scan.prune_cache(keep=2, today="2026-09-12") == []
+
+
+# --------------------------------------------------------------------------- #
+# The one leg that costs nothing to fetch, and therefore must not go stale
+#
+# A full 771-name Indonesian sweep came back with every net-debt figure null.
+# Nothing had failed: the leg payloads had been written an hour before the
+# borrowings reading existed, and `deepen` served them unchanged because a cache
+# hit is a cache hit. Every OTHER leg is a network fetch and is right to be
+# served as written; this one reads a company record already on disk, so the
+# right answer is to rebuild it rather than reserve two hours of provider quota
+# re-downloading filings that have not changed.
+# --------------------------------------------------------------------------- #
+def test_a_stale_free_leg_is_rebuilt_and_nothing_else_is(scan, monkeypatch):
+    rebuilt = {"version": scan.PROFILE_LEG_VERSION, "available": True,
+               "profile": {"industry": "Cable"}}
+    monkeypatch.setattr(scan, "read_profile", lambda symbol: rebuilt)
+
+    legs = {
+        "valuation": {"ok": True, "data": {"expensive": "network"}},
+        "profile": {"ok": True, "data": {"version": 1, "available": True,
+                                         "profile": {"industry": "Cable"}}},
+    }
+    assert scan.refresh_free_legs("K.JK", legs) is True
+    assert legs["profile"]["data"] == rebuilt
+    # The fetched legs are untouched: re-running them is a day of quota.
+    assert legs["valuation"] == {"ok": True, "data": {"expensive": "network"}}
+
+
+def test_a_current_free_leg_is_left_alone(scan, monkeypatch):
+    monkeypatch.setattr(scan, "read_profile",
+                        lambda symbol: pytest.fail("should not recompute"))
+    legs = {"profile": {"ok": True,
+                        "data": {"version": scan.PROFILE_LEG_VERSION,
+                                 "available": True}}}
+    assert scan.refresh_free_legs("K.JK", legs) is False
+
+
+def test_a_leg_set_written_before_versions_existed_is_rebuilt(scan, monkeypatch):
+    """No version at all is the oldest shape, and the commonest one on disk.
+
+    The rebuild has to KNOW something for it to be taken — see
+    `test_a_rebuild_that_knows_less_is_discarded` for why.
+    """
+    rebuilt = {"version": scan.PROFILE_LEG_VERSION, "available": True,
+               "profile": {"industry": "Cable"}}
+    monkeypatch.setattr(scan, "read_profile", lambda symbol: rebuilt)
+    legs = {"profile": {"ok": True, "data": {"available": True}}}
+    assert scan.refresh_free_legs("K.JK", legs) is True
+    assert legs["profile"]["data"] == rebuilt
+
+
+def test_a_missing_profile_leg_is_rebuilt_rather_than_skipped(scan, monkeypatch):
+    monkeypatch.setattr(scan, "read_profile",
+                        lambda symbol: {"version": scan.PROFILE_LEG_VERSION,
+                                        "available": True})
+    legs = {"valuation": {"ok": True, "data": {}}}
+    assert scan.refresh_free_legs("K.JK", legs) is True
+    assert legs["profile"]["data"]["version"] == scan.PROFILE_LEG_VERSION
+
+
+def test_a_rebuild_that_knows_less_is_discarded(scan, monkeypatch):
+    """The bug that emptied a 771-name report, as a test.
+
+    `read_profile` reads the fundamentals cache and returns a stated gap when
+    the record is not there. On the night the calendar rolled over, a
+    `--fundamentals-days 1` run found every record one day old and expired, so
+    the rebuild came back unavailable for every name — and the first version of
+    `refresh_free_legs` wrote that over 771 good payloads and saved it. Nothing
+    failed and nothing was reported; the next report simply had no business
+    descriptions and an empty shortlist.
+
+    A cache holds what was expensive to learn. Replacing that with "I could not
+    find out" is the one thing it must never do.
+    """
+    monkeypatch.setattr(scan, "read_profile",
+                        lambda symbol: {"version": scan.PROFILE_LEG_VERSION,
+                                        "available": False,
+                                        "reason": "the record was not in hand"})
+    good = {"version": 1, "available": True, "profile": {"industry": "Cable"}}
+    legs = {"profile": {"ok": True, "data": good}}
+
+    assert scan.refresh_free_legs("K.JK", legs) is False
+    assert legs["profile"]["data"] == good        # stale and true, not fresh and empty
+
+
+def test_a_rebuild_is_taken_when_the_cached_leg_was_itself_a_gap(scan, monkeypatch):
+    """Nothing is lost by replacing a gap with a gap, or with an answer."""
+    fresh = {"version": scan.PROFILE_LEG_VERSION, "available": True,
+             "profile": {"industry": "Cable"}}
+    monkeypatch.setattr(scan, "read_profile", lambda symbol: fresh)
+    legs = {"profile": {"ok": True, "data": {"version": 1, "available": False}}}
+    assert scan.refresh_free_legs("K.JK", legs) is True
+    assert legs["profile"]["data"] == fresh

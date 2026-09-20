@@ -1566,6 +1566,35 @@ export interface VerdictChart {
 }
 
 /** One row of a completed market scan, trimmed to what a table needs. */
+/**
+ * One name on the specialist shortlist: largest or only measurable in its
+ * field, compounding, and uncovered.
+ *
+ * GATED AND UNGATED ROWS SHARE THIS SHAPE AND ARE RENDERED TOGETHER. On the
+ * first full Indonesian sweep all seven selected names were gated, and the top
+ * of them was gated on `poorEntry` alone — a statement about today's price, not
+ * about the company. A screen for companies nobody trades that hides everything
+ * nobody trades has no output.
+ */
+export interface SpecialistRow {
+  ticker: string; name: string | null; score: number | null; action: string;
+  industry: string | null; summary: string | null;
+  /** Nothing else carries this label. The strong claim. */
+  soleListing: boolean;
+  /** Nothing else in the label could be measured. What the screen selects on. */
+  onlyRanked: boolean;
+  /** Same-label listings that returned no usable revenue. */
+  unrankedRivals: number;
+  leadsField: boolean; fieldPeers: number | null;
+  revenueCagr: number | null; netMargin: number | null;
+  yearsProfitable: number | null; yearsAvailable: number | null;
+  analysts: number | null; institutionsHeld: number | null;
+  /** Labels, not ids. "Poor entry at this price" and "Below the turnover floor"
+   *  are not the same news, and the card shows which. */
+  gates: { id: string; label: string }[];
+  recordReading: string | null; fieldReading: string | null;
+}
+
 export interface ScanRow {
   ticker: string;
   name: string | null;
@@ -1695,17 +1724,9 @@ export interface ScanResponse {
     selected: number;
     baseRates: { scanned: number; specialist: number; compounding: number;
                  unattended: number };
-    tradeable: {
-      ticker: string; name: string | null; score: number | null; action: string;
-      industry: string | null; summary: string | null;
-      soleListing: boolean; onlyRanked: boolean; unrankedRivals: number;
-      leadsField: boolean; fieldPeers: number | null;
-      revenueCagr: number | null; netMargin: number | null;
-      yearsProfitable: number | null; yearsAvailable: number | null;
-      analysts: number | null; institutionsHeld: number | null;
-      gates: string[]; recordReading: string | null; fieldReading: string | null;
-    }[];
-    gated: { ticker: string; name: string | null; industry: string | null }[];
+    tradeable: SpecialistRow[];
+    /** Same shape as `tradeable`. Rendered TOGETHER with it — see ScanPanel. */
+    gated: SpecialistRow[];
     note: string;
   } | null;
   /**

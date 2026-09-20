@@ -407,7 +407,12 @@ def _specialists_summary(verdicts: list[dict]) -> dict:
             "yearsAvailable": record.get("yearsAvailable"),
             "analysts": watch.get("analysts"),
             "institutionsHeld": watch.get("institutionsHeld"),
-            "gates": [g["id"] for g in (entry.get("gates") or [])],
+            # THE LABELS, NOT ONLY THE IDS. Every consumer of this list shows
+            # the gate beside the name rather than instead of it, and "Poor
+            # entry at this price" and "Below the turnover floor" are not the
+            # same news: the first is about today, the second about the company.
+            "gates": [{"id": g["id"], "label": g["label"]}
+                      for g in (entry.get("gates") or [])],
             "recordReading": record.get("reading"),
             "fieldReading": place.get("reading"),
         }
@@ -530,6 +535,77 @@ def cache_path(symbol: str, day: str) -> Path:
     return CACHE_DIR / day / f"{symbol.replace('/', '_')}.json"
 
 
+# THE ONLY LEG THAT COSTS NOTHING TO RECOMPUTE, AND THE VERSION IS WHY THAT
+# MATTERS. Every other leg in `deepen` is a network fetch, so a cached day is
+# worth keeping whatever shape it is in. This one reads a company record that is
+# already on disk, so when `field` or `trackrecord` learns to report something
+# new, the right answer is to recompute it — not to reserve two hours of
+# provider quota re-downloading filings that have not changed.
+#
+# Without a version the cache served the old shape silently: a full 771-name
+# sweep came back with every net-debt figure null, because the leg payloads had
+# been written the hour before the borrowings reading existed, and nothing said
+# so. Bump this whenever the payload gains or loses a field.
+PROFILE_LEG_VERSION = 3
+
+
+def read_profile(symbol: str) -> dict:
+    """What the company sells and what its filings say it has done.
+
+    A MISS IS A GAP, NOT A REFUSAL, and it does not go on the retry path.
+    `cached_company` is a peek: if the record is not in memory or on disk,
+    asking again two seconds later reads the same empty cache. Saying so costs
+    nothing and a pointless retry costs two seconds a name.
+    """
+    record = market_data.cached_company(symbol)
+    if record is None:
+        return {"version": PROFILE_LEG_VERSION, "available": False,
+                "reason": ("the company record was not in hand when the business "
+                           "profile was read, so what this company does is unknown "
+                           "for this run rather than unpublished")}
+    return {"version": PROFILE_LEG_VERSION,
+            "available": True,
+            "profile": field.profile(record),
+            "revenue": field.revenue_of(record),
+            # Same record, no further fetch. Profits, cash, growth and
+            # borrowings over the years the filings cover — description, never a
+            # score; see `trackrecord.py` for why "profitable" alone admits 67%
+            # of this market and is therefore not a screen.
+            "trackRecord": trackrecord.read(record)}
+
+
+def refresh_free_legs(symbol: str, legs: dict) -> bool:
+    """Recompute the legs that cost no fetch, in place. True if anything moved.
+
+    Called on a CACHE HIT. The expensive legs are served as they were written;
+    this one is rebuilt whenever its version has moved on, which costs a disk
+    read and makes the descriptive half of the scan iterable without spending a
+    day of provider quota to change a sentence.
+
+    A REFRESH MAY NEVER DOWNGRADE, AND THE FIRST VERSION OF THIS FUNCTION DID.
+    `read_profile` reads the fundamentals cache and returns a stated GAP when
+    the record is not there. On the night the calendar rolled over, a
+    `--fundamentals-days 1` run found every record one day old and therefore
+    expired, so the rebuild came back unavailable for all 771 names — and this
+    function wrote that over 771 good profile payloads and saved it to disk.
+    Nothing failed, nothing was reported, and the next report had no business
+    descriptions, no track records and an empty shortlist.
+
+    A cache exists to hold what was expensive to learn. Replacing what it holds
+    with "I could not find out" is the one thing it must never do, so a rebuild
+    that knows LESS than the record it would replace is discarded and the stale
+    payload is kept — stale and true beats fresh and empty.
+    """
+    current = (legs.get("profile") or {}).get("data") or {}
+    if current.get("version") == PROFILE_LEG_VERSION:
+        return False
+    rebuilt = read_profile(symbol)
+    if not rebuilt.get("available") and current.get("available"):
+        return False
+    legs["profile"] = {"ok": True, "data": rebuilt}
+    return True
+
+
 def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
     """Every per-symbol lens, in the `/api/confluence` leg shape.
 
@@ -541,9 +617,15 @@ def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
     path = cache_path(symbol, day)
     if use_cache and path.exists():
         try:
-            return json.loads(path.read_text())
+            legs = json.loads(path.read_text())
         except ValueError:
-            pass
+            legs = None
+        if legs is not None:
+            # The free leg is rebuilt if its shape has moved on; everything
+            # expensive is served as written. See `refresh_free_legs`.
+            if refresh_free_legs(symbol, legs):
+                path.write_text(json.dumps(clean(legs), default=str))
+            return legs
 
     def leg(fn):
         # ONE RETRY, AFTER A PAUSE, BECAUSE MOST FAILURES HERE ARE THE RATE
@@ -582,26 +664,6 @@ def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
             raise RuntimeError("429 no sector returned — rate limited, not refused")
         return payload
 
-    def profile_leg():
-        # A MISS IS A GAP, NOT A REFUSAL, and it does not go on the retry path.
-        # `cached_company` is a peek: if the record is not in memory or on disk,
-        # asking again two seconds later reads the same empty cache. Saying so
-        # costs nothing and a pointless retry costs two seconds a name.
-        record = market_data.cached_company(symbol)
-        if record is None:
-            return {"available": False,
-                    "reason": ("the company record was not in hand when the business "
-                               "profile was read, so what this company does is "
-                               "unknown for this run rather than unpublished")}
-        return {"available": True,
-                "profile": field.profile(record),
-                "revenue": field.revenue_of(record),
-                # Same record, no further fetch. Profits, cash and growth over
-                # the years the filings cover — description, never a score; see
-                # `trackrecord.py` for why "profitable" alone admits 67% of this
-                # market and is therefore not a screen.
-                "trackRecord": trackrecord.read(record)}
-
     legs = {
         "anomaly": leg(lambda: whale_payload(symbol, period="2y")),
         "technical": leg(lambda: technical_payload(symbol, range_key="2y",
@@ -614,7 +676,7 @@ def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
         # has just fetched this company's record, so `cached_company` reads it
         # out of memory. It never fetches — see its docstring — so this leg adds
         # nothing to a sweep the provider is already rate-limiting.
-        "profile": leg(profile_leg),
+        "profile": leg(lambda: read_profile(symbol)),
         # The share register is the third body of data and it is fetched here
         # rather than beside the price batch because, like the filings, it is one
         # call per symbol and does not batch. It is cached with the four lenses
@@ -1370,10 +1432,19 @@ def main() -> int:
     specialists = report.get("specialists") or {}
     if not args.quiet and specialists.get("selected"):
         base = specialists.get("baseRates") or {}
-        rows = specialists.get("tradeable") or []
+        # EVERY SELECTED NAME, GATED OR NOT, WITH THE GATE BESIDE IT.
+        #
+        # Printing only the tradeable ones hid the whole list on the first full
+        # sweep: all seven were gated, and the top of them — the name this was
+        # built to find — was gated on `poorEntry` alone, which is a statement
+        # about today's price and not about the company. A screen for companies
+        # nobody trades that hides everything nobody trades has no output.
+        rows = list(specialists.get("tradeable") or []) + list(
+            specialists.get("gated") or [])
+        tradeable = len(specialists.get("tradeable") or [])
         print(f"\n  Profitable specialists nobody is covering — "
               f"{specialists['selected']} of {base.get('scanned', 0)} scanned, "
-              f"{len(rows)} tradeable:")
+              f"{tradeable} of them clear every gate:")
         for row in rows:
             if row["soleListing"]:
                 where = "no listed rival in"
@@ -1387,11 +1458,11 @@ def main() -> int:
                   f"margin {(row.get('netMargin') or 0) * 100:5.1f}%  "
                   f"{row['yearsProfitable']}/{row['yearsAvailable']} yrs  "
                   f"{where} {str(row.get('industry'))[:26]}")
+            if row.get("gates"):
+                print(f"      gated: "
+                      f"{'; '.join(g['label'] for g in row['gates'])}")
             if row.get("summary"):
                 print(f"      {str(row['summary'])[:100]}")
-        if specialists.get("gated"):
-            print(f"    {len(specialists['gated'])} more were selected and gated as "
-                  f"untradeable.")
         # THE BASE RATES, BECAUSE THE INTERSECTION LOOKS LIKE THREE DEMANDING
         # TESTS AND ONE OF THEM ADMITS MOST OF THE MARKET.
         print(f"    Ingredients on this scan: "
