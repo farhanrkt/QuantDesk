@@ -198,6 +198,18 @@ WHERE TO BE CAREFUL
   measure_exposure_stability.py after a change to exposure.REFERENCES or to the
   estimation window. A stale stamped number is worse than none.
 
+- AFTER ANY THROTTLED SWEEP, REFETCH THE NAMES WHOSE DESCRIPTIVE FIELDS CAME
+  BACK EMPTY, BEFORE READING THE BUY LIST. `field.profile` marks those `not
+  returned`; 239 of 3,387 on the first US sweep. Their quality lens is a GAP
+  rather than a refusal, and a missing component's weight is REMOVED from the
+  blend, so the score goes UP.
+  Measured on that sweep: refetching the 239 changed 30 verdicts, and 23 of them
+  fell out of BUY. AAT went 60.5 to 46.3, BFH 72.2 to 50.2, BTX 72.9 to 58.3 —
+  two of them had been STRONG BUYS at the top of the list purely on an absent
+  lens. `reports/us-throttled.txt` is written by the analysis in the scratchpad;
+  rebuild it from the report's `summaryState` and re-run those tickers with
+  `--tickers @file --no-cache`, then replay the full scan.
+
 - `scripts/check_payload_keys.py` finds reads of a key no real payload carries —
   the `drawdown.current` class of bug, where the parent hop resolves and the
   leaf never does, so Python returns None and a missing key is indistinguishable

@@ -1776,6 +1776,28 @@ untradeable when it is. That is not a contradiction so much as the shape of the
 problem: on a market this well covered, the companies nobody has read are the
 companies nobody can buy at size.
 
+### 18.8 A throttled fetch inflates a score, measured at scale
+
+`verdict.py` already records that a missing lens RAISES a score, because the
+absent component's weight is removed from the blend rather than counted against
+the name. The first full US sweep measured what that costs in practice.
+
+239 of 3,387 names came back with no sector, industry or description — the
+throttle signature, not companies nobody describes. Refetching them changed
+**30 verdicts, and 23 fell out of BUY**:
+
+| | Before | After | Quality lens |
+|---|---|---|---|
+| BTX | 72.9 **Strong buy** | 58.3 Hold | gap → refused |
+| BFH | 72.2 **Strong buy** | 50.2 Hold | gap → refused |
+| CTBI | 67.0 Buy | 50.0 Hold | gap → refused |
+| ACNB | 61.4 Buy | 48.2 Hold | gap → refused |
+| AAT | 60.5 Buy | 46.3 Hold | gap → **scored 25** |
+
+Two of the list's Strong Buys were Strong Buys because a lens was missing. The
+operational consequence is in `NEXT_SESSION_PROMPT.md`: after a throttled sweep,
+refetch the names marked `not returned` before reading the buy list at all.
+
 **This finds what it was described, and that is all it establishes.** Industry labels and
 the share register arrive as a current snapshot with no history, so the screen cannot be
 backtested even in principle — the same wall `neglect.py` publishes. `scanlog.py` records
