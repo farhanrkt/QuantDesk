@@ -405,9 +405,17 @@ export function ScanPanel({ state, market, onSelect }: {
                       && ` · ${(row.netMargin * 100).toFixed(1)}% net margin`}
                     {row.analysts != null && ` · ${row.analysts} analysts`}
                   </span>
+                  {/* CLAMPED, NOT TRUNCATED. The whole description is in the
+                      DOM — the search reads it and a reader can select it — and
+                      three lines is what keeps seven of these on one screen.
+                      GMFI's runs to 1,400 characters on its own. */}
+                  {/* NO `block` ON THE CLAMP. `line-clamp-3` sets `display:
+                      -webkit-box`, which is what `-webkit-line-clamp` needs, and
+                      a later `block` silently overrode it — the clamp computed
+                      as 3 and did nothing at all. */}
                   {row.summary && (
-                    <span className="mt-1.5 block max-w-prose text-meta leading-relaxed
-                                     text-ash">
+                    <span className="mt-1.5 line-clamp-3 max-w-prose text-meta
+                                     leading-relaxed text-ash">
                       {row.summary}
                     </span>
                   )}
