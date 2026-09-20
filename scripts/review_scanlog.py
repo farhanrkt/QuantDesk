@@ -72,6 +72,21 @@ def main() -> int:
     print()
     print(summary["reading"])
 
+    # THE SCREENS, EACH REFUSING ON ITS OWN COUNT. `scanlog.record` writes down
+    # which names each screen picked on the day it picked them, because nothing
+    # about them can be reconstructed afterwards — the filings come back
+    # restated and the share register and industry labels have no history at
+    # all. For a while it wrote that down and nothing read it back, which is the
+    # same defect one layer up.
+    #
+    # Not pooled to reach the threshold sooner: a screen selecting seven names a
+    # sweep gets to thirty resolved calls long after the blended score does, and
+    # averaging them together would measure neither.
+    print()
+    print("Screens, each measured on its own selections:")
+    for flag, block in scanlog.summarise_screens(resolved).items():
+        print(f"  {flag}: {block['reading']}")
+
     if summary["available"]:
         print()
         closed = [r for r in resolved if not r.get("open") and r.get("excess") is not None]

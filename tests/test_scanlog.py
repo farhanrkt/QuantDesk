@@ -290,3 +290,62 @@ def test_an_unrecorded_day_is_not_an_empty_one(tmp_path):
 def test_an_unknown_screen_is_refused_rather_than_answered_empty(tmp_path):
     with pytest.raises(ValueError, match="not a recorded screen"):
         S.selected_on([], "profitable")
+
+
+# --------------------------------------------------------------------------- #
+# Reading the screens back, which is the other half of recording them
+# --------------------------------------------------------------------------- #
+def resolved_row(ticker="T.JK", *, flag="neglected", picked=True, excess=0.05,
+                 open_call=False, carries=True):
+    row = {"ticker": ticker, "action": "HOLD", "score": 55.0,
+           "open": open_call, "excess": None if open_call else excess}
+    if carries:
+        row[flag] = picked
+    return row
+
+
+def test_a_screen_under_the_threshold_refuses_and_names_its_own_count():
+    rows = [resolved_row(f"T{i}.JK") for i in range(5)]
+    block = S.summarise_screens(rows)["neglected"]
+    assert block["available"] is False
+    assert block["closed"] == 5 and block["needed"] == S.MIN_CLOSED
+    assert "not ready" in block["reading"]
+
+
+def test_each_screen_is_measured_on_its_own_selections_not_pooled():
+    """A screen picking a handful a sweep reaches the threshold much later."""
+    rows = ([resolved_row(f"N{i}.JK", flag="neglected")
+             for i in range(S.MIN_CLOSED)]
+            + [resolved_row(f"S{i}.JK", flag="soleListing") for i in range(3)])
+    # The soleListing rows do not carry `neglected`, and vice versa.
+    for row in rows[S.MIN_CLOSED:]:
+        row.pop("neglected", None)
+    out = S.summarise_screens(rows)
+    assert out["neglected"]["available"] is True
+    assert out["soleListing"]["available"] is False
+    assert out["soleListing"]["closed"] == 3
+
+
+def test_a_screen_no_scan_recorded_is_not_a_screen_that_picked_nobody():
+    rows = [resolved_row(f"T{i}.JK", flag="neglected") for i in range(40)]
+    out = S.summarise_screens(rows)
+    assert out["compounding"]["available"] is False
+    assert out["compounding"]["selected"] == 0
+    assert "predate it" in out["compounding"]["reading"]
+    assert "selected nobody" in out["compounding"]["reading"]
+
+
+def test_a_resolved_screen_reports_what_happened_and_claims_nothing():
+    rows = [resolved_row(f"T{i}.JK", excess=0.04) for i in range(S.MIN_CLOSED)]
+    block = S.summarise_screens(rows)["neglected"]
+    assert block["available"] is True
+    assert block["meanExcess"] == pytest.approx(0.04)
+    assert block["positive"] == S.MIN_CLOSED
+    assert "rather than evidence it will happen again" in block["reading"]
+
+
+def test_open_calls_are_not_counted_as_resolved():
+    rows = ([resolved_row(f"C{i}.JK") for i in range(4)]
+            + [resolved_row(f"O{i}.JK", open_call=True) for i in range(9)])
+    block = S.summarise_screens(rows)["neglected"]
+    assert block["closed"] == 4 and block["open"] == 9

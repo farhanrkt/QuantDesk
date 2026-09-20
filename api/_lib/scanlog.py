@@ -265,6 +265,81 @@ def resolve(rows: Sequence[dict], prices: dict, benchmark=None,
     return out
 
 
+def summarise_screens(resolved: Sequence[dict]) -> dict:
+    """What each screen's selections did, or a refusal to say, per screen.
+
+    THE OTHER HALF OF RECORDING THEM. `record` writes down which names each
+    screen picked on the day it picked them, because nothing about those screens
+    can be reconstructed afterwards — the filings come back restated and the
+    share register and industry labels have no history at all. Writing that down
+    and never reading it back is the same defect one layer up, and this
+    repository has now produced it twice.
+
+    EVERY REFUSAL HERE IS PER SCREEN AND NAMED. `MIN_CLOSED` applies to each one
+    separately: a screen selecting six names a month reaches thirty resolved
+    calls long after the blended score does, and pooling them to reach the
+    threshold sooner would measure neither.
+
+    A SCREEN WITH NO RECORDED DAYS IS NOT A SCREEN THAT SELECTED NOBODY. Rows
+    written before a flag existed do not carry it, so `selected_on` reports
+    those days as unrecorded and they are excluded here rather than counted as
+    zero — see that function for why a fabricated zero is worse than a gap.
+    """
+    out = {}
+    for flag in SCREEN_FLAGS:
+        picked = [row for row in resolved if row.get(flag)]
+        recorded = [row for row in resolved if flag in row]
+        closed = [row for row in picked if not row.get("open")
+                  and row.get("excess") is not None]
+        open_calls = [row for row in picked if row.get("open")]
+
+        if not recorded:
+            out[flag] = {
+                "available": False, "selected": 0, "closed": 0, "open": 0,
+                "reading": (f"No scan in this log recorded the {flag} screen. The "
+                            f"rows predate it, which is not the same as the screen "
+                            f"having selected nobody."),
+            }
+            continue
+
+        if len(closed) < MIN_CLOSED:
+            out[flag] = {
+                "available": False,
+                "selected": len(picked),
+                "closed": len(closed),
+                "open": len(open_calls),
+                "needed": MIN_CLOSED,
+                "reading": (
+                    f"{len(picked)} selection{'' if len(picked) == 1 else 's'} "
+                    f"recorded, {len(closed)} resolved against the {MIN_CLOSED} "
+                    f"needed before a rate means anything, {len(open_calls)} still "
+                    f"open. This screen makes no predictive claim and cannot be "
+                    f"backtested; this is the only measurement it will ever get, "
+                    f"and it is not ready."),
+            }
+            continue
+
+        values = np.array([row["excess"] for row in closed], dtype="float64")
+        out[flag] = {
+            "available": True,
+            "selected": len(picked),
+            "closed": len(closed),
+            "open": len(open_calls),
+            "meanExcess": float(values.mean()),
+            "medianExcess": float(np.median(values)),
+            "positive": int((values > 0).sum()),
+            "reading": (
+                f"{len(closed)} resolved selections, mean excess "
+                f"{values.mean() * 100:+.1f}%, median "
+                f"{np.median(values) * 100:+.1f}%, {int((values > 0).sum())} of "
+                f"{len(closed)} positive. No significance test is quoted: this is "
+                f"one screen on one market with no control group, and the number "
+                f"is a record of what happened rather than evidence it will "
+                f"happen again."),
+        }
+    return out
+
+
 def summarise(resolved: Sequence[dict]) -> dict:
     """What the closed calls add up to, or a refusal to say.
 
