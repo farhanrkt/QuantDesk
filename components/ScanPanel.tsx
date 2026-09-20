@@ -592,7 +592,24 @@ export function ScanPanel({ state, market, onSelect }: {
                       <td className="px-5 py-2 text-ash"
                           title={[row.summary, row.field?.reading]
                                    .filter(Boolean).join("\n\n") || undefined}>
-                        <span className="block max-w-56 truncate">{fieldLabel(row)}</span>
+                        {/* THE LABEL IS A WAY INTO THE FIELD, not just a note.
+                            "1 of 7" invites the question "which seven", and the
+                            answer is one click away. `stopPropagation` because
+                            the row itself opens the company. */}
+                        {row.industry ? (
+                          <button type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setQuery(row.industry ?? "");
+                                  }}
+                                  title={`Show the other scanned names in ${row.industry}`}
+                                  className="block max-w-56 truncate text-left
+                                             hover:text-body hover:underline">
+                            {fieldLabel(row)}
+                          </button>
+                        ) : (
+                          <span className="block max-w-56 truncate">{fieldLabel(row)}</span>
+                        )}
                         {row.field?.leads && (
                           <span className="text-micro text-flow">largest of its field</span>
                         )}

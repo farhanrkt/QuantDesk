@@ -112,6 +112,34 @@ def record(directory: Path, market: str, verdicts: Sequence[dict],
             "price": entry.get("latestClose"),
             "gates": [gate["id"] for gate in (entry.get("gates") or [])],
             "regime": (regime or {}).get("state"),
+            # WHAT THE SCREENS SAID ON THE DAY THEY SAID IT.
+            #
+            # `neglect.py` and the specialist shortlist both publish that they
+            # cannot be backtested and that THIS FILE is the honest alternative:
+            # the filings are only available as restated today, and industry
+            # labels and the share register arrive as a snapshot with no history
+            # at all, so "was this name cheap, unrivalled and uncovered in
+            # March" cannot be reconstructed after the fact — only recorded
+            # before it.
+            #
+            # The log did not record any of it. Both docstrings claimed a
+            # prospective record that did not exist, which is the failure this
+            # repository keeps finding in its own instruments: the thing next to
+            # the thing that matters. `sector` alone cannot answer a question
+            # asked about an industry, a screen or a field.
+            #
+            # Rows written before this existed simply lack these keys. A reader
+            # must treat absent as UNRECORDED rather than as false — see
+            # `selected_on`, which refuses a day it cannot speak for.
+            "industry": entry.get("industry"),
+            "neglected": bool((entry.get("neglect") or {}).get("selected")),
+            "leadsField": bool((entry.get("fieldPosition") or {}).get("leads")),
+            "soleListing": (entry.get("fieldPosition") or {}).get("peers") == 1,
+            "compounding": bool(
+                (entry.get("trackRecord") or {}).get("everyYearProfitable")
+                and (entry.get("trackRecord") or {}).get("operatingCashFlowPositive")
+                and (entry.get("trackRecord") or {}).get("growing")),
+            "revenueCagr": (entry.get("trackRecord") or {}).get("revenueCagr"),
         })
 
     with target.open("w") as handle:
@@ -120,6 +148,36 @@ def record(directory: Path, market: str, verdicts: Sequence[dict],
 
     return {"path": str(target), "added": len(rows),
             "total": len(existing) + len(rows), "scannedOn": today}
+
+
+# The screen flags added on 20 September 2026. A row written before that date
+# carries none of them, and the difference between "not selected" and "not
+# recorded" is the whole value of a prospective log.
+SCREEN_FLAGS = ("neglected", "leadsField", "soleListing", "compounding")
+
+
+def selected_on(rows: Sequence[dict], flag: str) -> dict:
+    """Which names a screen selected, by scan date, refusing the days it cannot speak for.
+
+    A DAY WITH NO ROWS CARRYING THE FLAG IS UNRECORDED, NOT EMPTY. Reading a
+    missing key as False would report that the screen selected nothing in
+    August, which is a finding about the screen rather than about the log — and
+    it is exactly the reading that would make a prospective record useless, by
+    filling its early history with fabricated zeroes.
+    """
+    if flag not in SCREEN_FLAGS:
+        raise ValueError(f"{flag} is not a recorded screen: {SCREEN_FLAGS}")
+    days: dict[str, dict] = {}
+    for row in rows:
+        day = row.get("scannedOn")
+        if not day:
+            continue
+        block = days.setdefault(day, {"recorded": False, "tickers": []})
+        if flag in row:
+            block["recorded"] = True
+            if row.get(flag):
+                block["tickers"].append(row["ticker"])
+    return {day: block for day, block in sorted(days.items())}
 
 
 def read(directory: Path, market: str) -> list[dict]:

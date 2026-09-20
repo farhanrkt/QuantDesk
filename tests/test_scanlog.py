@@ -191,3 +191,82 @@ def test_an_avoid_is_right_when_the_excess_is_negative():
     summary = S.summarise(resolved)
     assert summary["sells"]["hitRate"] == 1.0
     assert summary["buys"]["hitRate"] == 1.0
+
+
+# --------------------------------------------------------------------------- #
+# What the screens said on the day they said it
+#
+# `neglect.py` and the specialist shortlist both publish that they cannot be
+# backtested — the filings come back restated, and industry labels and the share
+# register arrive as a snapshot with no history — and both name THIS FILE as the
+# honest alternative. It was not recording any of it. The claim was made in two
+# docstrings and met in neither.
+# --------------------------------------------------------------------------- #
+def screened(ticker="T.JK", *, neglected=False, leads=False, peers=4,
+             every_year=True, ocf=True, growing=True, industry="Thermal Coal"):
+    return {
+        "ticker": ticker, "name": f"PT {ticker}", "action": "HOLD", "score": 55.0,
+        "latestClose": 100.0, "sector": "Energy", "industry": industry,
+        "neglect": {"selected": neglected},
+        "fieldPosition": {"leads": leads, "peers": peers},
+        "trackRecord": {"everyYearProfitable": every_year,
+                        "operatingCashFlowPositive": ocf, "growing": growing,
+                        "revenueCagr": 0.286},
+    }
+
+
+def test_the_screens_are_recorded_not_just_the_score(tmp_path):
+    S.record(tmp_path, "ID", [screened("A.JK", neglected=True, leads=True)],
+             scanned_on="2026-09-20")
+    row = S.read(tmp_path, "ID")[0]
+    assert row["industry"] == "Thermal Coal"
+    assert row["neglected"] is True
+    assert row["leadsField"] is True
+    assert row["soleListing"] is False
+    assert row["compounding"] is True
+    assert row["revenueCagr"] == pytest.approx(0.286)
+
+
+def test_a_sole_listing_is_recorded_as_its_own_state(tmp_path):
+    S.record(tmp_path, "ID", [screened("K.JK", peers=1)], scanned_on="2026-09-20")
+    row = S.read(tmp_path, "ID")[0]
+    assert row["soleListing"] is True
+    assert row["leadsField"] is False
+
+
+def test_compounding_needs_all_three_conditions(tmp_path):
+    S.record(tmp_path, "ID", [
+        screened("A.JK"), screened("B.JK", growing=False),
+        screened("C.JK", ocf=False), screened("D.JK", every_year=False),
+    ], scanned_on="2026-09-20")
+    by_ticker = {row["ticker"]: row for row in S.read(tmp_path, "ID")}
+    assert by_ticker["A.JK"]["compounding"] is True
+    assert by_ticker["B.JK"]["compounding"] is False
+    assert by_ticker["C.JK"]["compounding"] is False
+    assert by_ticker["D.JK"]["compounding"] is False
+
+
+def test_an_unrecorded_day_is_not_an_empty_one(tmp_path):
+    """The distinction that makes a prospective log worth keeping.
+
+    Rows written before the screens were recorded carry none of these keys.
+    Reading a missing key as False would report that the screen selected nothing
+    in August — a finding about the screen rather than about the log, and one
+    that would fill the record's early history with fabricated zeroes.
+    """
+    old = {"scannedOn": "2026-08-01", "ticker": "OLD.JK", "action": "HOLD",
+           "score": 50.0, "price": 100.0}
+    S.record(tmp_path, "ID", [screened("NEW.JK", neglected=True)],
+             scanned_on="2026-09-20")
+    rows = [old, *S.read(tmp_path, "ID")]
+
+    days = S.selected_on(rows, "neglected")
+    assert days["2026-08-01"]["recorded"] is False
+    assert days["2026-08-01"]["tickers"] == []
+    assert days["2026-09-20"]["recorded"] is True
+    assert days["2026-09-20"]["tickers"] == ["NEW.JK"]
+
+
+def test_an_unknown_screen_is_refused_rather_than_answered_empty(tmp_path):
+    with pytest.raises(ValueError, match="not a recorded screen"):
+        S.selected_on([], "profitable")
