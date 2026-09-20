@@ -222,6 +222,18 @@ def screen(verdict_row: dict, register_result: Optional[dict] = None,
 
     cheap = value >= CHEAP_AT
     solid = quality >= SOLID_AT
+    # AN UNKNOWN FLOAT PASSES, WHICH IS THE OPPOSITE OF HOW A MISSING VALUE OR
+    # QUALITY IS TREATED SIX LINES UP, AND THE ASYMMETRY IS DELIBERATE.
+    #
+    # Value and quality are the screen's CRITERIA: selecting on whichever of
+    # them happened to arrive would be a different screen. The float is a guard
+    # against spending the list on names nobody can buy, and `verdict` already
+    # gates `microFloat` independently — so an unknown float cannot smuggle an
+    # untradeable name into the tradeable half, only into the gated one.
+    #
+    # Measured on the 771-name Indonesian sweep: 7 of 269 scored names have no
+    # float reading and none of them was selected, so this decides nothing today
+    # either way.
     tradeable_float = free_float is None or free_float >= MIN_FREE_FLOAT
     selected = bool(cheap and solid and watch["unattended"] and tradeable_float)
 
