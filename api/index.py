@@ -1176,7 +1176,21 @@ def latest_scan(market: str = Query("ID", pattern="^(US|ID|us|id)$")):
         "market": market,
         "file": path.name,
         "generatedAt": report.get("generatedAt"),
-        "counts": report.get("counts"),
+        # COUNTS ARE SCALARS HERE, AND THE BREAKDOWN IS ITS OWN KEY.
+        #
+        # The report's own `counts` carries `rejectedByReason`, a map of reason
+        # to count, nested inside a block whose other members are all integers.
+        # A client declared that block `Record<string, number>`, believed it,
+        # rendered every value, and handed React an object — which throws, and
+        # the error boundary blanks the WHOLE PAGE rather than the one tile.
+        #
+        # The type was not wrong about what it wanted; the payload was wrong
+        # about what it was. Splitting it here makes the declared shape true, so
+        # no consumer has to be defensive about it. `tests/test_scan_route.py`
+        # holds the contract.
+        "counts": {key: value for key, value in (report.get("counts") or {}).items()
+                   if isinstance(value, (int, float)) and not isinstance(value, bool)},
+        "rejectedByReason": (report.get("counts") or {}).get("rejectedByReason"),
         "settings": report.get("settings"),
         "universe": report.get("universe"),
         # THE NULL RESULT AND THE MARKET'S OWN STATE TRAVEL WITH THE TABLE, in

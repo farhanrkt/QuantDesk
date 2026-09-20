@@ -356,6 +356,28 @@ for (const [file, src] of uiFiles) {
        + "every name, `fields.unplaced` too.");
 }
 
+// A RULE THAT WAS TRIED AND IS DELIBERATELY NOT HERE: "never render a value
+// off `Object.entries` as a bare JSX child". It comes from a real bug —
+// `ScanPanel` mapped every entry of the scan's `counts` into a tile, and
+// `counts.rejectedByReason` is itself a map, so React threw "Objects are not
+// valid as a React child" and the error boundary blanked the WHOLE PAGE from
+// the day the panel was written.
+//
+// It cannot be made precise at this level. The first version fired on three
+// panels that pass the value as a prop or read fields off it; narrowing to a
+// bare `{value}` child still fired on `VerdictPanel`, where the map is
+// `Record<string, string>` and rendering a string is always safe, and on a
+// template literal's own `${n}`. A regex cannot tell a string map from an
+// object map, so the rule would permanently cry wolf on correct files — which
+// is worse than no rule, for the reason recorded above rule 9.
+//
+// The actual defect was a TYPE THAT LIED: the payload was declared
+// `Record<string, number>` and was not one. So the fix went to the boundary
+// instead — `GET /api/scan/latest` now returns `counts` as scalars only, with
+// the by-reason breakdown as its own key, and `tests/test_scan_route.py`
+// asserts that contract on the real report. A shape guaranteed by the server
+// needs no rule on the client.
+
 if (designFailures.length) {
   console.error("\nDesign-system rules broken (see DESIGN.md):\n");
   console.error(designFailures.join("\n\n"));

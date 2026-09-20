@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Gauge, Lock, ShieldAlert, Telescope } from "lucide-react";
+import { ArrowDown, Gauge, Lock, ShieldAlert, Telescope } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import { TONE_FIELD } from "@/components/ui/explain";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,48 @@ import { cn, num } from "@/lib/utils";
 const ACTION_ORDER: Record<string, number> = {
   STRONG_BUY: 0, BUY: 1, HOLD: 2, REDUCE: 3, AVOID: 4, NO_ACTION: 5,
 };
+
+type SortKey = "default" | "score" | "growth" | "margin" | "coverage" | "field";
+
+/**
+ * What each sortable column sorts on. `null` means UNKNOWN, and unknown sorts
+ * LAST in both directions rather than at one end.
+ *
+ * That is not a nicety. A name whose revenue growth did not read is not the
+ * slowest-growing company in the market, and letting it settle at the bottom of
+ * a descending sort would say exactly that — the same conflation of a gap with
+ * a finding that this codebase keeps having to undo. Sorting it to the end in
+ * both directions leaves it visible and uninterpreted.
+ */
+const SORT_VALUE: Record<Exclude<SortKey, "default" | "field">,
+                         (row: ScanRow) => number | null> = {
+  score: (row) => row.score,
+  growth: (row) => row.record?.revenueCagr ?? null,
+  margin: (row) => row.record?.netMargin ?? null,
+  coverage: (row) => row.coverage,
+};
+
+function compareRows(a: ScanRow, b: ScanRow, key: SortKey): number {
+  if (key === "default") {
+    const byAction = (ACTION_ORDER[a.action] ?? 9) - (ACTION_ORDER[b.action] ?? 9);
+    return byAction !== 0 ? byAction : (b.score ?? 0) - (a.score ?? 0);
+  }
+  if (key === "field") {
+    // Leaders first, then sole listings, then alphabetically by label — so the
+    // column groups the names doing the same thing next to each other.
+    const rank = (row: ScanRow) =>
+      row.field?.leads ? 0 : row.field?.soleListing ? 1 : 2;
+    const byRank = rank(a) - rank(b);
+    if (byRank !== 0) return byRank;
+    return (a.industry ?? "\uffff").localeCompare(b.industry ?? "\uffff");
+  }
+  const left = SORT_VALUE[key](a);
+  const right = SORT_VALUE[key](b);
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;      // unknown last, always
+  if (right === null) return -1;
+  return right - left;              // largest first
+}
 
 type Filter =
   | "directional" | "buys" | "neglected" | "leaders" | "sole" | "compounding" | "all";
@@ -120,12 +162,50 @@ function entryLabel(row: ScanRow): string {
   return row.entry.band ?? "—";
 }
 
+/**
+ * A column header that sorts, and says whether it is sorting.
+ *
+ * `aria-sort` goes on the `th`, which is what a screen reader announces; the
+ * button inside is what takes focus and the keyboard. Clicking the active
+ * column returns to the report's own ordering rather than reversing — the
+ * default is action-then-score, which is an ORDER OF PRECEDENCE rather than a
+ * direction, and there is no meaningful ascending version of it.
+ */
+function SortHeader({ label, sortKey, sort, onSort, align = "left" }: {
+  label: string;
+  sortKey: SortKey;
+  sort: SortKey;
+  onSort: (key: SortKey) => void;
+  align?: "left" | "right";
+}) {
+  const active = sort === sortKey;
+  return (
+    <th aria-sort={active ? "descending" : "none"}
+        className={align === "right" ? "text-right" : undefined}>
+      <button type="button" onClick={() => onSort(active ? "default" : sortKey)}
+              title={active
+                ? `Sorted by ${label.toLowerCase()}, largest first. Click to return to `
+                  + "the scan's own ordering."
+                : `Sort by ${label.toLowerCase()}, largest first. Names this did not `
+                  + "read for go last, not lowest."}
+              className={cn("eyebrow inline-flex items-center gap-1 hover:text-body",
+                            active ? "text-body" : "text-inherit")}>
+        {label}
+        <ArrowDown aria-hidden
+                   className={cn("h-3 w-3 transition-opacity",
+                                 active ? "opacity-100" : "opacity-0")} />
+      </button>
+    </th>
+  );
+}
+
 export function ScanPanel({ state, market, onSelect }: {
   state: Engine<ScanResponse>;
   market: string;
   onSelect: (ticker: string) => void;
 }) {
   const [filter, setFilter] = useState<Filter>("directional");
+  const [sort, setSort] = useState<SortKey>("default");
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
 
@@ -152,11 +232,8 @@ export function ScanPanel({ state, market, onSelect }: {
       }
       return row.action !== "HOLD" && row.action !== "NO_ACTION";
     });
-    return [...picked].sort((a, b) => {
-      const byAction = (ACTION_ORDER[a.action] ?? 9) - (ACTION_ORDER[b.action] ?? 9);
-      return byAction !== 0 ? byAction : (b.score ?? 0) - (a.score ?? 0);
-    });
-  }, [state, filter, needle]);
+    return [...picked].sort((a, b) => compareRows(a, b, sort));
+  }, [state, filter, needle, sort]);
 
   if (state.status === "loading" || state.status === "idle") {
     return (
@@ -201,6 +278,7 @@ export function ScanPanel({ state, market, onSelect }: {
   }
 
   const counts = data.counts ?? {};
+  const rejectedByReason = data.rejectedByReason;
   const neglected = data.neglected;
   const specialists = data.specialists;
 
@@ -232,16 +310,30 @@ export function ScanPanel({ state, market, onSelect }: {
           </span>
         </CardHeader>
         <CardBody className="space-y-3">
+          {/* Every value here is a number because the route guarantees it — see
+              `GET /api/scan/latest`. It did not always, and a nested map
+              rendered as a child blanked this whole page behind an error
+              boundary. The breakdown renders below, as the sentence it is. */}
           <div className="flex flex-wrap gap-2">
             {Object.entries(counts).map(([key, value]) => (
               <div key={key}
-                   className="flex-1 basis-28 rounded-lg border border-ruleSoft bg-raised
-                              px-3 py-2">
+                   className="flex-1 basis-28 rounded-lg border border-ruleSoft
+                              bg-raised px-3 py-2">
                 <div className="eyebrow mb-0.5">{key}</div>
                 <div className="num text-base font-semibold text-chalk">{value}</div>
               </div>
             ))}
           </div>
+
+          {rejectedByReason && (
+            <p className="prose-col text-meta leading-relaxed text-ash">
+              Not scored:{" "}
+              {Object.entries(rejectedByReason)
+                .sort((a, b) => b[1] - a[1])
+                .map(([reason, n]) => `${n} ${reason}`)
+                .join(", ")}.
+            </p>
+          )}
 
           {data.regime?.reading && (
             <p className="prose-col text-meta leading-relaxed text-ash">
@@ -455,9 +547,17 @@ export function ScanPanel({ state, market, onSelect }: {
                 <thead>
                   <tr className="eyebrow border-b border-rule
                                  [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                    <th>Ticker</th><th className="text-right">Score</th>
-                    <th>Action</th><th>Business</th><th>Record</th><th>Conviction</th>
-                    <th className="text-right">Coverage</th>
+                    <th>Ticker</th>
+                    <SortHeader label="Score" sortKey="score" align="right"
+                                sort={sort} onSort={setSort} />
+                    <th>Action</th>
+                    <SortHeader label="Business" sortKey="field"
+                                sort={sort} onSort={setSort} />
+                    <SortHeader label="Record" sortKey="growth"
+                                sort={sort} onSort={setSort} />
+                    <th>Conviction</th>
+                    <SortHeader label="Coverage" sortKey="coverage" align="right"
+                                sort={sort} onSort={setSort} />
                     <th>Entry</th><th>Why not</th>
                   </tr>
                 </thead>

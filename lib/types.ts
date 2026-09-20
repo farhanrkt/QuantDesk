@@ -1617,7 +1617,17 @@ export interface ScanResponse {
   reason?: string;
   file?: string;
   generatedAt?: string;
+  /**
+   * The funnel's tallies, guaranteed scalar by the route.
+   *
+   * The report's own version nests `rejectedByReason` inside this block. A
+   * client that believed this type and rendered every value handed React an
+   * object, which throws and blanks the page behind an error boundary — so the
+   * route now splits it out rather than the client guarding against it.
+   */
   counts?: Record<string, number>;
+  /** Why names never reached a score, by reason. */
+  rejectedByReason?: Record<string, number>;
   settings?: Record<string, unknown>;
   universe?: { label?: string; asOf?: string; count?: number } | null;
   /** The measured null result. Never render the ordering without it. */
