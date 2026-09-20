@@ -165,6 +165,15 @@ WHERE TO BE CAREFUL
   measure_exposure_stability.py after a change to exposure.REFERENCES or to the
   estimation window. A stale stamped number is worse than none.
 
+- `scripts/check_payload_keys.py` finds reads of a key no real payload carries —
+  the `drawdown.current` class of bug, where the parent hop resolves and the
+  leaf never does, so Python returns None and a missing key is indistinguishable
+  from a company that has no value for it. It needs a real sweep on disk and is
+  therefore outside CI: an offline suite plants its own ground truth, and a key
+  audit against planted data proves only that fixture and code agree, which is
+  the failure that let the original through. Run it after a sweep and after
+  changing what any module puts in a payload.
+
 - `npm run check:frontend` now enforces 10 design rules by grep over source. Each
   one describes a bug that was actually in this codebase. If one fires on
   something legitimate, widen the rule or add to its allowlist WITH the reason —
