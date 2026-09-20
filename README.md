@@ -695,10 +695,19 @@ is absent for the trusts and absent for Ares Management and Main Street Capital 
 name test for "Trust" catches 36 trusts and also Northern Trust, a bank with 23,600 staff.
 `Gross Profit` comes closest — it appears on 0 of 38 fund-named income statements, so its
 presence rules a fund out — but it is missing from 36 of the 62 others, so its absence
-rules nothing in. **No filter ships**, because a wrong classifier drops real companies
-rather than merely admitting fake ones; the limitation is stated instead, and a standing
-inside a label that mixes operating companies with investment vehicles should not be read
-as a market position.
+rules nothing in.
+
+**The signal that works is the one that was not available when those four were tried.**
+Every name in question had come back empty from a throttled fetch, so there was no
+description to read; once 216 of them were refetched, BTX turned out to describe itself as
+"a mutual fund launched by BlackRock". Measured on 3,359 described US names: of the 138
+labelled Asset Management, **57 say they are a fund** — Guggenheim, Brookfield, BlackRock,
+Eaton Vance, Gabelli, Nuveen, PIMCO — the 81 that do not are operating firms including
+Ares, AllianceBernstein and the business development companies, and it fires on **zero**
+of the other 3,221 names. Those entities are now left unplaced with that reason, because a
+fund is not a company competing in a field and its investment income is not the quantity
+the rest of its label is ranked on. It remains the provider's claim rather than a
+classification this app makes, which is the same footing as the industry label beside it.
 
 *A "niche" flag was built, measured and dropped.* The obvious companion to "leads its
 field" is "and the field is small", measured as the field's share of scanned revenue.

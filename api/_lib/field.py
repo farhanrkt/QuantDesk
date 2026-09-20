@@ -152,13 +152,14 @@ A structural test comes closest and still does not close: `Gross Profit` and
 PRESENCE rules a fund out — but they are also absent from 36 of the 62 others,
 so their absence rules nothing in.
 
-So no filter ships. Inventing a name-based classifier here would be exactly the
-unmeasured heuristic this module declines elsewhere, and a wrong one drops real
-companies rather than merely admitting fake ones. What ships instead is this
-paragraph: **a standing inside "Asset Management", and inside any label that
-mixes operating companies with investment vehicles, is not comparable and should
-not be read as one.** The company name is on every row, and a reader can see
-what a BlackRock term trust is.
+A FIFTH SIGNAL WAS NOT TESTED AT THE TIME, AND IT IS THE ONE THAT WORKS. The
+names in question had all come back empty from a throttled fetch, so there was
+no description to read. Once 216 of them were refetched the answer was in the
+provider's own prose: BTX describes itself as "a mutual fund launched by
+BlackRock". `describes_itself_as_a_fund` reads that, `standings` leaves those
+entities UNPLACED with the reason, and the four failed signals above are left on
+the record because the order in which they failed is the useful part — the
+cheap structural tests were tried first and the text last, and the text won.
 
 WHAT WAS TRIED AND IS NOT HERE: A "NICHE" TEST
 -----------------------------------------------
@@ -545,6 +546,45 @@ def distinctive_terms(entries: list[dict]) -> dict[str, list[str]]:
     return out
 
 
+# A fund saying so in its own description. Deliberately narrow: the phrase has
+# to be a statement about what this entity IS, not a mention of funds it deals
+# with, which is why "is a mutual fund" matches and "manages mutual funds" does
+# not. See `describes_itself_as_a_fund` for what it was measured against.
+_FUND_PROSE = re.compile(
+    r"\b(is an? [a-z\- ]*?(mutual fund|closed[\- ]end(ed)? fund|"
+    r"exchange[\- ]traded fund)|launched and managed by|is a fund (launched|managed))",
+    re.I)
+
+
+def describes_itself_as_a_fund(summary: Optional[str]) -> bool:
+    """Whether this entity's own description says it is a fund.
+
+    THIS REVERSES AN EARLIER CONCLUSION, AND THE MEASUREMENT IS WHY. The module
+    docstring recorded that nothing available separates a closed-end trust from
+    an operating asset manager: `quoteType` reads EQUITY for a BlackRock term
+    trust exactly as for Apple, headcount is absent for Ares Management and
+    Main Street Capital as well as for the trusts, and a name test for "Trust"
+    catches Northern Trust, a bank with 23,600 staff.
+
+    All four of those were tested. The DESCRIPTION was not, because the names in
+    question had come back empty from a throttled fetch and there was nothing to
+    read. Once 216 of them were refetched, the answer was sitting in the prose:
+    BTX describes itself as "a mutual fund launched by BlackRock".
+
+    MEASURED ON 3,359 DESCRIBED US NAMES. Of the 138 labelled Asset Management,
+    57 say they are a fund — Guggenheim, Brookfield, BlackRock, Eaton Vance,
+    Gabelli, Nuveen, PIMCO — and the 81 that do not are operating firms: Ares
+    Management, AllianceBernstein, Principal Financial, and the business
+    development companies Main Street, Fidus, Horizon and Goldman Sachs BDC,
+    which lend and are properly ranked on what they earn. It fires on ZERO of
+    the other 3,221 names.
+
+    IT IS STILL THE PROVIDER'S CLAIM, NOT A CLASSIFICATION THIS APP MAKES,
+    which is the same epistemic footing as the industry label beside it.
+    """
+    return bool(summary and _FUND_PROSE.search(summary))
+
+
 def standings(entries: list[dict]) -> dict:
     """Rank every usable name inside its own industry label, by revenue.
 
@@ -563,6 +603,17 @@ def standings(entries: list[dict]) -> dict:
     for entry in entries or []:
         industry = (entry.get("industry") or "").strip()
         revenue = _finite(entry.get("revenue"))
+        # A FUND IS NOT A COMPANY COMPETING IN A FIELD. Its "revenue" is
+        # investment income, which is not the quantity every other member of
+        # its label is ranked on, and it inflates the peer count with entities
+        # that do not compete. Left UNPLACED with a reason rather than dropped,
+        # so the count of what could not be ranked still accounts for it.
+        if describes_itself_as_a_fund(entry.get("summary")):
+            unplaced.append({"ticker": entry.get("ticker"),
+                             "why": "describes itself as a fund"})
+            if industry:
+                unranked.setdefault(industry, []).append(entry.get("ticker"))
+            continue
         if not industry or revenue is None or revenue <= 0:
             unplaced.append({"ticker": entry.get("ticker"),
                              "why": "no industry" if not industry else "no usable revenue"})

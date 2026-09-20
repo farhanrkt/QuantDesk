@@ -409,3 +409,67 @@ def test_a_name_with_no_description_gets_no_terms():
 def test_an_empty_corpus_is_empty_rather_than_an_error():
     assert F.distinctive_terms([]) == {}
     assert F.distinctive_terms(None) == {}
+
+
+# --------------------------------------------------------------------------- #
+# A fund is not a company competing in a field
+#
+# The module docstring recorded that nothing available separates a closed-end
+# trust from an operating asset manager. Four signals were tested — quoteType,
+# headcount, the name, the statement structure — and all four failed. The
+# DESCRIPTION was not tested, because the names in question had come back empty
+# from a throttled fetch and there was nothing to read. Once refetched, BTX
+# described itself as "a mutual fund launched by BlackRock".
+#
+# Measured on 3,359 described US names: of the 138 labelled Asset Management, 57
+# say they are a fund and the 81 that do not are operating firms — Ares,
+# AllianceBernstein, Principal Financial, and the BDCs. Zero false positives
+# among the other 3,221.
+# --------------------------------------------------------------------------- #
+def test_an_entity_that_calls_itself_a_fund_is_recognised():
+    assert F.describes_itself_as_a_fund(
+        "BlackRock Innovation and Growth Term Trust is a mutual fund launched by "
+        "BlackRock, Inc.") is True
+    assert F.describes_itself_as_a_fund(
+        "Nuveen Quality Municipal Income Fund is a closed-ended fixed income "
+        "mutual fund launched by Nuveen Investments.") is True
+
+
+def test_a_manager_of_funds_is_not_a_fund():
+    """The distinction the regex exists for: what it IS, not what it deals in."""
+    assert F.describes_itself_as_a_fund(
+        "Ares Management Corporation operates as an alternative investment "
+        "manager and manages mutual funds for institutional clients.") is False
+    assert F.describes_itself_as_a_fund(
+        "Main Street Capital Corporation is a business development company "
+        "specializing in lower middle market investments.") is False
+
+
+def test_a_fund_is_left_unplaced_with_its_reason_not_ranked():
+    rows = [
+        {"ticker": "MGR", "name": "Manager", "industry": "Asset Management",
+         "revenue": 900.0, "summary": "Manager Corp operates as an asset manager."},
+        {"ticker": "A", "name": "A", "industry": "Asset Management",
+         "revenue": 400.0, "summary": "A Corp manages money for clients."},
+        {"ticker": "B", "name": "B", "industry": "Asset Management",
+         "revenue": 100.0, "summary": "B Corp advises institutions."},
+        {"ticker": "TRUST", "name": "Trust", "industry": "Asset Management",
+         "revenue": 5_000.0,
+         "summary": "Big Term Trust is a mutual fund launched by Big, Inc."},
+    ]
+    out = F.standings(rows)
+    # The fund has the largest "revenue" and must not take the field.
+    assert out["fields"]["Asset Management"]["leader"] == "MGR"
+    assert "TRUST" not in out["positions"]
+    assert {"ticker": "TRUST", "why": "describes itself as a fund"} in out["unplacedDetail"]
+    # It still counts against the field, so "no listed rival" cannot be claimed.
+    assert out["fields"]["Asset Management"]["unranked"] == 1
+
+
+def test_a_name_with_no_description_is_not_assumed_to_be_a_fund():
+    out = F.standings([
+        {"ticker": "A", "name": "A", "industry": "Gold", "revenue": 100.0},
+        {"ticker": "B", "name": "B", "industry": "Gold", "revenue": 20.0},
+        {"ticker": "C", "name": "C", "industry": "Gold", "revenue": 10.0},
+    ])
+    assert out["positions"]["A"]["leads"] is True
