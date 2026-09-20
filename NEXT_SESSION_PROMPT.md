@@ -205,6 +205,16 @@ WHERE TO BE CAREFUL
   the failure that let the original through. Run it after a sweep and after
   changing what any module puts in a payload.
 
+- THE SCAN PANEL RENDERS EVERY ROW, AND THAT IS MEASURED RATHER THAN ASSUMED.
+  On the 3,364-name US report: payload 2.0MB, fetch 946ms, JSON.parse 5ms, and
+  the "Everything" filter takes 889ms to paint 3,364 rows across 56,862 DOM
+  nodes. Adding the business descriptions and term chips roughly quadruples the
+  payload and adds about 13,000 nodes, so expect one to one and a half seconds
+  on that filter and nothing noticeable on the default one. If it ever needs
+  fixing the answer is row virtualisation, not trimming what is sent — the full
+  description has to travel because the search reads it, and the character-361
+  finding in `field.py` is why.
+
 - `npm run check:frontend` now enforces 10 design rules by grep over source. Each
   one describes a bug that was actually in this codebase. If one fires on
   something legitimate, widen the rule or add to its allowlist WITH the reason —
