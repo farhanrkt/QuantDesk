@@ -124,6 +124,21 @@ These are durable product facts. Future work preserves them; none is a style pre
    closed, and the module's own docstring says so. **A feature that survives its
    measurement by being scoped down is the normal outcome here, not a failure.**
 
+   *Second worked example, 20 September 2026.* `field.py` reports what a company sells
+   and whether it is the largest of the scanned names sharing its industry label. The
+   asked-for feature was a **niche champion** screen, and the "niche" half was built,
+   measured and dropped: the obvious measure is the field's share of the scanned
+   market's revenue, and across the fields with a clear leader the median field holds
+   0.5% of it — which is 1/97 restated, an artifact of how many labels the provider
+   uses, not a measure of how narrow a business is. A threshold on it would have sorted
+   fields by how finely their corner of the economy happens to be subdivided.
+
+   The "champion" half survived with a stated definition rather than a vibe: rank 1 by
+   revenue, at least 3 measured peers, at least 2x the runner-up. A bare rank-1 test
+   calls 97 of 97 Indonesian fields won; at 2x it is 31. The standing is **not market
+   share** and the caveat ships inside the payload as `basis`, because a rank rendered
+   without it is a claim nothing here measured.
+
 3. **Absence of a flag is never evidence of quality.** An empty panel is not a clean bill
    of health and must say so in words.
 

@@ -336,13 +336,33 @@ for (const [file, src] of uiFiles) {
   }
 }
 
+// 10. A FIELD STANDING IS NEVER RENDERED WITHOUT ITS BASIS. `field.py` ranks a
+//     company among the SCANNED names sharing its industry label, which is not
+//     market share: private companies, companies listed elsewhere and names
+//     whose filings never arrived are all missing from the denominator. "1 of 7"
+//     on its own is a claim nothing in this app measured, and it is the most
+//     quotable number on the panel.
+//
+//     The caveat ships inside the payload as `basis` precisely so this rule can
+//     be mechanical — a file that reads a rank and never mentions `basis` is
+//     publishing the rank bare.
+const FIELD_STANDING = /\b(fieldRank|leadsField|field\?\.rank|field\?\.leads)\b/;
+for (const [file, src] of uiFiles) {
+  if (!FIELD_STANDING.test(src)) continue;
+  if (/\bbasis\b/.test(src)) continue;
+  fail(file, "A field standing is rendered without `basis`.",
+       "A rank among scanned peers reads as market share and is not one. Render "
+       + "`fields.basis` wherever the rank is, and where the scan could not place "
+       + "every name, `fields.unplaced` too.");
+}
+
 if (designFailures.length) {
   console.error("\nDesign-system rules broken (see DESIGN.md):\n");
   console.error(designFailures.join("\n\n"));
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 9 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 10 checked across ${uiFiles.length} UI files`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));

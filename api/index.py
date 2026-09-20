@@ -1039,11 +1039,37 @@ SCAN_REPORTS = Path(__file__).resolve().parents[1] / "reports"
 # that name live and is the same code the report used.
 _SCAN_ROW_FIELDS = ("ticker", "name", "score", "action", "actionLabel", "tone",
                     "conviction", "coverage", "crossChecked", "rank", "sectorRank",
-                    "sector", "latestClose", "turnover", "held")
+                    "sector", "industry", "latestClose", "turnover", "held")
 
 
 def _scan_row(entry: dict) -> dict:
     row = {key: entry.get(key) for key in _SCAN_ROW_FIELDS}
+    # WHAT THE COMPANY SELLS, AND WHETHER IT IS THE BIGGEST SELLING IT.
+    #
+    # THE FULL DESCRIPTION, NOT THE TRIMMED ONE, AND THE REASON IS A MEASUREMENT
+    # ON THE EXACT NAME THIS FEATURE WAS ASKED FOR. The panel searches these
+    # descriptions, because an industry label is far too coarse to find a
+    # specialist: KETR.JK is labelled "Communication Equipment", which it shares
+    # with radio makers and handset distributors, and what actually distinguishes
+    # it — "sells submarine and terrestrial fiber optic cable systems" — appears
+    # only in the prose.
+    #
+    # It appears at CHARACTER 361, and the display trim is 320. Shipping the
+    # short version would have cost about 60% of the payload and broken the
+    # search on the one query the feature exists to answer. The client clamps
+    # for display; it cannot recover text it was never sent.
+    profile = entry.get("profile") or {}
+    row["summary"] = profile.get("summary")
+    row["summaryState"] = profile.get("summaryState")
+    place = entry.get("fieldPosition") or {}
+    # `basis` is dropped from the ROW because it is identical on every one of
+    # them and ships once at the top level. Nothing else here is: a rank
+    # without its peer count is not interpretable.
+    row["field"] = {"rank": place.get("rank"), "peers": place.get("peers"),
+                    "share": place.get("share"), "margin": place.get("margin"),
+                    "leads": bool(place.get("leads")),
+                    "leader": place.get("leader"),
+                    "reading": place.get("reading")} if place else None
     row["gates"] = [{"id": g.get("id"), "label": g.get("label")}
                     for g in (entry.get("gates") or [])]
     site = entry.get("structure") or {}
@@ -1052,6 +1078,34 @@ def _scan_row(entry: dict) -> dict:
                     "ratioWithheld": bool(site.get("ratioWithheld"))}
     row["neglected"] = bool((entry.get("neglect") or {}).get("selected"))
     return row
+
+
+def _scan_fields(standing: Optional[dict]) -> Optional[dict]:
+    """The field standings, minus the per-field membership lists.
+
+    `unplaced` IS CARRIED AND IS NOT DECORATION. A field missing its largest
+    member names the runner-up as leader and looks no different from a correct
+    one, so the count of names that could not be placed is the only thing
+    telling a reader how much to trust a thin field. See `field.py`.
+    """
+    if not isinstance(standing, dict):
+        return None
+    fields = standing.get("fields") or {}
+    return {
+        "measured": standing.get("measured"),
+        "unplaced": standing.get("unplaced"),
+        "count": len(fields),
+        "basis": standing.get("basis"),
+        "thresholds": standing.get("thresholds"),
+        "leaders": [
+            {"industry": industry,
+             "ticker": fields[industry].get("leader"),
+             "peers": fields[industry].get("peers"),
+             "margin": fields[industry].get("leaderMargin")}
+            for industry in (standing.get("leaders") or [])
+            if industry in fields
+        ],
+    }
 
 
 def _latest_scan(market: str) -> Optional[Path]:
@@ -1108,6 +1162,10 @@ def latest_scan(market: str = Query("ID", pattern="^(US|ID|us|id)$")):
         "concentration": report.get("concentration"),
         "signalOverlap": report.get("signalOverlap"),
         "neglected": report.get("neglected"),
+        # THE STANDINGS, WITHOUT THE PER-FIELD MEMBER LISTS. A client needs the
+        # caveat, the thresholds and how many names could not be placed; the
+        # full membership of 142 fields is a local-report concern.
+        "fields": _scan_fields(report.get("fields")),
         "rows": rows,
     })
 

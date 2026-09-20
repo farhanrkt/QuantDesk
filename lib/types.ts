@@ -1563,6 +1563,23 @@ export interface ScanRow {
   rank: number | null;
   sectorRank: number | null;
   sector: string | null;
+  /** The narrower label. A rank inside "Thermal Coal" says what one inside
+   *  "Energy" does not. */
+  industry: string | null;
+  /** The provider's own description of the business, trimmed. Never a judgement
+   *  about it — see `api/_lib/field.py`. */
+  summary: string | null;
+  /** `described` | `none published` | `not fetched`. The last two are NOT the
+   *  same: one is a fact about the data, the other a gap a refetch fills. */
+  summaryState: string | null;
+  /** Where it stands among the scanned names sharing its industry label. This
+   *  is NOT market share; `ScanResponse.fields.basis` carries the caveat and
+   *  must be rendered wherever a rank is. */
+  field: {
+    rank: number | null; peers: number | null; share: number | null;
+    margin: number | null; leads: boolean; leader: string | null;
+    reading: string | null;
+  } | null;
   latestClose: number | null;
   turnover: number | null;
   held: boolean;
@@ -1597,14 +1614,35 @@ export interface ScanResponse {
   signalOverlap?: { reading?: string } | null;
   neglected?: {
     selected: number;
+    /** How many of the selected names are the largest in their own field. A
+     *  count, never a filter — leading a field is not a selection criterion. */
+    leadTheirField?: number;
     tradeable: {
       ticker: string; name: string | null; score: number | null; action: string;
       value: number | null; quality: number | null;
       institutionsHeld: number | null; analysts: number | null;
+      industry?: string | null; summary?: string | null;
+      leadsField?: boolean; fieldRank?: number | null; fieldPeers?: number | null;
       gates: string[]; reading: string;
     }[];
     gated: { ticker: string; name: string | null; score: number | null }[];
     note: string;
+  } | null;
+  /**
+   * Standings among the scanned names sharing an industry label.
+   *
+   * `basis` IS NOT OPTIONAL COPY. A rank of 1 rendered without it reads as
+   * market share, which nothing in this app measures: private companies,
+   * companies listed elsewhere and names whose filings did not arrive are all
+   * missing from the denominator. `unplaced` says how many of the last kind
+   * there were.
+   */
+  fields?: {
+    measured: number; unplaced: number; count: number;
+    basis: string;
+    thresholds?: { minPeers: number; leadMargin: number };
+    leaders: { industry: string; ticker: string | null;
+               peers: number | null; margin: number | null }[];
   } | null;
   rows?: ScanRow[];
 }

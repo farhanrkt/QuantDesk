@@ -699,6 +699,36 @@ def company(ticker: str) -> dict:
     return dict(result)
 
 
+def cached_company(ticker: str) -> Optional[dict]:
+    """The company record already in hand, or None. NEVER fetches statements.
+
+    A peek, for callers that want the DESCRIPTIVE half of a record — what the
+    company does, what it sold last year — and must not pay a network call for
+    it. `company()` above is the fetching path; this one returns only what
+    memory or the local cache already holds.
+
+    THE PRICE ON THE RETURNED RECORD MAY BE STALE, deliberately. `company()`
+    refetches it on every hit because a valuation is a comparison against it;
+    this function skips that, which is the whole saving. So nothing may be
+    VALUED off what comes back here. `market_cap` is used downstream only as an
+    order-of-magnitude units check, where a week of drift cannot change the
+    answer — the error it guards against is a factor of sixteen thousand.
+
+    The exchange rate IS applied, because the statements come off the disk
+    unconverted and a caller comparing one company's revenue against another's
+    needs them on one scale. `fx_rate` is cached per pair per day, so this costs
+    at most one call per currency pair for a whole sweep.
+    """
+    key = (ticker.upper(), dt.date.today().isoformat())
+    cached = _COMPANY_CACHE.get(key)
+    if cached is not None:
+        return dict(cached)
+    stored = _fundamentals_load("company", ticker)
+    if stored is None:
+        return None
+    return _apply_fx(dict(stored))
+
+
 def _refresh_price(out: dict, ticker: str) -> dict:
     """Put today's price onto a record whose statements came off the disk.
 
@@ -825,6 +855,19 @@ def _company_uncached(ticker: str, convert: bool = True) -> dict:
         "name": info.get("longName") or info.get("shortName") or ticker,
         "sector": info.get("sector") or "",
         "industry": info.get("industry") or "",
+        # WHAT THE COMPANY ACTUALLY SELLS, in the provider's own words. Free:
+        # `info` is already in hand, and none of these costs a further call.
+        #
+        # THE EMPTY STRING IS LOAD-BEARING. `field.profile` distinguishes a
+        # record whose key is missing — written before this app asked for a
+        # description, so a refetch will supply one — from a record whose key is
+        # present and empty, which means the provider has none and refetching
+        # cannot help. Defaulting to None here instead would collapse the two
+        # and send a reader to re-run a scan that cannot change the answer.
+        "business_summary": info.get("longBusinessSummary") or "",
+        "employees": _safe_float(info.get("fullTimeEmployees")),
+        "country": info.get("country") or "",
+        "website": info.get("website") or "",
         "price": price,
         "shares": shares,
         "beta": _safe_float(info.get("beta")),

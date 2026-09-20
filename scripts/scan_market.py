@@ -80,7 +80,7 @@ sys.path.insert(0, str(ROOT / "api"))
 import numpy as np                                                  # noqa: E402
 import pandas as pd                                                 # noqa: E402
 
-from _lib import (basket, chartlayers, listings, market_data,        # noqa: E402
+from _lib import (basket, chartlayers, field, listings, market_data,  # noqa: E402
                   microstructure, neglect, ownership, patterns, pretrade,
                   ranking, scanlog, structure, symbols, tape, universes,
                   verdict, volumeprofile)
@@ -307,6 +307,33 @@ _THROTTLE_MARKERS = ("401", "429", "Invalid Crumb", "Unauthorized", "Too Many Re
                      "rate limit", "temporarily unavailable")
 
 
+def _place_in_field(verdicts: list[dict], say) -> dict:
+    """Rank every name inside its own industry label, in place.
+
+    Returns the whole standing for the report; each verdict gets its own
+    position attached under `fieldPosition`. Names whose industry or revenue did
+    not arrive get `None` there rather than a rank built on a guess — and the
+    count of those is printed, because a field missing half its members hands
+    the lead to whoever happens to have been fetched.
+    """
+    standing = field.standings([
+        {"ticker": v["ticker"], "name": v.get("name"),
+         "industry": v.get("industry"),
+         "revenue": (v.get("revenue") or {}).get("value")}
+        for v in verdicts])
+
+    positions = standing["positions"]
+    for entry in verdicts:
+        entry["fieldPosition"] = positions.get(entry["ticker"])
+
+    leaders = sum(1 for v in verdicts if (v.get("fieldPosition") or {}).get("leads"))
+    say(f"  Placed {standing['measured']} names in {len(standing['fields'])} fields "
+        f"({standing['unplaced']} had no industry label or no comparable revenue); "
+        f"{leaders} {'leads' if leaders == 1 else 'lead'} a field of "
+        f"{field.MIN_PEERS}+ names by {field.LEAD_MARGIN:g}x or more.")
+    return standing
+
+
 def _neglected_summary(verdicts: list[dict]) -> dict:
     """The screened names, split by whether a reader could actually buy them.
 
@@ -323,18 +350,38 @@ def _neglected_summary(verdicts: list[dict]) -> dict:
     def row(entry: dict) -> dict:
         screen = entry["neglect"]
         watch = screen["attention"]
+        place = entry.get("fieldPosition") or {}
         return {"ticker": entry["ticker"], "name": entry.get("name"),
                 "score": entry.get("score"), "action": entry.get("action"),
                 "value": screen.get("value"), "quality": screen.get("quality"),
                 "institutionsHeld": watch.get("institutionsHeld"),
                 "analysts": watch.get("analysts"),
+                # WHAT IT SELLS AND WHETHER IT IS THE BIGGEST DOING SO. The
+                # screen above answers "cheap, solid, unwatched"; this answers
+                # "at what", which is the half a reader cannot get from any
+                # ratio. It is carried, never screened on: leading a field is
+                # not a criterion for selection and does not add one here.
+                "industry": entry.get("industry"),
+                "summary": (entry.get("profile") or {}).get("summary"),
+                "leadsField": bool(place.get("leads")),
+                "fieldRank": place.get("rank"),
+                "fieldPeers": place.get("peers"),
                 "gates": [g["id"] for g in (entry.get("gates") or [])],
                 "reading": screen.get("reading")}
 
+    # LEADERS FIRST, WITHIN EACH LIST. A sort is not a filter: every selected
+    # name is still here and none is promoted into the list by leading a field.
+    # It is ordering, and it is the order the owner reads in.
+    def order(entries: list[dict]) -> list[dict]:
+        return sorted((row(v) for v in entries),
+                      key=lambda r: (not r["leadsField"], -(r["score"] or 0)))
+
     return {
         "selected": len(selected),
-        "tradeable": [row(v) for v in tradeable],
-        "gated": [row(v) for v in gated],
+        "leadTheirField": sum(1 for v in selected
+                              if (v.get("fieldPosition") or {}).get("leads")),
+        "tradeable": order(tradeable),
+        "gated": order(gated),
         "thresholds": {"cheapAt": neglect.CHEAP_AT, "solidAt": neglect.SOLID_AT,
                        "unattendedHeld": neglect.UNATTENDED_HELD,
                        "unattendedAnalysts": neglect.UNATTENDED_ANALYSTS},
@@ -424,6 +471,21 @@ def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
             raise RuntimeError("429 no sector returned — rate limited, not refused")
         return payload
 
+    def profile_leg():
+        # A MISS IS A GAP, NOT A REFUSAL, and it does not go on the retry path.
+        # `cached_company` is a peek: if the record is not in memory or on disk,
+        # asking again two seconds later reads the same empty cache. Saying so
+        # costs nothing and a pointless retry costs two seconds a name.
+        record = market_data.cached_company(symbol)
+        if record is None:
+            return {"available": False,
+                    "reason": ("the company record was not in hand when the business "
+                               "profile was read, so what this company does is "
+                               "unknown for this run rather than unpublished")}
+        return {"available": True,
+                "profile": field.profile(record),
+                "revenue": field.revenue_of(record)}
+
     legs = {
         "anomaly": leg(lambda: whale_payload(symbol, period="2y")),
         "technical": leg(lambda: technical_payload(symbol, range_key="2y",
@@ -431,6 +493,12 @@ def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
         "valuation": leg(lambda: valuation_payload(
             symbol, **_valuation_kwargs(market=market))),
         "quality": leg(quality_leg),
+        # WHAT THE COMPANY SELLS, AND HOW MUCH OF IT. Immediately after the
+        # quality leg, and that ordering is the whole design: `quality_payload`
+        # has just fetched this company's record, so `cached_company` reads it
+        # out of memory. It never fetches — see its docstring — so this leg adds
+        # nothing to a sweep the provider is already rate-limiting.
+        "profile": leg(profile_leg),
         # The share register is the third body of data and it is fetched here
         # rather than beside the price batch because, like the filings, it is one
         # call per symbol and does not batch. It is cached with the four lenses
@@ -756,6 +824,20 @@ def run(args) -> dict:
         quality_leg = legs.get("quality") or {}
         result["sector"] = ((quality_leg.get("data") or {}).get("sector")
                             if quality_leg.get("ok") else None)
+        # WHAT THE COMPANY DOES. Description only: nothing here scores, gates or
+        # shifts a verdict, and the industry label is carried beside the sector
+        # because a rank inside "Thermal Coal" says something a rank inside
+        # "Energy" does not.
+        profile_leg = legs.get("profile") or {}
+        profile_data = profile_leg.get("data") if profile_leg.get("ok") else None
+        if isinstance(profile_data, dict) and profile_data.get("available"):
+            result["profile"] = profile_data["profile"]
+            result["revenue"] = profile_data["revenue"]
+            result["industry"] = profile_data["profile"].get("industry")
+        else:
+            result["profile"] = None
+            result["revenue"] = None
+            result["industry"] = None
         result["costs"] = structure.round_trip_cost(liquidity)
         result["tape"] = tape_result
         result["register"] = register_result
@@ -859,6 +941,14 @@ def run(args) -> dict:
     # inside a group of four would be arithmetic on noise.
     _rank_within_sector(verdicts, say)
 
+    # --- and where it sits among the names doing the SAME THING -------------
+    # A different question from the sector percentile above, and a more useful
+    # one for the thing this was built for: a sector rank says "top decile of
+    # Energy", a field standing says "the largest of the seven scanned names in
+    # thermal coal". See `field.py` for what that is and, at length, what it is
+    # not — it is not market share.
+    field_standing = _place_in_field(verdicts, say)
+
     # --- is this buy list one bet? ------------------------------------------
     buys = [v for v in verdicts if v["action"] in ("BUY", "STRONG_BUY")]
     concentration = basket.analyse(
@@ -934,6 +1024,12 @@ def run(args) -> dict:
         # makes no predictive claim; see `neglect.py` for why no backtest of it
         # is possible with this data.
         "neglected": _neglected_summary(verdicts),
+        # WHAT EACH COMPANY SELLS AND WHO ELSE SELLS IT. Description, not a
+        # score: no verdict moves on any of it. `basis` travels inside the
+        # payload because a rank of 1 rendered without it reads as market share,
+        # which is a claim nothing here measured.
+        "fields": {key: value for key, value in field_standing.items()
+                   if key != "unplacedDetail"},
         "verdicts": verdicts,
         "rejected": sorted(rejected, key=lambda r: r["why"]),
         "notDeepened": [
@@ -1113,20 +1209,63 @@ def main() -> int:
               f"{len(rows)} of them tradeable:")
         if rows:
             print(f"    {'ticker':10} {'score':>5} {'action':10} {'value':>5} "
-                  f"{'qual':>5} {'inst%':>6}  name")
-            for row in sorted(rows, key=lambda r: -(r.get("score") or 0)):
+                  f"{'qual':>5} {'inst%':>6}  field")
+            # Already ordered leaders-first by `_neglected_summary`; not re-sorted
+            # here, so the terminal and the report agree on what comes first.
+            for row in rows:
                 held = row.get("institutionsHeld")
-                print(f"    {row['ticker']:10} {(row.get('score') or 0):5.1f} "
+                mark = "*" if row.get("leadsField") else " "
+                where = row.get("industry") or "field unknown"
+                if row.get("fieldRank") and row.get("fieldPeers"):
+                    where += f" ({row['fieldRank']}/{row['fieldPeers']})"
+                print(f"  {mark} {row['ticker']:10} {(row.get('score') or 0):5.1f} "
                       f"{row.get('action')!s:10} {(row.get('value') or 0):5.0f} "
                       f"{(row.get('quality') or 0):5.0f} "
                       f"{(held * 100 if held is not None else 0):5.1f}%  "
-                      f"{str(row.get('name'))[:30]}")
+                      f"{where[:38]}")
+                if row.get("summary"):
+                    print(f"      {str(row['summary'])[:96]}")
         else:
             print("    none of them clears the gates, which is the usual outcome: "
                   "a company nobody covers is usually a company nobody trades.")
-        print(f"    {len(neglected.get('gated') or [])} more were selected and gated.")
+        leads = neglected.get("leadTheirField") or 0
+        if leads:
+            print(f"    * = the largest of the scanned names carrying its industry "
+                  f"label — {leads} of the {neglected['selected']} selected. That is a "
+                  f"standing among measured peers, not market share: private and "
+                  f"overseas competitors are not in it.")
+        held_back = len(neglected.get("gated") or [])
+        print(f"    {held_back} more {'was' if held_back == 1 else 'were'} selected "
+              f"and gated.")
         print("    Nothing here is measured — no point-in-time filings exist to "
               "backtest it against. Recorded in the scan log to be judged later.")
+
+    # THE FIELD LEADERS, WHETHER OR NOT ANYTHING ELSE LIKES THEM. Separate from
+    # the screen above because it answers a different question: that list is
+    # "cheap, solid and unwatched", this one is "the biggest of the names doing
+    # this thing", and a reader hunting an underrated champion wants to see both
+    # halves rather than only their intersection.
+    fields = report.get("fields") or {}
+    if not args.quiet and fields.get("leaders"):
+        found = len(fields["leaders"])
+        print(f"\n  Largest scanned name in its field — {found} of "
+              f"{len(fields.get('fields') or {})} fields "
+              f"{'has' if found == 1 else 'have'} one:")
+        by_ticker = {v["ticker"]: v for v in report.get("verdicts") or []}
+        for industry in fields["leaders"][:12]:
+            block = fields["fields"][industry]
+            entry = by_ticker.get(block["leader"]) or {}
+            place = entry.get("fieldPosition") or {}
+            share = place.get("share")
+            print(f"    {block['leader']:10} {(entry.get('score') or 0):5.1f} "
+                  f"{entry.get('action')!s:10} {block['leaderMargin']:5.1f}x next, "
+                  f"{(share * 100 if share else 0):4.0f}% of {block['peers']:3} "
+                  f"peers   {industry[:34]}")
+        missing = fields.get("unplaced") or 0
+        if missing:
+            print(f"    {missing} name{'' if missing == 1 else 's'} could not be placed "
+                  f"at all — no industry label or no comparable revenue — so any thin "
+                  f"field above may simply be missing its real leader.")
 
     # WHAT THE SCANNER SAID, WRITTEN DOWN ON THE DAY IT SAID IT. The value and
     # quality components cannot be reconstructed as they stood on a past date —

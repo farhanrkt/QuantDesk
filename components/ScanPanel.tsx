@@ -40,14 +40,56 @@ const ACTION_ORDER: Record<string, number> = {
   STRONG_BUY: 0, BUY: 1, HOLD: 2, REDUCE: 3, AVOID: 4, NO_ACTION: 5,
 };
 
-type Filter = "directional" | "buys" | "neglected" | "all";
+type Filter = "directional" | "buys" | "neglected" | "leaders" | "all";
 
 const FILTERS: { id: Filter; label: string; hint: string }[] = [
   { id: "directional", label: "Says something", hint: "Everything but hold and gated" },
   { id: "buys", label: "Buys only", hint: "Strong buy and buy" },
   { id: "neglected", label: "Cheap & uncovered", hint: "The screen the blend cannot reach" },
+  { id: "leaders", label: "Leads its field",
+    hint: "Largest of the scanned names sharing its industry label" },
   { id: "all", label: "Everything", hint: "Including gated and hold" },
 ];
+
+/**
+ * Everything about a row a specialist search should reach.
+ *
+ * THE DESCRIPTION IS IN HERE BECAUSE THE INDUSTRY LABEL IS NOT ENOUGH, and the
+ * gap is not marginal. KETR.JK is labelled "Communication Equipment" — shared
+ * with radio makers and handset distributors — and the thing that actually
+ * identifies it, "sells submarine and terrestrial fiber optic cable systems",
+ * exists only in the prose. No label search finds it.
+ */
+function searchableText(row: ScanRow): string {
+  return [row.ticker, row.name, row.sector, row.industry, row.summary]
+    .filter(Boolean).join(" · ").toLowerCase();
+}
+
+/**
+ * The sentence a search matched, rather than the opening of the description.
+ *
+ * Searching "submarine" and being shown "PT Ketrosden Triasmitra operates as a
+ * telecommunication infrastructure company" answers a question nobody asked.
+ * The match is the point, so the match is what shows.
+ */
+function matchedSentence(text: string | null, needle: string): string | null {
+  if (!text || !needle) return null;
+  const at = text.toLowerCase().indexOf(needle);
+  if (at < 0) return null;
+  const start = Math.max(0, text.lastIndexOf(". ", at) + 1);
+  const dot = text.indexOf(". ", at + needle.length);
+  const end = dot < 0 ? text.length : dot + 1;
+  return text.slice(start, end).trim();
+}
+
+/** The industry and the standing in it, as one line. Never the rank alone: a
+ *  rank without its peer count is not interpretable. */
+function fieldLabel(row: ScanRow): string {
+  if (!row.industry) return "—";
+  const place = row.field;
+  if (!place?.rank || !place.peers) return row.industry;
+  return `${row.industry} · ${place.rank} of ${place.peers}`;
+}
 
 function entryLabel(row: ScanRow): string {
   if (row.entry.ratioWithheld) return "stop in noise";
@@ -61,21 +103,30 @@ export function ScanPanel({ state, market, onSelect }: {
   onSelect: (ticker: string) => void;
 }) {
   const [filter, setFilter] = useState<Filter>("directional");
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
 
   const rows = useMemo(() => {
     if (state.status !== "ready" || !state.data.available) return [];
     const all = state.data.rows ?? [];
     const picked = all.filter((row) => {
+      // A SEARCH IGNORES THE ACTION FILTER, DELIBERATELY. Looking up who lays
+      // submarine cable is a lookup, not a refinement of the current view, and
+      // the name being looked for is usually a Hold — that is the whole premise
+      // of the screen next door. Intersecting the two would hide the answer and
+      // give no sign it had.
+      if (needle) return searchableText(row).includes(needle);
       if (filter === "all") return true;
       if (filter === "buys") return row.action === "BUY" || row.action === "STRONG_BUY";
       if (filter === "neglected") return row.neglected;
+      if (filter === "leaders") return row.field?.leads === true;
       return row.action !== "HOLD" && row.action !== "NO_ACTION";
     });
     return [...picked].sort((a, b) => {
       const byAction = (ACTION_ORDER[a.action] ?? 9) - (ACTION_ORDER[b.action] ?? 9);
       return byAction !== 0 ? byAction : (b.score ?? 0) - (a.score ?? 0);
     });
-  }, [state, filter]);
+  }, [state, filter, needle]);
 
   if (state.status === "loading" || state.status === "idle") {
     return (
@@ -182,6 +233,7 @@ export function ScanPanel({ state, market, onSelect }: {
             <CardTitle>Cheap, solid and uncovered</CardTitle>
             <span className="font-mono text-micro text-ash">
               {neglected.tradeable.length} tradeable of {neglected.selected}
+              {neglected.leadTheirField ? `, ${neglected.leadTheirField} lead a field` : ""}
             </span>
           </CardHeader>
           <CardBody className="space-y-2">
@@ -208,6 +260,25 @@ export function ScanPanel({ state, market, onSelect }: {
                       </span> held</>
                     )}
                   </span>
+                  {/* WHAT IT ACTUALLY SELLS. The screen above says cheap, solid
+                      and unwatched; none of those says what the business is,
+                      and that is the half a reader cannot get from a ratio. */}
+                  <span className="w-full text-micro text-faint">
+                    {row.industry && (
+                      <span className="text-ash">{row.industry}</span>
+                    )}
+                    {row.leadsField && row.fieldPeers != null && (
+                      <span className="ml-1.5 text-flow">
+                        largest of {row.fieldPeers} scanned
+                      </span>
+                    )}
+                    {row.summary && (
+                      <span className="mt-1 block max-w-prose text-meta leading-relaxed
+                                       text-ash">
+                        {row.summary}
+                      </span>
+                    )}
+                  </span>
                 </button>
               ))
             )}
@@ -222,15 +293,46 @@ export function ScanPanel({ state, market, onSelect }: {
           <span className="text-meta text-faint">{rows.length} shown</span>
         </CardHeader>
         <CardBody className="space-y-3 px-0">
+          <div className="px-5">
+            <label className="block">
+              <span className="eyebrow mb-1 block">
+                Search what the companies actually do
+              </span>
+              <input
+                type="search" value={query} inputMode="search"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="submarine cable, geothermal, cement, cold storage…"
+                className="w-full rounded-lg border border-ruleSoft bg-raised px-3 py-2
+                           text-[1rem] text-chalk placeholder:text-faint
+                           focus:border-rule focus:outline-none"
+              />
+            </label>
+            {needle && (
+              <p className="prose-col mt-1.5 text-meta leading-relaxed text-faint">
+                {rows.length === 0
+                  ? `No description in this scan mentions “${query.trim()}”.`
+                  : `${rows.length} of ${state.data.rows?.length ?? 0} scored names
+                     mention “${query.trim()}”.`}
+                {" "}Searching every scored name, not just the current filter — a
+                specialist is usually a Hold. This reads the description the data
+                source publishes, which is a summary and not a full account of what a
+                company does, so an absence here is not evidence.
+              </p>
+            )}
+          </div>
+
           <div className="flex flex-wrap gap-1.5 px-5">
             {FILTERS.map((option) => (
               <button key={option.id} type="button" onClick={() => setFilter(option.id)}
-                      aria-pressed={filter === option.id} title={option.hint}
+                      aria-pressed={filter === option.id && !needle} title={option.hint}
+                      disabled={needle.length > 0}
                       className={cn(
                         "rounded-full border px-2.5 py-1 text-micro transition-colors",
-                        filter === option.id
-                          ? "border-rule bg-raised text-body"
-                          : "border-ruleSoft text-faint")}>
+                        needle
+                          ? "border-ruleSoft text-faint opacity-40"
+                          : filter === option.id
+                            ? "border-rule bg-raised text-body"
+                            : "border-ruleSoft text-faint")}>
                 {option.label}
               </button>
             ))}
@@ -238,7 +340,12 @@ export function ScanPanel({ state, market, onSelect }: {
 
           {rows.length === 0 ? (
             <p className="px-5 text-base text-ash">
-              Nothing in this scan matches that filter.
+              {needle
+                ? `Nothing in this scan mentions “${query.trim()}”. The scan covers
+                   ${state.data.rows?.length ?? 0} names on this exchange, so a
+                   specialist listed elsewhere, or one whose filings did not arrive,
+                   would not be here either.`
+                : "Nothing in this scan matches that filter."}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -247,7 +354,7 @@ export function ScanPanel({ state, market, onSelect }: {
                   <tr className="eyebrow border-b border-rule
                                  [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
                     <th>Ticker</th><th className="text-right">Score</th>
-                    <th>Action</th><th>Conviction</th>
+                    <th>Action</th><th>Business</th><th>Conviction</th>
                     <th className="text-right">Coverage</th>
                     <th>Entry</th><th>Why not</th>
                   </tr>
@@ -275,6 +382,27 @@ export function ScanPanel({ state, market, onSelect }: {
                           {row.actionLabel}
                         </span>
                       </td>
+                      {/* WHAT IT SELLS, AND WHERE IT STANDS AMONG THE NAMES
+                          SELLING IT. `title` carries the provider's description
+                          and the standing's own sentence; the caveat that this
+                          is not market share is under the table, where it
+                          cannot be scrolled away from the ranks. */}
+                      <td className="px-5 py-2 text-ash"
+                          title={[row.summary, row.field?.reading]
+                                   .filter(Boolean).join("\n\n") || undefined}>
+                        <span className="block max-w-56 truncate">{fieldLabel(row)}</span>
+                        {row.field?.leads && (
+                          <span className="text-micro text-flow">largest of its field</span>
+                        )}
+                        {/* The sentence that matched, not the opening of the
+                            description — see `matchedSentence`. */}
+                        {needle && matchedSentence(row.summary, needle) && (
+                          <span className="mt-0.5 block max-w-96 text-meta
+                                           leading-relaxed text-faint">
+                            {matchedSentence(row.summary, needle)}
+                          </span>
+                        )}
+                      </td>
                       <td className="px-5 py-2 text-ash">{row.conviction}</td>
                       <td className="num px-5 py-2 text-right text-ash">
                         {(row.coverage * 100).toFixed(0)}%
@@ -293,6 +421,34 @@ export function ScanPanel({ state, market, onSelect }: {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {/* A RANK RENDERED WITHOUT THIS READS AS MARKET SHARE, which nothing
+              here measures. It sits under the table rather than in the
+              explainer because the explainer is collapsed by default and this
+              is the condition on every number in the Business column. */}
+          {!data.fields && rows.length > 0 && (
+            <div className="px-5">
+              <Note>
+                This scan was written before the app recorded what each company does,
+                so the Business column is empty rather than unknown — re-running the
+                scan fills it. Nothing else here is affected.
+              </Note>
+            </div>
+          )}
+
+          {data.fields?.basis && (
+            <div className="px-5">
+              <Note>
+                {data.fields.basis}
+                {data.fields.unplaced > 0 && (
+                  <> {data.fields.unplaced} of the scanned names could not be placed in
+                  any field at all — no industry label, or no revenue comparable with
+                  its peers — so a field with few members may simply be missing its
+                  real leader.</>
+                )}
+              </Note>
             </div>
           )}
         </CardBody>
