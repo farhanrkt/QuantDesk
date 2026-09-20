@@ -11,11 +11,11 @@ CODEBASE_REVIEW.md is older and partly superseded.
 
 STATE
 =====
-Branch: feature/personal-verdict-scanner (28 commits ahead of main, NOT pushed,
+Branch: feature/personal-verdict-scanner (53 commits ahead of main, NOT pushed,
 tree clean apart from this file). Everything below is committed.
 
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
-single Vercel Python function on the back. 1,552 offline pytest tests, 35
+single Vercel Python function on the back. 1,597 offline pytest tests, 35
 frontend assertions and 10 enforced design rules. US and Indonesian (IDX)
 listings.
 
@@ -30,28 +30,54 @@ Both halves run from .claude/launch.json (`quantdesk-web`, `quantdesk-api`) or
 uvicorn` — a bare `uvicorn` resolves to a system Python here carrying yfinance
 1.5.2 against this project's 0.2.66.
 
-TWO BUGS FROM 20-21 SEPTEMBER, BOTH SILENT, BOTH MINE
-------------------------------------------------------
-Neither threw, neither changed a count, both exited zero. They are the shape of
-defect this codebase actually produces, so they are worth knowing before you
-add anything.
+SIX SILENT BUGS FROM 20-21 SEPTEMBER, ALL MINE OR LONG-STANDING
+----------------------------------------------------------------
+None threw. None changed a count. All exited zero. This is the shape of defect
+this codebase actually produces, so it is worth knowing before adding anything.
 
-1. A CACHE REFRESH THAT REPLACED ANSWERS WITH GAPS. `refresh_free_legs` rebuilds
-   the one leg that costs no fetch when its version moves on. At midnight the
-   calendar rolled, `--fundamentals-days 1` found every company record one day
-   old and expired, the rebuild came back "not in hand" for all 771 names, and
-   the function wrote that over 771 good payloads and saved them. The next
-   report had no business descriptions and an empty shortlist. A rebuild that
-   knows LESS than what it would replace is now discarded.
-
-   Related trap: `--fundamentals-days 1` means YESTERDAY's record is already
-   expired, so an overnight run and a morning run see different worlds. Use 2+
-   when replaying.
+1. A CACHE REFRESH THAT REPLACED ANSWERS WITH GAPS. At midnight the calendar
+   rolled, `--fundamentals-days 1` expired every record, the rebuild came back
+   "not in hand" for all 771 names, and `refresh_free_legs` wrote that over 771
+   good payloads and saved them. A rebuild that knows LESS than what it would
+   replace is now discarded. Related trap: `--fundamentals-days 1` means
+   YESTERDAY's record is already expired; use 2+ when replaying.
 
 2. A CSS CLAMP THAT COMPUTED CORRECTLY AND DID NOTHING. `line-clamp-3` sets
    `display: -webkit-box`; a later `block` in the same class list overrode it.
    The DOM read `webkitLineClamp: 3` and clamped nothing. A screenshot would not
-   have told you — reading computed style did.
+   have told you; reading computed style did.
+
+3. `neglect.py` READ `drawdown.current` FOR ITS WHOLE LIFE. The field has always
+   been `currentDrawdown`. The module has no momentum filter BY DESIGN and
+   compensates by reporting the drawdown as context — which had never rendered
+   once. THE TEST PLANTED THE SAME WRONG KEY, so fixture and code agreed and
+   neither agreed with the data. `scripts/check_payload_keys.py` now audits this
+   class against a real sweep.
+
+4. A MISSING BALANCE SHEET REPORTED AS NET CASH. Three lines each defaulted to
+   zero, so subtracting gave zero net debt, which reads as "holds more cash than
+   borrowings". A fabricated fact about a company nothing was known about.
+
+5. A BUTTON NESTED INSIDE A BUTTON. Each specialist row was one big button and
+   the term chips are buttons. Invalid HTML, React hydration error, browser
+   rendered it anyway — visible only in the dev overlay's issue count.
+
+6. NO KEYBOARD PATH TO THE TABLE'S PRIMARY ACTION. A `<tr onClick>` cannot be
+   tabbed to. Seven rows had no focusable element at all and the rest had only
+   the SEARCH buttons, so a keyboard user could reach every secondary action and
+   none of the primary one.
+
+THE INSTRUMENTS FAILED TOO, TWICE
+----------------------------------
+`check_payload_keys.py` did not catch the bug it was written for on its first
+run: `finditer` returns no overlapping matches, so in a three-deep chain the
+middle hop swallowed the call the next pair needed. A design rule for the
+React-child bug was written, fired on four correct files, and was DELETED with
+the reasoning left in `check_frontend.mjs` — a regex cannot tell a string map
+from an object map, and a rule nobody trusts is worse than none.
+
+Put the bug back and watch the instrument react. That is the only test these
+have.
 
 READ THIS BEFORE YOU TRUST A GREEN BATTERY
 ------------------------------------------
@@ -93,38 +119,43 @@ re-deriving the reasoning.
           words one click away rather than gone.
 
 
-  20 Sep  WHAT THE COMPANY DOES, AND WHO ELSE DOES IT. The scanner could say a
-          business was cheap, solid and unwatched and could not say what the
-          business WAS. Four new surfaces, all description, none scoring:
+  20-21 Sep  WHAT THE COMPANY DOES, AND WHO ELSE DOES IT. The scanner could say
+          a business was cheap, solid and unwatched and could not say what the
+          business WAS. Everything added is DESCRIPTION — nothing scores, gates
+          or moves a verdict.
 
-          `field.py`      the provider's business summary, and a standing among
-                          the scanned names sharing an industry label. Revenue,
-                          never market cap — ranking a cheap champion by market
-                          cap means the more underrated it is, the smaller it
-                          looks. "Leads its field" costs rank 1, 3+ peers and 2x
-                          the runner-up; a bare rank-1 test calls 97 of 97 IDX
-                          fields won, at 2x it is 31.
+          `field.py`       the provider's business summary; a standing among the
+                           scanned names sharing an industry label, by REVENUE
+                           not market cap; and `distinctive_terms`, the words
+                           common in one description and rare across the
+                           market's. KETR reads cable, optic, fiber.
           `trackrecord.py` profits, cash, growth and borrowings over the years
-                          the filings cover.
-          the SEARCH      over the description prose, in ScanPanel.
-          the SHORTLIST   `_specialists_summary` in scan_market.py: largest or
-                          ONLY name in its field, compounding, and uncovered.
+                           the filings cover.
+          the SEARCH       over the full description prose, in ScanPanel, with
+                           each term a clickable chip.
+          the SHORTLIST    `_specialists_summary`: largest or only measurable
+                           name in its field, compounding, and uncovered.
 
-          THREE MEASUREMENTS THAT CHANGED WHAT SHIPPED, all in the docstrings:
-          a "niche" flag built on field revenue share does not discriminate (the
-          median field holds 1/97th of scanned revenue, which is 1/97 restated);
-          "profitable every year" admits 67% of the IDX and is therefore not a
-          screen, only a description; and a "too much debt" flag at the textbook
-          3x EBITDA would sit exactly on this market's median for borrowers.
+          FIVE MEASUREMENTS CHANGED WHAT SHIPPED, all in the docstrings: a
+          "niche" flag on field revenue share does not discriminate (the median
+          field is 1/97 restated); "profitable every year" admits 67% of the IDX
+          and is therefore description, not a screen; a leverage flag at the
+          textbook 3x EBITDA sits exactly on this market's median for
+          borrowers; no signal separates a closed-end trust from an operating
+          asset manager, so no filter ships and the limitation is stated; and
+          distinctive terms refuse a corpus under fifty descriptions because the
+          ceiling and the floor cross.
 
-          A WRONG CURRENCY LABEL MANUFACTURES A CHAMPION. The first standings
-          crowned RIGS.JK with 99.4% of Indonesian marine shipping — a small tug
-          operator whose rupiah statements Yahoo labels USD, so the boundary
-          multiplied them by 16,300. Not a crash: a confident market leader.
-          `field.revenue_of` refuses it now. THE SAME BUG IS STILL LIVE IN
-          `market_data._apply_fx`, which every valuation reads — measured at 2
-          names of 388 (RIGS.JK, YPF), deliberately not fixed in that commit
-          because it moves numbers app-wide. That is the top of the open list.
+          THE RESULT, ON A FULL 771-NAME INDONESIAN SWEEP: seven specialists,
+          KETR.JK first at 28.6%/yr on an 18.5% net margin — the name this was
+          asked for. All seven are gated, six on turnover, which is the expected
+          outcome and is printed rather than hidden. Fifteen ungated buys, led
+          by SRSN.JK at 77.3.
+
+          A WRONG CURRENCY LABEL MANUFACTURES A CHAMPION: RIGS.JK took 99.4% of
+          Indonesian marine shipping because rupiah statements are labelled USD.
+          Guarded in `field.revenue_of` AND at the source in
+          `market_data._apply_fx`, which is what every valuation reads.
 
 PRINCIPLES THAT ARE LOAD-BEARING — do not quietly break these
 =============================================================
