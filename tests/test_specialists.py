@@ -201,3 +201,31 @@ def test_the_price_is_context_and_never_a_criterion(scan):
     deep["neglect"]["drawdown"] = -0.70
     out = scan._specialists_summary([near_high, deep])
     assert out["selected"] == 2, "neither the fallen nor the risen is filtered out"
+
+
+def test_the_field_placement_passes_the_summary_through(scan):
+    """The wiring the unit tests could not see.
+
+    `field.standings` leaves an entity that describes itself as a fund unplaced.
+    `_place_in_field` built its entries without `summary`, so the check read
+    None on every name and was inert for a whole US sweep — BTX came back ranked
+    132nd of 138 in Asset Management instead of unplaced. `test_field.py` passed
+    throughout, because it calls `standings` directly with a summary.
+    """
+    def named(ticker, revenue, summary):
+        return {"ticker": ticker, "name": ticker, "industry": "Asset Management",
+                "profile": {"summary": summary},
+                "revenue": {"usable": True, "value": revenue},
+                "trackRecord": {}, "neglect": {}}
+
+    verdicts = [
+        named("MGR", 900.0, "Manager Corp operates as an asset manager."),
+        named("A", 400.0, "A Corp advises institutions on allocation."),
+        named("B", 100.0, "B Corp manages money for pension clients."),
+        named("TRUST", 5_000.0, "Big Term Trust is a mutual fund launched by Big."),
+    ]
+    scan._place_in_field(verdicts, lambda *a: None)
+    by = {v["ticker"]: v for v in verdicts}
+    assert by["TRUST"]["fieldPosition"] is None, "a fund must not be ranked in a field"
+    assert by["MGR"]["fieldPosition"]["rank"] == 1
+    assert by["MGR"]["fieldPosition"]["unranked"] == 1

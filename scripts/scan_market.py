@@ -331,9 +331,16 @@ def _place_in_field(verdicts: list[dict], say) -> dict:
     count of those is printed, because a field missing half its members hands
     the lead to whoever happens to have been fetched.
     """
+    # THE SUMMARY IS NOT OPTIONAL HERE. `standings` reads it to leave entities
+    # that describe themselves as funds unplaced, and omitting it made that
+    # check inert for a whole US sweep: BTX came back ranked 132nd of 138 in
+    # Asset Management rather than unplaced, because the test was reading None
+    # on every name. The unit test passed throughout — it calls `standings`
+    # directly and passes a summary — so the defect was entirely in the wiring.
     standing = field.standings([
         {"ticker": v["ticker"], "name": v.get("name"),
          "industry": v.get("industry"),
+         "summary": (v.get("profile") or {}).get("summary"),
          "revenue": (v.get("revenue") or {}).get("value")}
         for v in verdicts])
 
