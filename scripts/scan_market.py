@@ -170,7 +170,22 @@ def resolve_universe(args) -> tuple[list[str], dict]:
     known_names = listings.names_for(args.market)
 
     if args.tickers:
-        raw = [t.strip() for t in args.tickers.replace("\n", ",").split(",") if t.strip()]
+        # `@path` READS THE LIST FROM A FILE, because the lists worth scanning
+        # this way are long. The US names a specialist hunt has to cover are the
+        # ones BELOW the turnover floor — measured: the uncovered share runs 0%
+        # in the highest turnover quintile to 11% in the lowest — and there are
+        # about 5,800 of them. That is a 40KB command line, which a shell will
+        # accept and nobody can read, edit or repeat.
+        source = args.tickers
+        if source.startswith("@"):
+            listed = Path(source[1:]).expanduser()
+            if not listed.exists():
+                raise SystemExit(f"No ticker list at {listed}")
+            source = listed.read_text()
+        # A `#` comment and blank lines are allowed, so a saved list can say
+        # what it is and where it came from.
+        source = "\n".join(line.split("#", 1)[0] for line in source.splitlines())
+        raw = [t.strip() for t in source.replace("\n", ",").split(",") if t.strip()]
         picked = [symbols.resolve(t, args.market) for t in raw]
         return picked, {"kind": "custom", "label": f"{len(picked)} pasted symbols",
                         "asOf": None, "staleness": None, "names": known_names}
@@ -1331,7 +1346,9 @@ def main() -> int:
                         help="A named index instead of the whole market "
                              "(idx30, lq45, dow30, nasdaq100, idxresources).")
     parser.add_argument("--tickers", default=None,
-                        help="A comma-separated list instead of a universe.")
+                        help="A comma-separated list instead of a universe, or "
+                             "@path to read one from a file (commas or newlines, "
+                             "# comments allowed).")
     parser.add_argument("--limit", type=int, default=None,
                         help="Scan only the N largest listings by market cap.")
     parser.add_argument("--deepen", default="40",

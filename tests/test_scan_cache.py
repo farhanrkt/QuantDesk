@@ -173,3 +173,38 @@ def test_a_rebuild_is_taken_when_the_cached_leg_was_itself_a_gap(scan, monkeypat
     legs = {"profile": {"ok": True, "data": {"version": 1, "available": False}}}
     assert scan.refresh_free_legs("K.JK", legs) is True
     assert legs["profile"]["data"] == fresh
+
+
+# --------------------------------------------------------------------------- #
+# Reading a ticker list from a file
+#
+# The lists worth scanning this way are long: a US specialist hunt has to cover
+# the names BELOW the turnover floor — measured, the uncovered share runs 0% in
+# the highest turnover quintile to 11% in the lowest — and there are about 5,800
+# of them. That is a 40KB command line nobody can read, edit or repeat.
+# --------------------------------------------------------------------------- #
+class _Args:
+    def __init__(self, tickers, market="US"):
+        self.tickers, self.market = tickers, market
+        self.universe = self.limit = None
+
+
+def test_a_ticker_list_can_come_from_a_file(scan, tmp_path, monkeypatch):
+    monkeypatch.setattr(scan.listings, "names_for", lambda market: {})
+    listed = tmp_path / "illiquid.txt"
+    listed.write_text("# names below the turnover floor\nAAPL, MSFT\n\nNVDA\n")
+
+    picked, provenance = scan.resolve_universe(_Args(f"@{listed}"))
+    assert picked == ["AAPL", "MSFT", "NVDA"]
+    assert provenance["kind"] == "custom"
+
+
+def test_a_missing_ticker_file_stops_rather_than_scanning_nothing(scan, tmp_path):
+    with pytest.raises(SystemExit, match="No ticker list at"):
+        scan.resolve_universe(_Args(f"@{tmp_path / 'absent.txt'}"))
+
+
+def test_an_inline_list_still_works(scan, monkeypatch):
+    monkeypatch.setattr(scan.listings, "names_for", lambda market: {})
+    picked, _ = scan.resolve_universe(_Args("AAPL,MSFT"))
+    assert picked == ["AAPL", "MSFT"]
