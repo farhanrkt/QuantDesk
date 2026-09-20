@@ -1557,6 +1557,172 @@ Recorded so the next audit does not re-open them.
 
 ---
 
+## 18. What the company does, and where it stands among the names doing it
+
+The scanner could establish that a business was cheap, solid and unwatched. It could not
+establish what the business *was*. The owner's worked example was a company that "is the
+biggest player on their field, its financial report solid, and they are needed" — four
+claims, of which the app could check one.
+
+Three of the four are now checkable. The fourth — whether the world needs the product — is
+not computable from anything available here and **no proxy for it was invented**.
+
+### 18.1 An industry label is not a description, and the gap is measurable
+
+`field.profile` carries the data source's own business summary, and the scan panel searches
+it. The label alone cannot find a specialist, and the case that settled it is the one the
+work was asked for: KETR.JK is filed under *Communication Equipment*, a label it shares with
+radio makers and handset distributors. What identifies it — "sells submarine and terrestrial
+fiber optic cable systems" — exists only in the prose, at **character 361** of a
+673-character summary, against a 320-character display trim.
+
+So the full text travels and the client clamps. Shipping the trimmed version would have
+saved about 60% of the payload and broken the one query the feature exists to answer.
+
+The search also **ignores the action filter**. A specialist is almost always a *Hold* — that
+is the entire premise of `neglect.py` next door — so intersecting a lookup with the current
+view would hide the answer and give no sign it had.
+
+Three states of a missing description are kept apart, because they send a reader to
+different places: `not fetched` (the record predates the field, and a refetch fixes it),
+`none published` (the source has none, and a refetch cannot), and `not returned` — no
+sector, industry or summary at all, which is the throttle signature `quality.py` already
+refuses to score on. Observed on INDF.JK, which reads "Packaged Foods" on any unhurried
+fetch.
+
+### 18.2 Ranking a field by revenue, not by market value
+
+`field.standings` ranks the scanned names inside each industry label. **By revenue, and the
+reason is structural**: market capitalisation is the quantity this whole line of work
+suspects of being wrong, so ranking a cheap champion by it means the more underrated it is,
+the smaller it looks. Revenue is what the company sells and the market has no vote on it.
+
+"Leads its field" costs rank 1, three or more measured peers, and twice the runner-up's
+revenue. The thresholds are measured, not chosen:
+
+| Test | Indonesian fields won | US fields won |
+|---|---|---|
+| Bare rank 1 | 97 of 97 | 142 of 142 |
+| ≥ 1.5× the runner-up | 42 | 60 |
+| ≥ 2.0× the runner-up | **31** | **32** |
+
+At 2× the US standings return AAPL for consumer electronics, AMZN for internet retail, MSFT
+for infrastructure software, NVDA for semiconductors, PM for tobacco and HCA for medical
+care facilities. **That is weak evidence and is treated as such**: it says the arithmetic is
+not broken, not that the ranking predicts anything.
+
+### 18.3 It is not market share, and the caveat is enforced
+
+Four things are missing from the denominator: private companies, companies listed elsewhere,
+divisions of larger groups, and **companies whose filings did not arrive** — 201 of 722
+cached Indonesian records carry no income statement at all. A field missing its largest
+member crowns the runner-up and looks no different from a correct one.
+
+So `basis` ships *inside* the payload and design rule 10 fails the build on any component
+that renders a rank without it, and `unplaced` is reported beside every count.
+
+**"No listed rival" turned out to be a claim the scan could not make.** The obvious test for
+it is a field of one, and that conflates two statements. Of the 28 Indonesian fields holding
+exactly one *ranked* name, only 13 have no same-label listing that failed to return revenue —
+so the strong reading was wrong on more than half. KETR.JK is one of the wrong ones: two
+other Indonesian listings carry its label and filed nothing usable.
+
+Tightening the flag alone would have **dropped the one company the feature was built to
+find**, which is its own kind of wrong — two tiny peers filing nothing does not stop a
+company being the specialist. The selection rule and the claim were therefore split:
+`onlyRanked` is what a screen may select on, `soleListing` is the only thing rendered as "no
+listed rival", and `unranked` counts the rivals nobody could measure.
+
+### 18.4 A wrong currency label manufactures a champion
+
+The first run of the standings crowned RIGS.JK with 99.4% of Indonesian marine shipping and
+456 times the runner-up. It is a small tug and barge operator whose rupiah statements the
+provider labels USD, so converting at the boundary multiplied a correct figure by about
+16,300. **The output was not a crash. It was a confident market leader.**
+
+Market capitalisation is an independent yardstick — it comes from the quote feed and is
+always in the trading currency — so the test is a comparison, not a threshold: if the
+unconverted revenue implies a sane price-to-sales ratio and the converted one does not, the
+label is what is wrong. Across all 388 mismatched records in the local cache it fires on
+exactly two (RIGS.JK, YPF), passes 100 correctly-labelled ones, and **declines to judge the
+283** where the rate is near 1, because a mislabel there is off by less than a factor of two
+rather than four orders of magnitude.
+
+An earlier version applied the plausibility band to every name regardless of conversion and
+refused 71 — MSTR, DJT, a row of pre-revenue biotechs, and DCII.JK, the most expensive
+listing on the Indonesian exchange. **A very low price-to-sales ratio is what an expensive
+company looks like**, and is indistinguishable from a mis-scaled one by inspection. The test
+only means anything where a conversion actually happened.
+
+This was then fixed at its source: `market_data._apply_fx` carries the same guard, so the
+valuation and accounting lenses no longer run on statements four orders of magnitude out.
+
+### 18.5 "Profitable" is not a screen on this exchange
+
+`trackrecord.py` reports profits, cash, growth and borrowings over the years the statements
+cover. Its first finding is that its own headline flag is worthless alone:
+
+| Condition | Indonesian listings with 3+ years |
+|---|---|
+| Profitable in **every** available year | 350 of 523 — **67%** |
+| …and operating cash flow positive | 301 — 58% |
+| …and revenue CAGR ≥ 15% | 73 — **14%** |
+
+A flag admitting two thirds of a market is not a distinction. Profitability ships as
+description; the narrowing is the conjunction, and each step carries its own base rate.
+`GROWING_AT = 0.15` is p75 of the measured distribution (14.8%), not a round number that
+sounded ambitious.
+
+**Four annual columns is the median history.** That does not span a cycle, it excludes 2020,
+and on this exchange those years were a commodity upswing — so "profitable every year" on an
+Indonesian coal name is close to a statement about the coal price. Every consistency figure
+carries `yearsAvailable` for that reason.
+
+**Negative free cash flow is reported, never penalised.** KETR is profitable in all four
+years and grew revenue 28.6% a year while free cash flow was negative in three of them,
+because it was laying cable. A screen that demoted it for that would have been wrong about
+the one company it was built to find; one that ignored the figure would hide the main thing
+to ask about. One negative year is called a single heavy year, not a build-out — a pattern
+needs more than one observation.
+
+**No leverage flag ships**, for the same reason. 39% of non-financial Indonesian listings
+carry net cash, and of the 242 that borrow the **median is 3.0× EBITDA** — which is exactly
+where the textbook draws "levered". A flag there would mark half the borrowers and mean
+nothing, so the ratio is quoted against that median and the reader draws the line. Free cash
+flow and net debt are both withheld for lenders, whose borrowings *are* the business.
+
+### 18.6 The shortlist, and its ingredients' base rates
+
+`_specialists_summary` intersects the three: largest **or only measurable** name in its
+field, compounding, and uncovered. On the full 771-name Indonesian sweep:
+
+| Ingredient | Share of the scan |
+|---|---|
+| Largest or only measurable in its field | 8% |
+| Profitable every year, cash-backed, growing in the top quartile | 10% |
+| Uncovered | **79%** |
+| All three | **7 names (0.9%)** |
+
+The 79% is why each base rate ships with the list: two thirds of a small exchange being
+uncovered is a fact about the exchange, not a filter, and an intersection reads as three
+demanding tests when one of them is not.
+
+The seven are KETR.JK (submarine fibre optic cable, +29%/yr, 18.5% net margin), GMFI.JK
+(aircraft maintenance), CASS.JK (cargo and ground handling), MAHA.JK (coal transport),
+PTSN.JK (electronics manufacturing), MHKI.JK (industrial waste) and BIRD.JK (taxis). **All
+seven are gated** — six below the turnover floor, which is the expected outcome and not a
+failure: a specialist nobody covers is usually a specialist nobody trades. KETR's gate is
+"Poor entry at this price", which is a statement about today rather than about the business,
+and the card shows every gate beside its name rather than hiding the list.
+
+**This finds what it was described, and that is all it establishes.** Industry labels and
+the share register arrive as a current snapshot with no history, so the screen cannot be
+backtested even in principle — the same wall `neglect.py` publishes. `scanlog.py` records
+what each screen selected on the day it selected it, which it had been cited for doing in
+two docstrings without actually doing.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
@@ -1564,7 +1730,7 @@ Recorded so the next audit does not re-open them.
 | Placing a company in a book-to-market quintile | §8 declines this rather than inventing a breakpoint. It needs a universe-wide scan of book values, and fundamentals do not batch |
 | Multi-factor cost of equity (Fama-French) | Factor returns are freely available for the US; constructing IDX factors is a project in itself |
 | Sensitivity grid (growth × discount rate) | Cheap, though not quite as cheap as this row used to claim: `pv_of_growing_stream` is vectorised over DRAWS, with growth, discount rate and terminal growth broadcast row-wise, so a grid means flattening a meshgrid into that axis rather than an outer product it already supports |
-| Peer / sector relative multiples | Needs a peer-set source beyond yfinance |
+| Peer / sector relative multiples | Needs a peer-set source beyond yfinance. §18 supplies half of it — a field membership from the provider's industry label — but those labels are coarse ("Conglomerates" is not a field anyone competes in) and a quarter of the exchange cannot be placed at all, so they are not yet a base for a multiple |
 | IDX fundamentals curation | The durable moat, and the largest single effort |
 | Single-name exposure betas | §16 ships the portfolio half, which is descriptive. "This stock moves 0.7x as hard as its sector" invites forward use, so it is gated on a stability study — do this period's betas predict next period's — mirroring `measure_correlation_stability.py`. A four-year probe gives year-over-year rank correlations of +0.29 to +0.66, inside the band that licensed the portfolio feature, on three transitions where that study had six. Eight blocks are available; MBMA, NCKL and TAPG cannot supply them and must be excluded by name rather than quietly run on fewer |
 | Fundamental exposure — revenue against commodity prices | **Rejected on feasibility, not deferred.** `market_data` fetches annual statements only, five columns, and yfinance's quarterlies for these names return five or six with gaps — ADRO and PTBA are both missing 2025-09-30. Five irregular observations is not a weak estimate, it is not an estimate. Consequence: the reverse DCF's implied growth cannot be restated as an implied commodity path |
