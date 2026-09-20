@@ -134,7 +134,8 @@ def record(directory: Path, market: str, verdicts: Sequence[dict],
             "industry": entry.get("industry"),
             "neglected": bool((entry.get("neglect") or {}).get("selected")),
             "leadsField": bool((entry.get("fieldPosition") or {}).get("leads")),
-            "soleListing": (entry.get("fieldPosition") or {}).get("peers") == 1,
+            "soleListing": bool((entry.get("fieldPosition") or {})
+                                .get("soleListing")),
             "compounding": bool(
                 (entry.get("trackRecord") or {}).get("everyYearProfitable")
                 and (entry.get("trackRecord") or {}).get("operatingCashFlowPositive")

@@ -27,6 +27,9 @@ WHAT THESE TESTS PROTECT
    reader to re-run a scan that cannot change the answer.
 6. THE CAVEAT TRAVELS IN THE PAYLOAD. A rank rendered without `basis` reads as
    market share, which nothing here measures.
+7. "NO LISTED RIVAL" ACCOUNTS FOR THE RIVALS THAT DID NOT RETURN. A field of one
+   whose other members merely failed to file is a thin measurement, not a
+   monopoly, and it is the strongest claim this module makes.
 """
 
 from __future__ import annotations
@@ -243,3 +246,54 @@ def test_standings_of_nothing_is_empty_rather_than_an_error():
     out = F.standings([])
     assert out["fields"] == {} and out["positions"] == {}
     assert out["measured"] == 0 and out["unplaced"] == 0
+
+
+# --------------------------------------------------------------------------- #
+# no listed rival, which is a stronger claim than being the only ranked name
+# --------------------------------------------------------------------------- #
+def test_a_field_of_one_with_no_other_listing_is_a_sole_listing():
+    out = F.standings(entries(("A", 100.0)))
+    place = out["positions"]["A"]
+    assert place["soleListing"] is True
+    assert place["unranked"] == 0
+    assert "is not listed on this exchange" in place["reading"]
+
+
+def test_an_unrankable_peer_cancels_the_sole_listing_claim():
+    """The rival that did not return its filings is still a rival.
+
+    Without this the claim reads as "nobody else does this", when what happened
+    is "nobody else could be measured" — the difference between a niche and a
+    thin scan, on the one flag the specialist shortlist selects with.
+    """
+    out = F.standings([
+        {"ticker": "A", "name": "A", "industry": "Thermal Coal", "revenue": 100.0},
+        {"ticker": "B", "name": "B", "industry": "Thermal Coal", "revenue": None},
+    ])
+    place = out["positions"]["A"]
+    assert place["peers"] == 1              # still the only one ranked
+    assert place["unranked"] == 1
+    assert place["soleListing"] is False    # but not alone in its field
+    assert "only one that could be measured" in place["reading"]
+    assert out["fields"]["Thermal Coal"]["unranked"] == 1
+    assert out["fields"]["Thermal Coal"]["unrankedTickers"] == ["B"]
+
+
+def test_a_named_leader_says_how_many_of_its_field_went_unmeasured():
+    out = F.standings([
+        *entries(("A", 100.0), ("B", 20.0), ("C", 10.0)),
+        {"ticker": "D", "industry": "Thermal Coal", "revenue": None},
+    ])
+    place = out["positions"]["A"]
+    assert place["leads"] is True
+    assert place["unranked"] == 1
+    assert "lead is over the measured group only" in place["reading"]
+
+
+def test_a_name_with_no_industry_at_all_counts_against_no_field():
+    out = F.standings([
+        *entries(("A", 100.0), ("B", 20.0), ("C", 10.0)),
+        {"ticker": "X", "industry": "", "revenue": None},
+    ])
+    assert out["fields"]["Thermal Coal"]["unranked"] == 0
+    assert out["unplaced"] == 1

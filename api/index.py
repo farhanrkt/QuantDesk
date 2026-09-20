@@ -1093,7 +1093,9 @@ def _scan_row(entry: dict) -> dict:
                     # exactly the signature of a specialist with no listed
                     # competition, which is what a niche champion is. KETR.JK,
                     # the name this was asked for, is one.
-                    "soleListing": place.get("peers") == 1,
+                    "soleListing": bool(place.get("soleListing")),
+                    "onlyRanked": bool(place.get("onlyRanked")),
+                    "unranked": place.get("unranked") or 0,
                     "leader": place.get("leader"),
                     "reading": place.get("reading")} if place else None
     row["gates"] = [{"id": g.get("id"), "label": g.get("label")}
@@ -1135,7 +1137,8 @@ def _scan_fields(standing: Optional[dict]) -> Optional[dict]:
         # not a market of specialists — it is a scan that placed few names, and
         # `unplaced` above is the figure that says which.
         "soleListings": sum(1 for block in fields.values()
-                            if block.get("peers") == 1),
+                            if block.get("peers") == 1
+                            and not block.get("unranked")),
     }
 
 

@@ -368,7 +368,11 @@ def _specialists_summary(verdicts: list[dict]) -> dict:
     """
     def specialist(entry: dict) -> bool:
         place = entry.get("fieldPosition") or {}
-        return bool(place.get("leads") or place.get("peers") == 1)
+        # `onlyRanked`, NOT `soleListing`. A company whose two listed peers
+        # returned no filings is still the specialist; what is weakened is the
+        # CLAIM about rivals, not the company. The row carries both flags and
+        # the unmeasured count so the qualification travels with it.
+        return bool(place.get("leads") or place.get("onlyRanked"))
 
     def compounding(entry: dict) -> bool:
         record = entry.get("trackRecord") or {}
@@ -392,7 +396,9 @@ def _specialists_summary(verdicts: list[dict]) -> dict:
             "score": entry.get("score"), "action": entry.get("action"),
             "industry": entry.get("industry"),
             "summary": (entry.get("profile") or {}).get("summary"),
-            "soleListing": place.get("peers") == 1,
+            "soleListing": bool(place.get("soleListing")),
+            "onlyRanked": bool(place.get("onlyRanked")),
+            "unrankedRivals": place.get("unranked") or 0,
             "leadsField": bool(place.get("leads")),
             "fieldPeers": place.get("peers"),
             "revenueCagr": record.get("revenueCagr"),
@@ -466,7 +472,7 @@ def _neglected_summary(verdicts: list[dict]) -> dict:
                 "leadsField": bool(place.get("leads")),
                 "fieldRank": place.get("rank"),
                 "fieldPeers": place.get("peers"),
-                "soleListing": bool(place.get("peers") == 1),
+                "soleListing": bool(place.get("soleListing")),
                 "profitableEveryYear": bool((entry.get("trackRecord") or {})
                                             .get("everyYearProfitable")),
                 "growing": bool((entry.get("trackRecord") or {}).get("growing")),
@@ -1369,7 +1375,12 @@ def main() -> int:
               f"{specialists['selected']} of {base.get('scanned', 0)} scanned, "
               f"{len(rows)} tradeable:")
         for row in rows:
-            where = "only listed name in" if row["soleListing"] else "largest in"
+            if row["soleListing"]:
+                where = "no listed rival in"
+            elif row["onlyRanked"]:
+                where = f"only measurable of {row['unrankedRivals'] + 1} in"
+            else:
+                where = "largest in"
             print(f"    {row['ticker']:10} {(row.get('score') or 0):5.1f} "
                   f"{row.get('action')!s:10} "
                   f"{(row.get('revenueCagr') or 0) * 100:6.1f}%/yr  "

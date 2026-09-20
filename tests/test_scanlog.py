@@ -202,13 +202,20 @@ def test_an_avoid_is_right_when_the_excess_is_negative():
 # honest alternative. It was not recording any of it. The claim was made in two
 # docstrings and met in neither.
 # --------------------------------------------------------------------------- #
-def screened(ticker="T.JK", *, neglected=False, leads=False, peers=4,
+def screened(ticker="T.JK", *, neglected=False, leads=False, peers=4, sole=None,
              every_year=True, ocf=True, growing=True, industry="Thermal Coal"):
+    # `soleListing` is the STRONG claim — nothing else carries the label — and
+    # `field.standings` withholds it when a same-label listing returned no
+    # usable revenue. The log records the strong flag, because a record that
+    # says "no listed rival" has to have meant it.
+    if sole is None:
+        sole = peers == 1
     return {
         "ticker": ticker, "name": f"PT {ticker}", "action": "HOLD", "score": 55.0,
         "latestClose": 100.0, "sector": "Energy", "industry": industry,
         "neglect": {"selected": neglected},
-        "fieldPosition": {"leads": leads, "peers": peers},
+        "fieldPosition": {"leads": leads, "peers": peers, "soleListing": sole,
+                          "onlyRanked": peers == 1},
         "trackRecord": {"everyYearProfitable": every_year,
                         "operatingCashFlowPositive": ocf, "growing": growing,
                         "revenueCagr": 0.286},
@@ -232,6 +239,19 @@ def test_a_sole_listing_is_recorded_as_its_own_state(tmp_path):
     row = S.read(tmp_path, "ID")[0]
     assert row["soleListing"] is True
     assert row["leadsField"] is False
+
+
+def test_the_log_records_the_strong_claim_not_the_screen(tmp_path):
+    """A field of one whose rivals did not file is not recorded as rival-free.
+
+    The shortlist SELECTS on the weaker flag — a specialist whose two tiny peers
+    returned nothing is still a specialist — but the prospective record is what
+    a later reader judges the screen by, and "no listed rival" has to have meant
+    it on the day it was written.
+    """
+    S.record(tmp_path, "ID", [screened("K.JK", peers=1, sole=False)],
+             scanned_on="2026-09-20")
+    assert S.read(tmp_path, "ID")[0]["soleListing"] is False
 
 
 def test_compounding_needs_all_three_conditions(tmp_path):

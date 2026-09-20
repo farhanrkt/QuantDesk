@@ -1594,9 +1594,17 @@ export interface ScanRow {
   field: {
     rank: number | null; peers: number | null; share: number | null;
     margin: number | null; leads: boolean; leader: string | null;
-    /** The only scanned name carrying this industry label. Its own state, not a
-     *  weaker `leads` — a specialist with no listed competition. */
-    soleListing: boolean; reading: string | null;
+    /**
+     * `soleListing` — nothing else carries this industry label at all. The
+     * strong claim, and the only one to render as "no listed rival".
+     * `onlyRanked` — nothing else in the label could be MEASURED, which is a
+     * statement about the scan. `unranked` counts the listings that share the
+     * label and returned no usable revenue. The shortlist selects on
+     * `onlyRanked` and displays `soleListing`, because a specialist whose two
+     * tiny peers filed nothing is still a specialist.
+     */
+    soleListing: boolean; onlyRanked: boolean; unranked: number;
+    reading: string | null;
   } | null;
   /**
    * What the filings say the business has done. Description, never a score.
@@ -1690,7 +1698,8 @@ export interface ScanResponse {
     tradeable: {
       ticker: string; name: string | null; score: number | null; action: string;
       industry: string | null; summary: string | null;
-      soleListing: boolean; leadsField: boolean; fieldPeers: number | null;
+      soleListing: boolean; onlyRanked: boolean; unrankedRivals: number;
+      leadsField: boolean; fieldPeers: number | null;
       revenueCagr: number | null; netMargin: number | null;
       yearsProfitable: number | null; yearsAvailable: number | null;
       analysts: number | null; institutionsHeld: number | null;

@@ -53,13 +53,21 @@ def scan():
 
 def verdict(ticker="T.JK", *, peers=1, leads=False, every_year=True, ocf=True,
             growing=True, unattended=True, gates=(), cagr=0.286, available=True,
-            industry="Communication Equipment"):
+            industry="Communication Equipment", sole=None, unranked=0):
+    # `soleListing` is NOT `peers == 1`. `field.standings` withholds it when
+    # another listing carries the same label but returned no usable revenue —
+    # that company is still a rival, and a field of one whose other members
+    # merely failed to file is a thin measurement rather than a monopoly. The
+    # default mirrors the module: alone and nothing unranked.
+    if sole is None:
+        sole = peers == 1 and not unranked
     return {
         "ticker": ticker, "name": f"PT {ticker}", "score": 55.0, "action": "HOLD",
         "industry": industry, "gates": [{"id": g, "label": g} for g in gates],
         "profile": {"summary": "Sells submarine and terrestrial fibre optic cable."},
         "fieldPosition": {"peers": peers, "leads": leads, "rank": 1,
-                          "reading": "…"},
+                          "onlyRanked": peers == 1, "soleListing": sole,
+                          "unranked": unranked, "reading": "…"},
         "trackRecord": {"available": available, "everyYearProfitable": every_year,
                         "operatingCashFlowPositive": ocf, "growing": growing,
                         "revenueCagr": cagr, "latestNetMargin": 0.185,
@@ -79,7 +87,7 @@ def test_the_three_conditions_hold_together(scan):
     assert scan._specialists_summary([verdict(unattended=False)])["selected"] == 0
 
 
-def test_the_only_listed_name_in_its_field_counts_as_a_specialist(scan):
+def test_the_only_measurable_name_in_its_field_counts_as_a_specialist(scan):
     """KETR's state, and the reason `leads` alone would have missed it.
 
     `field.standings` refuses to name a leader in a one-member field, correctly.
@@ -144,3 +152,25 @@ def test_an_empty_scan_selects_nothing_without_dividing_by_zero(scan):
     assert out["selected"] == 0
     assert out["baseRates"]["scanned"] == 0
     assert out["baseRates"]["specialist"] == 0
+
+
+def test_an_unmeasured_rival_weakens_the_claim_without_dropping_the_name(scan):
+    """KETR's actual state, and the reason the screen and the claim differ.
+
+    Two Indonesian listings share KETR's "Communication Equipment" label and
+    returned no usable revenue. Selecting on `soleListing` would have dropped
+    the one company this feature was built to find; displaying `onlyRanked` AS
+    `soleListing` would have told a reader it has no listed competition. So the
+    screen takes the weak flag, the row carries both, and the count of rivals
+    nobody could measure travels with it.
+    """
+    alone = scan._specialists_summary([verdict("K.JK", peers=1)])
+    assert alone["selected"] == 1
+    assert alone["tradeable"][0]["soleListing"] is True
+    assert alone["tradeable"][0]["unrankedRivals"] == 0
+
+    qualified = scan._specialists_summary([verdict("K.JK", peers=1, unranked=2)])
+    assert qualified["selected"] == 1            # still found
+    assert qualified["tradeable"][0]["soleListing"] is False   # but not claimed
+    assert qualified["tradeable"][0]["onlyRanked"] is True
+    assert qualified["tradeable"][0]["unrankedRivals"] == 2

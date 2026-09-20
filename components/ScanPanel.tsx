@@ -92,7 +92,8 @@ const FILTERS: { id: Filter; label: string; hint: string }[] = [
   { id: "leaders", label: "Leads its field",
     hint: "Largest of the scanned names sharing its industry label, by 2x or more" },
   { id: "sole", label: "No listed rival",
-    hint: "The only scanned name carrying its industry label" },
+    hint: "Nothing else on this exchange carries its industry label — not merely "
+        + "nothing else the scan could measure" },
   { id: "compounding", label: "Profitable & growing",
     hint: "Profitable every year the filings cover, cash-backed, and growing revenue "
         + "in this market's top quartile" },
@@ -383,10 +384,19 @@ export function ScanPanel({ state, market, onSelect }: {
                     </span>
                   </span>
                   <span className="mt-1 block text-micro text-faint">
+                    {/* THE STRONG CLAIM ONLY WHERE IT HOLDS. `onlyRanked` means
+                        nothing else in the label could be measured, which is a
+                        fact about the scan; `soleListing` means nothing else
+                        carries the label at all. Rendering the first as the
+                        second would tell a reader a company has no competition
+                        when what happened is that its competition did not
+                        file. */}
                     <span className="text-flow">
                       {row.soleListing
-                        ? "only listed name in"
-                        : `largest of ${row.fieldPeers ?? "?"} in`}
+                        ? "no listed rival in"
+                        : row.onlyRanked
+                          ? `only measurable of ${row.unrankedRivals + 1} in`
+                          : `largest of ${row.fieldPeers ?? "?"} in`}
                     </span>
                     {" "}{row.industry ?? "an unstated field"}
                     {" · "}{row.yearsProfitable}/{row.yearsAvailable} yrs profitable

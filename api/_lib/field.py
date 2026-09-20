@@ -345,12 +345,21 @@ def standings(entries: list[dict]) -> dict:
     size of that count is what tells a reader how much to trust a thin field.
     """
     usable, unplaced = [], []
+    # A NAME WITH A LABEL BUT NO REVENUE IS STILL IN THE FIELD, and losing that
+    # fact is what would make "the only listed name in its field" a lie. It
+    # cannot be RANKED — there is nothing to rank it by — but it is a listed
+    # rival, and a claim of no rivals has to account for it. Kept per label
+    # rather than only in the global `unplaced` total, because the global figure
+    # cannot tell a reader whether THIS field is the thin one.
+    unranked: dict[str, list[str]] = {}
     for entry in entries or []:
         industry = (entry.get("industry") or "").strip()
         revenue = _finite(entry.get("revenue"))
         if not industry or revenue is None or revenue <= 0:
             unplaced.append({"ticker": entry.get("ticker"),
                              "why": "no industry" if not industry else "no usable revenue"})
+            if industry:
+                unranked.setdefault(industry, []).append(entry.get("ticker"))
             continue
         usable.append({"ticker": entry.get("ticker"), "name": entry.get("name"),
                        "industry": industry, "revenue": revenue})
@@ -371,9 +380,13 @@ def standings(entries: list[dict]) -> dict:
         named = bool(len(members) >= MIN_PEERS and margin is not None
                      and margin >= LEAD_MARGIN)
 
+        missing = unranked.get(industry) or []
         fields[industry] = {
             "industry": industry,
             "peers": len(members),
+            # Listed under the same label, and not rankable. See `standings`.
+            "unranked": len(missing),
+            "unrankedTickers": missing,
             "revenue": pool,
             "shareOfMarket": (pool / total) if total else None,
             "leader": leader["ticker"] if named else None,
@@ -397,11 +410,30 @@ def standings(entries: list[dict]) -> dict:
                 "behindLeader": (row["revenue"] / leader["revenue"]
                                  if rank > 1 and leader["revenue"] > 0 else None),
                 "leads": bool(named and rank == 1),
+                "unranked": len(missing),
+                # TWO DIFFERENT STATEMENTS, AND CONFLATING THEM COSTS EITHER
+                # HONESTY OR THE ANSWER.
+                #
+                # `onlyRanked` — nothing else in this label could be measured.
+                # It is what a SCREEN can select on, because a specialist whose
+                # two tiny listed peers filed nothing is still a specialist.
+                #
+                # `soleListing` — nothing else carries this label at all. The
+                # stronger claim, and the only one a reader should be shown as
+                # "no listed rival". KETR.JK, the name this was built for, is
+                # the first and not the second: two other Indonesian listings
+                # are filed under Communication Equipment and returned no usable
+                # revenue. Selecting on the strong flag would have dropped it;
+                # displaying the weak one as the strong one would have told a
+                # reader it has no competition. It gets kept and qualified.
+                "onlyRanked": len(members) == 1,
+                "soleListing": bool(len(members) == 1 and not missing),
                 "leader": leader["ticker"],
                 "leaderName": leader.get("name"),
                 "basis": BASIS,
                 "reading": _position_reading(
-                    industry, rank, len(members), row, leader, margin, named, pool),
+                    industry, rank, len(members), row, leader, margin, named, pool,
+                    len(missing)),
             }
 
     return {
@@ -428,21 +460,34 @@ BASIS = ("Ranked among the scanned listings carrying the same industry label. "
 
 
 def _position_reading(industry: str, rank: int, peers: int, row: dict, leader: dict,
-                      margin: Optional[float], named: bool, pool: float) -> str:
+                      margin: Optional[float], named: bool, pool: float,
+                      unranked: int = 0) -> str:
     share = (row["revenue"] / pool * 100) if pool else None
+    if peers == 1 and unranked:
+        return (f"The only scanned name in {industry} whose revenue could be read, but "
+                f"{unranked} other listing{'' if unranked == 1 else 's'} carr"
+                f"{'ies' if unranked == 1 else 'y'} the same label and did not return "
+                f"filings this scan could use. It is not alone in its field; it is the "
+                f"only one that could be measured.")
     if peers == 1:
         return (f"The only scanned name carrying the {industry} label, so there is "
                 f"nothing here to be largest of. Whoever it competes with is private, "
-                f"listed elsewhere, or did not come back from this scan.")
+                f"listed elsewhere, or is not listed on this exchange.")
     if peers < MIN_PEERS:
         return (f"Only {peers} scanned names carry the {industry} label, which is too "
                 f"few for a rank in it to mean anything — being the largest of {peers} "
                 f"is not a position.")
     if rank == 1 and named:
-        return (f"The largest of the {peers} scanned names in {industry}, on "
+        text = (f"The largest of the {peers} scanned names in {industry}, on "
                 f"{margin:.1f}x the revenue of the next one and "
                 f"{share:.0f}% of what the group sells between them. "
                 f"Private and overseas competitors are not counted.")
+        if unranked:
+            text += (f" {unranked} further listing"
+                     f"{'' if unranked == 1 else 's'} carr"
+                     f"{'ies' if unranked == 1 else 'y'} this label and returned no "
+                     f"usable revenue, so the lead is over the measured group only.")
+        return text
     if rank == 1:
         return (f"Nominally the largest of the {peers} scanned names in {industry}, "
                 f"but only {margin:.2f}x the next one — inside the range one "
