@@ -1741,6 +1741,41 @@ failure: a specialist nobody covers is usually a specialist nobody trades. KETR'
 "Poor entry at this price", which is a statement about today rather than about the business,
 and the card shows every gate beside its name rather than hiding the list.
 
+### 18.7 The screen is a frontier-market tool, and the US says so
+
+Run against 2,136 US names the same three conditions select **nothing**, and the
+reason is one ingredient rather than the method:
+
+| | Indonesia | US |
+|---|---|---|
+| Uncovered (≤5% institutional, ≤2 analysts) | 79% | **4%** |
+| Median institutional holding | — | **85%** |
+| Median analyst count | — | 4 |
+
+Dropping the coverage condition leaves exactly two: StoneX Group and
+**Microsoft**. The arithmetic works; the US simply has no undiscovered champion
+in the liquid tier, which is what a market whose median company is 85%
+institutionally held looks like.
+
+**Uncovered and illiquid are close to the same set, and that is measured rather
+than assumed.** Across 2,171 US names carrying both a turnover and a coverage
+reading — all of them already ABOVE the turnover floor — the uncovered share
+rises monotonically as turnover falls:
+
+| Turnover quintile | Median daily turnover | Uncovered |
+|---|---|---|
+| Highest | 329,502,969 | 0% |
+| 4th | 83,642,022 | 1% |
+| 3rd | 31,536,454 | 1% |
+| 2nd | 11,360,770 | 4% |
+| Lowest | 3,763,908 | **11%** |
+
+So a US specialist hunt has to go BELOW the turnover floor, where this scan does
+not look unless `--include-illiquid` is passed — and those names are gated as
+untradeable when it is. That is not a contradiction so much as the shape of the
+problem: on a market this well covered, the companies nobody has read are the
+companies nobody can buy at size.
+
 **This finds what it was described, and that is all it establishes.** Industry labels and
 the share register arrive as a current snapshot with no history, so the screen cannot be
 backtested even in principle — the same wall `neglect.py` publishes. `scanlog.py` records

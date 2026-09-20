@@ -230,6 +230,16 @@ WHAT I MIGHT WANT NEXT — pick with me before building
        unconditionally and is wrong on RIGS.JK and YPF, scaling their statements
        by 16,300x and 1/1000. The detector is already written and tested in
        `field.revenue_of`. Left alone because it moves every valuation.
+     - THE SPECIALIST SCREEN IS A FRONTIER-MARKET TOOL AND THE US PROVES IT.
+       On 2,136 US names the three conditions select NOTHING, because only 4%
+       are uncovered against 79% on the IDX and the median US name is 85%
+       institutionally held. Drop coverage and it returns StoneX and Microsoft.
+       Measured, not assumed: across 2,171 US names with both readings — all
+       already above the turnover floor — the uncovered share runs 0% in the
+       highest turnover quintile to 11% in the lowest, monotonically. A US
+       specialist hunt therefore has to go BELOW the floor, which means
+       `--include-illiquid` and roughly 9,200 names at about ten a minute. The
+       owner has been told and has not chosen; do not start it unasked.
      - THE US SWEEP HAS NEVER PRODUCED A USABLE BUY LIST. Asked for repeatedly;
        the 12 Sep run was contaminated by the quality throttle and two
        completion runs were killed. It is ~3,300 names at roughly 3.5s each with
