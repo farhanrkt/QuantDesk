@@ -297,6 +297,8 @@ def _specialists_section(report: dict) -> str:
                   else f"{row['revenueCagr'] * 100:+.0f}%/yr")
         facts = [f"{_e(where)} {_e(row.get('industry') or 'an unstated field')}",
                  f"{row.get('yearsProfitable')}/{row.get('yearsAvailable')} yrs profitable"]
+        if row.get("terms"):
+            facts.append(_e(", ".join(row["terms"])))
         if row.get("netMargin") is not None:
             facts.append(f"{row['netMargin'] * 100:.1f}% net margin")
         if row.get("analysts") is not None:
@@ -364,6 +366,17 @@ def _business_block(entry: dict) -> str:
         parts.append(f"<p>{head}{_e(summary)}</p>")
     elif profile.get("reading"):
         parts.append(f'<p style="color:var(--ash)">{_e(profile["reading"])}</p>')
+
+    # The words that identify this company and few others. In the written
+    # report they are prose rather than controls — nothing here is clickable —
+    # so they read as "and these are the words that make it unusual" beside the
+    # description they were drawn from.
+    terms = entry.get("terms") or []
+    if terms:
+        parts.append(f'<p style="color:var(--faint);font-size:11.5px">'
+                     f'Distinctive in its description: '
+                     f'<b>{_e(", ".join(terms))}</b>. Word frequency across this '
+                     f'scan, not a classification.</p>')
 
     staff = profile.get("employees")
     where = profile.get("country")
