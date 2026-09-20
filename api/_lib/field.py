@@ -434,6 +434,13 @@ def revenue_of(company: Optional[dict]) -> dict:
 # reading the output on a 726-name sweep and removing what was obviously noise,
 # not by any test. The effect of getting it wrong is a bland term in a list of
 # four, which is why it is allowed to be a judgement at all.
+#
+# THE PRONOUNS AND QUANTITY WORDS WERE ADDED FOR THE US CORPUS. The Indonesian
+# descriptions are written in a flatter register and barely use them, so the
+# first list had none — and on 1,767 US descriptions Highwoods Properties came
+# back as "their, raleigh, they, experiences" and Pembina Pipeline as "barrels,
+# capacity, basins, million". A word below four characters is already excluded
+# by the tokeniser, which is why "we", "our" and "its" never needed listing.
 _FURNITURE = frozenset("""
 the a an and or of in to for with its it also as well is are was were by on at from
 that this company companies operates operate through provides provide offers offer
@@ -445,6 +452,9 @@ distributes distribution manufactures manufacturing production including include
 includes under brand brands well customers market markets domestic international
 activities activity operations operational related support supports solutions solution
 consists systems system application applications process processes hour income prime
+they them their theirs which these those such than then into over about
+approximately primarily mainly certain approximately million billion thousand
+percent primarily principally largely mostly
 """.split())
 
 _WORD = re.compile(r"[a-z][a-z-]{3,}")
