@@ -712,14 +712,23 @@ export function ScanPanel({ state, market, onSelect }: {
             </div>
           )}
 
-          {filter === "compounding" && !needle && (
+          {/* THE BASE RATE TRAVELS WITH THE COLUMN, NOT WITH ONE FILTER.
+              "4/4 yrs profitable" reads as a distinction and is not one — two
+              thirds of this exchange manages it — and `PRODUCT.md` constraint 7
+              puts a number and the base rate it is quoted against in the same
+              breath. Showing this only under the compounding filter left every
+              other view quoting the figure with nothing to weigh it by. */}
+          {rows.some((row) => row.record) && (
             <div className="px-5">
               <Note>
                 Profitable in every year the filings cover is true of about two thirds
-                of this exchange, so it is not on its own a distinction. This filter is
-                the conjunction — profitable every year, operating cash flow positive,
-                and revenue compounding at or above the market&apos;s own top quartile —
-                which about one name in seven meets. The window is whatever the filings
+                of this exchange, so the Record column is context rather than a
+                distinction on its own. What is uncommon is the conjunction —
+                profitable every year, operating cash flow positive, and revenue
+                compounding at or above this market&apos;s own top quartile — which
+                about one name in seven meets, and which the
+                {" "}<strong className="font-normal text-body">Profitable &amp;
+                growing</strong> filter selects. The window is whatever the filings
                 cover, typically four years, which does not span a cycle.
               </Note>
             </div>
