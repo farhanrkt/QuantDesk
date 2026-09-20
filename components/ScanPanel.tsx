@@ -446,6 +446,34 @@ export function ScanPanel({ state, market, onSelect }: {
           supply the parts — what a company does, who else does it, what the
           filings say, who is watching. This is their intersection, and it is
           first because a reader who wants the parts can read on. */}
+      {/* A NULL RESULT IS RENDERED, NOT OMITTED. `PRODUCT.md` constraint 7
+          names null results among the things that may never be cut, and a card
+          that simply vanishes when the intersection is empty leaves a reader
+          wondering whether the screen ran. The base rates say which ingredient
+          was the binding one. */}
+      {!needle && specialists && specialists.selected === 0 && (
+        <Card accent="#C9A227">
+          <CardHeader>
+            <CardTitle>Profitable specialists nobody is covering</CardTitle>
+            <span className="font-mono text-micro text-ash">none this scan</span>
+          </CardHeader>
+          <CardBody>
+            <p className="prose-col text-base leading-relaxed text-ash">
+              No name on this scan is the largest or only measurable one in its field,
+              profitable every year with cash behind it, growing in this market&apos;s
+              top quartile, and uncovered — all at once. Of the
+              {" "}{specialists.baseRates.scanned} scanned,
+              {" "}{(specialists.baseRates.specialist * 100).toFixed(0)}% meet the
+              first, {(specialists.baseRates.compounding * 100).toFixed(0)}% the
+              second and {(specialists.baseRates.unattended * 100).toFixed(0)}% the
+              third, so the smallest of those is what the intersection is up against.
+              An empty list is a finding about this market, not a failure of the
+              screen, and it is not evidence that nothing here is worth owning.
+            </p>
+          </CardBody>
+        </Card>
+      )}
+
       {!needle && specialists && specialists.selected > 0 && (
         <Card accent="#C9A227">
           <CardHeader>
