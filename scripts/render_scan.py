@@ -266,6 +266,127 @@ def _chart_block(entry: dict) -> str:
             + "</div>")
 
 
+def _specialists_section(report: dict) -> str:
+    """The shortlist, above the ranked table because it is not near the top of it.
+
+    Every name here is by construction unlikely to rank well: the blend shrinks
+    toward 50 when its families disagree, and a company whose filings are strong
+    and whose price family is weak is exactly that disagreement. Folding these
+    into the ordering would hide them again, which is the same reasoning
+    `neglect.py` is built on.
+
+    GATED NAMES ARE LISTED WITH THEIR GATES. On the first full Indonesian sweep
+    all seven were gated and six of those on turnover alone; printing only the
+    ungated ones would have printed nothing.
+    """
+    block = report.get("specialists") or {}
+    rows = list(block.get("tradeable") or []) + list(block.get("gated") or [])
+    if not rows:
+        return ""
+
+    base = block.get("baseRates") or {}
+    cards = []
+    for row in rows:
+        if row.get("soleListing"):
+            where = "no listed rival in"
+        elif row.get("onlyRanked"):
+            where = f"only measurable of {(row.get('unrankedRivals') or 0) + 1} in"
+        else:
+            where = f"largest of {row.get('fieldPeers') or '?'} in"
+        growth = ("&mdash;" if row.get("revenueCagr") is None
+                  else f"{row['revenueCagr'] * 100:+.0f}%/yr")
+        facts = [f"{_e(where)} {_e(row.get('industry') or 'an unstated field')}",
+                 f"{row.get('yearsProfitable')}/{row.get('yearsAvailable')} yrs profitable"]
+        if row.get("netMargin") is not None:
+            facts.append(f"{row['netMargin'] * 100:.1f}% net margin")
+        if row.get("analysts") is not None:
+            facts.append(f"{row['analysts']} analysts")
+        price = ""
+        if row.get("drawdown") is not None:
+            at = (f"at {row['latestClose']:,.0f}, "
+                  if row.get("latestClose") is not None else "")
+            fall = (f"{abs(row['drawdown']) * 100:.0f}% below its own high"
+                    if row["drawdown"] < -0.005 else "at its own high")
+            price = (f'<p style="color:var(--faint);font-size:11.5px">{at}{fall} '
+                     f'&mdash; this screen does not ask whether that is cheap</p>')
+        gates = ""
+        if row.get("gates"):
+            gates = ('<p style="color:var(--faint);font-size:11.5px">Gated: '
+                     + _e("; ".join(g["label"] for g in row["gates"])) + "</p>")
+        cards.append(
+            f'<div class="blk"><div class="h">{_e(row["ticker"])} '
+            f'&mdash; {_e(row.get("name") or "")} <span class="op">{growth}</span></div>'
+            f'<p style="color:var(--ash);font-size:11.5px">'
+            f'{" &middot; ".join(facts)}</p>'
+            f'{price}'
+            f'<p>{_e(row.get("summary") or "")}</p>'
+            f'{gates}</div>')
+
+    return (
+        f'<h2>Profitable specialists nobody is covering</h2>'
+        f'<div class="blk" style="max-width:82ch">'
+        f'<div class="h">What this list is, and what each part of it is worth</div>'
+        f'<p>The largest &mdash; or the only measurable &mdash; scanned name in its '
+        f'industry label, profitable in every year its filings cover with cash behind '
+        f'the profit, growing revenue in this market\u2019s top quartile, and covered '
+        f'by nobody.</p>'
+        f'<p>Of the {base.get("scanned", 0)} names scanned, '
+        f'{base.get("specialist", 0) * 100:.0f}% are the largest or only measurable '
+        f'name in their field, {base.get("compounding", 0) * 100:.0f}% compound on all '
+        f'three counts, and {base.get("unattended", 0) * 100:.0f}% are uncovered '
+        f'&mdash; the loosest of the three by a distance, which is why each share is '
+        f'printed rather than only the intersection.</p>'
+        f'<p style="color:var(--ash)">{_e(block.get("note") or "")}</p>'
+        f'</div>'
+        + "".join(cards))
+
+
+def _business_block(entry: dict) -> str:
+    """What the company sells, where it stands, and what its filings have done.
+
+    ON TOP OF THE ROW RATHER THAN INSIDE IT. Every other block in this detail
+    pane is a reading about a company the report never names beyond its ticker,
+    which is the gap `field.py` exists to close — and a static HTML file is the
+    artifact that outlives a dev server, so it should not be the one surface
+    that still cannot say what the business is.
+    """
+    profile = entry.get("profile") or {}
+    place = entry.get("fieldPosition") or {}
+    record = entry.get("trackRecord") or {}
+    if not (profile or place or record):
+        return ""
+
+    parts = []
+    summary = profile.get("summary")
+    industry = profile.get("industry") or profile.get("sector")
+    if summary:
+        head = f'<b>{_e(industry)}.</b> ' if industry else ""
+        parts.append(f"<p>{head}{_e(summary)}</p>")
+    elif profile.get("reading"):
+        parts.append(f'<p style="color:var(--ash)">{_e(profile["reading"])}</p>')
+
+    staff = profile.get("employees")
+    where = profile.get("country")
+    if staff or where:
+        bits = []
+        if staff:
+            bits.append(f"{staff:,} employees")
+        if where:
+            bits.append(_e(where))
+        parts.append(f'<p style="color:var(--faint);font-size:11.5px">'
+                     f'{" &middot; ".join(bits)}</p>')
+
+    if place.get("reading"):
+        parts.append(f'<p style="color:var(--ash)">{_e(place["reading"])}</p>')
+    if record.get("available") and record.get("reading"):
+        parts.append(f'<p style="color:var(--ash)">{_e(record["reading"])}</p>')
+
+    if not parts:
+        return ""
+    return ('<div class="blk"><div class="h">What this company does</div>'
+            + "".join(parts) + "</div>")
+
+
 def _detail(index: int, entry: dict) -> str:
     components = "".join(_component_block(c) for c in entry["components"])
 
@@ -402,6 +523,7 @@ def _detail(index: int, entry: dict) -> str:
       {_chart_block(entry)}
       <div class="det">
       <div>
+        {_business_block(entry)}
         <h3>The five components</h3>
         {components}
       </div>
@@ -773,6 +895,8 @@ def render(report: dict) -> str:
   {stale_html}
   <p class="note">{tally_html}</p>
   {concentration_html}
+
+  {_specialists_section(report)}
 
   <h2>Ranked</h2>
   <div class="blk" style="max-width:82ch">
