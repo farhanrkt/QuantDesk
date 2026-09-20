@@ -693,8 +693,24 @@ export function ScanPanel({ state, market, onSelect }: {
                         className="cursor-pointer border-b border-ruleSoft last:border-0
                                    hover:bg-raised"
                         onClick={() => onSelect(row.ticker)}>
+                      {/* THE TICKER IS A BUTTON, WHICH IS THE ROW'S ONLY
+                          KEYBOARD PATH. The row opens a company on click and a
+                          `<tr onClick>` cannot be tabbed to — so before this,
+                          seven rows held no focusable element at all and the
+                          rest held only the industry and term buttons, which
+                          SEARCH rather than open. A keyboard user could reach
+                          every secondary action on the table and none of the
+                          primary one. */}
                       <td className="px-5 py-2">
-                        <span className="num text-body">{row.ticker}</span>
+                        <button type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onSelect(row.ticker);
+                                }}
+                                title={`Open ${row.ticker}`}
+                                className="num text-body hover:underline">
+                          {row.ticker}
+                        </button>
                         {row.neglected && (
                           <span className="ml-2 text-micro text-flow">uncovered</span>
                         )}
