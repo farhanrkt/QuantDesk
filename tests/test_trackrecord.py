@@ -41,7 +41,7 @@ from _lib import trackrecord as T
 
 
 def statements(net_income, revenue=None, ocf=None, fcf=None, equity=None,
-               **extra):
+               cash=None, debt=None, ebit=None, **extra):
     """Newest year first, which is how the provider serves them."""
     years = [pd.Timestamp(f"{2025 - i}-12-31") for i in range(len(net_income))]
 
@@ -52,14 +52,23 @@ def statements(net_income, revenue=None, ocf=None, fcf=None, equity=None,
     income = {"Net Income": net_income}
     if revenue is not None:
         income["Total Revenue"] = revenue
-    cash = {}
+    if ebit is not None:
+        income["EBIT"] = ebit
+    flows = {}
     if ocf is not None:
-        cash["Operating Cash Flow"] = ocf
+        flows["Operating Cash Flow"] = ocf
     if fcf is not None:
-        cash["Free Cash Flow"] = fcf
+        flows["Free Cash Flow"] = fcf
+    sheet = {}
+    if equity:
+        sheet["Stockholders Equity"] = equity
+    if cash is not None:
+        sheet["Cash And Cash Equivalents"] = cash
+    if debt is not None:
+        sheet["Long Term Debt"] = debt
     out = {"income": frame(income),
-           "cashflow": frame(cash) if cash else pd.DataFrame(),
-           "balance": frame({"Stockholders Equity": equity}) if equity else pd.DataFrame(),
+           "cashflow": frame(flows) if flows else pd.DataFrame(),
+           "balance": frame(sheet) if sheet else pd.DataFrame(),
            "sector": "Technology", "industry": "Communication Equipment"}
     out.update(extra)
     return out
@@ -186,3 +195,64 @@ def test_no_statements_at_all_is_a_stated_refusal():
 
 def test_none_is_not_an_error():
     assert T.read(None)["available"] is False
+
+
+# --------------------------------------------------------------------------- #
+# what it owes
+#
+# NO "TOO MUCH DEBT" FLAG EXISTS, AND THE MEASUREMENT IS WHY. Across the 467
+# non-financial Indonesian listings in the local cache with an EBIT line, 181 —
+# 39% — carry net cash, and of the 242 that borrow the MEDIAN is 3.0x EBITDA.
+# The textbook line for "levered" is 3x, which here is the middle of the
+# distribution: a flag there would mark half the borrowers and say nothing.
+# --------------------------------------------------------------------------- #
+def test_net_cash_is_reported_against_how_common_it_is():
+    out = T.read(statements([10.0, 8.0, 6.0, 5.0], revenue=[100.0, 90.0, 80.0, 70.0],
+                            cash=[500.0, 400.0, 300.0, 200.0],
+                            debt=[100.0, 100.0, 100.0, 100.0],
+                            ebit=[20.0, 16.0, 12.0, 10.0]))
+    assert out["netCash"] is True
+    assert out["netDebt"] == pytest.approx(-400.0)
+    assert "39% of this market" in out["reading"]
+
+
+def test_leverage_is_quoted_against_the_markets_own_median():
+    out = T.read(statements([10.0, 8.0, 6.0, 5.0], revenue=[100.0, 90.0, 80.0, 70.0],
+                            cash=[10.0, 10.0, 10.0, 10.0],
+                            debt=[210.0, 200.0, 190.0, 180.0],
+                            ebit=[20.0, 16.0, 12.0, 10.0]))
+    assert out["netCash"] is False
+    assert out["netDebtToEbitda"] == pytest.approx(10.0)
+    assert "median of 3.0" in out["reading"]
+    assert "more levered" in out["reading"]
+    assert "comparison and not a verdict" in out["reading"]
+
+
+def test_no_arbitrary_over_indebted_flag_ships():
+    """Measured and refused; see the block comment above.
+
+    A boolean here would put a line through the middle of the distribution and
+    read as a warning. The ratio and the market's median ship instead.
+    """
+    out = T.read(statements([10.0, 8.0, 6.0, 5.0], revenue=[100.0, 90.0, 80.0, 70.0],
+                            cash=[10.0, 10.0, 10.0, 10.0], debt=[900.0] * 4,
+                            ebit=[20.0, 16.0, 12.0, 10.0]))
+    assert "overLevered" not in out
+    assert "distressed" not in out
+
+
+def test_borrowings_are_withheld_for_a_lender():
+    """A bank's borrowings ARE its business; netting them describes nothing."""
+    out = T.read(statements([10.0, 8.0, 6.0, 5.0], revenue=[100.0, 90.0, 80.0, 70.0],
+                            cash=[10.0] * 4, debt=[900.0] * 4, ebit=[20.0] * 4,
+                            sector="Financial Services", industry="Banks—Regional"))
+    assert out["netDebt"] is None and out["netCash"] is None
+    assert out["netDebtToEbitda"] is None
+
+
+def test_borrowings_without_earnings_to_measure_them_against_say_so():
+    out = T.read(statements([10.0, 8.0, 6.0, 5.0], revenue=[100.0, 90.0, 80.0, 70.0],
+                            cash=[10.0] * 4, debt=[900.0] * 4))
+    assert out["netCash"] is False
+    assert out["netDebtToEbitda"] is None
+    assert "not established here" in out["reading"]

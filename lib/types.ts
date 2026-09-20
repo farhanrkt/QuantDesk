@@ -1608,7 +1608,12 @@ export interface ScanRow {
     years: number | null; yearsProfitable: number | null;
     everyYearProfitable: boolean; operatingCashFlowPositive: boolean;
     revenueCagr: number | null; netMargin: number | null;
-    growing: boolean; reading: string | null;
+    growing: boolean;
+    /** `null` means the question does not apply — a lender's borrowings ARE its
+     *  business — and is not the same answer as `false`. */
+    netCash: boolean | null;
+    netDebtToEbitda: number | null;
+    reading: string | null;
   } | null;
   latestClose: number | null;
   turnover: number | null;

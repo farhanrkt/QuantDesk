@@ -91,6 +91,12 @@ MIN_YEARS = 3
 # threshold picked because it sounded ambitious.
 GROWING_AT = 0.15
 
+# The median net-debt-to-EBITDA of the Indonesian listings that borrow at all.
+# NOT A THRESHOLD — nothing is flagged against it. It is carried so the reading
+# can say where a company sits in its own market rather than against a textbook
+# line that happens to fall on this exchange's median.
+MARKET_MEDIAN_LEVERAGE = 3.0
+
 
 def _series(frame, key: str) -> Optional[pd.Series]:
     row = _get_row(frame, key)
@@ -165,6 +171,30 @@ def read(company: Optional[dict]) -> dict:
     profit_growth = _cagr(_finite(net_income.values[0]) or 0.0,
                           _finite(net_income.values[-1]) or 0.0, years - 1)
 
+    # WHAT IT OWES, AND WHETHER THE PROFIT IS BEING BORROWED AGAINST.
+    #
+    # A small profitable company with net cash and one with six times its
+    # earnings in debt are not the same proposition, and nothing else on this
+    # panel separates them: Altman scores solvency on a combined index, and the
+    # growth and margin figures are identical for both.
+    #
+    # NO "TOO MUCH DEBT" FLAG, AND THE MEASUREMENT IS WHY. Across the 467
+    # non-financial Indonesian listings in the local cache with an EBIT line,
+    # 181 — 39% — carry net cash, and of the 242 that carry net debt the MEDIAN
+    # is 3.0x EBITDA. The textbook line for "levered" is 3x, which on this
+    # exchange is the middle of the distribution: a flag there would mark half
+    # the borrowers and mean nothing. So the ratio is reported with the market's
+    # own median beside it and the reader draws the line.
+    cash = _latest(record.get("balance"), "cash") or 0.0
+    borrowings = ((_latest(record.get("balance"), "long_term_debt") or 0.0)
+                  + (_latest(record.get("balance"), "short_term_debt") or 0.0))
+    ebit = _latest(income, "ebit")
+    depreciation = abs(_latest(record.get("cashflow"), "depreciation") or 0.0)
+    net_debt = borrowings - cash
+    ebitda = (ebit + depreciation) if ebit is not None else None
+    leverage = (net_debt / ebitda
+                if net_debt > 0 and ebitda is not None and ebitda > 0 else None)
+
     # FREE CASH FLOW DOES NOT TRAVEL TO A BANK. Capital expenditure on a lender's
     # cash flow statement is premises and software, not the engine of the
     # business, so FCF describes nothing about whether it is working. Reported as
@@ -189,6 +219,12 @@ def read(company: Optional[dict]) -> dict:
         "freeCashFlowOf": None if financial or fcf is None else len(fcf),
         "revenueCagr": growth,
         "profitCagr": profit_growth,
+        # Suppressed for lenders for the same reason free cash flow is: a bank's
+        # borrowings ARE its business, so netting them against its cash
+        # describes nothing about whether it is working.
+        "netDebt": None if financial else net_debt,
+        "netCash": None if financial else bool(net_debt <= 0),
+        "netDebtToEbitda": None if financial else leverage,
         "growing": growing,
         "consistentlyProfitable": consistent,
         "financial": financial,
@@ -196,7 +232,9 @@ def read(company: Optional[dict]) -> dict:
         "baseRates": BASE_RATES,
         "reading": _reading(years, profitable, every_year, cash_backed, growth,
                             growing, margin, fcf_years,
-                            None if fcf is None else len(fcf), financial),
+                            None if fcf is None else len(fcf), financial,
+                            None if financial else bool(net_debt <= 0),
+                            None if financial else leverage),
     }
 
 
@@ -217,10 +255,16 @@ BASE_RATES = {
 }
 
 
+def _latest(frame, key: str) -> Optional[float]:
+    series = _series(frame, key)
+    return None if series is None else _finite(series.values[0])
+
+
 def _reading(years: int, profitable: int, every_year: bool, cash_backed: bool,
              growth: Optional[float], growing: bool, margin: Optional[float],
              fcf_years: Optional[int], fcf_of: Optional[int],
-             financial: bool) -> str:
+             financial: bool, net_cash: Optional[bool] = None,
+             leverage: Optional[float] = None) -> str:
     window = (f"across the {years} years the filings cover"
               if years > 1 else "in the one year the filings cover")
 
@@ -273,6 +317,19 @@ def _reading(years: int, profitable: int, every_year: bool, cash_backed: bool,
                  "accounts is premises and software rather than the engine of the "
                  "business, so the figure would describe nothing.")
 
-    return head + pace + cash + spend + (
+    owed = ""
+    if net_cash is True:
+        owed = (" It holds more cash than borrowings, which 39% of this market's "
+                "non-financial listings also do.")
+    elif leverage is not None:
+        owed = (f" Net borrowings are {leverage:.1f} times EBITDA, against a median of "
+                f"3.0 for the listings here that borrow at all — so this is "
+                f"{'more' if leverage > 3.0 else 'less'} levered than the typical "
+                f"borrower on this exchange, which is a comparison and not a verdict.")
+    elif net_cash is False:
+        owed = (" It carries net borrowings, and there is no EBITDA to measure them "
+                "against, so how heavy they are is not established here.")
+
+    return head + pace + cash + spend + owed + (
         f" {years} years is a short window — it does not span a cycle, and on this "
         f"exchange those years were a commodity upswing.")

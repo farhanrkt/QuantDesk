@@ -1073,6 +1073,11 @@ def _scan_row(entry: dict) -> dict:
         "revenueCagr": record.get("revenueCagr"),
         "netMargin": record.get("latestNetMargin"),
         "growing": bool(record.get("growing")),
+        # TRUE, FALSE AND NULL ARE THREE DIFFERENT ANSWERS HERE. Null means the
+        # question does not apply — a lender's borrowings are its business — and
+        # collapsing it to false would report every bank as carrying net debt.
+        "netCash": record.get("netCash"),
+        "netDebtToEbitda": record.get("netDebtToEbitda"),
         "reading": record.get("reading"),
     } if record.get("available") else None
     place = entry.get("fieldPosition") or {}

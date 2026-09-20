@@ -630,7 +630,20 @@ export function ScanPanel({ state, market, onSelect }: {
                           title={row.record?.reading ?? undefined}>
                         <span className="block whitespace-nowrap">{recordLabel(row)}</span>
                         {row.record && !row.record.operatingCashFlowPositive && (
-                          <span className="text-micro text-faint">no cash from ops</span>
+                          <span className="block text-micro text-faint">
+                            no cash from ops
+                          </span>
+                        )}
+                        {/* `netCash === true` only. Null means the question does
+                            not apply to a lender, and false is just "borrows",
+                            which most of the market does. */}
+                        {row.record?.netCash === true && (
+                          <span className="block text-micro text-faint">net cash</span>
+                        )}
+                        {row.record?.netDebtToEbitda != null && (
+                          <span className="block text-micro text-faint">
+                            {row.record.netDebtToEbitda.toFixed(1)}x net debt
+                          </span>
                         )}
                       </td>
                       <td className="px-5 py-2 text-ash">{row.conviction}</td>
