@@ -114,6 +114,7 @@ what makes a full-market scan mean anything at all.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -954,15 +955,44 @@ def _penalties(pretrade_result: Optional[dict]) -> list[dict]:
 # ============================================================================ #
 # Gates — facts about tradeability, which no amount of signal overrides
 # ============================================================================ #
+# A US preference line, which Yahoo suffixes `-P` plus the series letter:
+# BAC-PB, JPM-PC, GS-PD, WFC-PC, DUK-PA. Share CLASSES are a single letter after
+# the hyphen — BRK-A, BRK-B, LEN-B, HEI-A, PBR-A — and must not match, which is
+# why the P is required rather than any letter.
+_PREFERENCE_LINE = re.compile(r"-P[A-Z]?$")
+
+
 def _gates(liquidity: Optional[dict], price: Optional[float], market: str,
            legs: dict, available: int,
            turnover_floor: Optional[float] = None,
            register_result: Optional[dict] = None,
            tape_result: Optional[dict] = None,
-           structure_result: Optional[dict] = None) -> list[dict]:
+           structure_result: Optional[dict] = None,
+           symbol: Optional[str] = None) -> list[dict]:
     market = (market or "US").upper()
     floor = turnover_floor if turnover_floor is not None else TURNOVER_FLOOR.get(market, 0.0)
     gates: list[dict] = []
+
+    # A PREFERENCE LINE IS NOT THE COMMON STOCK, AND SCORING IT AS ONE MIXES TWO
+    # SECURITIES. The filings behind the value and quality lenses are the
+    # ISSUER'S — BAC-PB reads "Bank of America Corporation" — while every price
+    # signal comes from the preference line, which trades on its coupon and on
+    # rates rather than on the business. A full US sweep put BAC-PB and JPM-PC
+    # in the buy list at 63.8 and 62.6.
+    #
+    # Gated rather than dropped: the reading is still a true statement about
+    # Bank of America's filings, and a reader who wants it should be told what
+    # the ticker is instead of finding the row missing.
+    if symbol and _PREFERENCE_LINE.search(symbol.upper()):
+        gates.append({
+            "id": "preferenceLine", "action": "NO_ACTION",
+            "label": "A preference line, not the common stock",
+            "detail": ("This ticker is a preferred series. The value and quality "
+                       "lenses read the ISSUER'S filings while every price signal "
+                       "comes from this line, which trades on its coupon and on "
+                       "interest rates rather than on the business. The two halves "
+                       "of the score describe different securities."),
+        })
 
     turnover = _finite((liquidity or {}).get("medianDollarVolume"))
     if turnover is None:
@@ -1260,7 +1290,8 @@ def score(ticker: str,
 
     gates = _gates(liquidity, latest_close, market, legs, len(available),
                    turnover_floor=turnover_floor, register_result=register_result,
-                   tape_result=tape_result, structure_result=structure_result)
+                   tape_result=tape_result, structure_result=structure_result,
+                   symbol=ticker)
 
     if final is None:
         action, action_label, tone = "NO_ACTION", "No action", "none"

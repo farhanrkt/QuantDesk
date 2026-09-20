@@ -843,3 +843,43 @@ def test_one_lone_directional_family_is_still_only_medium_conviction():
     if result["agreement"]["state"] == "oneNeutral":
         assert result["conviction"] == "medium"
         assert result["action"] != "STRONG_BUY"
+
+
+# --------------------------------------------------------------------------- #
+# A preference line is not the common stock
+#
+# A full US sweep put BAC-PB in the buy list at 63.8 and JPM-PC at 62.6. Those
+# are preferred series: the value and quality lenses read the ISSUER'S filings —
+# the name on the row is "Bank of America Corporation" — while every price
+# signal comes from the preference line, which trades on its coupon and on
+# interest rates rather than on the business. The two halves of the score
+# describe different securities.
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("ticker", [
+    "BAC-PB", "JPM-PC", "JPM-PD", "GS-PD", "MS-PK", "WFC-PC", "DUK-PA",
+])
+def test_a_preference_line_is_gated(ticker):
+    from _lib import verdict as V
+    gates = V._gates(None, 100.0, "US", {}, 0, symbol=ticker)
+    ids = [g["id"] for g in gates]
+    assert "preferenceLine" in ids
+    gate = next(g for g in gates if g["id"] == "preferenceLine")
+    assert gate["action"] == "NO_ACTION"
+    assert "different securities" in gate["detail"]
+
+
+@pytest.mark.parametrize("ticker", [
+    # Share CLASSES are a single letter after the hyphen and must be untouched.
+    "BRK-A", "BRK-B", "BF-A", "BF-B", "LEN-B", "HEI-A", "MOG-A", "GEF-B",
+    "UHAL-B", "BH-A", "PBR-A", "AAPL", "BBCA.JK",
+])
+def test_a_share_class_is_not_mistaken_for_a_preference_line(ticker):
+    from _lib import verdict as V
+    gates = V._gates(None, 100.0, "US", {}, 0, symbol=ticker)
+    assert "preferenceLine" not in [g["id"] for g in gates]
+
+
+def test_no_symbol_means_no_guess():
+    from _lib import verdict as V
+    gates = V._gates(None, 100.0, "US", {}, 0)
+    assert "preferenceLine" not in [g["id"] for g in gates]
