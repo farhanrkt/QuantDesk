@@ -578,7 +578,10 @@ def cache_path(symbol: str, day: str) -> Path:
 # sweep came back with every net-debt figure null, because the leg payloads had
 # been written the hour before the borrowings reading existed, and nothing said
 # so. Bump this whenever the payload gains or loses a field.
-PROFILE_LEG_VERSION = 3
+#
+# 4 — `trackrecord` stopped reporting a missing balance sheet as net cash, which
+#     changes `netCash`/`netDebt` on any name whose sheet did not arrive.
+PROFILE_LEG_VERSION = 4
 
 
 def read_profile(symbol: str) -> dict:
