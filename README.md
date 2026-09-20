@@ -668,6 +668,20 @@ whose currencies differ it catches exactly two, and says plainly that 283 involv
 near 1 where it cannot tell. The first version of that guard ran on every name and refused
 71, nearly all of them companies that are simply expensive.
 
+*A closed-end fund is not a company, and nothing available can tell.* On the US
+market "Asset Management" holds Brookfield, BlackRock, a row of business development
+companies and about three dozen closed-end trusts, whose "revenue" is investment income.
+Three signals were tested on the 99 cached US names carrying the label and none separates
+them: `quoteType` reads EQUITY for a BlackRock term trust exactly as for Apple; headcount
+is absent for the trusts and absent for Ares Management and Main Street Capital too; and a
+name test for "Trust" catches 36 trusts and also Northern Trust, a bank with 23,600 staff.
+`Gross Profit` comes closest — it appears on 0 of 38 fund-named income statements, so its
+presence rules a fund out — but it is missing from 36 of the 62 others, so its absence
+rules nothing in. **No filter ships**, because a wrong classifier drops real companies
+rather than merely admitting fake ones; the limitation is stated instead, and a standing
+inside a label that mixes operating companies with investment vehicles should not be read
+as a market position.
+
 *A "niche" flag was built, measured and dropped.* The obvious companion to "leads its
 field" is "and the field is small", measured as the field's share of scanned revenue.
 Across the fields with a clear leader the median holds 0.5% of it — which is 1/97 restated,

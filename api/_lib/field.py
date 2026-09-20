@@ -128,6 +128,38 @@ state as the strong one would have told a reader it has no competition. So:
 A named leader carries it too: its lead is over the measured group only, and the
 reading says so whenever something in its field went unmeasured.
 
+A CLOSED-END FUND IS NOT A COMPANY, AND NOTHING HERE CAN TELL
+--------------------------------------------------------------
+On the US market the label "Asset Management" holds Brookfield, BlackRock, a row
+of business development companies, and about three dozen closed-end trusts. A
+trust's "Total Revenue" is investment income. Ranking it against an operating
+manager's fee income is comparing two different quantities, and the peer count
+for that field is inflated by entities that do not compete in it at all.
+
+THREE SIGNALS WERE TESTED AND NONE SEPARATES THEM, measured on the 99 cached US
+names carrying the label:
+
+  `quoteType`   EQUITY for BlackRock Innovation and Growth Term Trust exactly as
+                for Apple. It reads ETF only for actual exchange-traded funds.
+  headcount     absent for the trusts, and absent for Ares Management and Main
+                Street Capital too — 53 of the 62 names whose titles contain no
+                fund word report no employees either.
+  the name      "Trust" catches 36 trusts and also Northern Trust, a bank with
+                23,600 staff.
+
+A structural test comes closest and still does not close: `Gross Profit` and
+`Cost Of Revenue` appear on 0 of 38 fund-named income statements, so their
+PRESENCE rules a fund out — but they are also absent from 36 of the 62 others,
+so their absence rules nothing in.
+
+So no filter ships. Inventing a name-based classifier here would be exactly the
+unmeasured heuristic this module declines elsewhere, and a wrong one drops real
+companies rather than merely admitting fake ones. What ships instead is this
+paragraph: **a standing inside "Asset Management", and inside any label that
+mixes operating companies with investment vehicles, is not comparable and should
+not be read as one.** The company name is on every row, and a reader can see
+what a BlackRock term trust is.
+
 WHAT WAS TRIED AND IS NOT HERE: A "NICHE" TEST
 -----------------------------------------------
 The obvious companion to "leads its field" is "and the field is a small one",
