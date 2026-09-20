@@ -185,15 +185,33 @@ def read(company: Optional[dict]) -> dict:
     # exchange is the middle of the distribution: a flag there would mark half
     # the borrowers and mean nothing. So the ratio is reported with the market's
     # own median beside it and the reader draws the line.
-    cash = _latest(record.get("balance"), "cash") or 0.0
-    borrowings = ((_latest(record.get("balance"), "long_term_debt") or 0.0)
-                  + (_latest(record.get("balance"), "short_term_debt") or 0.0))
+    # AT LEAST ONE OF THE THREE LINES HAS TO HAVE ARRIVED.
+    #
+    # Defaulting each missing line to zero and subtracting gives net debt of
+    # zero for a company whose balance sheet did not come back at all — and zero
+    # net debt reads as `netCash: True`, so the reading told a reader it "holds
+    # more cash than borrowings, which 39% of this market also does". That is a
+    # fabricated fact about a company nothing was known about, which is the
+    # gap-reported-as-a-finding this codebase keeps having to undo.
+    #
+    # Where SOME of the three arrived, zero is the right default for the rest: a
+    # balance sheet that reports cash and carries no long-term debt line is a
+    # company without long-term debt, and `valuation.py` reads it the same way.
+    cash_line = _latest(record.get("balance"), "cash")
+    long_term = _latest(record.get("balance"), "long_term_debt")
+    short_term = _latest(record.get("balance"), "short_term_debt")
+    balance_read = any(line is not None
+                       for line in (cash_line, long_term, short_term))
+
+    cash = cash_line or 0.0
+    borrowings = (long_term or 0.0) + (short_term or 0.0)
     ebit = _latest(income, "ebit")
     depreciation = abs(_latest(record.get("cashflow"), "depreciation") or 0.0)
-    net_debt = borrowings - cash
+    net_debt = (borrowings - cash) if balance_read else None
     ebitda = (ebit + depreciation) if ebit is not None else None
     leverage = (net_debt / ebitda
-                if net_debt > 0 and ebitda is not None and ebitda > 0 else None)
+                if net_debt is not None and net_debt > 0
+                and ebitda is not None and ebitda > 0 else None)
 
     # FREE CASH FLOW DOES NOT TRAVEL TO A BANK. Capital expenditure on a lender's
     # cash flow statement is premises and software, not the engine of the
@@ -222,8 +240,12 @@ def read(company: Optional[dict]) -> dict:
         # Suppressed for lenders for the same reason free cash flow is: a bank's
         # borrowings ARE its business, so netting them against its cash
         # describes nothing about whether it is working.
+        # `None` on all three where the question does not apply (a lender) OR
+        # where the balance sheet never arrived. False would say "this company
+        # borrows"; None says nothing, which is the truth in both cases.
         "netDebt": None if financial else net_debt,
-        "netCash": None if financial else bool(net_debt <= 0),
+        "netCash": (None if financial or net_debt is None
+                    else bool(net_debt <= 0)),
         "netDebtToEbitda": None if financial else leverage,
         "growing": growing,
         "consistentlyProfitable": consistent,
@@ -233,7 +255,8 @@ def read(company: Optional[dict]) -> dict:
         "reading": _reading(years, profitable, every_year, cash_backed, growth,
                             growing, margin, fcf_years,
                             None if fcf is None else len(fcf), financial,
-                            None if financial else bool(net_debt <= 0),
+                            (None if financial or net_debt is None
+                             else bool(net_debt <= 0)),
                             None if financial else leverage),
     }
 
@@ -329,6 +352,10 @@ def _reading(years: int, profitable: int, every_year: bool, cash_backed: bool,
     elif net_cash is False:
         owed = (" It carries net borrowings, and there is no EBITDA to measure them "
                 "against, so how heavy they are is not established here.")
+    elif not financial:
+        # net_cash is None on a non-financial: the balance sheet did not arrive.
+        owed = (" No balance sheet came back, so whether it holds cash or borrowings "
+                "is unknown here rather than settled either way.")
 
     return head + pace + cash + spend + owed + (
         f" {years} years is a short window — it does not span a cycle, and on this "

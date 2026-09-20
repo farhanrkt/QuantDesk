@@ -256,3 +256,42 @@ def test_borrowings_without_earnings_to_measure_them_against_say_so():
     assert out["netCash"] is False
     assert out["netDebtToEbitda"] is None
     assert "not established here" in out["reading"]
+
+
+def test_a_missing_balance_sheet_is_not_reported_as_net_cash():
+    """The bug this review found, as a test.
+
+    Each of the three lines defaulted to zero, so subtracting gave net debt of
+    zero for a company whose balance sheet never arrived — and zero net debt
+    reads as `netCash: True`, so the app told a reader it "holds more cash than
+    borrowings, which 39% of this market also does". A fabricated fact about a
+    company nothing was known about.
+    """
+    out = T.read(statements([10.0, 8.0, 6.0, 5.0], revenue=[100.0, 90.0, 80.0, 70.0]))
+    assert out["netCash"] is None
+    assert out["netDebt"] is None
+    assert "unknown here rather than settled either way" in out["reading"]
+    assert "holds more cash than borrowings" not in out["reading"]
+
+
+def test_a_partial_balance_sheet_reads_the_missing_lines_as_zero():
+    """A sheet that reports cash and carries no debt line is debt-free.
+
+    That is the conventional reading and the one `valuation.py` takes; the
+    refusal above is for a sheet where NOTHING arrived, which is a different
+    thing from a sheet that says nothing is owed.
+    """
+    out = T.read(statements([10.0, 8.0, 6.0, 5.0], revenue=[100.0, 90.0, 80.0, 70.0],
+                            cash=[500.0, 400.0, 300.0, 200.0]))
+    assert out["netCash"] is True
+    assert out["netDebt"] == pytest.approx(-500.0)
+
+
+def test_a_lender_and_an_unread_sheet_are_both_none_but_read_differently():
+    lender = T.read(statements([10.0, 8.0, 6.0, 5.0], revenue=[100.0] * 4,
+                               cash=[10.0] * 4, debt=[900.0] * 4,
+                               sector="Financial Services", industry="Banks—Regional"))
+    unread = T.read(statements([10.0, 8.0, 6.0, 5.0], revenue=[100.0] * 4))
+    assert lender["netCash"] is None and unread["netCash"] is None
+    assert "would describe nothing" in lender["reading"]
+    assert "No balance sheet came back" in unread["reading"]

@@ -381,6 +381,13 @@ def revenue_of(company: Optional[dict]) -> dict:
 
     # THE UNITS SANITY TEST, AND IT ONLY RUNS ON A CONVERTED FIGURE.
     #
+    # THE SECOND LINE OF DEFENCE, NOT THE FIRST. `market_data._apply_fx` now
+    # runs the same comparison at the boundary and declines the conversion
+    # outright, so in practice a record reaching here has already been cleared —
+    # this fires only for a caller that built a record some other way. It is
+    # kept because the cost is a comparison and the failure it guards is a
+    # confident market leader; see the module docstring on RIGS.JK.
+    #
     # The first version asked whether the price-to-sales ratio was plausible for
     # EVERY name, and refused 71 of them. Almost none was a units error: MSTR at
     # 0.009, DJT at 0.0015, a row of pre-revenue biotechs, and DCII.JK, the most
