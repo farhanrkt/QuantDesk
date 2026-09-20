@@ -1064,6 +1064,13 @@ def _scan_row(entry: dict) -> dict:
     # strings a row; a way into the prose, not a classification. See
     # `field.distinctive_terms`.
     row["terms"] = entry.get("terms") or []
+    # The top line, for ordering only. Carried so a client can rank whatever set
+    # a SEARCH just defined — "of the names whose description mentions cable,
+    # which is the biggest" — which the industry label cannot answer because
+    # those names sit in three different labels. No currency travels with it:
+    # a scan is one market, and the figure is used to sort, never to display.
+    revenue = entry.get("revenue") or {}
+    row["revenue"] = revenue.get("value") if revenue.get("usable") else None
     row["summaryState"] = profile.get("summaryState")
     # THE RECORD, FLATTENED TO WHAT A TABLE CAN SORT ON. The base rates travel
     # with it: "profitable every year" is true of two thirds of this exchange,

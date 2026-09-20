@@ -1630,6 +1630,9 @@ export interface ScanRow {
    * full text rather than these.
    */
   terms: string[];
+  /** Annual revenue, for ORDERING only — no currency travels with it because a
+   *  scan is one market. Null where it could not be read or compared. */
+  revenue: number | null;
   /** Where it stands among the scanned names sharing its industry label. This
    *  is NOT market share; `ScanResponse.fields.basis` carries the caveat and
    *  must be rendered wherever a rank is. */

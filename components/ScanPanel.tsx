@@ -265,6 +265,24 @@ export function ScanPanel({ state, market, onSelect }: {
     return [...picked].sort((a, b) => compareRows(a, b, sort));
   }, [state, filter, needle, sort]);
 
+  /**
+   * The largest of whatever the search just matched.
+   *
+   * THE SET IS THE READER'S, NOT THE PROVIDER'S, which is the whole value: the
+   * 24 names mentioning "cable" sit in at least three different industry
+   * labels, so no standing built on those labels could rank them together. It
+   * is also why the sentence beside it refuses the word "field" — a text match
+   * is a set of companies that use a word, and nothing here has checked that
+   * they compete.
+   */
+  const biggestMatches = useMemo(() => {
+    if (!needle) return [];
+    return rows
+      .filter((row) => row.revenue != null)
+      .sort((a, b) => (b.revenue ?? 0) - (a.revenue ?? 0))
+      .slice(0, 3);
+  }, [rows, needle]);
+
   if (state.status === "loading" || state.status === "idle") {
     return (
       <Card>
@@ -586,6 +604,16 @@ export function ScanPanel({ state, market, onSelect }: {
                 specialist is usually a Hold. This reads the description the data
                 source publishes, which is a summary and not a full account of what a
                 company does, so an absence here is not evidence.
+                {biggestMatches.length > 1 && (
+                  <>
+                    {" "}Largest of them by revenue:{" "}
+                    <span className="num text-body">
+                      {biggestMatches.map((row) => row.ticker).join(", ")}
+                    </span>. That is an ordering among companies whose description
+                    happens to use the word, which is not the same as a field and
+                    certainly not a market.
+                  </>
+                )}
               </p>
             )}
           </div>
