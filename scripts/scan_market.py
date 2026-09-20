@@ -1086,7 +1086,14 @@ def run(args) -> dict:
         # not a single buy among them.
         result["neglect"] = neglect.screen(
             result, register_result,
-            technical=(technical_leg.get("data") if technical_leg.get("ok") else None))
+            technical=(technical_leg.get("data") if technical_leg.get("ok") else None),
+            # WHERE THE COMPANY IS DOMICILED, so a foreign depositary receipt is
+            # not read as uncovered. Its US institutional holding describes the
+            # receipt, not the company — see `neglect.attention`, which found
+            # all 26 US selections were ADRs of the most watched companies in
+            # Europe and Asia.
+            country=(result.get("profile") or {}).get("country"),
+            market_code=symbols.market_of(symbol))
         # THE CHART GEOMETRY IS BUILT ONLY FOR ROWS THAT SAY TO DO SOMETHING.
         # It is cheap per name but not free — the pattern curves are refitted
         # per detection — and a hundred-name report carrying a chart for every

@@ -236,3 +236,51 @@ def test_it_stays_context_and_never_becomes_a_criterion():
 def test_an_absent_drawdown_is_none_rather_than_zero():
     out = N.screen(verdict_row(), register_result=None, technical={})
     assert out["drawdown"] is None
+
+
+# --------------------------------------------------------------------------- #
+# A depositary receipt is not an uncovered company
+#
+# On the first full US sweep this screen selected 26 names and ALL 26 were
+# foreign ADRs: LVMH, Nestlé, Roche, Bayer, Tencent, Heineken, Danone,
+# Mercedes-Benz, ITOCHU. Their US institutional holding reads between 0.01% and
+# 4% because almost every share trades in Paris, Zurich or Tokyo — not because
+# nobody is looking. LVMH is among the most covered companies in Europe and the
+# screen called it unattended.
+#
+# There is no fix that keeps the number: the figure available is US-only and
+# what the screen needs is global. So the reading becomes UNKNOWN, which is
+# what it is, and an unknown reading cannot be unattended.
+# --------------------------------------------------------------------------- #
+def test_a_foreign_listing_reports_attention_as_unknown():
+    watch = N.attention(flat_register(held=0.001, analysts=0),
+                        country="France", market_code="US")
+    assert watch["known"] is False
+    assert watch["unattended"] is False
+    assert watch["foreignListing"] is True
+    assert watch["institutionsHeld"] is None, "the US-only figure must not be quoted"
+    assert "UNMEASURED here, not low" in watch["reading"]
+
+
+def test_a_domestic_listing_is_read_as_before():
+    for country, market in (("United States", "US"), ("Indonesia", "ID")):
+        watch = N.attention(flat_register(held=0.001, analysts=0),
+                            country=country, market_code=market)
+        assert watch["known"] is True and watch["unattended"] is True
+        assert watch["foreignListing"] is False
+
+
+def test_an_unknown_domicile_is_not_treated_as_foreign():
+    """Absent is not evidence of a foreign listing, and guessing would silently
+    drop domestic names whose country simply did not come back."""
+    watch = N.attention(flat_register(held=0.001, analysts=0),
+                        country=None, market_code="US")
+    assert watch["known"] is True and watch["unattended"] is True
+
+
+def test_a_foreign_listing_is_therefore_never_selected():
+    out = N.screen(verdict_row(value=90.0, quality=90.0),
+                   flat_register(held=0.001, analysts=0),
+                   country="Switzerland", market_code="US")
+    assert out["selected"] is False
+    assert "depositary receipt" in out["attention"]["reading"]

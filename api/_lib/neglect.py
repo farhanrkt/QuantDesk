@@ -122,7 +122,13 @@ def _component(verdict_row: dict, key: str) -> Optional[float]:
     return None
 
 
-def attention(register_result: Optional[dict]) -> dict:
+# Where a listing has to be domiciled for its institutional ownership to
+# describe the COMPANY rather than one line of its stock. See `attention`.
+HOME_COUNTRY = {"US": "United States", "ID": "Indonesia"}
+
+
+def attention(register_result: Optional[dict], country: Optional[str] = None,
+              market_code: Optional[str] = None) -> dict:
     """How much of the market is actually looking at this company.
 
     THE TWO FIGURES ARE NOT INTERCHANGEABLE and both are reported. Institutional
@@ -132,6 +138,35 @@ def attention(register_result: Optional[dict]) -> dict:
     listing an index fund owns mechanically and nobody researches.
     """
     register = register_result if isinstance(register_result, dict) else {}
+
+    # A DEPOSITARY RECEIPT'S INSTITUTIONAL HOLDING DESCRIBES THE RECEIPT, NOT
+    # THE COMPANY, AND READING IT AS COVERAGE PRODUCED A LIST OF THE MOST
+    # WATCHED COMPANIES ON EARTH.
+    #
+    # On the first full US sweep this screen selected 26 names and ALL 26 were
+    # foreign ADRs: LVMH, Nestlé, Roche, Bayer, Tencent, Heineken, Danone,
+    # Mercedes-Benz, ITOCHU. Their US institutional ownership reads between
+    # 0.01% and 4% because almost every share trades in Paris, Zurich or Tokyo —
+    # not because nobody is looking. LVMH is among the most covered companies in
+    # Europe and the screen called it unattended.
+    #
+    # There is no fix that keeps the number: the figure available is US-only,
+    # and what the screen needs is global. So a listing domiciled outside its
+    # market's home country reports attention as UNKNOWN, which is what it is.
+    # An unknown reading cannot be `unattended`, so these names stop being
+    # selected rather than being selected for the wrong reason.
+    home = HOME_COUNTRY.get((market_code or "").upper())
+    where = (country or "").strip()
+    if home and where and where != home:
+        return {
+            "known": False, "institutionsHeld": None, "institutionsCount": None,
+            "analysts": None, "unattended": False, "foreignListing": True,
+            "reading": (
+                f"Domiciled in {where} and listed here as a depositary receipt, so "
+                f"the institutional holding available describes the receipt rather "
+                f"than the company — almost every share trades on its home exchange. "
+                f"How closely this is watched is UNMEASURED here, not low."),
+        }
 
     # TWO PAYLOAD SHAPES REACH THIS, AND READING ONLY ONE SELECTED NOTHING.
     # `market_data.share_register` returns the raw Yahoo fields flat; the
@@ -164,6 +199,7 @@ def attention(register_result: Optional[dict]) -> dict:
 
     return {
         "known": known,
+        "foreignListing": False,
         "institutionsHeld": held,
         "institutionsCount": int(count) if count is not None else None,
         "analysts": int(analysts) if analysts is not None else None,
@@ -193,7 +229,8 @@ def _attention_reading(known: bool, held: Optional[float], count: Optional[float
 
 
 def screen(verdict_row: dict, register_result: Optional[dict] = None,
-           technical: Optional[dict] = None) -> dict:
+           technical: Optional[dict] = None, country: Optional[str] = None,
+           market_code: Optional[str] = None) -> dict:
     """Whether this name is a solid business the market is not attending to.
 
     Reads components the verdict already computed rather than recomputing any
@@ -202,7 +239,7 @@ def screen(verdict_row: dict, register_result: Optional[dict] = None,
     """
     value = _component(verdict_row, "value")
     quality = _component(verdict_row, "quality")
-    watch = attention(register_result)
+    watch = attention(register_result, country=country, market_code=market_code)
     free_float = _finite(((register_result or {}).get("float") or {}).get("freeFloat"))
     if free_float is None:
         # `ownership.read` puts it under `float`; the raw register does not carry
