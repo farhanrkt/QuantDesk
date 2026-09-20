@@ -581,6 +581,22 @@ def describes_itself_as_a_fund(summary: Optional[str]) -> bool:
 
     IT IS STILL THE PROVIDER'S CLAIM, NOT A CLASSIFICATION THIS APP MAKES,
     which is the same epistemic footing as the industry label beside it.
+
+    A SECOND PATTERN WAS TESTED AND REJECTED. Some closed-end funds never make
+    the claim — CBRE Clarion Global Real Estate Income Fund opens "specializes
+    in investments in various property types" and only refers to itself as "the
+    fund" later — so matching that self-reference was tried. It catches 23 names
+    and none outside Asset Management, which looks clean until you read them:
+    Ares Capital, Goldman Sachs BDC, Fidus, FS KKR, Oaktree Specialty Lending,
+    Carlyle Secured Lending. They are business development companies, they lend,
+    and their interest income is an operating result properly compared with
+    other lenders'. The pattern separates "entities that invest" from "operating
+    companies", which is a real distinction and the wrong one here.
+
+    SO IGR AND ITS KIND STAY RANKED, and that is the bounded cost of reading a
+    claim rather than guessing a category. Of 147 US names labelled Asset
+    Management, 61 are now unplaced; 14 with a fund-like NAME remain ranked, and
+    6 of those have no description at all to test.
     """
     return bool(summary and _FUND_PROSE.search(summary))
 
