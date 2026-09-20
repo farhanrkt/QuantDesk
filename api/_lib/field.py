@@ -102,6 +102,32 @@ it on every name and refused 71, of which essentially none was a units error —
 a very low price-to-sales ratio is what an expensive company looks like, not a
 broken one. See `revenue_of`.
 
+"NO LISTED RIVAL" AND "NOTHING ELSE WE COULD MEASURE" ARE DIFFERENT CLAIMS
+---------------------------------------------------------------------------
+A field holding one ranked name looks like a monopoly and is very often a thin
+measurement: 201 of the 722 cached Indonesian records carry no income statement,
+so a company's listed rivals can all be present on the exchange and absent from
+the ranking. Of the 28 Indonesian fields with exactly one ranked name, only 13
+have no same-label listing that failed to return revenue.
+
+KETR.JK is the case that forced the distinction. It is the only Indonesian
+listing under "Communication Equipment" whose revenue could be read, and TWO
+others carry the label and filed nothing usable. Tightening the flag alone would
+have dropped the one company this module was built to find; rendering the weak
+state as the strong one would have told a reader it has no competition. So:
+
+  `onlyRanked`   nothing else in the label could be measured. A fact about the
+                 SCAN, and what a screen may select on — two tiny peers filing
+                 nothing does not stop a company being the specialist.
+  `soleListing`  nothing else carries the label at all. The claim, and the only
+                 one to render as "no listed rival".
+  `unranked`     how many same-label listings returned nothing, carried PER
+                 FIELD as well as in the global `unplaced` total, because the
+                 global figure cannot say whether THIS field is the thin one.
+
+A named leader carries it too: its lead is over the measured group only, and the
+reading says so whenever something in its field went unmeasured.
+
 WHAT WAS TRIED AND IS NOT HERE: A "NICHE" TEST
 -----------------------------------------------
 The obvious companion to "leads its field" is "and the field is a small one",
@@ -160,6 +186,16 @@ PLAUSIBLE_PS = (0.01, 100.0)
 # The full text is kept in the local report; a table of 3,000 names carrying
 # 2,000 characters each is a six-megabyte payload nobody reads.
 SUMMARY_CHARS = 320
+
+
+# The caveat travels WITH the number rather than beside it in a docstring,
+# because a client that renders `rank: 1` without this is publishing a claim
+# about market share that nothing here measured. See the module docstring.
+BASIS = ("Ranked among the scanned listings carrying the same industry label. "
+         "Private companies, companies listed elsewhere and divisions of larger "
+         "groups are not in it, and names whose filings did not arrive are "
+         "missing from it, so this is a standing among measured peers and not a "
+         "market share.")
 
 
 def _finite(value) -> Optional[float]:
@@ -447,16 +483,6 @@ def standings(entries: list[dict]) -> dict:
         "thresholds": {"minPeers": MIN_PEERS, "leadMargin": LEAD_MARGIN},
         "basis": BASIS,
     }
-
-
-# The caveat travels WITH the number rather than beside it in a docstring,
-# because a client that renders `rank: 1` without this is publishing a claim
-# about market share that nothing here measured. See the module docstring.
-BASIS = ("Ranked among the scanned listings carrying the same industry label. "
-         "Private companies, companies listed elsewhere and divisions of larger "
-         "groups are not in it, and names whose filings did not arrive are "
-         "missing from it, so this is a standing among measured peers and not a "
-         "market share.")
 
 
 def _position_reading(industry: str, rank: int, peers: int, row: dict, leader: dict,
