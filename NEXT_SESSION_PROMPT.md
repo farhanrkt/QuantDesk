@@ -11,9 +11,11 @@ CODEBASE_REVIEW.md is older and partly superseded.
 
 STATE
 =====
-Branch: feature/personal-verdict-scanner (53 commits ahead of main, NOT pushed,
-tree clean apart from this file). Everything below is committed.
-
+Branch: feature/personal-verdict-scanner. 59 commits ahead of main, and
+37 ahead of `origin/feature/personal-verdict-scanner`, which sits at
+db2a753 — the branch WAS pushed before this session, contrary to what this
+file used to say; nothing has been pushed since, and nothing was asked to be.
+Tree clean apart from this file.
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
 single Vercel Python function on the back. 1,597 offline pytest tests, 35
 frontend assertions and 10 enforced design rules. US and Indonesian (IDX)
