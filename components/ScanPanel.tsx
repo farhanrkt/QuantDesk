@@ -396,11 +396,57 @@ export function ScanPanel({ state, market, onSelect }: {
         </CardBody>
       </Card>
 
+      {/* THE SEARCH IS THE ENTRY POINT, SO IT SITS WHERE ONE CAN BE SEEN.
+          Inside the table card it started six viewports down the page, under
+          two cards of results — and looking up who lays submarine cable is the
+          first thing a reader does here, not the last. The two result cards
+          below collapse while a search is running, so the matches appear
+          directly under the box rather than four screens beneath it. */}
+      <Card accent="#7C8FA6">
+        <CardBody className="py-4">
+          <label className="block">
+              <span className="eyebrow mb-1 block">
+                Search what the companies actually do
+              </span>
+              <input
+                type="search" value={query} inputMode="search"
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="submarine cable, geothermal, cement, cold storage…"
+                className="w-full rounded-lg border border-ruleSoft bg-raised px-3 py-2
+                           text-[1rem] text-chalk placeholder:text-faint
+                           focus:border-rule focus:outline-none"
+              />
+          </label>
+          {needle && (
+              <p className="prose-col mt-1.5 text-meta leading-relaxed text-faint">
+                {rows.length === 0
+                  ? `No description in this scan mentions “${query.trim()}”.`
+                  : `${rows.length} of ${state.data.rows?.length ?? 0} scored names
+                     mention “${query.trim()}”.`}
+                {" "}Searching every scored name, not just the current filter — a
+                specialist is usually a Hold. This reads the description the data
+                source publishes, which is a summary and not a full account of what a
+                company does, so an absence here is not evidence.
+                {biggestMatches.length > 1 && (
+                  <>
+                    {" "}Largest of them by revenue:{" "}
+                    <span className="num text-body">
+                      {biggestMatches.map((row) => row.ticker).join(", ")}
+                    </span>. That is an ordering among companies whose description
+                    happens to use the word, which is not the same as a field and
+                    certainly not a market.
+                  </>
+                )}
+              </p>
+          )}
+        </CardBody>
+      </Card>
+
       {/* THE ANSWER, ABOVE THE INGREDIENTS. The two cards below and the table
           supply the parts — what a company does, who else does it, what the
           filings say, who is watching. This is their intersection, and it is
           first because a reader who wants the parts can read on. */}
-      {specialists && specialists.selected > 0 && (
+      {!needle && specialists && specialists.selected > 0 && (
         <Card accent="#C9A227">
           <CardHeader>
             <CardTitle>Profitable specialists nobody is covering</CardTitle>
@@ -417,13 +463,23 @@ export function ScanPanel({ state, market, onSelect }: {
                 alone, which is about today rather than about the company. A
                 screen for companies nobody trades cannot hide everything nobody
                 trades. The gate shows beside the name. */}
+            {/* EACH ROW IS A DIV AND THE TICKER CARRIES THE CLICK. The row used
+                to be one big button with the term chips — buttons themselves —
+                nested inside it: invalid HTML, and React reported a hydration
+                error the browser happily rendered anyway, so nothing looked
+                wrong on screen. Two things happen here, opening the company and
+                searching a term, so there are two controls rather than one
+                wrapping the other. */}
             {[...specialists.tradeable, ...specialists.gated].map((row) => (
-                <button key={row.ticker} type="button"
-                        onClick={() => onSelect(row.ticker)}
-                        className="block w-full rounded border border-ruleSoft px-3 py-2.5
-                                   text-left hover:border-rule">
+                <div key={row.ticker}
+                     className="rounded border border-ruleSoft px-3 py-2.5
+                                focus-within:border-rule hover:border-rule">
                   <span className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <span className="num text-base text-chalk">{row.ticker}</span>
+                    <button type="button" onClick={() => onSelect(row.ticker)}
+                            title={`Open ${row.ticker}`}
+                            className="num text-base text-chalk hover:underline">
+                      {row.ticker}
+                    </button>
                     <span className="flex-1 truncate text-meta text-ash">{row.name}</span>
                     <span className="num text-meta text-body">
                       {row.revenueCagr == null
@@ -487,7 +543,7 @@ export function ScanPanel({ state, market, onSelect }: {
                       {row.gates.map((gate) => gate.label).join("; ")}
                     </span>
                   )}
-                </button>
+                </div>
               ))}
             {/* The base rates, because the intersection reads as three demanding
                 tests and one of them admits most of a small exchange. */}
@@ -514,7 +570,7 @@ export function ScanPanel({ state, market, onSelect }: {
 
       {/* The screen for what the blend cannot reach, above the table because it
           is, by construction, not near the top of it. */}
-      {neglected && neglected.selected > 0 && (
+      {!needle && neglected && neglected.selected > 0 && (
         <Card accent="#6FD0C0">
           <CardHeader>
             <CardTitle>Cheap, solid and uncovered</CardTitle>
@@ -559,9 +615,14 @@ export function ScanPanel({ state, market, onSelect }: {
                         largest of {row.fieldPeers} scanned
                       </span>
                     )}
+                    {/* Clamped for the same reason the card above is: ten of
+                        these unclamped ran to 3,700px and pushed the search —
+                        the thing most of this panel exists to feed — nine
+                        viewports down the page. The full text stays in the DOM
+                        and the search still reads it. */}
                     {row.summary && (
-                      <span className="mt-1 block max-w-prose text-meta leading-relaxed
-                                       text-ash">
+                      <span className="mt-1 line-clamp-2 max-w-prose text-meta
+                                       leading-relaxed text-ash">
                         {row.summary}
                       </span>
                     )}
@@ -580,44 +641,6 @@ export function ScanPanel({ state, market, onSelect }: {
           <span className="text-meta text-faint">{rows.length} shown</span>
         </CardHeader>
         <CardBody className="space-y-3 px-0">
-          <div className="px-5">
-            <label className="block">
-              <span className="eyebrow mb-1 block">
-                Search what the companies actually do
-              </span>
-              <input
-                type="search" value={query} inputMode="search"
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="submarine cable, geothermal, cement, cold storage…"
-                className="w-full rounded-lg border border-ruleSoft bg-raised px-3 py-2
-                           text-[1rem] text-chalk placeholder:text-faint
-                           focus:border-rule focus:outline-none"
-              />
-            </label>
-            {needle && (
-              <p className="prose-col mt-1.5 text-meta leading-relaxed text-faint">
-                {rows.length === 0
-                  ? `No description in this scan mentions “${query.trim()}”.`
-                  : `${rows.length} of ${state.data.rows?.length ?? 0} scored names
-                     mention “${query.trim()}”.`}
-                {" "}Searching every scored name, not just the current filter — a
-                specialist is usually a Hold. This reads the description the data
-                source publishes, which is a summary and not a full account of what a
-                company does, so an absence here is not evidence.
-                {biggestMatches.length > 1 && (
-                  <>
-                    {" "}Largest of them by revenue:{" "}
-                    <span className="num text-body">
-                      {biggestMatches.map((row) => row.ticker).join(", ")}
-                    </span>. That is an ordering among companies whose description
-                    happens to use the word, which is not the same as a field and
-                    certainly not a market.
-                  </>
-                )}
-              </p>
-            )}
-          </div>
-
           <div className="flex flex-wrap gap-1.5 px-5">
             {FILTERS.map((option) => (
               <button key={option.id} type="button" onClick={() => setFilter(option.id)}
