@@ -1590,6 +1590,32 @@ sector, industry or summary at all, which is the throttle signature `quality.py`
 refuses to score on. Observed on INDF.JK, which reads "Packaged Foods" on any unhurried
 fetch.
 
+### 18.1b The words that identify a company
+
+`field.distinctive_terms` reports the terms common in a company's own description and rare
+across the market's: for KETR, *cable, optic, fiber*. Clicking one runs the full-text
+search, and "cable" returns 24 of the 771 Indonesian names — KETR, MTEL, IKBI, INET, DATA
+and nineteen more — sitting in at least three different industry labels. **That is the
+competitive set no standing built on those labels could assemble.**
+
+The search then names the largest three of the match by revenue. For "cable" that is TOWR,
+MTEL and MDIY, not KETR; both facts are true and both are on screen. The sentence beside it
+refuses the word *field*, because a text match is a set of companies that use a word and
+nothing here has checked that they compete — TOWR leases towers, KETR lays submarine cable.
+
+**Word frequency, not a classification.** A company's own name is excluded, which is most of
+the cleanup — without it Blue Bird returns *blue, bird*, Garuda Maintenance returns *garuda*
+and Telkom returns *telekomunikasi*, each repeating its own name back. A term can still
+mislead: MAHA returns *hauling, mover* because "prime mover trucks" tokenises into separate
+words. The stopword list is a judgement built by reading output, not by any test, and the
+docstring says so; the cost of getting it wrong is a bland word in a list of four.
+
+**A corpus under fifty descriptions returns nothing.** The "too common" ceiling is a share
+of the corpus and the floor is a count, so the two cross on a small scan: at 45
+descriptions, 6% is 2.7, and only terms in exactly two documents survived. That is a
+feature reporting almost nothing while looking as though it worked, which is worse than a
+refusal — so it refuses, and the scan says why.
+
 ### 18.2 Ranking a field by revenue, not by market value
 
 `field.standings` ranks the scanned names inside each industry label. **By revenue, and the

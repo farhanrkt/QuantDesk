@@ -641,6 +641,24 @@ the full text travels and the client clamps; shipping the trimmed version would 
 ignores the action filter, because a specialist is almost always a *Hold* — the premise of
 the screen next door — and intersecting the two would hide the answer silently.
 
+**The words that identify a company, where the label cannot.** `field.distinctive_terms`
+reports the terms common in a company's own description and rare across the market's —
+for KETR, *cable, optic, fiber*. Each is a chip that runs the full-text search, and
+clicking "cable" on the 771-name Indonesian sweep returns 24 names: KETR, MTEL, IKBI,
+INET, DATA and nineteen others, sitting in at least three different industry labels. That
+is the competitive set the label could not produce, and it is the point. The search then
+names the largest three of the match by revenue — for "cable" that is TOWR, MTEL and MDIY,
+not KETR — while refusing the word *field*, because a text match is a set of companies
+that use a word and nothing has checked that they compete.
+
+It is **word frequency, not a classification**. A company's own name is excluded, which is
+most of the cleanup: without it Blue Bird returns *blue, bird* and Telkom returns
+*telekomunikasi*. A term can still mislead — MAHA returns *hauling, mover* because "prime
+mover trucks" tokenises into separate words. Below fifty descriptions the function refuses
+outright: the "too common" ceiling is a share of the corpus and the floor is a count, so on
+a 45-name scan the two cross and almost nothing survives, which looked like a working
+feature returning an empty answer.
+
 **Where it stands among the names doing the same thing.** `field.standings` ranks the
 scanned names inside each industry label by **revenue, never market capitalisation** — the
 same argument the neglect screen rests on, since market cap is the quantity the screen
