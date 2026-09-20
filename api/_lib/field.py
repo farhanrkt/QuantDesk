@@ -190,6 +190,9 @@ recording what the standing said on the day it said it.
 
 from __future__ import annotations
 
+import collections
+import math
+import re
 from typing import Optional
 
 import pandas as pd
@@ -416,6 +419,113 @@ def revenue_of(company: Optional[dict]) -> dict:
             # unexplained difference from the filing.
             "labelOverridden": bool(skipped),
             "reason": None}
+
+
+# Words that carry no information about WHAT a company does, either because
+# every description uses them or because they are corporate furniture. This list
+# is a judgement and is the weakest part of the function below: it was built by
+# reading the output on a 726-name sweep and removing what was obviously noise,
+# not by any test. The effect of getting it wrong is a bland term in a list of
+# four, which is why it is allowed to be a judgement at all.
+_FURNITURE = frozenset("""
+the a an and or of in to for with its it also as well is are was were by on at from
+that this company companies operates operate through provides provide offers offer
+products product services service indonesia indonesian tbk persero perseroan inc ltd
+limited corporation corp plc founded headquartered based name names changed formerly
+known subsidiary subsidiaries segments segment various other others addition engages
+engaged business businesses group holding holdings sells sell sale sales trading trade
+distributes distribution manufactures manufacturing production including include
+includes under brand brands well customers market markets domestic international
+activities activity operations operational related support supports solutions solution
+consists systems system application applications process processes hour income prime
+""".split())
+
+_WORD = re.compile(r"[a-z][a-z-]{3,}")
+
+# A term in more than this share of descriptions describes the market, not the
+# company. 6% of a 726-name sweep is about 44 names.
+COMMON_AT = 0.06
+
+# And a term in only one description cannot be checked against anything — it is
+# usually a proper noun the name filter missed.
+MIN_DOCUMENTS = 2
+
+# Below this many descriptions, "distinctive" has nothing to be distinctive
+# AGAINST and the function returns nothing rather than a list of whatever a
+# handful of companies happen to say.
+#
+# The ceiling is a SHARE of the corpus, and a share of a small number is a
+# smaller number than the floor: at 45 descriptions, 6% is 2.7, so the only
+# surviving terms were those in exactly two documents and a 45-name scan
+# reported almost nothing while looking as though it had worked. Refusing
+# outright is the honest version of that.
+MIN_CORPUS = 50
+
+# How many to report. Four is enough to recognise a business and few enough that
+# a weak fourth does not crowd out a strong first.
+TERMS_PER_NAME = 4
+
+
+def distinctive_terms(entries: list[dict]) -> dict[str, list[str]]:
+    """The words common in each description and rare in this market's.
+
+    WHY, GIVEN THE INDUSTRY LABEL ALREADY EXISTS: because the label is far too
+    coarse to say what a company does. KETR.JK is "Communication Equipment",
+    which it shares with radio makers and handset distributors; the words that
+    actually identify it are *cable*, *optic*, *fiber*. On a 726-name Indonesian
+    sweep this returns *waste, treatment, utilization* for an industrial waste
+    handler filed under Waste Management, *cargo, handling, aviation, catering*
+    for a ground-handling company filed under Airports & Air Services, and
+    *plantation, palm* — only two, correctly — for a palm grower.
+
+    THIS IS WORD FREQUENCY AND NOTHING MORE. It is not a classification, nothing
+    verified it, and a term can mislead: MAHA.JK returns *hauling, mover*
+    because "prime mover trucks" tokenises into separate words. It is offered as
+    a way INTO the descriptions — every term is searchable, and the search reads
+    the full text — rather than as a statement about the company.
+
+    A COMPANY'S OWN NAME IS EXCLUDED, which is most of the cleanup. Without it
+    the list for Blue Bird is *blue, bird*, for Garuda Maintenance Facility
+    *garuda, aero*, and for Telkom Indonesia *telekomunikasi* — the company
+    repeating its own name back, which tells a reader nothing they did not get
+    from the ticker.
+
+    A CORPUS UNDER `MIN_CORPUS` RETURNS NOTHING. Distinctive is a comparison,
+    and a handful of descriptions gives it nothing to compare against.
+    """
+    corpus: dict[str, list[str]] = {}
+    for entry in entries or []:
+        ticker = entry.get("ticker")
+        summary = (entry.get("summary") or "").lower()
+        if not ticker or not summary:
+            continue
+        own = set(_WORD.findall((entry.get("name") or "").lower()))
+        corpus[ticker] = [word for word in _WORD.findall(summary)
+                          if word not in _FURNITURE and word not in own]
+
+    if len(corpus) < MIN_CORPUS:
+        return {}
+
+    documents = collections.Counter()
+    for words in corpus.values():
+        documents.update(set(words))
+    total = len(corpus)
+    # Never below the floor: the two bounds crossing is what silently emptied
+    # small scans. See MIN_CORPUS.
+    ceiling = max(MIN_DOCUMENTS, total * COMMON_AT)
+
+    out: dict[str, list[str]] = {}
+    for ticker, words in corpus.items():
+        counts = collections.Counter(words)
+        scored = [
+            (count * math.log(total / documents[word]), word)
+            for word, count in counts.items()
+            if MIN_DOCUMENTS <= documents[word] <= ceiling
+        ]
+        # Ties broken alphabetically so two runs over the same corpus agree.
+        scored.sort(key=lambda pair: (-pair[0], pair[1]))
+        out[ticker] = [word for _, word in scored[:TERMS_PER_NAME]]
+    return out
 
 
 def standings(entries: list[dict]) -> dict:

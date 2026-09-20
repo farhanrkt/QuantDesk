@@ -132,6 +132,35 @@ function matchedSentence(text: string | null, needle: string): string | null {
 }
 
 /**
+ * The words that identify this company, each one a search.
+ *
+ * NOT A CLASSIFICATION, and the caption under the card says so. These are terms
+ * common in the company's own description and rare across the market's, which
+ * is what turns a label like "Communication Equipment" into *cable, optic,
+ * fiber*. Clicking one runs it through the same full-text search the box does,
+ * so it finds every other name whose description mentions it — the peer set the
+ * industry label could not give.
+ */
+function TermChips({ terms, onPick }: {
+  terms: string[]; onPick: (term: string) => void;
+}) {
+  if (!terms.length) return null;
+  return (
+    <span className="mt-1 flex flex-wrap gap-1">
+      {terms.map((term) => (
+        <button key={term} type="button"
+                onClick={(event) => { event.stopPropagation(); onPick(term); }}
+                title={`Find every scanned name whose description mentions "${term}"`}
+                className="rounded-full border border-ruleSoft px-1.5 py-0.5 text-micro
+                           text-faint transition-colors hover:border-rule hover:text-body">
+          {term}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+/**
  * The filing record as one cell: years profitable, and the growth rate.
  *
  * ALWAYS "n of m", never "profitable". Two thirds of this exchange is
@@ -433,6 +462,7 @@ export function ScanPanel({ state, market, onSelect }: {
                       {row.summary}
                     </span>
                   )}
+                  <TermChips terms={row.terms} onPick={setQuery} />
                   {row.gates.length > 0 && (
                     <span className="mt-1.5 flex items-center gap-1 text-micro text-faint">
                       <Lock aria-hidden className="h-3 w-3 shrink-0" />
@@ -660,6 +690,7 @@ export function ScanPanel({ state, market, onSelect }: {
                         )}
                         {/* The sentence that matched, not the opening of the
                             description — see `matchedSentence`. */}
+                        <TermChips terms={row.terms} onPick={setQuery} />
                         {needle && matchedSentence(row.summary, needle) && (
                           <span className="mt-0.5 block max-w-96 text-meta
                                            leading-relaxed text-faint">
@@ -744,6 +775,19 @@ export function ScanPanel({ state, market, onSelect }: {
                 {" "}<strong className="font-normal text-body">Profitable &amp;
                 growing</strong> filter selects. The window is whatever the filings
                 cover, typically four years, which does not span a cycle.
+              </Note>
+            </div>
+          )}
+
+          {rows.some((row) => row.terms?.length) && (
+            <div className="px-5">
+              <Note>
+                The words under each business are the ones common in that company&apos;s
+                own description and rare across the rest of the market — what turns a
+                label like &ldquo;Communication Equipment&rdquo; into cable, optic,
+                fiber. They are word frequency, not a classification: nothing verified
+                them and one can mislead, so they are a way into the descriptions rather
+                than a statement about the company. Clicking one searches the full text.
               </Note>
             </div>
           )}

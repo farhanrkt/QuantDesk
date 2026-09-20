@@ -1578,7 +1578,7 @@ export interface VerdictChart {
  */
 export interface SpecialistRow {
   ticker: string; name: string | null; score: number | null; action: string;
-  industry: string | null; summary: string | null;
+  industry: string | null; summary: string | null; terms: string[];
   /** Nothing else carries this label. The strong claim. */
   soleListing: boolean;
   /** Nothing else in the label could be measured. What the screen selects on. */
@@ -1621,6 +1621,15 @@ export interface ScanRow {
   /** `described` | `none published` | `not fetched`. The last two are NOT the
    *  same: one is a fact about the data, the other a gap a refetch fills. */
   summaryState: string | null;
+  /**
+   * Words common in this company's description and rare across the market's.
+   *
+   * WORD FREQUENCY, NOT A CLASSIFICATION. Nothing verified these and a term can
+   * mislead — "prime mover trucks" tokenises into separate words. They are a
+   * way into the descriptions: each one is searchable, and the search reads the
+   * full text rather than these.
+   */
+  terms: string[];
   /** Where it stands among the scanned names sharing its industry label. This
    *  is NOT market share; `ScanResponse.fields.basis` carries the caveat and
    *  must be rendered wherever a rank is. */

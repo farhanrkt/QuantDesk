@@ -320,3 +320,92 @@ def test_a_genuinely_missing_rate_is_still_refused():
     out = F.revenue_of(record(5_000.0, currency="IDR", financial="USD", fx=None))
     assert out["usable"] is False
     assert "no exchange rate was applied" in out["reason"]
+
+
+# --------------------------------------------------------------------------- #
+# The words that identify a company, where the industry label cannot
+#
+# KETR.JK is filed under "Communication Equipment", which it shares with radio
+# makers and handset distributors. On a 726-name Indonesian sweep this returns
+# cable, optic, fiber. It is word frequency and nothing more — not a
+# classification, and a term can mislead, because "prime mover trucks"
+# tokenises into separate words.
+# --------------------------------------------------------------------------- #
+def described(ticker, name, summary):
+    return {"ticker": ticker, "name": name, "summary": summary}
+
+
+def corpus():
+    """A market where 'cable' is rare and 'services' is everywhere.
+
+    Padded past `MIN_CORPUS`, because the function refuses a corpus too small to
+    have anything to be distinctive AGAINST — the filler carries the common word
+    and nothing else, which is what makes 'services' uninformative.
+    """
+    rows = [
+        described("KETR", "PT Ketrosden Triasmitra",
+                  "Sells submarine and terrestrial fiber optic cable systems and "
+                  "provides cable management services."),
+        described("BIRD", "PT Blue Bird Tbk",
+                  "Provides taxi services, car rental and taxi shuttle services."),
+        described("B", "Beta", "Provides cable services to households."),
+        # A second taxi operator, so "taxi" clears MIN_DOCUMENTS. Without one it
+        # is a term a single description uses, which this deliberately drops.
+        described("TX", "Omega", "Provides taxi services in regional cities."),
+        described("C", "Gamma", "Provides catering services to airlines."),
+        described("D", "Delta", "Provides catering services to hospitals."),
+    ]
+    rows += [described(f"F{i}", f"Filler {i}", "Provides services to customers.")
+             for i in range(F.MIN_CORPUS)]
+    return rows
+
+
+def test_a_rare_term_beats_a_common_one():
+    terms = F.distinctive_terms(corpus())
+    assert "cable" in terms["KETR"]
+    # "services" is in every description, so it identifies nothing.
+    for picked in terms.values():
+        assert "services" not in picked
+
+
+def test_a_companys_own_name_is_never_its_distinguishing_term():
+    """Without this, Blue Bird's terms are 'blue' and 'bird'."""
+    terms = F.distinctive_terms(corpus())
+    assert "blue" not in terms["BIRD"] and "bird" not in terms["BIRD"]
+    assert "taxi" in terms["BIRD"]
+
+
+def test_a_term_only_one_description_uses_is_not_reported():
+    """It cannot be checked against anything, and is usually a proper noun."""
+    terms = F.distinctive_terms(corpus())
+    # "hospitals" appears once; "catering" appears twice and survives.
+    assert "catering" in terms["C"]
+    assert "hospitals" not in terms["D"]
+
+
+def test_a_corpus_too_small_to_compare_against_returns_nothing():
+    """Distinctive is a comparison, and the bounds cross on a small population.
+
+    The ceiling is a SHARE of the corpus and the floor is a count, so below
+    about fifty descriptions the share falls under the floor and almost every
+    term is excluded — a scan that reported nothing while looking as though it
+    had worked. Refusing outright says so instead.
+    """
+    assert F.distinctive_terms(corpus()[:8]) == {}
+    assert F.distinctive_terms(corpus()) != {}
+
+
+def test_at_most_four_terms_and_ordered_stably():
+    terms = F.distinctive_terms(corpus())
+    assert all(len(v) <= F.TERMS_PER_NAME for v in terms.values())
+    assert F.distinctive_terms(corpus()) == terms
+
+
+def test_a_name_with_no_description_gets_no_terms():
+    rows = [*corpus(), described("E", "Epsilon", None)]
+    assert "E" not in F.distinctive_terms(rows)
+
+
+def test_an_empty_corpus_is_empty_rather_than_an_error():
+    assert F.distinctive_terms([]) == {}
+    assert F.distinctive_terms(None) == {}

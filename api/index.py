@@ -1060,6 +1060,10 @@ def _scan_row(entry: dict) -> dict:
     # for display; it cannot recover text it was never sent.
     profile = entry.get("profile") or {}
     row["summary"] = profile.get("summary")
+    # The words common in this description and rare in the market's. Four short
+    # strings a row; a way into the prose, not a classification. See
+    # `field.distinctive_terms`.
+    row["terms"] = entry.get("terms") or []
     row["summaryState"] = profile.get("summaryState")
     # THE RECORD, FLATTENED TO WHAT A TABLE CAN SORT ON. The base rates travel
     # with it: "profitable every year" is true of two thirds of this exchange,

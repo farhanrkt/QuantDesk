@@ -326,6 +326,24 @@ def _place_in_field(verdicts: list[dict], say) -> dict:
     for entry in verdicts:
         entry["fieldPosition"] = positions.get(entry["ticker"])
 
+    # THE WORDS THAT IDENTIFY THIS COMPANY AND FEW OTHERS. A corpus statistic,
+    # so it belongs here with the other cross-name work rather than in a leg:
+    # what counts as distinctive is a fact about the market, and it changes when
+    # the population does.
+    terms = field.distinctive_terms([
+        {"ticker": v["ticker"], "name": v.get("name"),
+         "summary": (v.get("profile") or {}).get("summary")}
+        for v in verdicts])
+    for entry in verdicts:
+        entry["terms"] = terms.get(entry["ticker"]) or []
+    if not terms and verdicts:
+        # Said out loud rather than left as an empty column. Below
+        # `field.MIN_CORPUS` descriptions there is nothing for a term to be
+        # distinctive against, and a scan that quietly reported none would look
+        # like a market of indistinguishable companies.
+        say(f"  No distinctive terms: fewer than {field.MIN_CORPUS} descriptions "
+            f"came back, and distinctive is a comparison.")
+
     leaders = sum(1 for v in verdicts if (v.get("fieldPosition") or {}).get("leads"))
     say(f"  Placed {standing['measured']} names in {len(standing['fields'])} fields "
         f"({standing['unplaced']} had no industry label or no comparable revenue); "
@@ -396,6 +414,7 @@ def _specialists_summary(verdicts: list[dict]) -> dict:
             "score": entry.get("score"), "action": entry.get("action"),
             "industry": entry.get("industry"),
             "summary": (entry.get("profile") or {}).get("summary"),
+            "terms": entry.get("terms") or [],
             "soleListing": bool(place.get("soleListing")),
             "onlyRanked": bool(place.get("onlyRanked")),
             "unrankedRivals": place.get("unranked") or 0,

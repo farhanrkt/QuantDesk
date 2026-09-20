@@ -90,7 +90,10 @@ def test_rows_carry_only_leaves_a_table_can_render(client, reports):
     field-by-field by the panel and are allowed to be objects. Everything else
     is rendered as itself.
     """
-    nested = {"field", "record", "entry", "gates", "sectorRank"}
+    # `terms` is a list the panel MAPS over into chips, not a value any cell
+    # renders directly, so it belongs with the nested blocks rather than with
+    # the leaves.
+    nested = {"field", "record", "entry", "gates", "sectorRank", "terms"}
     for market in ("ID", "US"):
         body = payload(client, market)
         if not body.get("available"):
