@@ -11,12 +11,12 @@ CODEBASE_REVIEW.md is older and partly superseded.
 
 STATE
 =====
-Branch: feature/pre-trade-checks (41 commits ahead of main, NOT pushed, tree
-clean apart from this file). Everything below is committed.
+Branch: feature/personal-verdict-scanner (28 commits ahead of main, NOT pushed,
+tree clean apart from this file). Everything below is committed.
 
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
-single Vercel Python function on the back. 1,145 offline pytest tests, 35
-frontend assertions and 7 enforced design rules. US and Indonesian (IDX)
+single Vercel Python function on the back. 1,552 offline pytest tests, 35
+frontend assertions and 10 enforced design rules. US and Indonesian (IDX)
 listings.
 
 The full battery, all green as of the last commit:
@@ -30,6 +30,15 @@ Both halves run from .claude/launch.json (`quantdesk-web`, `quantdesk-api`) or
 uvicorn` — a bare `uvicorn` resolves to a system Python here carrying yfinance
 1.5.2 against this project's 0.2.66.
 
+READ THIS BEFORE YOU TRUST A GREEN BATTERY
+------------------------------------------
+On 20 September the scan panel was opened in a browser for the first time and
+showed "SOMETHING BROKE WHILE RENDERING". It had been failing since the day it
+was written, a week earlier, with every check above passing — because the only
+rendering that had been verified was the SERVER-SIDE one, which shows the
+loading state. A panel fed by a fetch only fails once the data arrives.
+
+So: the battery does not cover the page. Open it. The browser pane works.
 
 WHAT THE LAST SESSIONS DID
 ==========================
@@ -60,6 +69,39 @@ re-deriving the reasoning.
           plus a copy edit — Trend tab 2,476 visible words to 1,975, with ~1,100
           words one click away rather than gone.
 
+
+  20 Sep  WHAT THE COMPANY DOES, AND WHO ELSE DOES IT. The scanner could say a
+          business was cheap, solid and unwatched and could not say what the
+          business WAS. Four new surfaces, all description, none scoring:
+
+          `field.py`      the provider's business summary, and a standing among
+                          the scanned names sharing an industry label. Revenue,
+                          never market cap — ranking a cheap champion by market
+                          cap means the more underrated it is, the smaller it
+                          looks. "Leads its field" costs rank 1, 3+ peers and 2x
+                          the runner-up; a bare rank-1 test calls 97 of 97 IDX
+                          fields won, at 2x it is 31.
+          `trackrecord.py` profits, cash, growth and borrowings over the years
+                          the filings cover.
+          the SEARCH      over the description prose, in ScanPanel.
+          the SHORTLIST   `_specialists_summary` in scan_market.py: largest or
+                          ONLY name in its field, compounding, and uncovered.
+
+          THREE MEASUREMENTS THAT CHANGED WHAT SHIPPED, all in the docstrings:
+          a "niche" flag built on field revenue share does not discriminate (the
+          median field holds 1/97th of scanned revenue, which is 1/97 restated);
+          "profitable every year" admits 67% of the IDX and is therefore not a
+          screen, only a description; and a "too much debt" flag at the textbook
+          3x EBITDA would sit exactly on this market's median for borrowers.
+
+          A WRONG CURRENCY LABEL MANUFACTURES A CHAMPION. The first standings
+          crowned RIGS.JK with 99.4% of Indonesian marine shipping — a small tug
+          operator whose rupiah statements Yahoo labels USD, so the boundary
+          multiplied them by 16,300. Not a crash: a confident market leader.
+          `field.revenue_of` refuses it now. THE SAME BUG IS STILL LIVE IN
+          `market_data._apply_fx`, which every valuation reads — measured at 2
+          names of 388 (RIGS.JK, YPF), deliberately not fixed in that commit
+          because it moves numbers app-wide. That is the top of the open list.
 
 PRINCIPLES THAT ARE LOAD-BEARING — do not quietly break these
 =============================================================
@@ -100,7 +142,7 @@ WHERE TO BE CAREFUL
   measure_exposure_stability.py after a change to exposure.REFERENCES or to the
   estimation window. A stale stamped number is worse than none.
 
-- `npm run check:frontend` now enforces 7 design rules by grep over source. Each
+- `npm run check:frontend` now enforces 10 design rules by grep over source. Each
   one describes a bug that was actually in this codebase. If one fires on
   something legitimate, widen the rule or add to its allowlist WITH the reason —
   do not delete the check.
@@ -119,6 +161,20 @@ WHERE TO BE CAREFUL
 
 WHAT I MIGHT WANT NEXT — pick with me before building
 =====================================================
+  0) OPEN AND UNFINISHED, in order:
+
+     - `market_data._apply_fx` trusts the provider's `financialCurrency`
+       unconditionally and is wrong on RIGS.JK and YPF, scaling their statements
+       by 16,300x and 1/1000. The detector is already written and tested in
+       `field.revenue_of`. Left alone because it moves every valuation.
+     - THE US SWEEP HAS NEVER PRODUCED A USABLE BUY LIST. Asked for repeatedly;
+       the 12 Sep run was contaminated by the quality throttle and two
+       completion runs were killed. It is ~3,300 names at roughly 3.5s each with
+       the fundamentals cache warm.
+     - The specialist shortlist has been verified on cached data (5 names of
+       729, KETR.JK at the top) but the card rendering it was verified only on
+       an IDX scan. Look at it on a US scan.
+
   a) The sensitivity grid (growth x discount rate) for the valuation. Open since
      §5. Note the roadmap's old claim was imprecise: pv_of_growing_stream is
      vectorised over DRAWS, with growth, rate and terminal broadcast row-wise,
@@ -132,11 +188,15 @@ WHAT I MIGHT WANT NEXT — pick with me before building
      module. Where curated figures live, how they are dated, and how a reader
      tells them from fetched ones is a session on its own.
 
-  c) Lens-vote correlation is DONE (§15). Accessibility and responsive layout is
-     DONE for the single-ticker read and the panels. What has NOT been done is a
-     real screen-reader pass — the keyboard walkthrough is clean (64 focusables,
-     zero unnamed, zero without a focus style, zero dangling aria-controls, all
-     four roving groups at one tab stop), but nobody has listened to it.
+     THIS IS NOW BETTER MOTIVATED THAN IT WAS. 201 of 722 cached IDX records
+     carry no income statement at all, so a quarter of the exchange cannot be
+     placed in a field or given a track record, and a field missing its largest
+     member crowns the runner-up while looking no different.
+
+  c) A real screen-reader pass. The keyboard walkthrough is clean (64
+     focusables, zero unnamed, zero without a focus style, zero dangling
+     aria-controls, all four roving groups at one tab stop), but nobody has
+     listened to it.
 
   d) Composition for Scan & rank, Screener, Portfolio and Thesis. They have the
      tokens, the copy pass and the Explainer treatment, but not the Section
@@ -147,7 +207,6 @@ WHAT I MIGHT WANT NEXT — pick with me before building
      seasonality grid). I would leave them: the principle is "direction decided
      once in Python", and these are the cases where Python has nothing to say.
      They are now budgeted in check_frontend.mjs so they cannot multiply.
-
 
 STANDARDS
 =========
@@ -161,7 +220,9 @@ STANDARDS
   can't defend.
 - Explanations may be restructured or progressively disclosed. They may not be
   deleted (PRODUCT.md constraint 7).
-- Before finishing: the full battery above, plus verify the UI live in the
-  browser on both a US and an IDX ticker.
+- Before finishing: the full battery above, plus OPEN THE PAGE IN A BROWSER on
+  both a US and an IDX ticker, and on the landing state where the scan panel
+  lives. See the note under STATE: a green battery does not mean the page
+  renders, and this has already cost a week.
 - Commit on the current branch. Don't push.
 - If you disagree with anything here, say so before building it.

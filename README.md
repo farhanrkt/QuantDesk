@@ -629,6 +629,87 @@ It is local by construction: `reports/` is gitignored and never deployed, so the
 app gets `available: false` and the panel says which command to run. That is the same
 privacy boundary the scanner already had, not a new one.
 
+**What the company actually does — and an industry label is not it.** Everything above
+judges a business without ever naming it. `field.py` carries the data source's own
+description of what each company sells, and the scan panel searches it. The label alone
+cannot find a specialist: KETR.JK is filed under *Communication Equipment*, which it
+shares with radio makers and handset distributors, and the phrase that identifies it —
+"sells submarine and terrestrial fiber optic cable systems" — exists only in the prose,
+at **character 361** of a 673-character summary against a 320-character display trim. So
+the full text travels and the client clamps; shipping the trimmed version would have saved
+60% of the payload and broken the one query the feature exists to answer. The search also
+ignores the action filter, because a specialist is almost always a *Hold* — the premise of
+the screen next door — and intersecting the two would hide the answer silently.
+
+**Where it stands among the names doing the same thing.** `field.standings` ranks the
+scanned names inside each industry label by **revenue, never market capitalisation** — the
+same argument the neglect screen rests on, since market cap is the quantity the screen
+suspects of being wrong, and ranking a cheap champion by it means the more underrated it
+is the smaller it looks. "Leads its field" costs rank 1, three or more measured peers and
+twice the runner-up's revenue: a bare rank-1 test calls **97 of 97** Indonesian fields
+won, at 1.5x it is 42 and at 2x it is 31. At that threshold the US standings return AAPL,
+AMZN, MSFT, NVDA, PM and HCA for their industries, which says the arithmetic is not broken
+and nothing more.
+
+It is **not market share**, and the caveat ships inside the payload as `basis` so a client
+cannot render a rank without it — design rule 10 fails the build on one that tries. Private
+companies, foreign listings and names whose filings never arrived are all missing from the
+denominator, and the third of those is not small: 201 of 722 cached Indonesian records
+carry no income statement at all. A field missing its largest member crowns the runner-up
+and looks no different from a correct one, so `unplaced` is reported beside every count.
+
+*A wrong currency label manufactures a champion.* The first run of the standings crowned
+RIGS.JK with 99.4% of Indonesian marine shipping and 456 times the runner-up. It is a small
+tug and barge operator whose rupiah statements the provider labels USD, so converting at
+the boundary multiplied a correct figure by about 16,300 — and the output was not a crash,
+it was a confident market leader. A converted figure whose implied price-to-sales ratio is
+implausible where the unconverted one is not is now refused; across all 388 cached records
+whose currencies differ it catches exactly two, and says plainly that 283 involve a rate
+near 1 where it cannot tell. The first version of that guard ran on every name and refused
+71, nearly all of them companies that are simply expensive.
+
+*A "niche" flag was built, measured and dropped.* The obvious companion to "leads its
+field" is "and the field is small", measured as the field's share of scanned revenue.
+Across the fields with a clear leader the median holds 0.5% of it — which is 1/97 restated,
+an artifact of how many labels the provider uses rather than a measure of narrowness.
+
+**What the filings say it has done.** `trackrecord.py` reports profits, cash, growth and
+borrowings over the years the statements cover, and its first finding is that its own
+headline flag is worthless alone: **350 of 523** Indonesian listings with three or more
+years — 67% — are profitable in *every* year. A flag admitting two thirds of a market is
+not a distinction, so it ships as description and the narrowing is the conjunction, each
+step carrying its base rate: 67% profitable every year, 58% also cash-backed, 14% also
+growing revenue at or above the market's own top quartile (14.8%, hence the 15% threshold).
+
+Four annual columns is the median history. That does not span a cycle and on this exchange
+those years were a commodity upswing, so every consistency figure carries the window.
+
+Negative free cash flow is **reported, never penalised**. KETR is profitable in all four
+years and grew revenue 28.6% a year while free cash flow was negative in three of them,
+because it was laying cable — a screen that demoted it for that would have been wrong
+about the one company it was built to find, and one that ignored the figure would hide the
+main thing to ask about. Borrowings get the same treatment: 39% of non-financial IDX names
+carry net cash, and of those that borrow the **median is 3.0x EBITDA**, which is exactly
+where the textbook draws "levered" — so no flag ships and the ratio is quoted against that
+median instead. Free cash flow and net debt are both withheld for lenders, whose borrowings
+*are* the business.
+
+**The shortlist, which is the point of the other three.** `_specialists_summary` intersects
+them: the largest **or the only** scanned name in its field, compounding, and uncovered.
+Sole listing counts because `leads` correctly refuses a one-member field — being the
+largest of one is not a position — while having no listed rival *is* the signature of a
+niche, and requiring `leads` would have missed the case this was built for.
+
+Measured on 729 cached Indonesian records before it was built: 4.3% lead a field, 3.6% are
+alone in theirs, 10.0% compound, and **66.5% are uncovered** — the loosest of the three by
+a distance, which is why each ingredient's base rate ships with the list. All three
+together select **five names**, and the top by growth is KETR.JK at 28.6% a year on an
+18.5% net margin. That is evidence the screen finds what it was described, and nothing at
+all about returns: industry labels and the share register arrive as a snapshot with no
+history, so this cannot be backtested even in principle. `scanlog.py` records what each
+screen selected on the day it selected it — which it had been cited for doing, in two
+docstrings, without doing it.
+
 **Scanning a whole exchange, across days.** The scan's own cache is keyed by calendar
 day, which is right for the four legs derived from price and wrong for the statements
 underneath them: filings move quarterly and were being refetched every morning. For 837
