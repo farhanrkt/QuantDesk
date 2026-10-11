@@ -25,9 +25,10 @@ is recorded. Two summaries come out of that, and they answer different things:
   INFORMATION COEFFICIENT — the rank correlation, within each period, between a
   name's composite score and its subsequent return. This is the direct question:
   does a higher rank correspond to a better outcome? It is averaged across
-  periods and given a t-statistic. An IC of 0.03 sustained is considered useful
-  by professional standards; an IC indistinguishable from zero means the order
-  carries no information about the future.
+  periods and given a t-statistic. This app sets its own bar for a useful IC at
+  0.03, sustained: a declared judgement, not a published standard. An IC
+  indistinguishable from zero means the order carries no information about the
+  future.
 
   QUINTILE SPREAD — the mean forward return of the top fifth minus the bottom
   fifth. More intuitive, noisier, and the thing people actually picture.

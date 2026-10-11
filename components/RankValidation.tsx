@@ -95,8 +95,9 @@ export function RankValidation({ data }: { data?: Validation }) {
           winner by construction, and {num(data.expectedByChance ?? 0, 1)} of them are expected
           to clear the usual cutoff by chance alone.{" "}
           <span className="text-body">Smallest detectable</span> is the weakest relationship
-          this sample could have found; a genuinely useful one in this field is nearer 0.03, so
-          a blank result here means <em>too small to see</em> rather than <em>not there</em>.
+          this sample could have found. This app sets its own bar for a useful one at 0.03, a
+          judgement rather than a field standard, so a blank result here means <em>too small to
+          see</em> rather than <em>not there</em>.
         </p>
 
         {data.caveats && data.caveats.length > 0 && (

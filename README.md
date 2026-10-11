@@ -339,9 +339,10 @@ correlation between rank and what happened next.
 **The answer is no, and the app says so.** One of the twenty-four tests cleared the
 conventional 5% cutoff, against 1.2 expected by chance from running that many, and none
 survives a Benjamini-Hochberg correction. The panel also reports the smallest effect the
-sample could have detected — around 0.08 at best, where a genuinely useful information
-coefficient is nearer 0.03 — so the honest reading is *no edge large enough to see here*,
-not *no edge*. Survivorship, costs and sample size are stated alongside.
+sample could have detected — around 0.08 at best, against the 0.03 this app sets as its
+own bar for a useful information coefficient (a judgement, not a field standard) — so the
+honest reading is *no edge large enough to see here*, not *no edge*. Survivorship, costs
+and sample size are stated alongside.
 
 Measured offline by `scripts/backtest_ranking.py` and stamped with its date. Re-run it after
 changing anything in `ranking.py`.

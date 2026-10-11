@@ -8,7 +8,7 @@
   ],
   "significant": 0,
   "expectedByChance": 1.2,
-  "headline": "Across 12 backtests \u2014 four universes at three holding periods, two statistics each \u2014 none showed a relationship between a name's rank and its subsequent return that survives correcting for having run them all. 1 of the 24 individual tests cleared the conventional 5% cutoff before correction, against 1.2 expected from chance alone at that many tests \u2014 which is why the correction is applied rather than the best result quoted. The most sensitive of them could only have detected a mean information coefficient of about 0.08, and a useful one in this field is nearer 0.03 \u2014 so this is 'no edge large enough to see here', not 'no edge'.",
+  "headline": "Across 12 backtests \u2014 four universes at three holding periods, two statistics each \u2014 none showed a relationship between a name's rank and its subsequent return that survives correcting for having run them all. 1 of the 24 individual tests cleared the conventional 5% cutoff before correction, against 1.2 expected from chance alone at that many tests \u2014 which is why the correction is applied rather than the best result quoted. The most sensitive of them could only have detected a mean information coefficient of about 0.08, against the 0.03 this app sets as its own bar for a useful one \u2014 so this is 'no edge large enough to see here', not 'no edge'.",
   "results": {
     "dow30:21": {
       "universe": "Dow Jones Industrial Average",
