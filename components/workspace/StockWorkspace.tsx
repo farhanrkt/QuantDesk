@@ -27,7 +27,7 @@ import { usePreferences } from "@/components/shell/preferences";
 import { useWorkspace } from "@/components/shell/workspace";
 import { TabPanel, Tabs, type Tab } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toaster";
-import { Panel, PortfolioSignpost, RunStatus, StockActions } from "@/components/workspace/parts";
+import { Panel, PortfolioSignpost, PrintHeader, RunStatus, StockActions } from "@/components/workspace/parts";
 import {
   confluenceKey, simulationCsvUrl, useEngines, useEventStudy, useExposureScan, usePeers,
   usePortfolio, useUniverses, useVerdict, type RunOptions,
@@ -193,6 +193,24 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
   }, [symbol, visible, tuning, toast]);
   const onPrint = useCallback(() => window.print(), []);
 
+  // A printed page cannot open a disclosure, so every <details> on the page is
+  // opened for the print and the ones the reader had closed are closed again
+  // afterwards — their choice on screen is not the printer's to keep.
+  useEffect(() => {
+    let reopened: HTMLDetailsElement[] = [];
+    const before = () => {
+      reopened = [...document.querySelectorAll<HTMLDetailsElement>("main details:not([open])")];
+      reopened.forEach((d) => { d.open = true; });
+    };
+    const after = () => { reopened.forEach((d) => { d.open = false; }); reopened = []; };
+    window.addEventListener("beforeprint", before);
+    window.addEventListener("afterprint", after);
+    return () => {
+      window.removeEventListener("beforeprint", before);
+      window.removeEventListener("afterprint", after);
+    };
+  }, []);
+
   // Keyboard: [ ] move between tabs, w toggles the watchlist.
   useEffect(() => {
     const onShortcut = (e: Event) => {
@@ -228,6 +246,9 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
 
   return (
     <div className="space-y-6">
+      <PrintHeader symbol={symbol}
+                   name={company.status === "ready" ? company.data.name : null}
+                   priceAsOf={company.status === "ready" ? company.data.listing.priceAsOf : null} />
       <div className="space-y-3 print:hidden">
         <TickerBar opts={draft} onChange={setDraft} onRun={submit} busy={busy} />
         <RunStatus symbol={symbol} busy={busy} failed={failed} at={engines.at} />
@@ -362,8 +383,16 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
             />
           </TabPanel>
           <TabPanel id="score" active={visible}>
-            <VerdictPanel state={verdict} ticker={resolvedTicker}
-                          onScore={() => scoreVerdict({ ticker: symbol, market })} />
+            {/* THE PRIVATE SCORE NEVER LEAVES THE SCREEN. A printout travels
+                without its context, and a number on paper is the easiest thing
+                in this app to mistake for a recommendation. */}
+            <div className="print:hidden">
+              <VerdictPanel state={verdict} ticker={resolvedTicker}
+                            onScore={() => scoreVerdict({ ticker: symbol, market })} />
+            </div>
+            <p className="hidden text-meta text-ash print:block">
+              The private score is not printed.
+            </p>
           </TabPanel>
         </div>
       </div>

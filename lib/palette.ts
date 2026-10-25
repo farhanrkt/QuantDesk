@@ -104,6 +104,19 @@ export const palette = {
   // ceiling is not bad news and a floor is not good news.
   levelAbove: "#EF9A9A",
   levelBelow: "#80CBC4",
+
+  // --- print: the same ladder and tones, dark on white paper --------------
+  // A printer does not draw dark backgrounds, so `chalk` text would print as
+  // near-white on white. These are what each token becomes on paper, and the
+  // tones keep their meaning at print contrast. Not a light theme: the screen
+  // stays dark (DESIGN.md), and these exist for one media query.
+  printText: "#0D1620",
+  printBody: "#26313D",
+  printMuted: "#4A5868",
+  printRule: "#C9D2DC",
+  printAcc: "#0B7A66",
+  printDist: "#B42318",
+  printWarn: "#8A6100",
 } satisfies Record<string, string>;
 
 export type PaletteToken = keyof typeof palette;

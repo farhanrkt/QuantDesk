@@ -164,3 +164,30 @@ export function StockActions({
     </div>
   );
 }
+
+/**
+ * What a printed page says about itself, which the screen does not need to.
+ *
+ * A printout leaves the app: it has no top bar, no live data and no URL bar,
+ * so it has to carry its own provenance — which company, when it was printed,
+ * which close the prices are from, where they came from, and that it is not
+ * investment advice. Hidden on screen.
+ */
+export function PrintHeader({ symbol, name, priceAsOf }: {
+  symbol: string; name?: string | null; priceAsOf?: string | null;
+}) {
+  const printed = new Date().toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+  return (
+    <div className="hidden border-b border-rule pb-3 print:block">
+      <p className="font-mono text-meta font-semibold tracking-[0.16em] text-chalk">QUANTDESK</p>
+      <p className="mt-1 text-meta text-body">
+        {symbol}{name ? ` — ${name}` : ""} · printed {printed}
+        {priceAsOf ? ` · prices as of the close of ${priceAsOf}` : ""} · source: Yahoo Finance
+      </p>
+      <p className="text-meta text-ash">
+        Educational and research use only — not investment advice. Only the tab that was open
+        is printed; every figure explains itself on screen.
+      </p>
+    </div>
+  );
+}

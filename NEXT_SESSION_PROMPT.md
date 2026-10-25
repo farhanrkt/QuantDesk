@@ -11,15 +11,14 @@ CODEBASE_REVIEW.md is older and partly superseded.
 
 STATE
 =====
-Branch: feature/personal-verdict-scanner. 59 commits ahead of main, and
-37 ahead of `origin/feature/personal-verdict-scanner`, which sits at
-db2a753 — the branch WAS pushed before this session, contrary to what this
-file used to say; nothing has been pushed since, and nothing was asked to be.
-Tree clean apart from this file.
+Branch: claude/codebase-app-overhaul-e51579 — feature/personal-verdict-scanner
+plus main's IC-bar commit and the fix-ci advisory commit (merged, not
+cherry-picked), plus the October 2026 overhaul. Nothing pushed; nothing was
+asked to be. The overhaul's commits each state what they changed and why.
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
-single Vercel Python function on the back. 1,597 offline pytest tests, 35
-frontend assertions and 10 enforced design rules. US and Indonesian (IDX)
-listings.
+single Vercel Python function on the back. ~1,690 offline pytest tests, 59
+frontend assertions, 15 enforced design rules plus structural checks. US and
+Indonesian (IDX) listings. lxml is now a runtime dependency (see below).
 
 The full battery, all green as of the last commit:
   .venv/bin/python -m pytest && .venv/bin/ruff check api tests scripts
@@ -30,7 +29,64 @@ The full battery, all green as of the last commit:
 Both halves run from .claude/launch.json (`quantdesk-web`, `quantdesk-api`) or
 `npm run dev` / `npm run dev:api`. Both are pinned to `.venv/bin/python -m
 uvicorn` — a bare `uvicorn` resolves to a system Python here carrying yfinance
-1.5.2 against this project's 0.2.66.
+1.5.2 against this project's 0.2.66. `npm run build` clobbers `.next` under a
+running dev server: stop it, delete `.next`, start it again.
+
+THE OCTOBER 2026 OVERHAUL — WHAT EXISTS NOW
+-------------------------------------------
+Routes: / (landing), /stock/[symbol] (?tab=, non-default tuning), /markets
+(?view=rank|screener|exposure|scan), /compare?symbols=, /journal. A shell
+(components/shell/) with a top bar, phone menu, command palette (⌘K, backed by
+GET /api/symbols over the committed listing files), shortcuts ([ ] w ?),
+toasts, a watchlist and recent tickers (localStorage only), print styles.
+
+New on the stock page: a "What it is" tab first in the order (Trend still the
+default) fed by a `company` leg in /api/confluence — description only, never
+read by the synthesis or pre-trade checks — and a sensitivity grid on the
+Value tab. New page: Compare, which never sorts, sums or highlights.
+
+lib/palette.ts is the only place a colour is written; lib/session.ts keeps
+results per symbol for the tab; lib/cache.ts shares confluence payloads across
+views for five minutes. Read lib/url.ts before touching routing, and
+lib/compare.ts before touching Compare.
+
+FOUR SILENT BUGS THE OVERHAUL FOUND, ALL LONG-STANDING
+-------------------------------------------------------
+1. yf.download KEEPS ITS RESULTS IN MODULE GLOBALS. Two downloads at once in
+   one process could hand a caller the other's frame: a made-up ticker came
+   back with Microsoft's 1,610 bars and an "Uptrend". market_data now holds a
+   lock around every yf.download (`_DOWNLOAD_LOCK`), and a test plants the
+   flaw and fails without it. Anything new that downloads must go through
+   market_data — it always had to, and now it also has to for correctness.
+2. THE EARNINGS TABLE NEEDS lxml, WHICH WAS NEVER INSTALLED. The bare except
+   swallowed the ImportError, so earnings_dates was [] on every call and the
+   event study's earnings-proximity tag never fired once. lxml==6.0.2 is
+   pinned in both requirements files.
+3. stale-while-revalidate WAS IN THE BROWSER'S Cache-Control, so Chrome served
+   the previous answer for five minutes. It is in CDN-Cache-Control now.
+4. THE TRACK RECORD QUOTED INDONESIAN BASE RATES UNDER US COMPANIES. read()
+   takes the market; off the IDX the figures are reported bare.
+
+Also: the on-demand panels (event study, peers, portfolio, score) ran for the
+text in the ticker box rather than the loaded ticker; the exposure panel's
+universe list never loaded; the field manual 404'd in production; every Card
+accent was a no-op and a third of them were judgements; the rail printed the
+bank refusal for any unscorable company.
+
+NOT DONE IN THE OVERHAUL, AND WORTH DOING
+-----------------------------------------
+- RankingPanel (~770 lines), ScanPanel (~930) and VerdictPanel (~730) were not
+  split into subcomponents. Their state was lifted into lib/session.ts, which
+  was the functional half; the split is maintainability only.
+- In `next dev` only, a hidden copy of the stock workspace (React's streamed
+  Suspense placeholder, id S:0) stays in the DOM beside the real one, and
+  StrictMode doubles the first confluence request. Checked against `next
+  start` (launch config `quantdesk-web-prod`, port 3001): one h1, one tablist,
+  no S:0. Not worth chasing unless it shows up in production.
+- Under four concurrent cold requests the provider throttles `info` for one or
+  two names (no sector, no name). Compare fetches two at a time for that
+  reason; the throttle is reported honestly, not hidden.
+- Nobody has listened to any of this with a screen reader.
 
 SIX SILENT BUGS FROM 20-21 SEPTEMBER, ALL MINE OR LONG-STANDING
 ----------------------------------------------------------------

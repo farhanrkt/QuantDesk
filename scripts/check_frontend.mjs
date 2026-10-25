@@ -560,7 +560,7 @@ if (compareSources.length < 2) {
        "Point the rule at the compare view's new home rather than deleting it.");
 }
 
-// A LINK TO THE FIELD MANUAL RESOLVES. "New to this?" pointed at
+// 15. A LINK TO THE FIELD MANUAL RESOLVES. "New to this?" pointed at
 // /docs/field-manual.html for months while production returned a 404: docs/
 // was excluded from the upload and nothing copied the file into public/. The
 // copy now happens in `prebuild`, and this checks the other half — that every

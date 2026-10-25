@@ -84,10 +84,16 @@ const STORAGE_KEY = "quantdesk.detail";
  * The two modes are not more-and-less of one thing. GUIDED walks a reader
  * through: the handful of numbers that decide a holding, their readings shown
  * rather than hidden behind an icon, and every expert control collapsed out of
- * the first screen. FULL is the app as it has always been — nothing moved,
- * nothing renamed, nothing added. That second promise is the load-bearing one:
- * a mode that "simplifies" by taking capability away from the people who came
- * for the capability is a mode they turn off once and never trust again.
+ * the first screen. FULL is every control and every indicator, with nothing
+ * removed or hidden. That second promise is the load-bearing one: a mode that
+ * "simplifies" by taking capability away from the people who came for the
+ * capability is a mode they turn off once and never trust again.
+ *
+ * Revised by the owner in the October 2026 overhaul. It used to read "nothing
+ * moved, nothing renamed, nothing added", and the overhaul moved things — the
+ * market tools to /markets, a company tab first in the order. Moves are now
+ * allowed and written down (PRODUCT.md lists them); removing or hiding
+ * anything from Full is still not.
  */
 export function DetailProvider({
   level, children,

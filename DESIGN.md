@@ -54,6 +54,16 @@ and every tab got shorter. Progressive disclosure did that, not cutting.
 
 ## Colour
 
+**One file holds every colour: `lib/palette.ts`.** Tailwind spreads it, Recharts props
+import it, and rule 8 recomputes contrast from it. Before the October 2026 overhaul the
+palette lived in `tailwind.config.ts` *and* in some 140 hex literals across 22 components —
+the same tone redeclared in six panels, the lens hues copied by hand between the page and
+the rail, and five values that were in no palette at all. Rule 11 now fails the build on a
+hex literal anywhere in `components/` or `app/`. The tabs that are not lenses have identity
+tokens of their own (`portfolio`, `drivers`, `pretrade`, `private`, and a deliberately
+neutral `company`, so orientation never reads as a fifth lens with an opinion); chart series
+have theirs, so a moving average is no longer drawn in `warn` yellow.
+
 Two systems that must never blend.
 
 **Identity** — which model is speaking. Structural, always on, says nothing
@@ -134,6 +144,21 @@ inside one (quoted figures, working, raw data), `raised` for something floating
 (controls, popovers). 71 identical containers marked where a box started and not
 what kind of thing was in it.
 
+**`Card accent` paints a header field, and only for identity.** For its whole life the
+prop set a custom property nothing read — twenty-four cards declared a lens colour and
+rendered grey. Wiring it up exposed a third of them as judgements (a drawdown card
+hard-coded red, relative strength green or red from a boolean, a setup coloured by
+long/short). Those pass `tone`, which washes the header in the server's tone colour and keeps
+the title in chalk; `accent` is identity alone.
+
+**Primitives, one of each.** `Button` (cva: `primary`, `secondary`, `quiet`, `danger`,
+`chip` × `xs`/`sm`/`md`, plus `ButtonLink`) replaced four button styles; `Input`, `Select`
+and `Textarea` share one ground; `StateCard` has four kinds — `error`, `refused`, `empty`,
+`loading` — and `refused` is styled quiet so a model that does not apply never looks like a
+failure; skeletons are shaped like what they stand in for; `Toaster` confirms actions (never
+findings) through live regions rendered before any message; `Kbd` is the one file allowed a
+key glyph.
+
 **Lens chips.** Four lenses, four words, four tone dots, on a fixed grid. The one
 piece of at-a-glance this app allows itself, agreed with the owner on 29 August
 2026. Never summed, averaged, counted or ordered by strength — three greens and a
@@ -180,6 +205,51 @@ itself; v1 drew the affordance carrying it at 14px. The ring grew, not the glyph
 so a dense table row still reads as a table row.
 
 **Icons** are lucide, one stroke weight. No emoji, no unicode glyphs.
+
+## The shell
+
+Routes replaced the single page: `/` (landing), `/stock/[symbol]` (one company, `?tab=` and
+any non-default tuning in the query), `/markets` (`?view=rank|screener|exposure|scan`),
+`/compare?symbols=` and `/journal`. A top bar is on every page — brand link, Markets /
+Compare / Journal, search, Guided/Full, field manual; on a phone the links move into a native
+`<dialog>` menu. Every route owns exactly one `h1`: on a stock page it is the ticker, still
+the largest thing on the page.
+
+**The landing shows no numbers.** One question (which company?), answered three ways — type
+it, pick a preset, or open one from your desk — then the app in three lines and the market
+tools as named destinations. A number on that page would be a number nobody asked about,
+presented without the four lenses this app exists to put around every figure.
+
+**Lens tabs are one row.** They used to wrap, which on a phone made three sticky rows
+covering a third of the screen; they scroll sideways now, stick under the top bar, and keep
+the selected tab in view. A labelled "Private" divider separates the score tab from the
+published lenses, and the same divider sits before the local scan on /markets.
+
+**The command palette** (⌘K, `/`, or the search button) opens any company by name or ticker
+— "open as typed" first, so crypto, indices and new listings still open — and reaches every
+route, every tab of the current stock, and the settings. Shortcuts: `[` and `]` move between
+tabs, `w` stars the ticker, `?` lists them; none fire while typing.
+
+**What it is**, the first tab: the company's own description clamped to four lines, its
+listing, the statements as small multiples in one neutral colour (a loss year is a bar below
+zero in the same colour, never red), the record's headline figures, and dividends. Trend is
+still where a run lands.
+
+**The sensitivity grid** is numbers on one ground: no fill, no weight change, no tone, the
+assumed cell outlined in the engine's identity colour, and the price beside the grid rather
+than inside it. A grid of fair values coloured against price is a buy/sell heat map.
+
+**Compare** lines up two to four companies in the reader's order, same widths, no
+highlight, no totals, and says when the currencies differ.
+
+## Print
+
+A tearsheet of the tab you are on. Every ground prints white and every text and tone token
+maps to a print equivalent in `lib/palette.ts`, so a bad reading still prints red at a
+contrast a printer can hold — this is a media query, not a light theme. Chrome, controls and
+the private score are hidden; collapsed explanations are opened for the print and restored
+after; a print-only header carries the ticker, the time, the close the prices are from, the
+source, and "not investment advice".
 
 ## Accessibility
 
@@ -266,8 +336,10 @@ it *sounds* is still untested — an automated pass is a floor, not a substitute
 
 ## The rules are enforced, not just written
 
-`npm run check:frontend` enforces nine of them, and each describes a bug
-that was really in this codebase:
+`npm run check:frontend` enforces fifteen of them, and each describes a bug
+that was really in this codebase. It walks `components/` and `app/`
+recursively — the first version listed three directories by hand, so a file in
+any new subfolder was exempt from every rule without anyone deciding so.
 
 1. A heading wearing `.eyebrow` — the inverted hierarchy.
 2. Prose at `text-micro` (11px) — caught by `leading-relaxed`, which marks a
@@ -283,7 +355,7 @@ that was really in this codebase:
    only the former and was hiding two real sites in `LongTermPanel` and one in
    `EventStudyPanel`.
 8. A text token that does not clear WCAG AA against every ground, recomputed
-   from `tailwind.config.ts` rather than trusted.
+   from `lib/palette.ts` rather than trusted.
 9. A recharts child wrapped in a React fragment. Recharts decides what to draw
    by walking its own `children` and does not look inside a fragment, so
    `{show && (<><Line/><Line/></>)}` compiles, type-checks, lints clean, throws
@@ -295,6 +367,29 @@ that was really in this codebase:
    immediately on `LongTermPanel`, where the fragment legitimately wraps a whole
    `ResponsiveContainer`. A fragment is only a bug when the chart children inside
    it have no chart container between them and it.
+10. A field standing rendered without its `basis`. A rank among scanned peers
+    reads as market share and is not one.
+11. A hex colour literal outside `lib/palette.ts`.
+12. A unicode glyph used as an icon (`›`, `↑`, `↓`, `★`, `✓`, …) outside
+    `components/ui/kbd.tsx`. Three had survived "lucide, one stroke weight".
+13. A tone, or a comparison with the price, in the sensitivity grid. Narrowed
+    on its first run: it mistook the JSX text "price <span" for a comparison.
+14. A sort, max, reduce, the agreement count or the private verdict in any
+    compare file. It caught a layout `Math.max` on its first run.
+15. A `/docs/` link with no file behind it — the field manual 404'd in
+    production for months.
+
+Rule 4 now covers every text and tone token, not only `chalk` and `ash`; eight
+`text-warn/90`-style sites had walked past it. Rule 7's budget is eight hits in
+four files (AnomalyPanel 2, EventStudyPanel 1, LongTermPanel 3, TechnicalPanel
+2) — the event study lost one when its card stopped colouring itself by the
+sign of a mean.
+
+Beside the design rules the same script holds three structural checks:
+`lib/api.ts` may not import the journal or watchlist stores or touch browser
+storage; every analytics `track(` carries only `market` and `lenses`; and
+`lib/symbols.ts` must resolve tickers with the same pattern and suffix map as
+the Python.
 
 Comments are stripped before the greps — rule 7 fired on its own explanation the
 first time it ran, because `LongTermPanel`'s docstring quotes the expression it
@@ -381,7 +476,8 @@ Rules that survived the pass:
 ## Motion
 
 One authored moment: `animate-rise`, 260ms, `cubic-bezier(0.22,1,0.36,1)`, on
-panels as they arrive. A pending lens pulses its own rule at the same rate its
+panels as they arrive — and on the palette, the phone menu and toasts as they
+open, the same curve, so nothing new moves differently. A pending lens pulses its own rule at the same rate its
 panel skeleton does, so a slow engine reads as slow rather than broken.
 Everything respects `prefers-reduced-motion`.
 
@@ -391,7 +487,8 @@ Inherited from `PRODUCT.md` and repeated here because a visual system is exactly
 where they get broken by accident.
 
 1. No composite verdict, in any visual form — no count, badge, ring, meter,
-   gauge, ordering, or size difference that implies one lens outranks another.
+   gauge, ordering, or size difference that implies one lens outranks another,
+   or that one company outranks another on the compare view.
 2. Colour by `explain.tone` only. Six documented sign-based exceptions survive
    where Python has no interpretation to offer.
 3. Absence never renders as a pass. There is no green tick in the pre-trade

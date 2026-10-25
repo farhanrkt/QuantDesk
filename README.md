@@ -81,7 +81,8 @@ npm run dev:api
 npm run dev
 ```
 
-Open <http://localhost:3000>, type a ticker (or click a preset), and hit **Run all lenses**.
+Open <http://localhost:3000>, type a ticker (or click a preset), and hit **Run all lenses** —
+or press **⌘K** (Ctrl K) and type a company's name.
 
 `dev:api` runs `.venv/bin/python -m uvicorn` rather than a bare `uvicorn`, so it does not
 depend on the environment being activated — and, more to the point, cannot pick up a different
@@ -251,6 +252,74 @@ cycle for "working capital" to describe, and revenue isn't a receivables-and-inv
 process. Financials get an explicit refusal. And Beneish is a *screen*, not a
 finding — quantified above rather than hedged: at the prevalence its own coefficients were
 fitted under, a flag is about 11% likely to be real.
+
+---
+
+## Moving around
+
+Every page has its own address, so a refresh, a bookmark and a shared link all land in the
+same place:
+
+| Route | What it is |
+|---|---|
+| `/` | The landing: which company? Type it, pick a preset, or open one from your watchlist or recent tickers. No numbers about anything — a figure here would be one nobody asked about. |
+| `/stock/AAPL` | One company through every lens. `?tab=value` picks the tab; only tuning that differs from the defaults is written. Indonesian listings are `/stock/BBCA.JK`. |
+| `/markets` | The tools that read a whole list at once: rank a universe, scan for unusual activity, what a market moves with, and the local scanner report. |
+| `/compare?symbols=AAPL,BBCA.JK` | Two to four companies, read the same way, side by side. |
+| `/journal` | Every thesis you have written, for every company. |
+
+**The command palette** (⌘K, `/`, or the search button) opens any company by name or
+ticker from the provider's listing files — Bank Central Asia finds BBCA.JK — and always
+offers "open as typed", so crypto pairs, indices and new listings still open. It also reaches
+every route, every tab of the current stock, the reading mode and your holding horizon.
+Shortcuts: `[` and `]` move between tabs, `w` stars the ticker, `?` lists them all. None fire
+while you are typing.
+
+**Your desk.** Star a ticker to keep it on a **watchlist**; the last twelve you opened are
+**recent**. Both live in this browser only. "Rank these" sends the watchlist to the ranking
+tier in a request body — never a URL — and only when you press it.
+
+**Results stay put.** Leaving a company for the compare view and coming back restores the
+page instead of running four engines again, and a ranking, a screener scan or a half-written
+thesis survives a trip to another tab. Each page says when its figures were fetched.
+
+**Print** gives a tearsheet of the tab you are on, dark on white, with the ticker, the time,
+the close the prices are from, and "not investment advice" in the header. The private score
+is never printed.
+
+---
+
+## What it is
+
+The first tab says who the company is before any lens reads it: what it sells in the data
+provider's own words, its market value, exchange and currencies, the next report date, its
+statements year by year as small charts and a table (revenue, operating and net income,
+operating and free cash flow, capital spending, debt, cash, equity), what that record adds up
+to, and dividends per share by year. Every figure was already being fetched for the valuation
+and quality lenses and thrown away before reaching the page.
+
+It is **description, never a lens**: no chip in the rail, no vote in the synthesis, no input
+to the pre-trade checks, and a test asserts both are unchanged with or without it. A missing
+year is a dash, never a zero; a bank's free cash flow is withheld because it describes
+nothing; statements left in their reporting currency say so; and a dividend series that
+implies an impossible yield against today's price is withheld as a units problem rather than
+charted. The comparisons in the record's reading were measured on Indonesian listings, so a
+US company's figures are reported bare.
+
+---
+
+## Compare
+
+Up to four companies, each read through the same lenses — what it is, who is trading it,
+what the price did, what it is worth, the accounting screens, and which pre-trade conditions
+fired — with the answers lined up row by row.
+
+**It never decides between them.** The columns stay in the order you put them (move them by
+hand; there is no sort), every column is the same width, each cell carries its own company's
+reading and nothing is computed across columns. The rail's "two independent readings"
+count is not repeated per column, fired conditions are listed and never counted, and the
+private score is never read. The build fails if a compare file sorts, takes a maximum, sums,
+or touches either. Mixed currencies stay mixed, and the page says so.
 
 ---
 
@@ -924,9 +993,16 @@ Full reasoning, effect sizes, and the validation results are in
 ## How it's built
 
 ```
-app/          Next.js App Router pages, error boundaries
-components/   One panel per lens + shared UI primitives
+app/          Next.js App Router routes: / , stock/[symbol], markets, compare, journal
+components/   One panel per lens + shared UI primitives (ui/), the app shell (shell/),
+              the palette, the stock workspace, company, compare, markets, journal
 lib/          API client, wire types, CSV export, formatting
+              palette.ts  Every colour, and the only place one is written down
+              url.ts      What the address bar means; symbols.ts mirrors symbols.py
+              session.ts  Results kept per symbol for the tab, so navigation restores
+              cache.ts    Confluence payloads shared across views for five minutes
+              watchlist.ts, shortcuts.ts, commands.ts, compare.ts, redact.ts — pure,
+                          and pinned by the frontend assertions
               journal.ts  The thesis journal — client-only by design, so its
                           logic is tested by scripts/check_frontend.mjs
 api/
@@ -1025,7 +1101,7 @@ scripts/
   scan_market.py      The private scanner: sweep a market, score every
                       tradeable name, write a report
   render_scan.py      That report as one self-contained HTML file
-tests/        1,400+ offline tests
+tests/        1,690 offline tests (pytest), plus 59 frontend assertions
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -1047,21 +1123,25 @@ receives the resolved symbol.
 
 ## API
 
-Everything the UI does is a plain `GET`, with one deliberate exception noted below.
+Everything the UI does is a plain `GET`, except the two routes whose input is personal —
+a holdings list and a reader's own list to rank — which are `POST` with `no-store`.
 Interactive docs at `/api/docs`.
 
 | Endpoint | What it returns |
 |---|---|
-| `GET /api/confluence` | **All four lenses in one call, plus the synthesis and the pre-trade checks** — what the UI actually uses |
+| `GET /api/confluence` | **All four lenses in one call, plus the synthesis, the pre-trade checks and the company block** — what the UI actually uses |
+| `GET /api/company` | **What the company is**: profile, listing, statements year by year, dividends, next report. The same block confluence carries |
+| `GET /api/symbols` | **Listings matching a name or ticker**, for the command palette. Reads the committed listing files; no provider call |
 | `GET /api/isolation-forest` | Flow: anomalies, accumulation regimes, liquidity profile |
 | `GET /api/technical-analysis` | Trend: indicators, levels, signals, narrative |
-| `GET /api/intrinsic-value` | Value: DCF / DDM / RI with Monte Carlo percentiles |
+| `GET /api/intrinsic-value` | Value: DCF / DDM / RI with Monte Carlo percentiles and the sensitivity grid |
 | `GET /api/quality` | Quality: F-Score, Z''-score, M-Score |
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
 | `GET /api/rank/universes` | The predefined lists and the fetched whole-market lists, each with its as-of date |
 | `GET /api/verdict` | **The private scanner's score and action for one name** — nine components across three families, the tape reading and the chart-formation study with their market-wide firing rates, the share register, where the trade is wrong, what a round trip costs, the market regime, the shrinkage, the gates, and the two backtests that calibrate all of it |
-| `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. The one POST, and the one `no-store` |
+| `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. `no-store` |
+| `POST /api/rank/list` | **Rank a reader's own list** — the watchlist, or one pasted in. Same engine and caps as `/api/rank`, in a body, `no-store` |
 | `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
 | `GET /api/rank/deepen` | Quality + valuation for a shortlist of up to 8 |
 | `GET /api/exposure` | **What a whole universe moves with** — every name against the factors whose betas were measured to persist, as a cross-section. Needs no ticker |
@@ -1079,7 +1159,8 @@ dividend history still returns its other three panels.
 
 **Limits.** Per-IP rate limiting (40/min default; 3/min for the screener, the ranking scan
 and the verdict, which runs a universe scan *and* four lenses; 2/min for shortlist deepening,
-which is the one route that does *not* batch; 6/min for the event study). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
+which is the one route that does *not* batch; 6/min for the event study; 120/min for the
+symbol finder, which reads two files already in memory and has to keep up with typing). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
 8. These exist because each of those requests fans out to upstream calls — the caps are sized
 to what actually batches.
 
@@ -1186,6 +1267,10 @@ that did not require relaxing anything:
   many of the four lenses succeeded. *Which* companies someone looks up is behavioural data
   about an individual — a watchlist is one of the more revealing things a person can tell
   you — and this app has no business collecting it.
+- **Route templates, not paths.** Once a ticker could appear in the address, the stock
+  analytics wrapper would have reported it on every page view. A page view now reports
+  `/stock/[symbol]` and never a query string, through an allowlist where any unknown path is
+  `/other`; the build fails if an event gains a key beyond `market` and `lenses`.
 
 It renders in production only, so local development neither pollutes the numbers nor trips
 the CSP on the debug script. `track()` is a no-op off Vercel, so a self-hosted copy sends
@@ -1260,12 +1345,13 @@ thresholds that would fire on noise. Calendar effects
 (January, Halloween) are where the multiple-testing critique bites hardest. Headline
 sentiment would need full article text and a lexicon that covers Indonesian.
 
-**No state.** No accounts, no saved watchlists, no persistence on any server. The reading mode,
-the holding horizon, the holdings list and the thesis journal live in your own browser's storage
-and go no further — the journal never crosses the wire at all, and the build fails if it starts
-to;
-every session starts empty on a new machine. The portfolio route is the one place personal
-input crosses the wire, and what that does and does not cost is set out on the panel itself.
+**No state.** No accounts and no persistence on any server. The reading mode, the holding
+horizon, the holdings list, the watchlist, recent tickers and the thesis journal live in your
+own browser's storage and go no further — the journal never crosses the wire at all, and the
+build fails if the request layer can so much as import it or the watchlist. Every session starts
+empty on a new machine. Holdings cross the wire to answer the portfolio question, and the
+watchlist when you press "rank these"; both in a request body, and what that costs is set out
+where you press the button.
 
 ---
 

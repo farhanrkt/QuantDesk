@@ -19,10 +19,23 @@ time to read but no way to tell an ordinary number from an alarming one. They ar
 knowing a ticker and little else.
 
 **Secondary: the experienced investor, and the author.** Full mode is a standing promise
-to them — "the app as it has always been: nothing moved, nothing renamed, nothing added".
-That promise is load-bearing: a mode that simplifies by taking capability away from the
-people who came for the capability is a mode they turn off once and never trust again.
-Full mode may not be degraded to serve the newcomer.
+to them — **every control and every indicator, nothing removed or hidden**. That promise is
+load-bearing: a mode that simplifies by taking capability away from the people who came for
+the capability is a mode they turn off once and never trust again. Full mode may not be
+degraded to serve the newcomer.
+
+*Revised by the owner, 25 October 2026.* The promise used to read "nothing moved, nothing
+renamed, nothing added", and the overhaul that gave the app routes moved things. Moves are
+now allowed and listed here, so a reader of the old layout can find everything:
+
+- **Scan & rank and the anomaly screener** moved from the stock page's last tab to
+  **/markets**, with the exposure scan and the local scanner report beside them.
+- **What the company does** moved from the Quality tab to the new first tab, **What it is**,
+  and a one-line version sits under the ticker on every tab.
+- **The thesis journal** is still the Thesis tab; every entry for every company is also on
+  **/journal**.
+- **The detection and look-back controls** are unchanged, and the tab, ticker and any
+  non-default tuning now live in the URL.
 
 ## Product Purpose
 
@@ -38,7 +51,7 @@ do.
 
 Most research tools give one opinion. This gives four that share no inputs, and then
 spends real effort establishing how much that agreement is actually worth — publishing the
-measurement whichever way it comes out. Five stamped artifacts already do this
+measurement whichever way it comes out. Eight stamped artifacts already do this
 (`backtest_results.json`, `check_calibration.json`, `correlation_stability.json`,
 `lens_agreement.json`, `exposure_stability.json`, `tape_calibration.json`,
 `patterns_calibration.json`, `verdict_backtest.json`), including a backtest that reports
@@ -88,20 +101,41 @@ These are durable product facts. Future work preserves them; none is a style pre
    - **The published surfaces cannot reach it.** `explain.for_synthesis` and
      `pretrade.assess` do not import `verdict`, and `tests/test_verdict.py` asserts the
      import direction by AST. Their own aggregate guards are untouched and still pass.
-   - **`/api/confluence` is unchanged.** The single-company view has no score, no
-     ordering and no new field.
+   - **`/api/confluence` carries no score and no ordering.** It gained one field in the
+     October 2026 overhaul, a `company` leg, and it is description only: what the company
+     sells, its listing, its statements year by year. Neither `explain.for_synthesis` nor
+     `pretrade.assess` is handed it, and `tests/test_api.py` asserts both produce identical
+     output whether it arrived or failed.
    - **Every score ships with the null result.** `verdict.provenance()` returns the
      measured finding that this app's price ranking shows no detectable relationship to
      subsequent returns, and it is the first block on the report, above the table. Where
      the artifact is missing it gets *louder*, not quieter.
-   - **The scanner is private.** It writes to `reports/`, which is gitignored. It is not
-     linked from the app.
+   - **The scanner is private, and drawn as private where it appears.** It writes to
+     `reports/`, which is gitignored, so the deployed app has no report to show. Locally,
+     the report is the **Latest local scan** view on /markets and the per-name score is the
+     **Score it** tab — both behind a "Private" divider, never the default, never printed,
+     and never read by the compare view. (This line used to say the scanner was not linked
+     from the app, which stopped being true the day the landing panel and the tab shipped.)
    - **The annotated chart is part of the private surface, not the published one.**
      `api/_lib/chartlayers.py` and `components/AnnotatedChart.tsx` draw the scanner's
      readings — defended levels with their touch counts, the detected formations, the
      sessions the tape test counted, the stop and the first ceiling — and they are
      reachable from `GET /api/verdict` and nowhere else. The technical panel's own chart
      is unchanged.
+
+   *Confirmed boundary for Compare (25 Oct 2026):* the compare view puts two to four
+   companies side by side and **never decides between them**. Columns stay in the reader's
+   order with no sort; every column is the same width with no highlight; each cell carries
+   its own company's server tone and nothing is computed across columns; the rail's
+   agreement count is not repeated per column, because "2 of 2" beside "1 of 2" is a
+   cross-company count; fired pre-trade conditions are listed, never counted; and the
+   private score is never read. `scripts/check_frontend.mjs` rule 14 fails the build on a
+   sort, max, reduce, the agreement count or the verdict in any compare file, and
+   `tests/frontend/assertions.cjs` pins order and the absence of aggregate keys.
+
+   *Confirmed boundary for the sensitivity grid (25 Oct 2026):* values only. No fill, no
+   tone and no comparison with the price inside the grid — the price is printed beside it.
+   Rule 13 enforces it.
 
 2. **No predictive claim that isn't measured.** If a feature implies something predicts
    returns, it is measured offline and published including nulls, or it does not ship.
@@ -200,6 +234,14 @@ These are durable product facts. Future work preserves them; none is a style pre
    reach a server; `scripts/check_frontend.mjs` fails the build if `lib/api.ts` so much as
    mentions the journal.
 
+
+   *Clarified 25 October 2026.* "One serverless function" means the Python API — the one
+   bundle carrying numpy, pandas, scipy and scikit-learn. The routed front end adds a small
+   Next.js render function for `/stock/[symbol]`, which renders an empty shell named after
+   the ticker and fetches nothing; every number still comes from the one Python function.
+   The watchlist and recent tickers join the journal and holdings as things that never
+   reach a server unasked: `lib/api.ts` may not import those stores or touch browser
+   storage, and analytics report route templates, never a path with a ticker in it.
 7. **Every figure explains itself — in one sentence, on the page.** Each number carries
    what it measures and whether *this* value is good or bad. The rest — why, what would
    change it, the evidence grade — lives behind the figure's own info icon.
@@ -233,6 +275,11 @@ These are durable product facts. Future work preserves them; none is a style pre
   `none`. The only permitted input to colour.
 - **Guided / Full** — the two reading modes. Guided is the default.
 - **Horizon** — how long the reader means to hold, stated once and read by several panels.
+- **Company block** — what the company sells, its listing and its statements year by year.
+  Description, never a lens: it casts no vote and the synthesis and pre-trade checks never
+  read it.
+- **Watchlist / recent** — tickers a reader keeps, in this browser only. They leave it only
+  when the reader presses "rank these", and then in a POST body, never a URL.
 
 ## Evidence and assets
 
@@ -276,8 +323,15 @@ Audited and fixed 29 Aug 2026. What the audit found and what happened to it:
 | Both tablists announcing as "Lenses" | the inner one is "Time horizon" |
 
 Verified by walking the real tab order: 64 focusables, none unnamed, none without a
-visible focus style, no positive `tabindex`. Seven of these rules are now enforced by
-`npm run check:frontend` so they cannot come back.
+visible focus style, no positive `tabindex`. These rules and the ones added since are
+enforced by `npm run check:frontend` (fifteen design rules, plus the privacy, analytics and
+drift checks) so they cannot come back.
+
+*Overhaul, 25 Oct 2026:* the command palette is a native `<dialog>` with the ARIA combobox
+pattern (`aria-activedescendant`, arrow keys, Escape returns focus); the phone menu and the
+shortcut list are native dialogs too; every page has a skip link and exactly one `h1`;
+confirmations go through live regions that exist before any message; the lens tabs scroll
+on one row instead of wrapping into three sticky rows on a phone.
 
 **Not a conformance claim.** Nobody has listened to this with a screen reader — the
 keyboard contract is implemented and measured, but how it *sounds* is untested.

@@ -77,3 +77,32 @@
 /* Recharts overrides — the library's defaults are light-theme. */
 .recharts-cartesian-grid line { stroke: theme(colors.grid); }
 .recharts-text { fill: theme(colors.ash); font-size: 11px; }
+
+/* ------------------------------------------------------------------------
+   PRINT: a tearsheet of the page you are on.
+   The screen is dark on purpose; paper is not. Every ground prints white and
+   every text and tone token maps to its print equivalent from lib/palette.ts,
+   so a figure keeps its meaning (a "bad" reading still prints red) at a
+   contrast a printer can hold. Chrome, controls and the private score are
+   `print:hidden`; collapsed explanations are opened by the stock page before
+   printing and restored after.
+   ------------------------------------------------------------------------ */
+@media print {
+  @page { margin: 14mm 12mm; }
+  html { color-scheme: light; }
+  body { background: #fff !important; background-image: none !important; color: theme(colors.printBody) !important; }
+  .bg-ink, .bg-panel, .bg-raised, .bg-sunken, [class*="bg-ink/"], [class*="bg-raised/"] {
+    background: #fff !important; box-shadow: none !important; backdrop-filter: none !important;
+  }
+  .text-chalk { color: theme(colors.printText) !important; }
+  .text-body { color: theme(colors.printBody) !important; }
+  .text-ash, .text-faint, .eyebrow { color: theme(colors.printMuted) !important; }
+  .text-acc { color: theme(colors.printAcc) !important; }
+  .text-dist { color: theme(colors.printDist) !important; }
+  .text-warn { color: theme(colors.printWarn) !important; }
+  .border-rule, .border-ruleSoft, .border-ruleStrong, [class*="border-"] { border-color: theme(colors.printRule) !important; }
+  .sticky { position: static !important; }
+  .animate-rise, .animate-pulseline { animation: none !important; }
+  section, .rounded-lg, .rounded-xl { break-inside: avoid-page; }
+  a { color: inherit !important; text-decoration: none !important; }
+}
