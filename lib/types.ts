@@ -725,7 +725,10 @@ export type Engine<T> =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "error"; failure: EngineFailure }
-  | { status: "ready"; data: T };
+  // `at` is when the data was fetched (epoch ms). Results now survive
+  // navigation, so a panel showing one can say how old it is — a stale peer
+  // placing or verdict looks identical to a fresh one otherwise.
+  | { status: "ready"; data: T; at?: number };
 
 /**
  * One leg of a /api/confluence response. Each engine reports its own outcome,
@@ -1843,4 +1846,22 @@ export interface VerdictResponse {
     significant?: number | null;
     appliesTo?: string;
   };
+}
+
+/** One listing the command palette can offer — GET /api/symbols. */
+export interface SymbolHit {
+  symbol: string;
+  name: string;
+  market: Market;
+  exchange: string | null;
+  match: "symbol" | "prefix" | "name" | "contains";
+}
+
+export interface SymbolSearch {
+  query: string;
+  market: Market | null;
+  results: SymbolHit[];
+  /** How old each listing file is, so a missing IPO reads as "not indexed", not "no such company". */
+  listings: Record<string, { asOf: string; count: number } | null>;
+  note: string;
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import {
   ApplyButton, DownloadButton, Field, NumberField, SelectField,
@@ -13,6 +12,7 @@ import { cn, num, pct } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { Textarea } from "@/components/ui/input";
 import { StateCard } from "@/components/ui/state";
+import { useSessionState } from "@/lib/session";
 
 const ACC = palette.acc;
 const DIST = palette.dist;
@@ -42,11 +42,11 @@ const DEFAULT_UNIVERSE = "AAPL, NVDA, TSLA, JPM, KO, BBCA.JK, BBRI.JK, TLKM.JK";
  */
 export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => void }) {
   const { state, scan } = useScreener();
-  const [tickers, setTickers] = useState(DEFAULT_UNIVERSE);
-  const [recentDays, setRecentDays] = useState(10);
-  const [period, setPeriod] = useState("2y");
-  const [mode, setMode] = useState("threshold");
-  const [market, setMarket] = useState<Market>("US");
+  const [tickers, setTickers] = useSessionState("screener:tickers", DEFAULT_UNIVERSE);
+  const [recentDays, setRecentDays] = useSessionState("screener:recentDays", 10);
+  const [period, setPeriod] = useSessionState("screener:period", "2y");
+  const [mode, setMode] = useSessionState("screener:mode", "threshold");
+  const [market, setMarket] = useSessionState<Market>("screener:market", "US");
 
   const bareCodes = tickers
     .replace(/\n/g, ",")

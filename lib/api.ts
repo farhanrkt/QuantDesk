@@ -1,13 +1,16 @@
 "use client";
 
 import { track } from "@vercel/analytics";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { createTtlCache } from "./cache";
+import { readSession, useSessionState, writeSession } from "./session";
+import type { RunTuning } from "./url";
 import type {
   AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
   ExposureScanResponse,
   Leg, ManualInputs, EventStudyResponse, Market, NewsResponse, QualityResponse,
   PeersResponse, PortfolioResponse, PreTrade, RankResponse, ScanResponse,
-  ScreenerResponse,
+  ScreenerResponse, SymbolSearch,
   Synthesis, TechnicalResponse,
   UniversesResponse,
   ValuationResponse,
@@ -61,7 +64,9 @@ async function get<T>(
 }
 
 /**
- * The one POST in this app, and the reason is the INPUT rather than the size.
+ * POST, for the routes whose input is personal, and the reason is the INPUT
+ * rather than the size. There are two: holdings (/api/portfolio) and a reader's
+ * own list to rank (/api/rank/list).
  *
  * Every other request here asks about a company, and a company name in a URL is
  * not a fact about anybody. A holdings list is — and URLs are logged by every
@@ -70,9 +75,9 @@ async function get<T>(
  * is not logged by default anywhere in that chain.
  *
  * The cost is honest and small: this app's stated shape was that everything the
- * UI does is a plain GET, and it is now "everything except one route", which
- * also means one CORS preflight on that call. Cheaper than putting somebody's
- * portfolio in a log file.
+ * UI does is a plain GET, and it is now "everything except the two routes whose
+ * input is personal", which also means a CORS preflight on those calls. Cheaper
+ * than putting somebody's portfolio, or their watchlist, in a log file.
  */
 async function post<T>(
   path: string,
@@ -96,20 +101,75 @@ const asFailure = (err: unknown): EngineFailure =>
 const isAbort = (err: unknown) =>
   typeof err === "object" && err !== null && (err as { name?: string }).name === "AbortError";
 
+/**
+ * ONE SUPERSEDE GUARD PER KEY, AT MODULE SCOPE.
+ *
+ * Each request hook used to carry its own sequence counter and abort
+ * controller in refs, which died with the component. Results now outlive the
+ * component (lib/session.ts), so the guard has to as well: a peer comparison
+ * started on the Trend tab must still be able to supersede itself after the
+ * reader has switched tabs and back. The key is the same one the result is
+ * stored under, so "newest request for peers:AAPL" is a question with one answer
+ * however many components ask it.
+ */
+const guardSeq = new Map<string, number>();
+const guardInflight = new Map<string, AbortController>();
+
+function claimKey(key: string) {
+  guardInflight.get(key)?.abort();
+  const controller = new AbortController();
+  guardInflight.set(key, controller);
+  const token = (guardSeq.get(key) ?? 0) + 1;
+  guardSeq.set(key, token);
+  return { signal: controller.signal, live: () => guardSeq.get(key) === token };
+}
+
+function releaseKey(key: string) {
+  guardInflight.get(key)?.abort();
+  guardSeq.set(key, (guardSeq.get(key) ?? 0) + 1);
+}
+
+const IDLE = { status: "idle" } as const;
+
+/**
+ * An on-demand request whose result belongs to `key` — `peers:AAPL`, not "the
+ * ticker on screen". Started with `run`, superseded by a newer `run` on the
+ * same key, and written back under the key it was STARTED with, so a late
+ * answer can never land under another company's header.
+ */
+function useRequest<P, T>(key: string, fetcher: (params: P, signal: AbortSignal) => Promise<T>) {
+  const [state] = useSessionState<Engine<T>>(key, IDLE);
+  const fetchRef = useRef(fetcher);
+  fetchRef.current = fetcher;
+
+  const run = useCallback((params: P) => {
+    const k = key;
+    const { signal, live } = claimKey(k);
+    writeSession<Engine<T>>(k, { status: "loading" });
+    fetchRef.current(params, signal)
+      .then((data) => { if (live()) writeSession<Engine<T>>(k, { status: "ready", data, at: Date.now() }); })
+      .catch((err) => {
+        if (isAbort(err) || !live()) return;
+        writeSession<Engine<T>>(k, { status: "error", failure: asFailure(err) });
+      });
+  }, [key]);
+
+  const reset = useCallback(() => {
+    releaseKey(key);
+    writeSession<Engine<T>>(key, IDLE);
+  }, [key]);
+
+  return { state, run, reset };
+}
+
 const fromLeg = <T,>(leg: Leg<T>): Engine<T> =>
   leg.ok
     ? { status: "ready", data: leg.data }
     : { status: "error", failure: asFailure(leg.error) };
 
-export interface RunOptions {
+export interface RunOptions extends RunTuning {
   ticker: string;
   market: Market;
-  period: string;   // anomaly look-back
-  range: string;    // technical look-back
-  mode: string;     // detection mode
-  contamination: number;  // quota mode
-  madK: number;           // mad mode
-  scoreThreshold: number; // threshold mode
 }
 
 /** Everything the valuation engine will accept, all optional. */
@@ -166,40 +226,81 @@ type Lens = "anomaly" | "technical" | "valuation" | "quality" | "news";
 const ALL_LENSES: Lens[] = ["anomaly", "technical", "valuation", "quality", "news"];
 
 /**
- * Guards against out-of-order settlement.
- *
- * Run AAPL, then immediately NVDA: the two runs are independent requests that
- * resolve at whatever speed the upstream allows, so AAPL's slower response
- * could land after NVDA's and leave one company's flow beside another's
- * valuation — with the confluence rail scoring "agreement" across two different
- * securities. Every dispatch takes a fresh token per lens it owns and aborts
- * whatever that lens had in flight; a response only applies while its token is
- * still the newest one.
+ * Every confluence payload this tab has already fetched, keyed by the exact
+ * query string. A compare column and a stock page asking about the same company
+ * with the same tuning share one entry — and one request if both ask at once.
+ * See lib/cache.ts for what it deliberately does not do.
  */
-function useLensGuard() {
-  const seq = useRef<Record<Lens, number>>({
-    anomaly: 0, technical: 0, valuation: 0, quality: 0, news: 0,
-  });
-  const inflight = useRef<Record<Lens, AbortController | null>>({
-    anomaly: null, technical: null, valuation: null, quality: null, news: null,
-  });
+const confluenceCache = createTtlCache<ConfluenceResponse>({ ttlMs: 300_000, max: 8 });
 
-  return useCallback((lenses: Lens[]) => {
-    const controller = new AbortController();
-    const tokens = new Map<Lens, number>();
-    for (const lens of lenses) {
-      inflight.current[lens]?.abort();
-      inflight.current[lens] = controller;
-      seq.current[lens] += 1;
-      tokens.set(lens, seq.current[lens]);
-    }
-    return {
-      signal: controller.signal,
-      /** True only while this dispatch is still the newest for that lens. */
-      current: (lens: Lens) => seq.current[lens] === tokens.get(lens),
-    };
-  }, []);
+export function confluenceKey(o: RunOptions): string {
+  return queryString(confluenceParams({ ...o, ticker: o.ticker.trim().toUpperCase() }));
 }
+
+/** One company's full read, through the shared cache. Used by the compare view. */
+export function fetchConfluence(o: RunOptions) {
+  const key = confluenceKey(o);
+  return confluenceCache.getOrFetch(key, () => get<ConfluenceResponse>("/api/confluence",
+    confluenceParams({ ...o, ticker: o.ticker.trim().toUpperCase() })));
+}
+
+/** A settled payload for these options, if this tab already holds a fresh one. */
+export function peekConfluence(o: RunOptions) {
+  return confluenceCache.peek(confluenceKey(o));
+}
+
+/** Everything one company's workspace shows, held per symbol in the session. */
+export interface EngineSet {
+  anomaly: Engine<AnomalyResponse>;
+  technical: Engine<TechnicalResponse>;
+  valuation: Engine<ValuationResponse>;
+  quality: Engine<QualityResponse>;
+  news: Engine<NewsResponse>;
+  // The synthesis arrives with the confluence payload and is the only piece of
+  // state here that is not per-lens: it is a statement ABOUT the four together,
+  // so a partial re-run of one lens deliberately clears it rather than leaving
+  // a summary standing that describes figures no longer on screen.
+  synthesis: Synthesis | null;
+  // The pre-trade panel is cleared and restored on exactly the same rule, and
+  // for a sharper version of the same reason: it reads the assembled payload,
+  // so leaving it up beside a re-run lens would show conditions evaluated
+  // against figures that are no longer the ones on screen. On this panel that
+  // is worse than a stale summary — a flag nobody can reproduce from the page
+  // is the one thing it must never print.
+  preTrade: PreTrade | null;
+  /** The confluence query this set was built from; a different one means re-run. */
+  runKey: string | null;
+  /** When the confluence payload behind this set was fetched. */
+  at: number | null;
+  /** Assumptions the reader applied to one lens since, so a CSV link can match them. */
+  valuationOptions: ValuationOptions;
+  technicalOptions: TechnicalOptions;
+}
+
+const EMPTY_SET: EngineSet = {
+  anomaly: IDLE, technical: IDLE, valuation: IDLE, quality: IDLE, news: IDLE,
+  synthesis: null, preTrade: null, runKey: null, at: null,
+  valuationOptions: {}, technicalOptions: {},
+};
+
+const LOADING_SET = (runKey: string): EngineSet => ({
+  ...EMPTY_SET,
+  anomaly: { status: "loading" }, technical: { status: "loading" },
+  valuation: { status: "loading" }, quality: { status: "loading" }, news: { status: "loading" },
+  runKey,
+});
+
+const setFromPayload = (payload: ConfluenceResponse, runKey: string, at: number): EngineSet => ({
+  ...EMPTY_SET,
+  anomaly: fromLeg(payload.anomaly),
+  technical: fromLeg(payload.technical),
+  valuation: fromLeg(payload.valuation),
+  quality: fromLeg(payload.quality),
+  news: fromLeg(payload.news),
+  synthesis: payload.synthesis ?? null,
+  preTrade: payload.preTrade ?? null,
+  runKey, at,
+});
 
 /**
  * A full run is ONE request to /api/confluence, which runs all four lenses
@@ -214,119 +315,69 @@ function useLensGuard() {
  * The valuation and technical engines can additionally be re-run ALONE against
  * the loaded ticker, so changing an assumption or a support/resistance window
  * does not re-fetch the others.
+ *
+ * KEYED BY SYMBOL. The whole set lives in the session under `engines:AAPL`, so
+ * leaving for the compare view and coming back restores the page — refined
+ * assumptions included — instead of running four engines again, and a response
+ * for AAPL that lands after the reader has moved to NVDA writes to AAPL's slot
+ * rather than NVDA's screen. Out-of-order settlement within one symbol is still
+ * guarded per lens, exactly as before.
  */
-export function useEngines() {
-  const [anomaly, setAnomaly] = useState<Engine<AnomalyResponse>>({ status: "idle" });
-  const [technical, setTechnical] = useState<Engine<TechnicalResponse>>({ status: "idle" });
-  const [valuation, setValuation] = useState<Engine<ValuationResponse>>({ status: "idle" });
-  const [quality, setQuality] = useState<Engine<QualityResponse>>({ status: "idle" });
-  const [news, setNews] = useState<Engine<NewsResponse>>({ status: "idle" });
-  // The synthesis arrives with the confluence payload and is the only piece of
-  // state here that is not per-lens: it is a statement ABOUT the four together,
-  // so a partial re-run of one lens deliberately clears it rather than leaving
-  // a summary standing that describes figures no longer on screen.
-  const [synthesis, setSynthesis] = useState<Synthesis | null>(null);
-  // The pre-trade panel is cleared and restored on exactly the same rule, and
-  // for a sharper version of the same reason: it reads the assembled payload,
-  // so leaving it up beside a re-run lens would show conditions evaluated
-  // against figures that are no longer the ones on screen. On this panel that
-  // is worse than a stale summary — a flag nobody can reproduce from the page
-  // is the one thing it must never print.
-  const [preTrade, setPreTrade] = useState<PreTrade | null>(null);
+export function useEngines(symbol: string) {
+  const key = `engines:${symbol.trim().toUpperCase()}`;
+  const [set] = useSessionState<EngineSet>(key, EMPTY_SET);
 
-  // The last options each engine ran with, so a partial re-run can reuse them.
-  const lastRun = useRef<RunOptions | null>(null);
-  const lastValuation = useRef<ValuationOptions>({});
-  const lastTechnical = useRef<TechnicalOptions>({});
-
-  const claim = useLensGuard();
-
-  const settle = <T,>(
-    promise: Promise<T>,
-    set: (s: Engine<T>) => void,
-    live: () => boolean,
-  ) =>
-    promise
-      .then((data) => { if (live()) set({ status: "ready", data }); })
-      .catch((err) => {
-        if (isAbort(err) || !live()) return;   // superseded — leave the newer run alone
-        set({ status: "error", failure: asFailure(err) });
-      });
-
-  const runTechnical = useCallback((o: RunOptions, t: TechnicalOptions = {}) => {
-    lastTechnical.current = t;
-    const { signal, current } = claim(["technical"]);
-    setTechnical({ status: "loading" });
-    // The synthesis quotes figures from the run it was built for. Re-running one
-    // lens supersedes some of them, so it is dropped rather than left standing
-    // beside numbers it no longer describes.
-    setSynthesis(null);
-    setPreTrade(null);
-    return settle(
-      get<TechnicalResponse>("/api/technical-analysis", {
-        ticker: o.ticker, market: o.market, range: o.range,
-        sr_window: t.srWindow, sr_levels: t.srLevels,
-      }, signal),
-      setTechnical,
-      () => current("technical"),
-    );
-  }, [claim]);
-
-  const runValuation = useCallback((o: RunOptions, v: ValuationOptions = {}) => {
-    lastValuation.current = v;
-    const { signal, current } = claim(["valuation"]);
-    setValuation({ status: "loading" });
-    setSynthesis(null);          // see runTechnical
-    setPreTrade(null);
-    return settle(
-      get<ValuationResponse>("/api/intrinsic-value", valuationParams(o, v), signal),
-      setValuation,
-      () => current("valuation"),
-    );
-  }, [claim]);
+  const patch = useCallback((k: string, update: Partial<EngineSet>) => {
+    writeSession<EngineSet>(k, (prev) => ({ ...(prev ?? EMPTY_SET), ...update }));
+  }, []);
 
   const run = useCallback(async (opts: RunOptions) => {
     const ticker = opts.ticker.trim().toUpperCase();
     if (!ticker) return;
     const o = { ...opts, ticker };
-    lastRun.current = o;
-    // A fresh ticker resets per-engine tuning; stale assumptions from the last
-    // company would be applied silently to this one.
-    lastValuation.current = {};
-    lastTechnical.current = {};
+    const k = `engines:${ticker}`;
+    const runKey = confluenceKey(o);
 
-    const { signal, current } = claim(ALL_LENSES);
-    setAnomaly({ status: "loading" });
-    setTechnical({ status: "loading" });
-    setValuation({ status: "loading" });
-    setQuality({ status: "loading" });
-    setNews({ status: "loading" });
-    setSynthesis(null);
-    setPreTrade(null);
+    // Already fetched this exact read in the last few minutes: show it at once,
+    // with no skeleton flash, and say when it was fetched.
+    const hit = confluenceCache.peek(runKey);
+    if (hit) { writeSession<EngineSet>(k, setFromPayload(hit.value, runKey, hit.at)); return; }
+
+    // NO ABORT SIGNAL ON THE SHARED FETCH. The request goes through the cache,
+    // where a compare column may be waiting on the same promise; aborting it
+    // because this page was superseded would fail that column too. A late
+    // answer still fills the cache for the next visit, and `live()` keeps it
+    // off this screen.
+    const { live } = claimKey(`${k}:run`);
+    const lensTokens = ALL_LENSES.map((lens) => [lens, claimKey(`${k}:${lens}`)] as const);
+    const current = (lens: Lens) => lensTokens.find(([l]) => l === lens)![1].live();
+    writeSession<EngineSet>(k, LOADING_SET(runKey));
 
     let payload: ConfluenceResponse;
+    let at: number;
     try {
-      payload = await get<ConfluenceResponse>("/api/confluence", confluenceParams(o), signal);
+      const result = await confluenceCache.getOrFetch(runKey, () =>
+        get<ConfluenceResponse>("/api/confluence", confluenceParams(o)));
+      payload = result.value;
+      at = result.at;
     } catch (err) {
-      if (isAbort(err)) return;
+      if (isAbort(err) || !live()) return;
       // The request itself failed (network, 4xx, a Vercel timeout), so no leg
       // has a verdict — every panel reports the same cause.
       const failure = asFailure(err);
-      if (current("anomaly")) setAnomaly({ status: "error", failure });
-      if (current("technical")) setTechnical({ status: "error", failure });
-      if (current("valuation")) setValuation({ status: "error", failure });
-      if (current("quality")) setQuality({ status: "error", failure });
-      if (current("news")) setNews({ status: "error", failure });
+      const update: Partial<EngineSet> = {};
+      for (const lens of ALL_LENSES) {
+        if (current(lens)) update[lens] = { status: "error", failure };
+      }
+      patch(k, update);
       return;
     }
+    if (!live()) return;
 
-    if (current("anomaly")) setAnomaly(fromLeg(payload.anomaly));
-    if (current("technical")) setTechnical(fromLeg(payload.technical));
-    if (current("valuation")) setValuation(fromLeg(payload.valuation));
-    if (current("quality")) setQuality(fromLeg(payload.quality));
-    if (current("news")) setNews(fromLeg(payload.news));
-    if (current("anomaly")) setSynthesis(payload.synthesis ?? null);
-    if (current("anomaly")) setPreTrade(payload.preTrade ?? null);
+    const next = setFromPayload(payload, runKey, at);
+    const update: Partial<EngineSet> = { synthesis: next.synthesis, preTrade: next.preTrade, runKey, at };
+    for (const lens of ALL_LENSES) if (current(lens)) update[lens] = next[lens] as never;
+    patch(k, update);
 
     // ONE AGGREGATE EVENT, AND DELIBERATELY NOT THE TICKER.
     //
@@ -344,27 +395,42 @@ export function useEngines() {
     const succeeded = [payload.anomaly, payload.technical,
                        payload.valuation, payload.quality].filter((leg) => leg?.ok).length;
     track("analysis", { market: o.market, lenses: succeeded });
-  }, [claim]);
+  }, [patch]);
 
   /** Re-run one engine against the ticker already loaded. */
-  const refineValuation = useCallback((v: ValuationOptions) => {
-    if (lastRun.current) runValuation(lastRun.current, v);
-  }, [runValuation]);
+  const refine = useCallback(<T,>(lens: "technical" | "valuation", o: RunOptions,
+                                  request: (signal: AbortSignal) => Promise<T>,
+                                  options: Partial<EngineSet>) => {
+    const k = `engines:${o.ticker.trim().toUpperCase()}`;
+    const { signal, live } = claimKey(`${k}:${lens}`);
+    // The synthesis quotes figures from the run it was built for. Re-running one
+    // lens supersedes some of them, so it is dropped rather than left standing
+    // beside numbers it no longer describes.
+    patch(k, { [lens]: { status: "loading" }, synthesis: null, preTrade: null, ...options });
+    request(signal)
+      .then((data) => { if (live()) patch(k, { [lens]: { status: "ready", data, at: Date.now() } }); })
+      .catch((err) => {
+        if (isAbort(err) || !live()) return;   // superseded — leave the newer run alone
+        patch(k, { [lens]: { status: "error", failure: asFailure(err) } });
+      });
+  }, [patch]);
 
-  const refineTechnical = useCallback((t: TechnicalOptions) => {
-    if (lastRun.current) runTechnical(lastRun.current, t);
-  }, [runTechnical]);
+  const refineValuation = useCallback((o: RunOptions, v: ValuationOptions) => {
+    refine("valuation", o,
+           (signal) => get<ValuationResponse>("/api/intrinsic-value", valuationParams(o, v), signal),
+           { valuationOptions: v });
+  }, [refine]);
 
-  const csvUrl = useCallback(
-    () => (lastRun.current ? simulationCsvUrl(lastRun.current, lastValuation.current) : "#"),
-    []
-  );
+  const refineTechnical = useCallback((o: RunOptions, t: TechnicalOptions) => {
+    refine("technical", o,
+           (signal) => get<TechnicalResponse>("/api/technical-analysis", {
+             ticker: o.ticker, market: o.market, range: o.range,
+             sr_window: t.srWindow, sr_levels: t.srLevels,
+           }, signal),
+           { technicalOptions: t });
+  }, [refine]);
 
-  return {
-    anomaly, technical, valuation, quality, news, synthesis, preTrade,
-    run, refineValuation, refineTechnical, csvUrl,
-    valuationOptions: lastValuation, technicalOptions: lastTechnical,
-  };
+  return { ...set, run, refineValuation, refineTechnical };
 }
 
 /**
@@ -376,73 +442,30 @@ export function useEngines() {
  * signal does not predict anything on this ticker", and that deserves a
  * deliberate click rather than arriving unbidden beside the chart.
  */
-export function useEventStudy() {
-  const [state, setState] = useState<Engine<EventStudyResponse>>({ status: "idle" });
-  const seq = useRef(0);
-  const inflight = useRef<AbortController | null>(null);
-
-  const validate = useCallback((o: { ticker: string; market: Market; mode: string;
-                                     scoreThreshold: number }) => {
-    inflight.current?.abort();
-    const controller = new AbortController();
-    inflight.current = controller;
-    const token = (seq.current += 1);
-    const live = () => seq.current === token;
-
-    setState({ status: "loading" });
-    get<EventStudyResponse>("/api/event-study", {
-      ticker: o.ticker, market: o.market,
-      // Walk-forward is not offered by the route; fall back to its default.
-      mode: o.mode === "walkforward" ? "threshold" : o.mode,
-      score_threshold: o.scoreThreshold,
-    }, controller.signal)
-      .then((data) => { if (live()) setState({ status: "ready", data }); })
-      .catch((err) => {
-        if (isAbort(err) || !live()) return;
-        setState({ status: "error", failure: asFailure(err) });
-      });
-  }, []);
-
-  const reset = useCallback(() => {
-    inflight.current?.abort();
-    seq.current += 1;
-    setState({ status: "idle" });
-  }, []);
-
-  return { state, validate, reset };
+export function useEventStudy(symbol: string) {
+  const { state, run, reset } = useRequest(`eventStudy:${symbol}`,
+    (o: { ticker: string; market: Market; mode: string; scoreThreshold: number },
+     signal: AbortSignal) =>
+      get<EventStudyResponse>("/api/event-study", {
+        ticker: o.ticker, market: o.market,
+        // Walk-forward is not offered by the route; fall back to its default.
+        mode: o.mode === "walkforward" ? "threshold" : o.mode,
+        score_threshold: o.scoreThreshold,
+      }, signal));
+  return { state, validate: run, reset };
 }
 
 /** The screener is a separate, on-demand tool — it is not part of a ticker run. */
 export function useScreener() {
-  const [state, setState] = useState<Engine<ScreenerResponse>>({ status: "idle" });
-  const seq = useRef(0);
-  const inflight = useRef<AbortController | null>(null);
-
-  const scan = useCallback((params: {
-    tickers: string; market: Market; period: string; mode: string; recentDays: number;
-  }) => {
-    // A second scan supersedes the first rather than racing it.
-    inflight.current?.abort();
-    const controller = new AbortController();
-    inflight.current = controller;
-    const token = (seq.current += 1);
-    const live = () => seq.current === token;
-
-    setState({ status: "loading" });
-    get<ScreenerResponse>("/api/screener", {
-      tickers: params.tickers, market: params.market, period: params.period,
-      mode: params.mode, recent_days: params.recentDays,
-    }, controller.signal)
-      .then((data) => { if (live()) setState({ status: "ready", data }); })
-      .catch((err) => {
-        if (isAbort(err) || !live()) return;
-        setState({ status: "error", failure: asFailure(err) });
-      });
-  }, []);
-
-  return { state, scan };
+  const { state, run } = useRequest("markets:screener",
+    (params: { tickers: string; market: Market; period: string; mode: string; recentDays: number },
+     signal: AbortSignal) =>
+      get<ScreenerResponse>("/api/screener", {
+        tickers: params.tickers, market: params.market, period: params.period,
+        mode: params.mode, recent_days: params.recentDays,
+      }, signal));
+  return { state, scan: run };
 }
-
 
 /**
  * The breadth tier: rank a universe, then deepen a shortlist from it.
@@ -451,144 +474,68 @@ export function useScreener() {
  * costs and the user chooses whether to pay the second. A scan is a handful of
  * batched upstream calls; deepening is one fetch per name and takes seconds
  * each, which is exactly why the shortlist is small and explicit.
+ *
+ * THE CATALOGUE LOADS ITSELF, ONCE. It used to need a `load()` call, which the
+ * ranking panel made and the page's own copy never did — so the exposure
+ * panel's universe picker was empty for as long as it existed and every
+ * exposure scan quietly ran the hidden default list.
  */
 export function useUniverses() {
-  const [state, setState] = useState<Engine<UniversesResponse>>({ status: "idle" });
-
-  const load = useCallback(() => {
-    setState({ status: "loading" });
-    get<UniversesResponse>("/api/rank/universes", {})
-      .then((data) => setState({ status: "ready", data }))
-      .catch((err) => setState({ status: "error", failure: asFailure(err) }));
-  }, []);
-
-  return { state, load };
+  const { state, run } = useRequest("universes",
+    (_: void, signal: AbortSignal) => get<UniversesResponse>("/api/rank/universes", {}, signal));
+  useEffect(() => {
+    const current = readSession<Engine<UniversesResponse>>("universes");
+    if (!current || current.status === "idle" || current.status === "error") run(undefined);
+  }, [run]);
+  return { state, load: () => run(undefined) };
 }
 
 export function useRanking() {
-  const [state, setState] = useState<Engine<RankResponse>>({ status: "idle" });
-  const seq = useRef(0);
-  const inflight = useRef<AbortController | null>(null);
-
-  const scan = useCallback((params: {
-    universe?: string | null; tickers?: string; market: Market;
-  }) => {
-    // A second scan supersedes the first rather than racing it — the same
-    // guard the single-ticker lenses use, and for the same reason: two scans
-    // settling out of order would put one universe's rows under another's
-    // header.
-    inflight.current?.abort();
-    const controller = new AbortController();
-    inflight.current = controller;
-    const token = (seq.current += 1);
-    const live = () => seq.current === token;
-
-    setState({ status: "loading" });
-    get<RankResponse>("/api/rank", {
-      universe: params.universe ?? undefined,
-      tickers: params.universe ? undefined : params.tickers,
-      market: params.market,
-    }, controller.signal)
-      .then((data) => { if (live()) setState({ status: "ready", data }); })
-      .catch((err) => {
-        if (isAbort(err) || !live()) return;
-        setState({ status: "error", failure: asFailure(err) });
-      });
-  }, []);
-
-  const reset = useCallback(() => {
-    inflight.current?.abort();
-    seq.current += 1;
-    setState({ status: "idle" });
-  }, []);
-
-  return { state, scan, reset };
+  // A second scan supersedes the first rather than racing it — the same guard
+  // the single-ticker lenses use, and for the same reason: two scans settling
+  // out of order would put one universe's rows under another's header.
+  //
+  // A READER'S OWN LIST GOES IN A BODY. A named index travels as its id; a list
+  // somebody typed or keeps is a fact about them, so it goes to the POST route
+  // for the same reason holdings do — see `post`, and RankListRequest in
+  // api/index.py.
+  const { state, run, reset } = useRequest("markets:rank",
+    (params: { universe?: string | null; tickers?: string; market: Market }, signal: AbortSignal) =>
+      params.universe
+        ? get<RankResponse>("/api/rank", { universe: params.universe, market: params.market }, signal)
+        : post<RankResponse>("/api/rank/list", {
+            tickers: (params.tickers ?? "").split(/[\s,]+/).filter(Boolean),
+            market: params.market,
+          }, signal));
+  return { state, scan: run, reset };
 }
 
 export function useExposureScan() {
-  const [state, setState] = useState<Engine<ExposureScanResponse>>({ status: "idle" });
-  const seq = useRef(0);
-  const inflight = useRef<AbortController | null>(null);
-
-  const scan = useCallback((params: {
-    universe?: string | null; tickers?: string; market: Market;
-  }) => {
-    // Same supersede-rather-than-race guard as the ranking scan: two scans
-    // settling out of order would put one universe's points under another's axis.
-    inflight.current?.abort();
-    const controller = new AbortController();
-    inflight.current = controller;
-    const token = (seq.current += 1);
-    const live = () => seq.current === token;
-
-    setState({ status: "loading" });
-    get<ExposureScanResponse>("/api/exposure", {
-      universe: params.universe ?? undefined,
-      tickers: params.universe ? undefined : params.tickers,
-      market: params.market,
-    }, controller.signal)
-      .then((data) => { if (live()) setState({ status: "ready", data }); })
-      .catch((err) => {
-        if (isAbort(err) || !live()) return;
-        setState({ status: "error", failure: asFailure(err) });
-      });
-  }, []);
-
-  const reset = useCallback(() => {
-    inflight.current?.abort();
-    seq.current += 1;
-    setState({ status: "idle" });
-  }, []);
-
-  return { state, scan, reset };
+  // Same supersede-rather-than-race guard as the ranking scan: two scans
+  // settling out of order would put one universe's points under another's axis.
+  const { state, run, reset } = useRequest("markets:exposure",
+    (params: { universe?: string | null; tickers?: string; market: Market }, signal: AbortSignal) =>
+      get<ExposureScanResponse>("/api/exposure", {
+        universe: params.universe ?? undefined,
+        tickers: params.universe ? undefined : params.tickers,
+        market: params.market,
+      }, signal));
+  return { state, scan: run, reset };
 }
 
 export function useDeepen() {
-  const [state, setState] = useState<Engine<DeepenResponse>>({ status: "idle" });
-  const seq = useRef(0);
-  const inflight = useRef<AbortController | null>(null);
-
-  const deepen = useCallback((tickers: string[], market: Market) => {
-    inflight.current?.abort();
-    const controller = new AbortController();
-    inflight.current = controller;
-    const token = (seq.current += 1);
-    const live = () => seq.current === token;
-
-    setState({ status: "loading" });
-    get<DeepenResponse>("/api/rank/deepen", {
-      tickers: tickers.join(","), market,
-    }, controller.signal)
-      .then((data) => { if (live()) setState({ status: "ready", data }); })
-      .catch((err) => {
-        if (isAbort(err) || !live()) return;
-        setState({ status: "error", failure: asFailure(err) });
-      });
-  }, []);
-
-  const reset = useCallback(() => {
-    inflight.current?.abort();
-    seq.current += 1;
-    setState({ status: "idle" });
-  }, []);
-
-  return { state, deepen, reset };
+  const { state, run, reset } = useRequest("markets:deepen",
+    (params: { tickers: string[]; market: Market }, signal: AbortSignal) =>
+      get<DeepenResponse>("/api/rank/deepen", {
+        tickers: params.tickers.join(","), market: params.market,
+      }, signal));
+  return {
+    state,
+    deepen: (tickers: string[], market: Market) => run({ tickers, market }),
+    reset,
+  };
 }
 
-/**
- * Peer comparison, on demand.
- *
- * NOT part of a ticker run, and that is a cost decision rather than a taste one:
- * placing a name against the Nasdaq-100 means scanning the Nasdaq-100, which is
- * about six seconds and shares the ranking tier's 3-per-minute cap. Attaching
- * that to `/api/confluence` would multiply the cost of the app's most-used route
- * for something most readers will not open.
- *
- * `reset` exists because a peer placing belongs to the ticker it was run for.
- * Carrying one across a new company would put another firm's percentiles under
- * this firm's header — the same class of mistake `_lib/symbols.py` exists to
- * prevent, arriving through the UI instead of the API.
- */
 /**
  * Where the loaded ticker sits against a book of holdings.
  *
@@ -604,74 +551,61 @@ export function useDeepen() {
  * not collected. It travels in a POST body rather than a query string for the
  * same reason — see `post`.
  */
-export function usePortfolio() {
-  const [state, setState] = useState<Engine<PortfolioResponse>>({ status: "idle" });
-  const seq = useRef(0);
-  const inflight = useRef<AbortController | null>(null);
-
-  const compare = useCallback(
-    (o: {
-      candidate: string; market: Market; holdings: string[];
-      weights?: Record<string, number>;
-    }) => {
-      inflight.current?.abort();
-      const controller = new AbortController();
-      inflight.current = controller;
-      const token = (seq.current += 1);
-      const live = () => seq.current === token;
-
-      setState({ status: "loading" });
+export function usePortfolio(symbol: string) {
+  const { state, run, reset } = useRequest(`portfolio:${symbol}`,
+    (o: { candidate: string; market: Market; holdings: string[]; weights?: Record<string, number> },
+     signal: AbortSignal) =>
       // POST, so the holdings travel in a body rather than a URL. See `post`.
       post<PortfolioResponse>("/api/portfolio", {
         candidate: o.candidate, market: o.market,
         holdings: o.holdings, weights: o.weights ?? {},
-      }, controller.signal)
-        .then((data) => { if (live()) setState({ status: "ready", data }); })
-        .catch((err) => {
-          if (isAbort(err) || !live()) return;
-          setState({ status: "error", failure: asFailure(err) });
-        });
-    }, []);
-
-  const reset = useCallback(() => {
-    inflight.current?.abort();
-    seq.current += 1;
-    setState({ status: "idle" });
-  }, []);
-
-  return { state, compare, reset };
+      }, signal));
+  return { state, compare: run, reset };
 }
 
-export function usePeers() {
-  const [state, setState] = useState<Engine<PeersResponse>>({ status: "idle" });
-  const seq = useRef(0);
-  const inflight = useRef<AbortController | null>(null);
+/**
+ * Peer comparison, on demand.
+ *
+ * NOT part of a ticker run, and that is a cost decision rather than a taste one:
+ * placing a name against the Nasdaq-100 means scanning the Nasdaq-100, which is
+ * about six seconds and shares the ranking tier's 3-per-minute cap. Attaching
+ * that to `/api/confluence` would multiply the cost of the app's most-used route
+ * for something most readers will not open.
+ *
+ * Keyed by symbol, so a placing belongs to the ticker it was run for and can
+ * never appear under another firm's header — the same class of mistake
+ * `_lib/symbols.py` exists to prevent, arriving through the UI instead.
+ */
+export function usePeers(symbol: string) {
+  const { state, run, reset } = useRequest(`peers:${symbol}`,
+    (o: { ticker: string; market: Market; universe?: string }, signal: AbortSignal) =>
+      get<PeersResponse>("/api/peers", {
+        ticker: o.ticker, market: o.market, universe: o.universe,
+      }, signal));
+  return { state, compare: run, reset };
+}
 
-  const compare = useCallback((o: { ticker: string; market: Market; universe?: string }) => {
-    inflight.current?.abort();
-    const controller = new AbortController();
-    inflight.current = controller;
-    const token = (seq.current += 1);
-    const live = () => seq.current === token;
-
-    setState({ status: "loading" });
-    get<PeersResponse>("/api/peers", {
-      ticker: o.ticker, market: o.market, universe: o.universe,
-    }, controller.signal)
-      .then((data) => { if (live()) setState({ status: "ready", data }); })
-      .catch((err) => {
-        if (isAbort(err) || !live()) return;
-        setState({ status: "error", failure: asFailure(err) });
-      });
-  }, []);
-
-  const reset = useCallback(() => {
-    inflight.current?.abort();
-    seq.current += 1;
-    setState({ status: "idle" });
-  }, []);
-
-  return { state, compare, reset };
+/**
+ * The latest market scan that was run on THIS machine.
+ *
+ * READS A FILE, RUNS NOTHING. A whole-exchange sweep is about an hour; the
+ * route serves the report the script already wrote. It therefore has no busy
+ * state worth showing beyond a moment's fetch, and it comes back
+ * `available: false` wherever no scan has been run — a fresh checkout, or the
+ * deployed app, where `reports/` does not exist.
+ */
+export function useScan(market: Market) {
+  const key = `scan:${market}`;
+  const { state, run } = useRequest(key,
+    (m: Market, signal: AbortSignal) => get<ScanResponse>("/api/scan/latest", { market: m }, signal));
+  // Loaded on mount and whenever the market changes, because it costs one read
+  // of a local file and the alternative is a button nobody presses — which is
+  // how the scan results went unseen for a week.
+  useEffect(() => {
+    const current = readSession<Engine<ScanResponse>>(key);
+    if (!current || current.status === "idle") run(market);
+  }, [key, market, run]);
+  return { state, reload: () => run(market) };
 }
 
 /**
@@ -684,70 +618,25 @@ export function usePeers() {
  * run — and it is a question most readers of the single-company view are not
  * asking, which is the more important half.
  *
- * Nothing here caches. The verdict is a function of today's price and the last
- * filing, and a stale one is the failure mode this app is least equipped to
- * notice — it looks identical to a fresh one.
+ * It is kept for the session under its symbol and stamped with when it was
+ * computed, because a stale verdict is the failure mode this app is least
+ * equipped to notice — it looks identical to a fresh one — and the panel shows
+ * the stamp beside the score.
  */
-/**
- * The latest market scan that was run on THIS machine.
- *
- * READS A FILE, RUNS NOTHING. A whole-exchange sweep is about an hour; the
- * route serves the report the script already wrote. It therefore has no busy
- * state worth showing beyond a moment's fetch, and it comes back
- * `available: false` wherever no scan has been run — a fresh checkout, or the
- * deployed app, where `reports/` does not exist.
- */
-export function useScan(market: Market) {
-  const [state, setState] = useState<Engine<ScanResponse>>({ status: "idle" });
-  const seq = useRef(0);
-
-  const load = useCallback(() => {
-    const token = (seq.current += 1);
-    setState({ status: "loading" });
-    get<ScanResponse>("/api/scan/latest", { market })
-      .then((data) => { if (seq.current === token) setState({ status: "ready", data }); })
-      .catch((err) => {
-        if (isAbort(err) || seq.current !== token) return;
-        setState({ status: "error", failure: asFailure(err) });
-      });
-  }, [market]);
-
-  // Loaded on mount and whenever the market changes, because it costs one read
-  // of a local file and the alternative is a button nobody presses — which is
-  // how the scan results went unseen for a week.
-  useEffect(() => { load(); }, [load]);
-
-  return { state, reload: load };
+export function useVerdict(symbol: string) {
+  const { state, run, reset } = useRequest(`verdict:${symbol}`,
+    (o: { ticker: string; market: Market; universe?: string }, signal: AbortSignal) =>
+      get<VerdictResponse>("/api/verdict", {
+        ticker: o.ticker, market: o.market, universe: o.universe,
+      }, signal));
+  return { state, score: run, reset };
 }
 
-export function useVerdict() {
-  const [state, setState] = useState<Engine<VerdictResponse>>({ status: "idle" });
-  const seq = useRef(0);
-  const inflight = useRef<AbortController | null>(null);
-
-  const score = useCallback((o: { ticker: string; market: Market; universe?: string }) => {
-    inflight.current?.abort();
-    const controller = new AbortController();
-    inflight.current = controller;
-    const token = (seq.current += 1);
-    const live = () => seq.current === token;
-
-    setState({ status: "loading" });
-    get<VerdictResponse>("/api/verdict", {
-      ticker: o.ticker, market: o.market, universe: o.universe,
-    }, controller.signal)
-      .then((data) => { if (live()) setState({ status: "ready", data }); })
-      .catch((err) => {
-        if (isAbort(err) || !live()) return;
-        setState({ status: "error", failure: asFailure(err) });
-      });
-  }, []);
-
-  const reset = useCallback(() => {
-    inflight.current?.abort();
-    seq.current += 1;
-    setState({ status: "idle" });
-  }, []);
-
-  return { state, score, reset };
+/**
+ * Listings matching what is typed into the command palette. A plain function,
+ * not a hook: the palette debounces and supersedes its own requests, and the
+ * answer is never worth keeping beyond the moment it was asked.
+ */
+export function searchSymbols(q: string, market: Market | null, signal?: AbortSignal) {
+  return get<SymbolSearch>("/api/symbols", { q, market: market ?? undefined, limit: 8 }, signal);
 }

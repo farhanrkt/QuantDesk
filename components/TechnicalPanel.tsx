@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import type { TooltipProps } from "recharts";
 import { useState } from "react";
+import { useSessionState } from "@/lib/session";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note, Stat } from "@/components/ui/card";
 import { IndicatorGrid } from "@/components/IndicatorGrid";
 import { HorizonPanel } from "@/components/HorizonPanel";
@@ -52,11 +53,13 @@ function TechTooltip({ active, payload }: TooltipProps<number, string>) {
 }
 
 export function TechnicalPanel({
-  data, onApply, busy,
+  data, onApply, busy, stateKey,
 }: {
   data: TechnicalResponse;
   onApply: (o: TechnicalOptions) => void;
   busy: boolean;
+  /** Which company this is, so the chosen sub-section survives a tab switch. */
+  stateKey?: string;
 }) {
   const { latest, summary, series, levels, signals } = data;
 
@@ -69,7 +72,10 @@ export function TechnicalPanel({
   // DIFFERENT question ("where would the levels be if I bought this month?"),
   // not a more detailed version of the same one, and nesting them would imply
   // otherwise.
-  const [section, setSection] = useState(data.hasLongTerm ? "long" : "chart");
+  // Kept for the session per company: the old panel forgot the reader was on
+  // "Short term" every time they glanced at another tab and came back.
+  const [section, setSection] = useSessionState<string>(
+    `tech:section:${stateKey ?? data.ticker}`, data.hasLongTerm ? "long" : "chart");
   const guided = useDetail() === "simple";
 
   const downloadSeries = () =>

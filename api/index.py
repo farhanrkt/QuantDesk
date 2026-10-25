@@ -134,6 +134,8 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # not a hundred. The per-IP cap stays as strict as the screener's anyway,
     # because the work per request is still far above a single-ticker route.
     "/api/rank": (3, 60),
+    # The same scan, for a reader's own list in a POST body. Same cost, same cap.
+    "/api/rank/list": (3, 60),
     # Runs the identical universe scan and keeps one row of it, so it carries
     # the identical cost and the identical cap.
     "/api/peers": (3, 60),
@@ -156,6 +158,10 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # Five years of history plus the benchmark index, then a market model per
     # event — the heaviest single-ticker route in the app.
     "/api/event-study": (6, 60),
+    # The command palette asks on every pause in typing, and the answer is a
+    # scan of two JSON files already in memory — no upstream call at all. A cap
+    # at the default would throttle somebody typing a company name.
+    "/api/symbols": (120, 60),
     None: (40, 60),                      # default for every other route
 }
 RATE_EXEMPT = {"/api/health", "/api/docs", "/openapi.json"}
@@ -681,6 +687,12 @@ def rank(
         label = "Custom list"
         as_of = None
 
+    return ok(_ranked(symbols_list, market_code, label, as_of, universe))
+
+
+def _ranked(symbols_list: list, market_code: str, label: str,
+            as_of: Optional[str], universe: Optional[str]) -> dict:
+    """The ranking payload for a resolved list — shared by the GET and the POST."""
     if not symbols_list:
         raise HTTPException(status_code=400, detail="Provide at least one ticker.")
     if len(symbols_list) > RANK_MAX_UNIVERSE:
@@ -700,11 +712,36 @@ def rank(
     result["explain"] = explain.for_ranking(result)
     for row in result["rows"]:
         row["explain"] = explain.for_ranking_row(row)
-    return ok({
+    return {
         "universe": {"id": universe, "name": label, "market": market_code,
                      "asOf": as_of, "symbols": symbols_list},
         **result,
-    })
+    }
+
+
+class RankListRequest(BaseModel):
+    """A reader's own list to rank — their watchlist, or one they pasted.
+
+    WHY A SECOND POST. The README's argument for making the portfolio route a
+    POST was about the input, not its size: "a company name in a URL is not a
+    fact about anybody; a holdings list is". A list somebody keeps and asks to
+    have ranked is the same kind of fact — `lib/api.ts` has called a watchlist
+    "one of the more revealing things someone can tell you" since the analytics
+    were added — so it travels in a body, which no hop between here and the
+    browser logs by default, and the response is `no-store`.
+
+    The GET with `tickers=` stays, for curl and for anyone who prefers it; the
+    UI no longer uses it for a reader's own list.
+    """
+    tickers: list[str] = Field(..., min_length=1, max_length=RANK_MAX_UNIVERSE)
+    market: str = Field("US", pattern="^(US|ID|us|id)$")
+
+
+@app.post("/api/rank/list")
+def rank_list(body: RankListRequest):
+    """Rank a reader's own list. Same engine and caps as `/api/rank`."""
+    symbols_list = parse_ticker_list(",".join(body.tickers), body.market)
+    return private_ok(_ranked(symbols_list, body.market.upper(), "Your list", None, None))
 
 
 @app.get("/api/peers")
@@ -1763,6 +1800,43 @@ def event_study(
         "study": study,
         "earningsProximity": pead,
     })
+
+
+# --------------------------------------------------------------------------- #
+# Finding a symbol
+# --------------------------------------------------------------------------- #
+SYMBOL_QUERY_PATTERN = r"^[A-Za-z0-9 .&'\-^=,()]{1,40}$"
+SYMBOLS_CACHE = "public, max-age=3600, s-maxage=86400"
+
+
+@app.get("/api/symbols")
+def find_symbols(
+    q: str = Query(..., pattern=SYMBOL_QUERY_PATTERN),
+    market: Optional[str] = Query(None, pattern="^(US|ID|us|id)$"),
+    limit: int = Query(8, ge=1, le=20),
+):
+    """Listings whose symbol or name matches what someone is typing.
+
+    Reads the committed listing files and nothing else — no provider call, so it
+    can answer every keystroke. Cached for a day at the edge because the files
+    only change when someone re-runs scripts/refresh_listings.py and commits.
+    The `listings` block says how old each file is, because a finder that
+    silently lacked last month's IPOs would read as "no such company".
+    """
+    results = listings.search(q, market, limit)
+    status = {}
+    for code in listings.SEARCH_MARKETS:
+        payload = listings.load(code)
+        status[code] = ({"asOf": payload.get("asOf"), "count": payload.get("count")}
+                        if payload else None)
+    return JSONResponse(content=clean({
+        "query": q,
+        "market": market.upper() if market else None,
+        "results": results,
+        "listings": status,
+        "note": ("The provider's equity listings as of these dates. Funds, indices, crypto "
+                 "and recent listings are not in them; type a full symbol to open it anyway."),
+    }), headers={"Cache-Control": SYMBOLS_CACHE})
 
 
 # --------------------------------------------------------------------------- #

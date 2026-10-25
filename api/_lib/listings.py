@@ -155,6 +155,77 @@ def symbols_for(market_code: str = "ID", limit: Optional[int] = None,
     return [r["symbol"] for r in rows]
 
 
+SEARCH_MARKETS = ("US", "ID")
+SEARCH_MAX = 20
+
+
+def search(query: str, market_code: Optional[str] = None, limit: int = 8) -> list[dict]:
+    """Listings matching what someone is typing into the command palette.
+
+    WHY THIS IS HERE AND NOT A FETCH. The palette asks on every pause in typing.
+    A call to the provider's lookup per keystroke would be slow, rate-limited
+    and one more place the app talks to Yahoo; the committed listing files
+    already hold every equity the provider listed for both markets, with names,
+    and they ship in the function bundle. So this reads them and nothing else —
+    and it does not touch `market_data`, which a test asserts.
+
+    ORDERED BY HOW THE TEXT MATCHES, THEN BY THE FILE'S OWN ORDER. Match classes,
+    best first: the symbol or its bare code exactly ("BBCA" finds both BBCA.JK
+    and the US BBCA), a symbol prefix, a word in the name starting with the text,
+    the text anywhere in the name. Within a class the file's order decides,
+    which is market capitalisation, largest first.
+
+    NEVER BY MARKET CAP ACROSS MARKETS. The US file is in dollars and the IDX
+    file in rupiah; comparing those numbers would rank every Indonesian name
+    above every American one by a factor of sixteen thousand. Across markets the
+    tie breaks on the order the caller asked for — its own market first.
+
+    Funds, indices, crypto and recent listings are not in the files. The palette
+    always offers "open as typed" for that reason; this is a finder, not a gate.
+    """
+    text = (query or "").strip()
+    if not text:
+        return []
+    upper = text.upper()
+    lower = text.lower()
+    limit = max(1, min(int(limit), SEARCH_MAX))
+    preferred = (market_code or "").strip().upper()
+    order = ([preferred] if preferred in SEARCH_MARKETS else []) + \
+        [m for m in SEARCH_MARKETS if m != preferred]
+
+    scored: list[tuple[int, int, int, dict]] = []
+    for market_rank, market in enumerate(order):
+        payload = load(market)
+        if payload is None:
+            continue
+        suffix = ".JK" if market == "ID" else ""
+        for index, row in enumerate(payload["rows"]):
+            symbol = str(row.get("symbol") or "")
+            if not symbol:
+                continue
+            base = symbol[: -len(suffix)] if suffix and symbol.endswith(suffix) else symbol
+            name = str(row.get("name") or "")
+            if upper in (symbol, base):
+                match = 0
+            elif symbol.startswith(upper):
+                match = 1
+            elif (" " + name.lower()).find(" " + lower) >= 0:
+                # At a word boundary, so "bank central" finds "PT Bank Central
+                # Asia" and "corp" does not find every "Incorporated".
+                match = 2
+            elif len(lower) >= 3 and lower in name.lower():
+                match = 3
+            else:
+                continue
+            scored.append((match, index, market_rank, {
+                "symbol": symbol, "name": name or symbol, "market": market,
+                "exchange": row.get("exchange"),
+                "match": ("symbol", "prefix", "name", "contains")[match],
+            }))
+    scored.sort(key=lambda t: (t[0], t[2] if t[0] == 0 else 0, t[1], t[2]))
+    return [row for *_, row in scored[:limit]]
+
+
 def names_for(market_code: str = "ID") -> dict[str, str]:
     """Symbol to company name, for a report that should not print bare codes."""
     payload = load(market_code)

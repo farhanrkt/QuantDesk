@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import {
@@ -21,8 +21,11 @@ import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { Textarea } from "@/components/ui/input";
 import { StateCard } from "@/components/ui/state";
+import { useSessionState } from "@/lib/session";
 
 const CUSTOM = "__custom__";
+// A stable empty list: the session store returns its initial value by identity.
+const NO_PICKS: string[] = [];
 const DEFAULT_CUSTOM = "AAPL, NVDA, TSLA, JPM, KO, BBCA.JK, BBRI.JK, TLKM.JK";
 
 /**
@@ -102,23 +105,25 @@ const EVIDENCE_DOT: Record<string, string> = {
  * reader is told that in the data rather than in a footnote.
  */
 export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void }) {
-  const { state: universeState, load } = useUniverses();
+  const { state: universeState } = useUniverses();
   const { state, scan } = useRanking();
   const { state: deepState, deepen, reset: resetDeepen } = useDeepen();
   const detail = useDetail();
   const simple = detail === "simple";
 
-  const [choice, setChoice] = useState<string>("dow30");
-  const [custom, setCustom] = useState(DEFAULT_CUSTOM);
-  const [customMarket, setCustomMarket] = useState<Market>("US");
-  const [sortKey, setSortKey] = useState<string>("composite");
-  const [ascending, setAscending] = useState(false);
-  const [filter, setFilter] = useState("");
-  const [minComposite, setMinComposite] = useState(0);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [picked, setPicked] = useState<string[]>([]);
+  // Everything the reader set up here is kept for the session — a six-second
+  // Nasdaq-100 scan, the sort, the filter and the shortlist used to vanish the
+  // moment they opened one of the rows to read it.
+  const [choice, setChoice] = useSessionState<string>("rank:choice", "dow30");
+  const [custom, setCustom] = useSessionState("rank:custom", DEFAULT_CUSTOM);
+  const [customMarket, setCustomMarket] = useSessionState<Market>("rank:customMarket", "US");
+  const [sortKey, setSortKey] = useSessionState<string>("rank:sortKey", "composite");
+  const [ascending, setAscending] = useSessionState("rank:ascending", false);
+  const [filter, setFilter] = useSessionState("rank:filter", "");
+  const [minComposite, setMinComposite] = useSessionState("rank:minComposite", 0);
+  const [expanded, setExpanded] = useSessionState<string | null>("rank:expanded", null);
+  const [picked, setPicked] = useSessionState<string[]>("rank:picked", NO_PICKS);
 
-  useEffect(() => { load(); }, [load]);
 
   const catalogue = universeState.status === "ready" ? universeState.data.universes : [];
   const maxDeepen = universeState.status === "ready" ? universeState.data.maxDeepen : 8;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Inter } from "next/font/google";
 import { AnalyticsRedacted } from "@/components/shell/AnalyticsRedacted";
+import { AppShell } from "@/components/shell/AppShell";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -9,9 +10,15 @@ const plex = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "QuantDesk - by @farhanrkt",
+  // A template, because every route now has a title of its own — "AAPL ·
+  // QuantDesk" in a tab strip of six stock pages is the difference between
+  // finding the one you want and opening each.
+  title: { default: "QuantDesk", template: "%s · QuantDesk" },
   description:
-    "Isolation Forest anomaly detection, automated technical analysis and DCF/DDM intrinsic value for US and Indonesian equities.",
+    "Four independent models read one listed company — order flow, price trend, intrinsic "
+    + "value and accounting quality — and say where they agree, where they disagree, and "
+    + "what none of them can tell you. US and Indonesian (IDX) listings. Not investment advice.",
+  authors: [{ name: "@farhanrkt" }],
 };
 
 /**
@@ -55,7 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           until this changed. `hidden` keeps the carrier out of the layout.
         */}
         <div hidden aria-hidden dangerouslySetInnerHTML={{ __html: DIRECTION }} />
-        {children}
+        <AppShell>{children}</AppShell>
         {/*
           Visitor counts, and NOTHING that needed the privacy posture relaxed.
           Three properties made this the only analytics worth adding here:

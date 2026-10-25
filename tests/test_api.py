@@ -456,11 +456,49 @@ def test_an_idx_holding_keeps_its_suffix_under_a_us_market(client, monkeypatch):
     assert seen["holdings"] == ["BBCA.JK", "MSFT"]
 
 
-def test_post_is_permitted_for_this_route_and_no_other(client):
-    """The CORS allowlist gained POST for one route. Every other endpoint must
+# THE ROUTES WHOSE INPUT IS PERSONAL, AND NO OTHERS. Each is a POST for the same
+# reason — a list somebody keeps is a fact about them and URLs are logged by every
+# hop — and each answers `no-store`. A third entry here should come with that
+# argument made again, not by analogy.
+PERSONAL_POST_ROUTES = {"/api/portfolio", "/api/rank/list"}
+
+
+def test_post_is_permitted_for_personal_input_and_nothing_else(client):
+    """POST exists for routes whose input is personal. Every other endpoint must
     still refuse it, so the relaxation stays as narrow as it was argued to be."""
-    for path in ("/api/confluence", "/api/rank", "/api/quality", "/api/technical-analysis"):
+    for path in ("/api/confluence", "/api/rank", "/api/quality", "/api/technical-analysis",
+                 "/api/symbols", "/api/peers"):
         assert client.post(path, json={}).status_code == 405, path
+    posts = {route.path for route in index.app.routes
+             if "POST" in getattr(route, "methods", set())}
+    assert posts == PERSONAL_POST_ROUTES
+
+
+def test_ranking_a_readers_own_list_is_never_cached(client, monkeypatch):
+    seen = {}
+
+    def fake_scan(symbols, market_code):
+        seen["symbols"], seen["market"] = symbols, market_code
+        return {"rows": [], "signals": [], "weights": {}, "correlation": {"available": False},
+                "requested": len(symbols), "fetched": 0, "ranked": 0, "missing": [],
+                "benchmark": None}
+    monkeypatch.setattr(index.ranking, "scan", fake_scan)
+    monkeypatch.setattr(index.ranking, "validation", lambda universe: {"available": False})
+    response = client.post("/api/rank/list", json={"tickers": ["bbca", "TLKM.JK"], "market": "ID"})
+    assert response.status_code == 200
+    assert "no-store" in response.headers["Cache-Control"]
+    assert seen == {"symbols": ["BBCA.JK", "TLKM.JK"], "market": "ID"}
+    assert response.json()["universe"]["name"] == "Your list"
+
+
+@pytest.mark.parametrize("body", [
+    {"tickers": []},
+    {"tickers": ["../etc/passwd"]},
+    {"tickers": ["AAPL"] * 251},
+    {"tickers": ["AAPL"], "market": "XX"},
+])
+def test_ranking_a_list_validates_like_the_query_did(client, body):
+    assert client.post("/api/rank/list", json=body).status_code in (400, 422)
 
 
 # --------------------------------------------------------------------------- #
@@ -587,6 +625,9 @@ def test_the_ranking_routes_are_rate_limited_more_tightly_than_the_default(clien
 
     default_limit, _window = RATE_LIMITS[None]
     assert RATE_LIMITS["/api/rank"][0] < default_limit
+    assert RATE_LIMITS["/api/rank/list"] == RATE_LIMITS["/api/rank"], (
+        "the same scan in a POST body costs the same and is capped the same"
+    )
     assert RATE_LIMITS["/api/rank/deepen"][0] < RATE_LIMITS["/api/rank"][0], (
         "deepening does not batch, so it must be capped harder than ranking"
     )

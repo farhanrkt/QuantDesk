@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { ArrowDown, Gauge, Lock, ShieldAlert, Telescope } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import { TONE_FIELD } from "@/components/ui/explain";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import type { Engine, ScanResponse, ScanRow } from "@/lib/types";
 import { cn, num } from "@/lib/utils";
 import { palette } from "@/lib/palette";
+import { useSessionState } from "@/lib/session";
 
 /**
  * A market scan that already ran, shown in the app rather than left in a file.
@@ -235,9 +236,9 @@ export function ScanPanel({ state, market, onSelect }: {
   market: string;
   onSelect: (ticker: string) => void;
 }) {
-  const [filter, setFilter] = useState<Filter>("directional");
-  const [sort, setSort] = useState<SortKey>("default");
-  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useSessionState<Filter>("scan:filter", "directional");
+  const [sort, setSort] = useSessionState<SortKey>("scan:sort", "default");
+  const [query, setQuery] = useSessionState("scan:query", "");
   const needle = query.trim().toLowerCase();
 
   const rows = useMemo(() => {

@@ -36,6 +36,11 @@ const config: Config = {
         h3: ["1.0625rem", { lineHeight: "1.35" }],      // 17px  subsection
         h2: ["1.375rem", { lineHeight: "1.3" }],        // 22px  section
         h1: ["1.75rem", { lineHeight: "1.2" }],         // 28px  the ticker
+        // The landing's one sentence, and nothing else. 29% above h1, so it
+        // reads as a different kind of text rather than a slightly larger
+        // heading; a stock page never uses it — the ticker stays the biggest
+        // thing there.
+        display: ["2.25rem", { lineHeight: "1.15" }],   // 36px  the landing headline
         figure: ["1.5rem", { lineHeight: "1.15" }],     // 24px  a headline number
       },
       // A measure cap for prose. 15px Inter at 68ch lands near 640px, which is

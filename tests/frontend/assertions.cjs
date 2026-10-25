@@ -293,4 +293,151 @@ t("an unknown path is /other, so a new route cannot leak by being forgotten", ()
   assert.equal(redactUrl("not a url"), "/other");
 });
 
-console.log(`  ${n} frontend assertions passed`);
+// ---- lib/url: what the address bar means ----
+const U = require("./lib/url.js");
+
+t("a stock link writes only what differs from the defaults", () => {
+  assert.equal(U.stockHref("aapl"), "/stock/AAPL");
+  assert.equal(U.stockHref("AAPL", "trend"), "/stock/AAPL", "trend is the default tab");
+  assert.equal(U.stockHref("BBCA.JK", "value"), "/stock/BBCA.JK?tab=value");
+  assert.equal(U.stockHref("AAPL", "flow", { mode: "mad", madK: 4 }), "/stock/AAPL?tab=flow&mode=mad&k=4");
+});
+t("symbols that are not path-safe survive the round trip", () => {
+  for (const sym of ["^GSPC", "EURUSD=X", "BRK-B", "BTC-USD", "BBCA.JK"]) {
+    const segment = U.stockHref(sym).slice("/stock/".length);
+    assert.equal(U.symbolFromSegment(segment), sym);
+  }
+});
+t("a path segment that is not a ticker is refused, never guessed at", () => {
+  assert.equal(U.symbolFromSegment("..%2F..%2Fetc"), null);
+  assert.equal(U.symbolFromSegment("%E0%A4%A"), null, "malformed encoding");
+  assert.equal(U.symbolFromSegment("A".repeat(21)), null);
+});
+t("a query is parsed defensively: unknown tabs and bad numbers fall back", () => {
+  const q = U.parseStockQuery("?tab=nonsense&mode=evil&k=NaN&q=0.9&t=-0.2&range=10y");
+  assert.equal(q.tab, U.DEFAULT_TAB);
+  assert.equal(q.run.mode, "threshold");
+  assert.equal(q.run.madK, 3);
+  assert.equal(q.run.contamination, 0.02, "0.9 is outside what the API accepts");
+  assert.equal(q.run.scoreThreshold, -0.2);
+  assert.equal(q.run.range, "10y");
+});
+t("parse then write is the identity on a written link", () => {
+  const href = U.stockHref("NVDA", "quality", { period: "5y", scoreThreshold: -0.2 });
+  const back = U.parseStockQuery(href.split("?")[1]);
+  assert.equal(U.stockHref("NVDA", back.tab, back.run), href);
+});
+t("a compare list keeps the reader's order, resolves, de-duplicates and caps at four", () => {
+  assert.deepEqual(U.parseSymbolList("msft, aapl msft,BBCA.JK"), ["MSFT", "AAPL", "BBCA.JK"]);
+  assert.deepEqual(U.parseSymbolList("bbca,tlkm", "ID"), ["BBCA.JK", "TLKM.JK"]);
+  assert.equal(U.parseSymbolList("A,B,C,D,E,F").length, 4);
+  assert.deepEqual(U.parseSymbolList("AAPL, ../x, <b>"), ["AAPL"]);
+  assert.equal(U.compareHref(["B", "A"]), "/compare?symbols=B,A");
+});
+
+// ---- lib/symbols: the browser's copy of api/_lib/symbols.py ----
+const S = require("./lib/symbols.js");
+
+t("an explicit suffix beats the market dropdown, as on the server", () => {
+  assert.equal(S.resolveSymbol("bbca", "ID"), "BBCA.JK");
+  assert.equal(S.resolveSymbol("BBCA.JK", "US"), "BBCA.JK");
+  assert.equal(S.resolveSymbol("BBCA.JK", "ID"), "BBCA.JK", "idempotent");
+  assert.equal(S.resolveSymbol(" aapl ", "US"), "AAPL");
+  assert.equal(S.marketOf("TLKM.JK"), "ID");
+  assert.equal(S.marketOf("BRK.B"), "US");
+  assert.equal(S.baseCode("BBCA.JK"), "BBCA");
+});
+
+// ---- lib/cache: what the browser keeps, and for how long ----
+const { createTtlCache } = require("./lib/cache.js");
+
+t("a cached value expires after its TTL and is never served stale", () => {
+  let clock = 0;
+  const c = createTtlCache({ ttlMs: 100, now: () => clock });
+  c.set("k", 1);
+  assert.equal(c.peek("k").value, 1);
+  clock = 101;
+  assert.equal(c.peek("k"), undefined);
+});
+t("the oldest entry is evicted past the cap", () => {
+  const c = createTtlCache({ max: 2, now: () => 0 });
+  c.set("a", 1); c.set("b", 2); c.set("c", 3);
+  assert.equal(c.peek("a"), undefined);
+  assert.equal(c.size(), 2);
+});
+const pending = [];
+pending.push((async () => {
+  let calls = 0;
+  const c = createTtlCache({ now: () => 0 });
+  const fetcher = () => new Promise((r) => { calls++; setTimeout(() => r("v"), 5); });
+  const [x, y] = await Promise.all([c.getOrFetch("k", fetcher), c.getOrFetch("k", fetcher)]);
+  t("two callers asking at once share one request", () => {
+    assert.equal(calls, 1);
+    assert.equal(x.value, "v"); assert.equal(y.value, "v");
+  });
+  let failures = 0;
+  const failing = () => { failures++; return Promise.reject(new Error("throttled")); };
+  await c.getOrFetch("bad", failing).catch(() => {});
+  await c.getOrFetch("bad", failing).catch(() => {});
+  t("a failure is never cached: the next caller asks again", () => {
+    assert.equal(failures, 2);
+    assert.equal(c.peek("bad"), undefined);
+  });
+})());
+
+// ---- lib/watchlist: browser-only, and defensive on read ----
+const W = require("./lib/watchlist.js");
+
+t("a corrupt or hand-edited watchlist loses the bad rows, never the good ones", () => {
+  assert.deepEqual(W.parseList(JSON.stringify({ v: 1, symbols: ["aapl", 7, "../x", "AAPL", "BBCA.JK"] })),
+                   ["AAPL", "BBCA.JK"]);
+  assert.deepEqual(W.parseList(JSON.stringify(["msft"])), ["MSFT"], "a bare array still reads");
+  assert.deepEqual(W.parseList("{not json"), []);
+  assert.deepEqual(W.parseList(null), []);
+});
+t("a full watchlist refuses an add rather than silently dropping something kept", () => {
+  const full = Array.from({ length: W.WATCHLIST_MAX }, (_, i) => `T${i}`);
+  assert.equal(W.toggle(full, "NEW"), full);
+  assert.deepEqual(W.toggle(["AAPL"], "aapl"), [], "toggling an existing symbol removes it");
+  assert.deepEqual(W.toggle(["AAPL"], "msft"), ["MSFT", "AAPL"]);
+});
+t("recent tickers are a trail: newest first, de-duplicated, capped", () => {
+  assert.deepEqual(W.pushRecent(["A", "B", "C"], "b"), ["B", "A", "C"]);
+  assert.equal(W.pushRecent(Array.from({ length: 20 }, (_, i) => `T${i}`), "X").length, W.RECENT_MAX);
+});
+
+// ---- lib/shortcuts: never while typing ----
+const K = require("./lib/shortcuts.js");
+
+t("shortcuts never fire in a text field, but the palette chord does", () => {
+  const input = { tagName: "INPUT", type: "text" };
+  assert.equal(K.matchShortcut({ key: "]" }, input), null);
+  assert.equal(K.matchShortcut({ key: "w" }, { tagName: "TEXTAREA" }), null);
+  assert.equal(K.matchShortcut({ key: "w" }, { isContentEditable: true }), null);
+  assert.equal(K.matchShortcut({ key: "k", metaKey: true }, input), "palette");
+  assert.equal(K.matchShortcut({ key: "]" }, { tagName: "INPUT", type: "checkbox" }), "nextTab");
+});
+t("a modified key is left to the browser, and composition is ignored", () => {
+  assert.equal(K.matchShortcut({ key: "[", metaKey: true }), null, "cmd-[ is the browser's back");
+  assert.equal(K.matchShortcut({ key: "w", ctrlKey: true }), null);
+  assert.equal(K.matchShortcut({ key: "/", isComposing: true }), null);
+  assert.equal(K.matchShortcut({ key: "?" }), "help");
+});
+
+// ---- lib/commands: the palette orders by how text matches, never by a company ----
+const C = require("./lib/commands.js");
+
+t("a label prefix outranks a word match outranks a keyword", () => {
+  const cmds = [
+    { id: "a", label: "Thesis journal", group: "Go to" },
+    { id: "b", label: "Markets: rank a universe", group: "Go to", keywords: "journalism" },
+    { id: "c", label: "Journal", group: "Go to" },
+  ];
+  assert.deepEqual(C.rankCommands(cmds, "jour").map((c) => c.id), ["c", "a", "b"]);
+  assert.deepEqual(C.rankCommands(cmds, "zzz"), []);
+  assert.deepEqual(C.rankCommands(cmds, "").map((c) => c.id), ["a", "b", "c"], "no query keeps order");
+});
+
+Promise.all(pending).then(() => {
+  console.log(`  ${n} frontend assertions passed`);
+});

@@ -7,7 +7,7 @@ import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
 import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
-import { palette } from "@/lib/palette";
+import { LENS_HUE, palette } from "@/lib/palette";
 
 const ACC = palette.acc;
 const DIST = palette.dist;
@@ -294,9 +294,7 @@ function readQuality(state: Engine<QualityResponse>): Reading {
  * were both teal, so a lens name and a conclusion rendered identically and
  * neither read as meaningful.
  */
-const LENS_HUE: Record<string, string> = {
-  Flow: palette.flow, Trend: palette.trend, Value: palette.value, Quality: palette.quality,
-};
+// The lens hues come from lib/palette.ts, shared with the tab bar.
 
 /** A vote is the SERVER's direction. This maps it to a tone and nothing else. */
 const voteTone = (r: Reading): string =>
@@ -365,13 +363,17 @@ function LensChips({ readings }: { readings: Reading[] }) {
  * one of them alone, and §15 measured how much more.
  */
 export function ConfluenceRail({
-  ticker, anomaly, technical, valuation, quality,
+  ticker, anomaly, technical, valuation, quality, subtitle, actions,
 }: {
   ticker: string;
   anomaly: Engine<AnomalyResponse>;
   technical: Engine<TechnicalResponse>;
   valuation: Engine<ValuationResponse>;
   quality: Engine<QualityResponse>;
+  /** Who the ticker is — the company header, drawn under the symbol. */
+  subtitle?: React.ReactNode;
+  /** Watch, compare, share, print: things to do WITH this page, beside its name. */
+  actions?: React.ReactNode;
 }) {
   const readings = [readAnomaly(anomaly), readTechnical(technical),
                     readValuation(valuation), readQuality(quality)];
@@ -390,7 +392,11 @@ export function ConfluenceRail({
           fact the reader brought with them and every number below is about it. */}
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-5 pb-4 pt-5">
         <div className="min-w-0">
-          <h1 className="font-mono tracking-tight">{ticker}</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="font-mono tracking-tight">{ticker}</h1>
+            {actions}
+          </div>
+          {subtitle}
           <p className="mt-1 text-meta text-ash">
             {pending > 0
               ? `${readings.length - pending} of ${readings.length} lenses have answered`

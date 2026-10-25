@@ -5,14 +5,15 @@ import { Button } from "@/components/ui/button";
 import { useDetail } from "@/components/ui/explain";
 import { Input, Select } from "@/components/ui/input";
 import type { RunOptions } from "@/lib/api";
+import { PRESETS } from "@/lib/url";
 
-const PRESETS = ["AAPL", "NVDA", "JPM", "BBCA.JK", "TLKM.JK", "BTC-USD"];
 
 /**
  * Controlled by the page rather than holding its own state, so that anything
- * else able to start a run — the screener's ticker buttons, a future deep
- * link — is reflected here instead of leaving the bar showing a stale symbol
- * beside results for a different one.
+ * else able to start a run — a link, the palette, a ranking row — is reflected
+ * here instead of leaving the bar showing a stale symbol beside results for a
+ * different one. On a stock page "run" means "go to that stock's page": the
+ * URL is the source of truth for what is loaded.
  *
  * THE TUNING CONTROLS COLLAPSE IN GUIDED MODE, AND ARE NAMED WHILE THEY DO IT.
  * Four expert controls used to sit above the fold — a detection algorithm, a
@@ -27,14 +28,13 @@ const PRESETS = ["AAPL", "NVDA", "JPM", "BBCA.JK", "TLKM.JK", "BTC-USD"];
  * as it always has.
  */
 export function TickerBar({
-  opts, onChange, onRun, busy, progress,
+  opts, onChange, onRun, busy, autoFocus,
 }: {
   opts: RunOptions;
   onChange: (o: RunOptions) => void;
   onRun: (o: RunOptions) => void;
   busy: boolean;
-  /** How many lenses have settled, so the wait says something while it lasts. */
-  progress?: { done: number; total: number };
+  autoFocus?: boolean;
 }) {
   const guided = useDetail() === "simple";
 
@@ -124,6 +124,9 @@ export function TickerBar({
             onChange={(e) => set("ticker", e.target.value)}
             placeholder="Ticker — AAPL, BBCA.JK, BTC-USD"
             aria-label="Ticker symbol"
+            autoFocus={autoFocus}
+            autoComplete="off"
+            spellCheck={false}
             className="pl-9"
           />
         </div>
@@ -132,10 +135,12 @@ export function TickerBar({
           <option value="US">US market</option>
           <option value="ID">IDX (.JK)</option>
         </Select>
-        <Button type="submit" disabled={busy || !opts.ticker.trim()}>
-          {busy
-            ? progress ? `Running ${progress.done}/${progress.total}` : "Running"
-            : "Run all lenses"}
+        {/* NO "n/4" COUNTER. A full run is one request, so the count went from
+            0 straight to 4 and read "Running 0/4" for the whole wait — a
+            progress bar that never moves. The run status under the bar says
+            how long it has been instead, which is true. */}
+        <Button type="submit" disabled={busy || !opts.ticker.trim()} aria-busy={busy || undefined}>
+          {busy ? "Running…" : "Run all lenses"}
         </Button>
       </div>
 
@@ -171,16 +176,12 @@ export function TickerBar({
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-meta text-faint">Try:</span>
         {PRESETS.map((preset) => (
-          <button key={preset} type="button"
+          <Button key={preset} variant="chip" size="xs"
                   onClick={() => { const next = { ...opts, ticker: preset,
                                      market: preset.endsWith(".JK") ? "ID" as const : "US" as const };
-                                   onChange(next); onRun(next); }}
-                  className="num inline-flex h-8 items-center rounded-lg border border-rule
-                             bg-sunken px-3 text-meta font-medium text-ash transition-colors
-                             hover:border-tech/50 hover:bg-tech/10 hover:text-tech
-                             focus:outline-none focus-visible:ring-2 focus-visible:ring-tech">
+                                   onChange(next); onRun(next); }}>
             {preset}
-          </button>
+          </Button>
         ))}
       </div>
     </form>

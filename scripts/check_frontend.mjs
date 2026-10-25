@@ -53,6 +53,15 @@ const SOURCES = [
   // What the analytics beacon is allowed to learn about the page. A privacy
   // property, so it is pinned by assertion rather than by reading the source.
   "lib/redact.ts",
+  // The routing and workspace logic that has no server half: what a URL
+  // means, how a symbol resolves before navigation, what the browser caches,
+  // the watchlist store, which keys are shortcuts, how the palette orders.
+  "lib/url.ts",
+  "lib/symbols.ts",
+  "lib/cache.ts",
+  "lib/watchlist.ts",
+  "lib/shortcuts.ts",
+  "lib/commands.ts",
 ];
 
 // Real packages the compiled output requires at load time.
@@ -150,6 +159,31 @@ for (const [lens, family] of Object.entries(pyFamilies)) {
     process.exit(1);
   }
 }
+// THE BROWSER RESOLVES SYMBOLS THE WAY THE SERVER DOES. lib/symbols.ts exists
+// so the URL names the symbol the engines will actually fetch; if its pattern
+// or suffix map drifted from the Python ones, /stock/BBCA could open a page
+// for one security while the server analysed another — the BBCA bug that
+// symbols.py was written to end, back through the address bar.
+const tsSymbols = readFileSync(join(ROOT, "lib/symbols.ts"), "utf8");
+const pyIndex = readFileSync(join(ROOT, "api/index.py"), "utf8");
+const pySymbols = readFileSync(join(ROOT, "api/_lib/symbols.py"), "utf8");
+const pyPattern = pyIndex.match(/TICKER_PATTERN\s*=\s*r"([^"]+)"/)?.[1];
+const tsPattern = tsSymbols.match(/TICKER_PATTERN\s*=\s*\/(.+)\/;/)?.[1];
+if (!pyPattern || !tsPattern || pyPattern !== tsPattern) {
+  console.error(`lib/symbols.ts TICKER_PATTERN (${tsPattern}) differs from api/index.py `
+                + `(${pyPattern}). A URL could name a symbol the API refuses, or the reverse.`);
+  process.exit(1);
+}
+const pySuffix = Object.fromEntries([...pySymbols.matchAll(/"(US|ID)":\s*"([^"]*)"/g)]
+  .map((m) => [m[1], m[2]]));
+const tsSuffix = Object.fromEntries([...(tsSymbols.match(/MARKET_SUFFIX[^=]*=\s*\{([^}]*)\}/)?.[1] ?? "")
+  .matchAll(/(US|ID):\s*"([^"]*)"/g)].map((m) => [m[1], m[2]]));
+if (JSON.stringify(pySuffix) !== JSON.stringify(tsSuffix) || !("ID" in pySuffix)) {
+  console.error(`lib/symbols.ts MARKET_SUFFIX ${JSON.stringify(tsSuffix)} differs from `
+                + `api/_lib/symbols.py ${JSON.stringify(pySuffix)}.`);
+  process.exit(1);
+}
+
 if (Object.keys(railFamilies).length < 4) {
   console.error("Could not read all four lens families out of ConfluenceRail.tsx; "
                 + "the drift check between it and explain.py is not running.");

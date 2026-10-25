@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   CartesianGrid, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart,
   Tooltip, XAxis, YAxis,
@@ -12,6 +12,7 @@ import type { Engine, ExposureScanResponse, Market, UniversesResponse } from "@/
 import { num, pct } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { StateCard } from "@/components/ui/state";
+import { useSessionState } from "@/lib/session";
 
 /**
  * What a whole universe moves with, as a cross-section.
@@ -221,7 +222,7 @@ export function ExposurePanel({
   highlight: string | null;
 }) {
   const catalogue = universeState.status === "ready" ? universeState.data.universes : [];
-  const [choice, setChoice] = useState<string>("idx30");
+  const [choice, setChoice] = useSessionState<string>("exposure:choice", "idx30");
 
   return (
     <div className="space-y-4 animate-rise">
