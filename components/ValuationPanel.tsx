@@ -14,12 +14,13 @@ import type { ValuationOptions } from "@/lib/api";
 import type { ExplainMap, ValuationResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
+import { alpha, palette } from "@/lib/palette";
 
-const DCF = "#E8B44C";
-const DDM = "#A78BFA";
-const MARKET = "#5B8DEF";
-const UP = "#35C4A8";
-const DOWN = "#FF6B6B";
+const DCF = palette.dcf;
+const DDM = palette.ddm;
+const MARKET = palette.tech;
+const UP = palette.acc;
+const DOWN = palette.dist;
 
 export function ValuationPanel({
   data, onApply, busy, csvUrl,
@@ -79,9 +80,9 @@ export function ValuationPanel({
         <div key={i}
              className="rounded border px-4 py-3 text-meta leading-relaxed"
              style={{
-               borderColor: n.tone === "warn" ? "#F2C14E66" : `${accent}55`,
-               background: n.tone === "warn" ? "#F2C14E14" : `${accent}14`,
-               color: n.tone === "warn" ? "#F2C14E" : "#E7EEF5",
+               borderColor: n.tone === "warn" ? alpha(palette.warn, 0.4) : `${accent}55`,
+               background: n.tone === "warn" ? alpha(palette.warn, 0.08) : `${accent}14`,
+               color: n.tone === "warn" ? palette.warn : palette.chalk,
              }}>
           {n.text}
         </div>
@@ -201,7 +202,7 @@ export function ValuationPanel({
               <YAxis tickLine={false} axisLine={false} width={48} />
               <Tooltip
                 cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                contentStyle={{ background: "#080C10", border: "1px solid #1E2A36",
+                contentStyle={{ background: palette.ink, border: `1px solid ${palette.rule}`,
                                 borderRadius: 4, fontSize: 12 }}
                 labelFormatter={(v) => `Fair value ${num(Number(v))}`}
                 formatter={(v: number) => [`${v} iterations`, ""]} />

@@ -1,12 +1,14 @@
 "use client";
 
-import { AlertTriangle, Users } from "lucide-react";
+import { Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/input";
 import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
 import type { Engine, PeersResponse } from "@/lib/types";
 import { cn, ordinal } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { StateCard } from "@/components/ui/state";
 
 /**
  * Where this name sits among its own index.
@@ -33,7 +35,7 @@ function Bar({ percentile, tone }: { percentile: number; tone: string }) {
     <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-rule">
       <div className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500"
            style={{ width: `${Math.max(2, Math.min(100, percentile))}%`,
-                    background: TONE_HEX[tone] ?? "#7A8CA0" }} />
+                    background: TONE_HEX[tone] ?? palette.ash }} />
       {/* The midpoint. Without it a bar is read as "out of 100" rather than as a
           position in a distribution, which is the whole distinction. */}
       <div aria-hidden className="absolute inset-y-0 left-1/2 w-px bg-ink/70" />
@@ -88,15 +90,9 @@ export function PeersPanel({
 
   if (state.status === "error") {
     return (
-      <Card className="border-warn/40 bg-warn/5">
-        <CardBody className="flex gap-3 py-4">
-          <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
-          <div>
-            <div className="eyebrow mb-1 text-warn">No peer group</div>
-            <p className="text-base leading-relaxed text-body">{state.failure.message}</p>
-          </div>
-        </CardBody>
-      </Card>
+      <StateCard kind="error" title="No peer group could be built">
+        {state.failure.message}
+      </StateCard>
     );
   }
 
@@ -151,7 +147,7 @@ export function PeersPanel({
         </div>
 
         {explain.overlap && (
-          <p className="border-t border-rule pt-3 text-meta leading-relaxed text-warn/90">
+          <p className="border-t border-rule pt-3 text-meta leading-relaxed text-warn">
             {explain.overlap}
           </p>
         )}

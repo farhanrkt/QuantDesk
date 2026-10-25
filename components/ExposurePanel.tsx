@@ -10,6 +10,8 @@ import { Explain } from "@/components/ui/explain";
 import { Field, SelectField } from "@/components/ui/controls";
 import type { Engine, ExposureScanResponse, Market, UniversesResponse } from "@/lib/types";
 import { num, pct } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { StateCard } from "@/components/ui/state";
 
 /**
  * What a whole universe moves with, as a cross-section.
@@ -37,9 +39,9 @@ import { num, pct } from "@/lib/utils";
  * Every point is the same hue; only position carries meaning.
  */
 
-const EXPOSURE = "#D4763A";
-const GRID = "#1E2A36";
-const AXIS = "#63748A";
+const EXPOSURE = palette.drivers;
+const GRID = palette.grid;
+const AXIS = palette.axis;
 
 interface Point {
   x: number; y: number; ticker: string; material: boolean;
@@ -162,7 +164,7 @@ function FactorChart({ factor, rows, materialAt, highlight, yMax }: {
                           fillOpacity={payload.material ? 0.9 : 0.4} />
                   {payload.material && (
                     <text x={cx} y={cy - 9 - payload.level * 11} textAnchor="middle"
-                          fill="#C3CFDC" fontSize={10} fontFamily="monospace">
+                          fill={palette.body} fontSize={10} fontFamily="monospace">
                       {payload.ticker}
                     </text>
                   )}
@@ -258,11 +260,7 @@ export function ExposurePanel({
       </Card>
 
       {state.status === "error" && (
-        <Card className="border-dist/40 bg-dist/5">
-          <CardBody>
-            <p className="prose-col text-meta leading-relaxed">{state.failure.message}</p>
-          </CardBody>
-        </Card>
+        <StateCard kind="error" title="The scan could not run">{state.failure.message}</StateCard>
       )}
 
       {state.status === "ready" && !state.data.usable && (

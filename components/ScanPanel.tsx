@@ -7,6 +7,7 @@ import { TONE_FIELD } from "@/components/ui/explain";
 import { Button } from "@/components/ui/button";
 import type { Engine, ScanResponse, ScanRow } from "@/lib/types";
 import { cn, num } from "@/lib/utils";
+import { palette } from "@/lib/palette";
 
 /**
  * A market scan that already ran, shown in the app rather than left in a file.
@@ -347,7 +348,7 @@ export function ScanPanel({ state, market, onSelect }: {
         </Card>
       )}
 
-      <Card accent="#7C8FA6">
+      <Card accent={palette.private}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Gauge aria-hidden className="h-4 w-4" />
@@ -402,7 +403,7 @@ export function ScanPanel({ state, market, onSelect }: {
           first thing a reader does here, not the last. The two result cards
           below collapse while a search is running, so the matches appear
           directly under the box rather than four screens beneath it. */}
-      <Card accent="#7C8FA6">
+      <Card accent={palette.private}>
         <CardBody className="py-4">
           <label className="block">
               <span className="eyebrow mb-1 block">
@@ -452,7 +453,7 @@ export function ScanPanel({ state, market, onSelect }: {
           wondering whether the screen ran. The base rates say which ingredient
           was the binding one. */}
       {!needle && specialists && specialists.selected === 0 && (
-        <Card accent="#C9A227">
+        <Card accent={palette.quality}>
           <CardHeader>
             <CardTitle>Profitable specialists nobody is covering</CardTitle>
             <span className="font-mono text-micro text-ash">none this scan</span>
@@ -475,7 +476,7 @@ export function ScanPanel({ state, market, onSelect }: {
       )}
 
       {!needle && specialists && specialists.selected > 0 && (
-        <Card accent="#C9A227">
+        <Card accent={palette.quality}>
           <CardHeader>
             <CardTitle>Profitable specialists nobody is covering</CardTitle>
             <span className="font-mono text-micro text-ash">
@@ -599,7 +600,7 @@ export function ScanPanel({ state, market, onSelect }: {
       {/* The screen for what the blend cannot reach, above the table because it
           is, by construction, not near the top of it. */}
       {!needle && neglected && neglected.selected > 0 && (
-        <Card accent="#6FD0C0">
+        <Card accent={palette.portfolio}>
           <CardHeader>
             <CardTitle>Cheap, solid and uncovered</CardTitle>
             <span className="font-mono text-micro text-ash">

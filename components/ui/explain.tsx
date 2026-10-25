@@ -6,6 +6,7 @@ import {
 import { ArrowDown, ArrowUp, Info, X } from "lucide-react";
 import type { Explanation, ExplainMap } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { palette } from "@/lib/palette";
 
 /**
  * The plain-language layer, rendered.
@@ -35,11 +36,11 @@ export const TONE_TEXT: Record<string, string> = {
 };
 
 export const TONE_HEX: Record<string, string> = {
-  good: "#35C4A8",
-  bad: "#FF6B6B",
-  warn: "#F2C14E",
-  neutral: "#8496A9",
-  none: "#8496A9",
+  good: palette.acc,
+  bad: palette.dist,
+  warn: palette.warn,
+  neutral: palette.ash,
+  none: palette.ash,
 };
 
 /** Surfaces for a tone, used by chips and callouts. Never picked from a number. */

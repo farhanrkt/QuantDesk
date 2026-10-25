@@ -7,14 +7,15 @@ import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
 import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
+import { palette } from "@/lib/palette";
 
-const ACC = "#35C4A8";
-const DIST = "#FF6B6B";
-const TECH = "#5B8DEF";
-const DCF = "#E8B44C";
-const DDM = "#A78BFA";
-const QUAL = "#E8B44C";
-const ASH = "#7A8CA0";
+const ACC = palette.acc;
+const DIST = palette.dist;
+const TECH = palette.tech;
+const DCF = palette.dcf;
+const DDM = palette.ddm;
+const QUAL = palette.value;
+const ASH = palette.ash;
 
 /**
  * WHICH BODY OF DATA A LENS READS. This is the field the agreement count is
@@ -294,7 +295,7 @@ function readQuality(state: Engine<QualityResponse>): Reading {
  * neither read as meaningful.
  */
 const LENS_HUE: Record<string, string> = {
-  Flow: "#2FBFA4", Trend: "#6B9BFF", Value: "#E8B44C", Quality: "#C9A227",
+  Flow: palette.flow, Trend: palette.trend, Value: palette.value, Quality: palette.quality,
 };
 
 /** A vote is the SERVER's direction. This maps it to a tone and nothing else. */
@@ -325,7 +326,7 @@ function LensChips({ readings }: { readings: Reading[] }) {
     <ul className="grid grid-cols-2 gap-2 lg:grid-cols-4">
       {readings.map((r) => {
         const tone = voteTone(r);
-        const hue = LENS_HUE[r.lens] ?? "#8496A9";
+        const hue = LENS_HUE[r.lens] ?? palette.ash;
         return (
           <li key={r.lens}
               className="flex items-start gap-2.5 rounded-lg border border-rule bg-sunken px-3 py-2.5"
@@ -445,7 +446,7 @@ export function ConfluenceRail({
                          "sm:grid-cols-2 sm:divide-x lg:grid lg:grid-cols-4 lg:divide-y-0",
                          showDetail ? "grid" : "hidden lg:grid")}>
         {readings.map((r) => {
-          const hue = LENS_HUE[r.lens] ?? "#8496A9";
+          const hue = LENS_HUE[r.lens] ?? palette.ash;
           const tone = voteTone(r);
           return (
             <div key={r.lens} className="px-5 py-4">
@@ -461,7 +462,7 @@ export function ConfluenceRail({
               <p className="mb-2.5 text-meta text-ash">{r.question}</p>
               <p className={cn("text-h3 font-semibold leading-tight",
                                r.pending && "animate-pulseline")}
-                 style={{ color: TONE_HEX[tone] ?? "#8496A9" }}>
+                 style={{ color: TONE_HEX[tone] ?? palette.ash }}>
                 {r.verdict}
               </p>
               <p className="mt-2 text-meta leading-relaxed text-body">{r.detail}</p>

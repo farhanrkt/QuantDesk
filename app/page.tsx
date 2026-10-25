@@ -1,6 +1,5 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { AnomalyPanel } from "@/components/AnomalyPanel";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
@@ -26,13 +25,14 @@ import { Card, CardBody } from "@/components/ui/card";
 import { ApplyButton } from "@/components/ui/controls";
 import { DetailProvider, DetailToggle, useDetailLevel } from "@/components/ui/explain";
 import { HorizonProvider, useHoldingHorizon } from "@/components/ui/horizon";
-import { PanelSkeleton } from "@/components/ui/skeleton";
+import { StateCard } from "@/components/ui/state";
 import { TabPanel, Tabs } from "@/components/ui/tabs";
 import {
   useEngines, useEventStudy, useExposureScan, usePeers, usePortfolio,
   useScan, useUniverses, useVerdict, type RunOptions,
 } from "@/lib/api";
 import type { Engine, EngineFailure } from "@/lib/types";
+import { palette } from "@/lib/palette";
 
 const INITIAL: RunOptions = {
   // `range` drives the technical lens. 5y is the shortest window where
@@ -47,24 +47,24 @@ const INITIAL: RunOptions = {
 // `ConfluenceRail.LENS_HUE`, so a chip in the rail and the tab that owns it are
 // the same colour.
 const TABS = [
-  { id: "flow", label: "Who is trading it", accent: "#2FBFA4" },
-  { id: "trend", label: "What the price did", accent: "#6B9BFF" },
-  { id: "value", label: "What it is worth", accent: "#E8B44C" },
-  { id: "quality", label: "Are the numbers real", accent: "#C9A227" },
+  { id: "flow", label: "Who is trading it", accent: palette.flow },
+  { id: "trend", label: "What the price did", accent: palette.trend },
+  { id: "value", label: "What it is worth", accent: palette.value },
+  { id: "quality", label: "Are the numbers real", accent: palette.quality },
   // The fourth question this app can answer — how does it sit against what I
   // already own — and the only one that needs an input other than a ticker.
-  { id: "portfolio", label: "Portfolio fit", accent: "#6FD0C0" },
+  { id: "portfolio", label: "Portfolio fit", accent: palette.portfolio },
   // The cross-sectional half of the same question. Portfolio fit asks what YOUR
   // holdings share; this asks what a whole index moves with, and needs no input
   // beyond picking a list. Its own tab rather than a section inside Portfolio
   // fit because it answers without being given anything, and burying a scan
   // behind a form nobody fills in is how the first version of this went unread.
-  { id: "exposure", label: "What drives it", accent: "#D4763A" },
+  { id: "exposure", label: "What drives it", accent: palette.drivers },
   // Last, because it is the only tab that asks the reader for something rather
   // than telling them something, and it is meant to be reached after the rest
   // has been read.
-  { id: "thesis", label: "Thesis", accent: "#A78BFA" },
-  { id: "screen", label: "Scan & rank", accent: "#A78BFA" },
+  { id: "thesis", label: "Thesis", accent: palette.thesis },
+  { id: "screen", label: "Scan & rank", accent: palette.thesis },
   // THE PRIVATE TIER, AND LAST FOR A REASON THAT IS NOT MODESTY. This is the
   // one tab that returns a verdict rather than a description, and the whole app
   // is arranged so a reader meets the evidence before anything compresses it.
@@ -72,7 +72,7 @@ const TABS = [
   // accent is deliberately outside the four lens hues: it is not a lens, it is
   // an aggregate OF the lenses, and colouring it like one would imply it reads
   // data of its own.
-  { id: "verdict", label: "Score it", accent: "#7C8FA6" },
+  { id: "verdict", label: "Score it", accent: palette.private },
 ];
 
 /**
@@ -126,33 +126,30 @@ function Panel<T>({
   /** Rendered inside the error card when the failure is a fixable data gap. */
   rescue?: (failure: EngineFailure) => React.ReactNode;
 }) {
-  if (state.status === "loading") return <Card><PanelSkeleton /></Card>;
+  if (state.status === "loading") return <StateCard kind="loading" />;
   if (state.status === "error") {
     const { failure } = state;
     return (
-      <Card tone="bad" className="bg-dist/5">
-        <div className="flex gap-3.5 p-5">
-          <AlertTriangle aria-hidden className="mt-0.5 h-5 w-5 shrink-0 text-dist" />
-          <div className="min-w-0 flex-1">
-            <h3 className="mb-1.5 text-lead text-dist">This engine could not run</h3>
-            <p className="prose-col text-base leading-relaxed text-body">{failure.message}</p>
-            {/* A data gap the user can close is a different problem from a
-                business the model cannot value. Only the former gets a form —
-                and the form has to be here, because the panel that normally
-                holds it never rendered. */}
-            {failure.manualRequired && (
-              <>
-                <p className="prose-col mt-2.5 text-meta leading-relaxed text-warn">
-                  Yahoo is missing{" "}
-                  {failure.missing?.length ? failure.missing.join(", ") : "a required figure"} for
-                  this listing. Enter it below to value the company anyway.
-                </p>
-                {rescue?.(failure)}
-              </>
-            )}
+      <StateCard
+        kind="error"
+        title="This engine could not run"
+        action={failure.manualRequired ? (
+          // A data gap the user can close is a different problem from a
+          // business the model cannot value. Only the former gets a form —
+          // and the form has to be here, because the panel that normally
+          // holds it never rendered.
+          <div className="space-y-3">
+            <p className="prose-col text-meta leading-relaxed text-warn">
+              Yahoo is missing{" "}
+              {failure.missing?.length ? failure.missing.join(", ") : "a required figure"} for
+              this listing. Enter it below to value the company anyway.
+            </p>
+            {rescue?.(failure)}
           </div>
-        </div>
-      </Card>
+        ) : undefined}
+      >
+        {failure.message}
+      </StateCard>
     );
   }
   if (state.status === "ready") return <>{children(state.data)}</>;

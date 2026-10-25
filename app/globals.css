@@ -28,18 +28,18 @@
   h2 { @apply text-h2 font-semibold tracking-tight text-chalk; }
   h3 { @apply text-h3 font-semibold text-chalk; }
 
-  ::selection { background: rgba(53,196,168,0.28); color: #E7EEF5; }
+  ::selection { background: rgba(53,196,168,0.28); color: theme(colors.chalk); }
   :focus-visible { @apply outline-none ring-2 ring-tech/70 ring-offset-2 ring-offset-ink; }
 
   /* Browser surfaces belong to the design system too. */
-  html { caret-color: #6B9BFF; scrollbar-color: #2A3948 #080C10; scrollbar-width: thin; }
+  html { caret-color: theme(colors.tech); scrollbar-color: theme(colors.ruleStrong) theme(colors.ink); scrollbar-width: thin; }
   ::-webkit-scrollbar { width: 11px; height: 11px; }
-  ::-webkit-scrollbar-track { background: #080C10; }
+  ::-webkit-scrollbar-track { background: theme(colors.ink); }
   ::-webkit-scrollbar-thumb {
-    background: #2A3948; border-radius: 99px; border: 3px solid #080C10;
+    background: theme(colors.ruleStrong); border-radius: 99px; border: 3px solid theme(colors.ink);
   }
-  ::-webkit-scrollbar-thumb:hover { background: #3A4C5E; }
-  ::-webkit-scrollbar-corner { background: #080C10; }
+  ::-webkit-scrollbar-thumb:hover { background: theme(colors.ruleHover); }
+  ::-webkit-scrollbar-corner { background: theme(colors.ink); }
   a { text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
 }
 
@@ -75,5 +75,5 @@
 }
 
 /* Recharts overrides — the library's defaults are light-theme. */
-.recharts-cartesian-grid line { stroke: #1E2A36; }
-.recharts-text { fill: #8496A9; font-size: 11px; }
+.recharts-cartesian-grid line { stroke: theme(colors.grid); }
+.recharts-text { fill: theme(colors.ash); font-size: 11px; }

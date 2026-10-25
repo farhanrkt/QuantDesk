@@ -3,15 +3,14 @@
 import { AlertTriangle, ArrowRight, Ban, Target } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
 import {
-  Explain, ExplainedRow, ExplainedStat, TONE_HEX, useDetail,
+  Explain, ExplainedRow, ExplainedStat, useDetail,
 } from "@/components/ui/explain";
 import type { ExplainMap, HorizonBlock, PivotSet } from "@/lib/types";
 import { cn, num, pct, signedPct } from "@/lib/utils";
+import { palette } from "@/lib/palette";
 
-const UP = "#35C4A8";
-const DOWN = "#FF6B6B";
-const WARN = "#F2C14E";
-const ASH = "#7A8CA0";
+const UP = palette.acc;
+const WARN = palette.warn;
 
 const EVIDENCE_BADGE: Record<string, { text: string; colour: string }> = {
   strong: { text: "Well evidenced", colour: UP },
@@ -60,8 +59,9 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
   const levels = data.levels!;
   const story = data.plainEnglish;
   const evidence = setup.evidence ? EVIDENCE_BADGE[setup.evidence] : null;
-  const accent = setup.direction === "long" ? UP
-    : setup.direction === "short" ? DOWN : ASH;
+  // Identity, not direction. A setup to the short side is not bad news, and
+  // painting it red put a judgement on a direction the panel only describes.
+  const accent = palette.trend;
   const money = (v: number | null | undefined) =>
     v == null ? "—" : `${currency === "USD" ? "$" : currency === "IDR" ? "Rp" : ""}${num(v)}`;
 
@@ -89,7 +89,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                className={cn(
                  "leading-relaxed",
                  i === story.paragraphs.length - 1
-                   ? "rounded border border-warn/30 bg-warn/5 px-3 py-2 text-meta text-warn/90"
+                   ? "rounded border border-warn/30 bg-warn/5 px-3 py-2 text-meta text-warn"
                    : "text-base text-body",
                )}>
               {paragraph}
@@ -100,7 +100,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
 
       {/* ---------------- the plan ---------------- */}
       {plan.usable ? (
-        <Card accent={TONE_HEX[ex.riskReward?.tone ?? "neutral"]}>
+        <Card tone={ex.riskReward?.tone}>
           <CardHeader>
             <CardTitle>Where the levels would sit</CardTitle>
             <span className="font-mono text-micro text-ash">
@@ -444,7 +444,7 @@ function PivotTable({
                 </td>
                 <td className={cn("num py-1 text-right",
                                   label === "Pivot" ? "font-semibold text-chalk"
-                                    : label.startsWith("R") ? "text-dist/80" : "text-acc/80")}>
+                                    : label.startsWith("R") ? "text-dist" : "text-acc")}>
                   {money(value)}
                 </td>
                 <td className="num py-1 text-right text-ash">

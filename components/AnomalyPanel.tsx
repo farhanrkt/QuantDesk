@@ -11,11 +11,15 @@ import { DownloadButton } from "@/components/ui/controls";
 import type { AnomalyPoint, AnomalyResponse, ExplainMap } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn, num, pct } from "@/lib/utils";
+import { palette } from "@/lib/palette";
 
-const ACC = "#35C4A8";
-const DIST = "#FF6B6B";
-const NEU = "#7A8CA0";
+const ACC = palette.acc;
+const DIST = palette.dist;
+const NEU = palette.ash;
 
+/** The flow label is the server's (whale.py); a card wash restates it as a tone. */
+const flowTone = (flow?: string | null) =>
+  flow === "Accumulation" ? "good" : flow === "Distribution" ? "bad" : undefined;
 const flowColor = (flow?: string | null) =>
   flow === "Accumulation" ? ACC : flow === "Distribution" ? DIST : NEU;
 
@@ -106,7 +110,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
         <ExplainedStat explain={ex.amihud} sub="cost of putting size through it" />
       </div>
 
-      <Card accent={biasColor}>
+      <Card tone={flowTone(stats.recentFlowBias)}>
         <CardHeader>
           <CardTitle>Price with detected anomalies</CardTitle>
           <div className="flex flex-wrap items-center gap-3 text-micro text-ash">
@@ -138,7 +142,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
               <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={48} />
               <YAxis domain={["auto", "auto"]} tickLine={false} axisLine={false} width={56} />
               <Tooltip content={<AnomalyTooltip />} />
-              <Line type="monotone" dataKey="close" stroke="#5B8DEF" strokeWidth={1.4}
+              <Line type="monotone" dataKey="close" stroke={palette.tech} strokeWidth={1.4}
                     dot={false} isAnimationActive={false} />
               <Scatter dataKey="acc" fill={ACC} shape="triangle" isAnimationActive={false} />
               <Scatter dataKey="dist" fill={DIST} shape="triangle" isAnimationActive={false} />
@@ -177,8 +181,8 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
       )}
 
       {accumulation && accumulation.episodes.length > 0 && (
-        <Card accent={accumulation.current
-          ? flowColor(accumulation.current.direction) : undefined}>
+        <Card tone={accumulation.current
+          ? flowTone(accumulation.current.direction) : undefined}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               Slow, patient buying or selling
@@ -307,7 +311,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
 
       {simple && anomalies.length > 8 && (
         <p className="text-meta text-ash">
-          Showing the 8 strongest of {anomalies.length} flagged days. Switch to Detailed for the
+          Showing the 8 strongest of {anomalies.length} flagged days. Switch to Full for the
           full log and the model settings behind it.
         </p>
       )}

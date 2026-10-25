@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowRight, ChevronRight, EyeOff, Scale } from "lucide-r
 import type { AgreementMeasurement, Synthesis } from "@/lib/types";
 import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
 import { cn, pct, signed } from "@/lib/utils";
+import { palette } from "@/lib/palette";
 
 /**
  * What the four lenses add up to, in sentences.
@@ -71,7 +72,7 @@ function Block({
   const head = (
     <>
       <Icon aria-hidden className="h-4 w-4 shrink-0"
-            style={{ color: tone ? TONE_HEX[tone] : "#8496A9" }} />
+            style={{ color: tone ? TONE_HEX[tone] : palette.ash }} />
       <span className={cn("text-meta font-semibold uppercase tracking-wider",
                           weight === "quiet" ? "text-ash" : "text-chalk")}>
         {title}

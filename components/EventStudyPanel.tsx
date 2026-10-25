@@ -1,14 +1,15 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Explainer } from "@/components/ui/card";
 import { ApplyButton } from "@/components/ui/controls";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import type { CarSummary, EventStudyResponse, Engine } from "@/lib/types";
 import { cn, num, pct } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { StateCard } from "@/components/ui/state";
 
-const UP = "#35C4A8";
-const DOWN = "#FF6B6B";
+const UP = palette.acc;
+const DOWN = palette.dist;
 
 /** Conventional two-sided significance bands, labelled rather than starred. */
 function significance(p: number | null): { label: string; className: string } {
@@ -102,15 +103,7 @@ export function EventStudyPanel({
 
   if (state.status === "error") {
     return (
-      <Card className="border-dist/40 bg-dist/5">
-        <div className="flex gap-3 p-5">
-          <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
-          <div>
-            <div className="eyebrow mb-1 text-dist">The study could not run</div>
-            <p className="text-base leading-relaxed text-body">{state.failure.message}</p>
-          </div>
-        </div>
-      </Card>
+      <StateCard kind="error" title="The study could not run">{state.failure.message}</StateCard>
     );
   }
 
@@ -127,13 +120,12 @@ export function EventStudyPanel({
     );
   }
 
-  const headline = study.horizons["20"];
   const anySignificant = Object.values(study.horizons)
     .some((h) => h && h.pValue !== null && h.pValue < 0.05);
 
   return (
     <div className="space-y-4">
-      <Card accent={anySignificant ? (headline && headline.meanCar >= 0 ? UP : DOWN) : undefined}>
+      <Card accent={palette.flow}>
         <CardHeader>
           <CardTitle>Abnormal returns after each anomaly</CardTitle>
           <span className="font-mono text-micro text-ash">

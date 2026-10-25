@@ -3,6 +3,7 @@
 import { ExternalLink } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
 import type { Engine, NewsResponse } from "@/lib/types";
+import { StateCard } from "@/components/ui/state";
 
 /**
  * Contextual catalyst — the headline panel from the Whale Tracker app.
@@ -13,7 +14,26 @@ import type { Engine, NewsResponse } from "@/lib/types";
  * app reads this content back as instructions.
  */
 export function NewsPanel({ state }: { state: Engine<NewsResponse> }) {
-  if (state.status !== "ready" || state.data.items.length === 0) return null;
+  // A FAILED FEED AND A QUIET COMPANY USED TO LOOK IDENTICAL: both rendered
+  // nothing. They are different facts, and only one of them is about the
+  // company, so each now says which it is.
+  if (state.status === "idle" || state.status === "loading") return null;
+  if (state.status === "error") {
+    return (
+      <StateCard kind="error" title="Headlines did not load">
+        {state.failure.message} Nothing else on this page reads the news, so every other
+        figure is unaffected.
+      </StateCard>
+    );
+  }
+  if (state.data.items.length === 0) {
+    return (
+      <StateCard kind="empty" title="No recent headlines">
+        The feed returned nothing for {state.data.ticker}. That is common for smaller listings
+        and says nothing about the company either way.
+      </StateCard>
+    );
+  }
 
   return (
     <Card>

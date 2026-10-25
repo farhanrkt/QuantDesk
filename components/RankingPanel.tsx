@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import {
   ApplyButton, Field, SelectField,
@@ -18,23 +18,31 @@ import type {
 } from "@/lib/types";
 import { RankValidation } from "@/components/RankValidation";
 import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { Textarea } from "@/components/ui/input";
+import { StateCard } from "@/components/ui/state";
 
 const CUSTOM = "__custom__";
 const DEFAULT_CUSTOM = "AAPL, NVDA, TSLA, JPM, KO, BBCA.JK, BBRI.JK, TLKM.JK";
 
-/** Percentiles get a heat colour, not a verdict colour — they are positions. */
+/**
+ * A percentile is a POSITION, so it gets weight and length — never a tone.
+ *
+ * This used to ramp from green through yellow to red, which is the server's
+ * good/caution/bad palette applied on the client to a number. A 15th
+ * percentile on "steadiness" is not bad news about the company; it is where the
+ * name sits in this scan on one measure, and the ranking's own explanation says
+ * so. Painting it `dist` re-litigated a judgement Python never made — the bug
+ * class §14 removed everywhere else — and gave the table the look of a heat map
+ * of verdicts. The bar already carries the magnitude; the text steps through
+ * the neutral ladder so the top of a column still stands out.
+ */
 function heat(percentile: number | null): string {
   if (percentile == null) return "text-faint";
-  if (percentile >= 80) return "text-acc";
-  if (percentile >= 60) return "text-acc/70";
-  if (percentile >= 40) return "text-body";
-  if (percentile >= 20) return "text-warn/80";
-  return "text-dist/80";
+  if (percentile >= 80) return "text-chalk";
+  if (percentile >= 20) return "text-body";
+  return "text-ash";
 }
-
-const HEAT_FILL = (percentile: number) =>
-  percentile >= 80 ? "#35C4A8" : percentile >= 60 ? "#35C4A899"
-    : percentile >= 40 ? "#7A8CA0" : percentile >= 20 ? "#F2C14E99" : "#FF6B6B99";
 
 /**
  * One percentile cell: the number, over a bar as long as the number.
@@ -55,9 +63,8 @@ function PercentileCell({ value }: { value: number | null }) {
           <span aria-hidden
                 className="absolute inset-y-[0.3rem] left-1 right-1 rounded-sm bg-rule/40" />
           <span aria-hidden
-                className="absolute inset-y-[0.3rem] left-1 rounded-sm opacity-30"
-                style={{ width: `calc((100% - 0.5rem) * ${Math.max(value, 1.5) / 100})`,
-                         background: HEAT_FILL(value) }} />
+                className="absolute inset-y-[0.3rem] left-1 rounded-sm bg-body opacity-20"
+                style={{ width: `calc((100% - 0.5rem) * ${Math.max(value, 1.5) / 100})` }} />
         </>
       )}
       <span className={cn("num relative font-medium", heat(value))}>
@@ -196,7 +203,11 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
       composite: row.composite == null ? "" : row.composite.toFixed(1),
       close: row.latestClose,
       coverage: row.coverage,
-      ...Object.fromEntries(signals.map((s) => [
+      // EVERY signal, not the ones this reading mode shows. Guided trims the
+      // table to three columns for legibility; an export that changed shape
+      // with a display preference handed two readers different files for the
+      // same scan.
+      ...Object.fromEntries(allSignals.map((s) => [
         s.key, row.signals[s.key]?.percentile?.toFixed(0) ?? "",
       ])),
     }));
@@ -207,7 +218,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
         { key: "composite", label: "Composite (percentile)" },
         { key: "close", label: "Close" },
         { key: "coverage", label: "Signal coverage" },
-        ...signals.map((s) => ({ key: s.key, label: `${s.label} (percentile)` })),
+        ...allSignals.map((s) => ({ key: s.key, label: `${s.label} (percentile)` })),
       ])
     );
   };
@@ -263,22 +274,14 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
 
           {choice === CUSTOM && (
             <Field label="Your list" hint="Comma or newline separated.">
-              <textarea
-                value={custom}
-                onChange={(e) => setCustom(e.target.value)}
-                rows={3}
-                className={cn(
-                  "w-full rounded border border-rule bg-raised px-3 py-2",
-                  "font-mono text-meta text-chalk transition-colors focus:border-tech/60",
-                )}
-              />
+              <Textarea mono value={custom} onChange={(e) => setCustom(e.target.value)} rows={3} />
             </Field>
           )}
 
           {selected && (
             <p className="text-meta leading-relaxed text-ash">
               {selected.note}{" "}
-              <span className="text-warn/90">
+              <span className="text-warn">
                 This membership list was transcribed on {selected.asOf} and is not updated
                 automatically — index constituents change, and a name that has since been
                 dropped will still be scanned while a newly added one will be missing. There is
@@ -306,26 +309,18 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
       )}
 
       {state.status === "error" && (
-        <Card className="border-dist/40 bg-dist/5">
-          <div className="flex gap-3 p-5">
-            <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
-            <div>
-              <div className="eyebrow mb-1 text-dist">The scan could not run</div>
-              <p className="text-base leading-relaxed text-body">{state.failure.message}</p>
-            </div>
-          </div>
-        </Card>
+        <StateCard kind="error" title="The scan could not run">{state.failure.message}</StateCard>
       )}
 
       {data && (
         <>
           {/* ---------------- the honest overlap card ---------------- */}
           {data.correlation.available && (
-            <Card accent="#F2C14E">
+            <Card>
               <CardHeader>
                 <CardTitle>How independent are these signals?</CardTitle>
                 {data.correlation.effectiveSignals != null && (
-                  <span className="num text-meta font-semibold text-warn">
+                  <span className="num text-meta font-semibold text-chalk">
                     {num(data.correlation.effectiveSignals, 1)} of{" "}
                     {data.correlation.measuredSignals} independent
                   </span>
@@ -348,9 +343,12 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                             {labels(pair.a)} vs {labels(pair.b)}
                             <Explain explain={data.explain?.[key]} />
                           </span>
+                          {/* Toned by the server's reading of the pair
+                              (explain.signalOverlap), not by a threshold
+                              re-declared here. */}
                           <span className={cn("num font-semibold",
-                                              Math.abs(pair.correlation) > 0.7
-                                                ? "text-warn" : "text-body")}>
+                                              TONE_TEXT[data.explain?.[key]?.tone ?? ""]
+                                                ?? "text-body")}>
                             {pair.correlation >= 0 ? "+" : ""}{num(pair.correlation)}
                           </span>
                         </div>
@@ -511,9 +509,15 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                 </table>
               </div>
 
+              {/* Two different empties. A scan that ranked nobody is a fact about
+                  the list; a filter that hides everybody is a fact about the
+                  filter, and saying the latter about the former sent readers
+                  hunting for a filter that was not set. */}
               {rows.length === 0 && (
                 <p className="px-5 py-3 text-base text-ash">
-                  Nothing matches the filter.
+                  {data.rows.length === 0
+                    ? "No name in this list had enough price history to rank."
+                    : "Nothing matches the filter."}
                 </p>
               )}
 
@@ -554,7 +558,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
           <RankValidation data={data.validation} />
 
           {/* ---------------- the deepen step ---------------- */}
-          <Card accent={picked.length > 0 ? "#5B8DEF" : undefined}>
+          <Card accent={picked.length ? palette.tech : undefined}>
             <CardHeader>
               <CardTitle>Then look at the filings</CardTitle>
               <span className="font-mono text-micro text-ash">
@@ -653,7 +657,10 @@ function SortHeader({
                 title={`Sort by ${title ?? label}`}
                 className={cn("whitespace-nowrap py-0.5 transition-colors hover:text-chalk",
                               active ? "text-chalk" : "")}>
-          {label}{active && (ascending ? " ↑" : " ↓")}
+          {label}
+          {active && (ascending
+            ? <ArrowUp aria-hidden className="ml-0.5 inline h-3 w-3" />
+            : <ArrowDown aria-hidden className="ml-0.5 inline h-3 w-3" />)}
         </button>
         {hint && (
           <span aria-hidden

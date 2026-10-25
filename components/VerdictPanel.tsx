@@ -14,6 +14,7 @@ import type {
   VerdictVolumeProfile,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { palette } from "@/lib/palette";
 
 /**
  * One score and one action for this name — the private scanner, in the app.
@@ -66,9 +67,9 @@ const FAMILY_WORD: Record<string, string> = {
 // Identity, never judgement — the same rule the lens hues follow. A family is
 // its colour whether its reading is excellent or terrible.
 const FAMILY_HUE: Record<string, string> = {
-  price: "#6B9BFF",
-  filings: "#E8B44C",
-  register: "#A78BFA",
+  price: palette.trend,
+  filings: palette.value,
+  register: palette.thesis,
 };
 
 /** Ends a server-supplied clause so it can be followed by another sentence. */
@@ -79,7 +80,7 @@ function sentence(text: string | null): string {
 }
 
 function ComponentRow({ item }: { item: VerdictComponent }) {
-  const hue = FAMILY_HUE[item.family] ?? "#8496A9";
+  const hue = FAMILY_HUE[item.family] ?? palette.ash;
   return (
     <div className="border-t border-ruleSoft py-3 first:border-t-0">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
@@ -555,7 +556,7 @@ export function VerdictPanel({
             <div>
               <div className="eyebrow mb-1">Score</div>
               <div className="text-figure font-semibold tabular-nums"
-                   style={{ color: TONE_HEX[data.tone] ?? "#8496A9" }}>
+                   style={{ color: TONE_HEX[data.tone] ?? palette.ash }}>
                 {data.score === null ? "—" : data.score.toFixed(1)}
               </div>
             </div>

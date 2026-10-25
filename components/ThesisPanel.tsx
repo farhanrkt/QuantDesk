@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Download, Lock, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, Download, Lock, Trash2 } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import { ApplyButton, Field, NumberField, PercentField } from "@/components/ui/controls";
 import { useHorizon } from "@/components/ui/horizon";
@@ -10,6 +10,8 @@ import {
   type ThesisEntry, type ThesisSnapshot,
 } from "@/lib/journal";
 import { cn } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { Textarea } from "@/components/ui/input";
 
 /**
  * What you believed, written down before you acted, and never edited after.
@@ -36,7 +38,7 @@ import { cn } from "@/lib/utils";
  * this app refuses composites elsewhere on far better evidence than that.
  */
 
-const THESIS = "#A78BFA";
+const THESIS = palette.thesis;
 
 export function ThesisPanel({
   ticker, snapshot,
@@ -131,31 +133,23 @@ export function ThesisPanel({
 
           <div className="space-y-1.5">
             <span className="eyebrow">What has to be true for this to work?</span>
-            <textarea
+            <Textarea
               value={thesis}
               onChange={(e) => setThesis(e.target.value)}
               rows={3}
               aria-label="What has to be true"
               placeholder="The specific thing you are betting on."
-              className="w-full rounded border border-rule bg-ink px-3 py-2 text-meta
-                         leading-relaxed text-chalk placeholder:text-faint
-                         focus:border-tech/60 focus:outline-none
-                         focus-visible:ring-1 focus-visible:ring-tech"
             />
           </div>
 
           <div className="space-y-1.5">
             <span className="eyebrow">What would tell you it is wrong?</span>
-            <textarea
+            <Textarea
               value={falsifier}
               onChange={(e) => setFalsifier(e.target.value)}
               rows={2}
               aria-label="What would falsify this"
               placeholder="Something observable, that you would actually notice."
-              className="w-full rounded border border-rule bg-ink px-3 py-2 text-meta
-                         leading-relaxed text-chalk placeholder:text-faint
-                         focus:border-tech/60 focus:outline-none
-                         focus-visible:ring-1 focus-visible:ring-tech"
             />
             <Note>
               A thesis with nothing that could disprove it is a hope. If no observation would
@@ -188,7 +182,7 @@ export function ThesisPanel({
       </Card>
 
       {live.length > 0 && (
-        <Card accent="#F2C14E">
+        <Card tone="warn">
           <CardHeader>
             <CardTitle>Where this disagrees with the page</CardTitle>
             <span className="font-mono text-micro text-ash">before you save</span>
@@ -292,7 +286,7 @@ function Entry({
         <ul className="mt-2 space-y-1">
           {written.map((c) => (
             <li key={c.key} className="flex gap-2 text-meta leading-relaxed text-ash">
-              <AlertTriangle aria-hidden className="mt-0.5 h-3 w-3 shrink-0 text-warn/70" />
+              <AlertTriangle aria-hidden className="mt-0.5 h-3 w-3 shrink-0 text-warn" />
               <span>{c.title}, at the time of writing.</span>
             </li>
           ))}
@@ -307,7 +301,8 @@ function Entry({
               <li key={d.key} className="flex items-baseline gap-2 text-micro">
                 <span className="text-ash">{d.label}</span>
                 <span className="num ml-auto text-ash">{d.then}</span>
-                <span className="text-ash">&rarr;</span>
+                <ArrowRight aria-hidden className="h-3.5 w-3.5 shrink-0 self-center text-ash" />
+                <span className="sr-only">to</span>
                 <span className="num text-body">{d.now}</span>
               </li>
             ))}

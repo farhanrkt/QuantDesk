@@ -1,72 +1,16 @@
 import type { Config } from "tailwindcss";
+import { palette } from "./lib/palette";
 
 /**
- * THE PALETTE HAS TWO JOBS AND THEY MUST NOT BLEND.
- *
- * IDENTITY says which model is speaking: flow teal, trend azure, value amber,
- * quality gold. It is structural, always on, and means nothing about the
- * company — a lens is that colour whether its reading is good or terrible.
- *
- * TONE says what the server concluded: `acc` good, `dist` bad, `warn` caution.
- * It arrives from `explain.tone` and from nowhere else. A component that picks
- * a tone colour from the sign of a number has re-litigated a judgement Python
- * already made, which is the bug class §14 spent an audit removing.
- *
- * Keeping them apart is why `tech` is not allowed to mean "good" and `acc` is
- * not allowed to mean "the flow lens". Before v2 both drifted: the flow lens's
- * teal and the accumulation tone were the same token doing two jobs, so a lens
- * heading and a verdict were the same colour and neither read as meaningful.
- *
- * NEUTRALS ARE A LADDER, NOT A PAIR. The v1 palette had exactly two text
- * colours — `chalk` and `ash` — and 54% of every screen was `ash`. When more
- * than half a page is in the de-emphasis colour, nothing is emphasised. The
- * ladder below gives secondary text somewhere to go that is not the dimmest
- * value available.
+ * Colours come from lib/palette.ts and nowhere else — that file explains the
+ * identity/tone split and the text ladder, and check_frontend.mjs recomputes
+ * the ladder's contrast from it on every build.
  */
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
     extend: {
-      colors: {
-        // --- strata -------------------------------------------------------
-        ink: "#080C10",       // page ground
-        panel: "#111820",     // the standard surface
-        raised: "#161F29",    // a surface on top of a surface
-        sunken: "#0C1116",    // wells: tables, code, quoted figures
-        rule: "#1E2A36",      // hairline
-        ruleSoft: "#18222C",  // hairline INSIDE a group, so nesting reads
-
-        // --- text ladder --------------------------------------------------
-        chalk: "#E7EEF5",     // headings and figures
-        body: "#C3CFDC",      // running prose. NOT ash — this is the fix.
-        ash: "#8496A9",       // genuinely secondary: units, counts, captions
-        // LIGHTENED FROM #63748A, 1 September 2026, because it is not furniture.
-        // The ladder called it that, but `.eyebrow` uses it for every field
-        // label in the app and the footer disclaimer is set in it — twenty-one
-        // sites, most of them text a reader has to read. At #63748A it cleared
-        // 3.48 to 4.11 against the four grounds, so it failed WCAG AA (4.5)
-        // everywhere it was used. #7387A0 clears 4.52 to 5.33 while staying a
-        // clear step below `ash` at 5.48 to 6.46, so the ladder is intact.
-        faint: "#7387A0",     // furniture AND small labels — must clear AA
-
-        // --- tone: the server's judgement, never chrome --------------------
-        acc: "#35C4A8",
-        dist: "#FF6B6B",
-        warn: "#F2C14E",
-
-        // --- identity: which lens is speaking, never a judgement -----------
-        flow: "#2FBFA4",
-        trend: "#6B9BFF",
-        value: "#E8B44C",
-        quality: "#C9A227",
-        thesis: "#A78BFA",
-
-        // Retained: `tech` is the interactive accent (focus, links, controls)
-        // and `dcf`/`ddm` are the valuation engine hues the charts key off.
-        tech: "#6B9BFF",
-        dcf: "#E8B44C",
-        ddm: "#A78BFA",
-      },
+      colors: { ...palette },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
         mono: ["var(--font-plex)", "ui-monospace", "monospace"],

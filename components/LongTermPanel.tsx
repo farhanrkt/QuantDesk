@@ -12,10 +12,10 @@ import {
 import { useHorizon } from "@/components/ui/horizon";
 import type { ExplainMap, LongTermBlock } from "@/lib/types";
 import { cn, num, pct, signedPct } from "@/lib/utils";
+import { alpha, palette } from "@/lib/palette";
 
-const UP = "#35C4A8";
-const DOWN = "#FF6B6B";
-const ASH = "#7A8CA0";
+const UP = palette.acc;
+const DOWN = palette.dist;
 
 /**
  * The long-horizon view: what holding this would actually have been like.
@@ -49,7 +49,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
   const horizon = useHorizon();
   const ex: ExplainMap = data.explain ?? {};
 
-  const verdictColor = view.tone === "bull" ? UP : view.tone === "bear" ? DOWN : ASH;
+  const verdictTone = view.tone === "bull" ? "good" : view.tone === "bear" ? "bad" : "neutral";
 
   const drawdownSeries = (drawdown.series ?? []).filter((_, i, all) =>
     all.length <= 1200 || i % Math.ceil(all.length / 1200) === 0);
@@ -63,10 +63,10 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
     <div className="space-y-4 animate-rise">
       {/* ---------------- the summary in plain English ---------------- */}
       {plainEnglish && plainEnglish.paragraphs.length > 0 && (
-        <Card accent={verdictColor}>
+        <Card tone={verdictTone}>
           <CardHeader>
             <CardTitle>In plain English</CardTitle>
-            <span className="num text-meta font-semibold" style={{ color: verdictColor }}>
+            <span className="num text-meta font-semibold" style={{ color: TONE_HEX[verdictTone] }}>
               {view.verdict}
             </span>
           </CardHeader>
@@ -101,7 +101,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       <Card>
         <CardHeader>
           <CardTitle>Long-horizon checklist</CardTitle>
-          <span className="num text-meta font-semibold" style={{ color: verdictColor }}>
+          <span className="num text-meta font-semibold" style={{ color: TONE_HEX[verdictTone] }}>
             {view.passed}/{view.scored} pointing up
           </span>
         </CardHeader>
@@ -242,8 +242,11 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       )}
 
       {/* ---------------- drawdown ---------------- */}
+      {/* Toned by the server's reading of the drawdown. This was hard-coded red,
+          which made every drawdown — a 9% dip on a utility included — look like
+          bad news before a word of it was read. */}
       {drawdown.usable && (
-        <Card accent={DOWN}>
+        <Card tone={ex.maxDrawdown?.tone}>
           <CardHeader>
             <CardTitle>What holding it cost</CardTitle>
             <span className="font-mono text-micro text-ash">
@@ -278,10 +281,10 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                     <YAxis tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
                            tickLine={false} axisLine={false} width={48} />
                     <Tooltip
-                      contentStyle={{ background: "#080C10E6", border: "1px solid #1E2A36",
+                      contentStyle={{ background: alpha(palette.ink, 0.9), border: `1px solid ${palette.rule}`,
                                       borderRadius: 4, fontSize: 12 }}
                       formatter={(v: number) => [pct(v), "below the high"]} />
-                    <ReferenceLine y={0} stroke="#1E2A36" />
+                    <ReferenceLine y={0} stroke={palette.grid} />
                     <Area type="monotone" dataKey="drawdown" stroke={DOWN} strokeWidth={1}
                           fill="url(#ddFill)" isAnimationActive={false} />
                   </AreaChart>
@@ -329,7 +332,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
 
       {/* ---------------- relative strength ---------------- */}
       {relativeStrength.usable && relativeStrength.periods && (
-        <Card accent={relativeStrength.outperforming ? UP : DOWN}>
+        <Card accent={palette.trend}>
           <CardHeader>
             <CardTitle>Against just owning the index</CardTitle>
             <span className="font-mono text-micro text-ash">
@@ -408,7 +411,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
           )}
 
           {faber.usable && (
-            <Card accent={TONE_HEX[ex.faberDistance?.tone ?? "neutral"]}>
+            <Card tone={ex.faberDistance?.tone}>
               <CardHeader>
                 <CardTitle>A simple long-term trend rule</CardTitle>
                 <span className={cn("num text-meta font-semibold",
@@ -451,10 +454,10 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                 <YAxis tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
                        tickLine={false} axisLine={false} width={48} />
                 <Tooltip
-                  contentStyle={{ background: "#080C10E6", border: "1px solid #1E2A36",
+                  contentStyle={{ background: alpha(palette.ink, 0.9), border: `1px solid ${palette.rule}`,
                                   borderRadius: 4, fontSize: 12 }}
                   formatter={(v: number) => [signedPct(v), "return"]} />
-                <ReferenceLine y={0} stroke="#1E2A36" />
+                <ReferenceLine y={0} stroke={palette.grid} />
                 <Bar dataKey="return" isAnimationActive={false}>
                   {calendarReturns.map((row) => (
                     <Cell key={row.year} fill={(row.return ?? 0) >= 0 ? UP : DOWN} />

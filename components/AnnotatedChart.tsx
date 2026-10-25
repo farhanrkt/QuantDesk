@@ -9,6 +9,7 @@ import type { TooltipProps } from "recharts";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import type { ChartBar, ChartPattern, VerdictChart } from "@/lib/types";
 import { cn, num } from "@/lib/utils";
+import { palette } from "@/lib/palette";
 
 /**
  * The scanner's readings, on the chart, where they can be disagreed with.
@@ -52,21 +53,21 @@ import { cn, num } from "@/lib/utils";
  */
 
 // Identity hues. None of these means good or bad.
-const PRICE_UP = "#35C4A8";
-const PRICE_DOWN = "#FF6B6B";
-const MA_FAST = "#F2C14E";
-const MA_MID = "#6B9BFF";
-const MA_SLOW = "#7387A0";
-const BAND = "#A78BFA";
-const HEAVY = "#E8B44C";
-const ORDINARY = "#2A3846";
-const PATTERN = "#A78BFA";
-const GUIDE = "#E7EEF5";
-const SUPPORT = "#80CBC4";
+const PRICE_UP = palette.acc;
+const PRICE_DOWN = palette.dist;
+const MA_FAST = palette.seriesFast;
+const MA_MID = palette.trend;
+const MA_SLOW = palette.faint;
+const BAND = palette.seriesViolet;
+const HEAVY = palette.value;
+const ORDINARY = palette.ruleStrong;
+const PATTERN = palette.seriesViolet;
+const GUIDE = palette.chalk;
+const SUPPORT = palette.levelBelow;
 // Identity, like every other hue here. A volume shelf is this colour whether the
 // price is above it or below it.
-const PROFILE = "#4DD0E1";
-const RESISTANCE = "#EF9A9A";
+const PROFILE = palette.seriesCyan;
+const RESISTANCE = palette.levelAbove;
 
 type Row = ChartBar & {
   candle: [number, number] | null;
@@ -278,11 +279,11 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
         {/* ---------------------------------------------------------------- */}
         <ResponsiveContainer width="100%" height={360}>
           <ComposedChart data={rows} margin={{ top: 6, right: 96, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#1E2A36" />
+            <CartesianGrid strokeDasharray="2 4" vertical={false} stroke={palette.grid} />
             <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={56}
-                   tick={{ fontSize: 10, fill: "#7387A0" }} />
+                   tick={{ fontSize: 10, fill: palette.axis }} />
             <YAxis domain={domain as [number, number]} tickLine={false} axisLine={false}
-                   width={60} tick={{ fontSize: 10, fill: "#7387A0" }}
+                   width={60} tick={{ fontSize: 10, fill: palette.axis }}
                    tickFormatter={(value: number) => num(value)} />
             <Tooltip content={<PriceTooltip />} />
 
@@ -377,7 +378,7 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
                              label={{
                                value: `${num(level.price)} · ${level.touches}x`,
                                position: "right", fontSize: 9,
-                               fill: level.nearest ? "#C3CFDC" : "#7387A0",
+                               fill: level.nearest ? palette.body : palette.faint,
                              }} />
             ))}
 
@@ -419,7 +420,7 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
                 <ReferenceDot key={`${cross.date}-${cross.type}`} x={cross.date}
                               y={cross.price} r={3.5}
                               fill={cross.type === "Buy" ? PRICE_UP : PRICE_DOWN}
-                              stroke="#080C10" strokeWidth={1} />
+                              stroke={palette.ink} strokeWidth={1} />
               ) : null
             ))}
           </ComposedChart>
@@ -476,14 +477,14 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
             <ResponsiveContainer width="100%" height={96}>
               <ComposedChart data={rows}
                              margin={{ top: 4, right: 96, left: 0, bottom: 6 }}>
-                <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="#1E2A36" />
+                <CartesianGrid strokeDasharray="2 4" vertical={false} stroke={palette.grid} />
                 <XAxis dataKey="date" hide />
                 {/* Padded past the extremes so a session that closed exactly at
                     its high or low is a dot rather than a half-dot on the
                     frame. */}
                 <YAxis domain={[-1.12, 1.12]} ticks={[-1, 0, 1]} tickLine={false}
                        axisLine={false} width={60}
-                       tick={{ fontSize: 9, fill: "#7387A0" }}
+                       tick={{ fontSize: 9, fill: palette.axis }}
                        tickFormatter={(v: number) =>
                          v === 1 ? "at high" : v === -1 ? "at low" : "middle"} />
                 {/* THE COMPARISON THE TEST ACTUALLY MADE. Not zero — the middle
@@ -551,7 +552,7 @@ function Toggle({ on, hue, onClick, children }: {
               "transition-colors",
               on ? "border-rule bg-raised text-body" : "border-ruleSoft text-faint")}>
       <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full"
-            style={{ background: on ? hue : "#2A3846" }} />
+            style={{ background: on ? hue : palette.ruleStrong }} />
       {children}
     </button>
   );

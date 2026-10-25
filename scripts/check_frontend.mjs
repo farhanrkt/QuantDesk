@@ -233,10 +233,14 @@ for (const [file, src] of uiFiles) {
 // 4. TEXT COLOUR COMES FROM THE LADDER, NOT FROM ALPHA. `text-chalk/80` and
 //    friends were how v1 faked a body colour it did not have; eight of them
 //    composited to 2.2-3.2:1 and failed contrast outright.
+//    WIDENED to every text and tone token. The first version watched `chalk`
+//    and `ash` only, and eight `text-warn/90`-style sites walked past it — a
+//    tone at 70-90% alpha is both a contrast risk and a quieter judgement than
+//    the server made, which is a change of meaning nobody decided.
 for (const [file, src] of uiFiles) {
-  for (const m of src.matchAll(/text-(?:chalk|ash)\/\d+/g)) {
+  for (const m of src.matchAll(/text-(?:chalk|body|ash|faint|acc|dist|warn|tech)\/\d+/g)) {
     fail(file, `Alpha text colour ${m[0]}.`,
-         "Use chalk / body / ash / faint. Alpha on text was the contrast bug.");
+         "Use the solid token. Alpha on text was the contrast bug.");
   }
 }
 
@@ -274,12 +278,13 @@ for (const [file, src] of uiFiles) {
 //    them. This does not ban the pattern; it stops the list growing quietly.
 const SIGN_TONE_BUDGET = {
   "components/AnomalyPanel.tsx": 2,     // a day's price change, twice
-  // Two, and the second was invisible to the old pattern for the same reason
-  // LongTermPanel's were: it colours a Card accent from a constant pair rather
-  // than a Tailwind class. Both are gated on significance BEFORE they take a
-  // direction — see `carTone` — so an insignificant result stays grey however
-  // it is signed, which is the whole reason these two are allowed.
-  "components/EventStudyPanel.tsx": 2,
+  // One. It was two until the card accent went: that one coloured the whole
+  // event-study card green or red from the sign of the 20-day mean, and once
+  // `Card accent` actually painted a header field it would have shouted a
+  // direction over a result that is usually not significant. The card is the
+  // flow lens's identity now. What remains is gated on significance BEFORE it
+  // takes a direction — see `carTone` — so an insignificant result stays grey.
+  "components/EventStudyPanel.tsx": 1,
   // Three, not one, and the number changed because the CHECK changed rather
   // than the code. The seasonality grid colours twice — an inline background
   // and the figure under it — and the calendar-returns bars colour a third
@@ -297,9 +302,13 @@ const SIGN_TONE_BUDGET = {
 //    geometry from a beta and colour it from a constant — the next person to
 //    touch either will reach for an inline style, and the check has to be there
 //    when they do. Both forms count against the same budget.
+//    WIDENED AGAIN when the palette moved into lib/palette.ts: a sign test that
+//    picks `palette.acc` or `TONE_HEX.good` directly is the same bug spelled
+//    through the token module, and none of the patterns above could see it.
 const SIGN_TONE_PATTERNS = [
   /[<>]=?\s*0\s*\?\s*"text-(?:acc|dist)"/g,
   /[<>]=?\s*0\s*\?\s*[A-Z_]{2,}\s*:\s*[A-Z_]{2,}/g,
+  /[<>]=?\s*0\s*\?\s*(?:palette|TONE_HEX)[.[]/g,
 ];
 for (const [file, src] of uiFiles) {
   const hits = SIGN_TONE_PATTERNS
@@ -324,7 +333,9 @@ for (const [file, src] of uiFiles) {
 //    Contrast is arithmetic on the config, so it does not need a browser. This
 //    reads the palette out of tailwind.config.ts and recomputes it, which means
 //    the claim can never drift from the tokens again.
-const CONFIG = readFileSync(join(ROOT, "tailwind.config.ts"), "utf8");
+//    The palette moved out of tailwind.config.ts into lib/palette.ts so that
+//    Recharts props and Tailwind classes read one source; this follows it.
+const CONFIG = readFileSync(join(ROOT, "lib/palette.ts"), "utf8");
 const hexOf = (name) => {
   const m = CONFIG.match(new RegExp(`\\b${name}:\\s*"(#[0-9A-Fa-f]{6})"`));
   return m ? m[1] : null;
@@ -345,14 +356,14 @@ const GROUNDS = ["ink", "panel", "raised", "sunken"];
 const AA = 4.5;
 for (const token of TEXT_TOKENS) {
   const fg = hexOf(token);
-  if (!fg) { fail("tailwind.config.ts", `Text token \`${token}\` not found.`,
+  if (!fg) { fail("lib/palette.ts", `Text token \`${token}\` not found.`,
                   "The palette check reads it out of the config by name."); continue; }
   for (const ground of GROUNDS) {
     const bg = hexOf(ground);
     if (!bg) continue;
     const ratio = contrast(fg, bg);
     if (ratio < AA) {
-      fail("tailwind.config.ts",
+      fail("lib/palette.ts",
            `${token} on ${ground} is ${ratio.toFixed(2)}:1, below WCAG AA ${AA}.`,
            "Every token in the text ladder is used for text somewhere. Lighten it, "
            + "or stop using it for text and remove it from TEXT_TOKENS with the reason.");
@@ -432,6 +443,38 @@ for (const [file, src] of uiFiles) {
 // asserts that contract on the real report. A shape guaranteed by the server
 // needs no rule on the client.
 
+// 11. A COLOUR IS WRITTEN DOWN IN lib/palette.ts AND NOWHERE ELSE. There were
+//     some 140 hex literals across 22 components — the same tone redeclared in
+//     six panels, lens hues copied by hand between the page and the rail, and
+//     five values that were in no palette at all, one of them the `faint` that
+//     failed contrast and was still drawing axis labels. A token that can be
+//     redeclared locally is a suggestion, not a token.
+for (const [file, src] of uiFiles) {
+  for (const m of src.matchAll(/#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?\b/g)) {
+    fail(file, `Hex colour literal ${m[0]}.`,
+         "Import it from lib/palette.ts (or use theme(colors.x) in CSS). Add a token "
+         + "there, with what it is for, if none fits.");
+  }
+}
+
+// 12. ICONS ARE LUCIDE. DESIGN.md has said "no emoji, no unicode glyphs" since
+//     v2, and three survived it: a `›` as the disclosure chevron, `↑`/`↓` as
+//     sort indicators, a `→` as a link affordance. They render at the font's
+//     whim — a different size, weight and baseline on every platform — and a
+//     screen reader announces them as words ("right-pointing angle quotation
+//     mark"). `→` between two figures in running text is typography and stays;
+//     the glyphs below are only ever used as icons. kbd.tsx is the one exemption,
+//     because a printed key IS its glyph.
+const ICON_GLYPHS = /[›‹★☆✓✔✕✗⌘▲▼↑↓]/;
+for (const [file, src] of uiFiles) {
+  if (file === "components/ui/kbd.tsx") continue;
+  const m = src.match(ICON_GLYPHS);
+  if (m) {
+    fail(file, `Unicode glyph ${m[0]} used as an icon.`,
+         "Use a lucide icon with aria-hidden, or <Kbd> for a keyboard key.");
+  }
+}
+
 // A LINK TO THE FIELD MANUAL RESOLVES. "New to this?" pointed at
 // /docs/field-manual.html for months while production returned a 404: docs/
 // was excluded from the upload and nothing copied the file into public/. The
@@ -453,7 +496,7 @@ if (designFailures.length) {
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 11 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 13 checked across ${uiFiles.length} UI files`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));

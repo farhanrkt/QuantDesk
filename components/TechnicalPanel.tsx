@@ -17,14 +17,15 @@ import type { TechnicalOptions } from "@/lib/api";
 import type { TechPoint, TechnicalResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { TONE, cn, num, pct, splitEmphasis } from "@/lib/utils";
+import { palette } from "@/lib/palette";
 
-const TECH = "#5B8DEF";
-const FAST = "#F2C14E";
-const SLOW = "#7FA8F5";
-const BAND = "#A78BFA";
-const UP = "#35C4A8";
-const EXPOSURE_HUE = "#D4763A";
-const DOWN = "#FF6B6B";
+const TECH = palette.tech;
+const FAST = palette.seriesFast;
+const SLOW = palette.seriesSlow;
+const BAND = palette.seriesViolet;
+const UP = palette.acc;
+const EXPOSURE_HUE = palette.drivers;
+const DOWN = palette.dist;
 
 /** A series row plus the derived columns the band and marker layers read. */
 type ChartPoint = TechPoint & {
@@ -117,11 +118,11 @@ export function TechnicalPanel({
   // reason they stop using it. The line below the tabs says it is one click
   // away in Full, so nothing disappears silently.
   const SECTIONS = [
-    ...(data.hasLongTerm ? [{ id: "long", label: "Long term · years", accent: "#35C4A8" }] : []),
-    { id: "mid", label: "Mid term · weeks–months", accent: "#5B8DEF" },
-    { id: "short", label: "Short term · days–weeks", accent: "#F2C14E" },
-    { id: "chart", label: "Chart & signals", accent: "#A78BFA" },
-    ...(guided ? [] : [{ id: "indicators", label: "All indicators", accent: "#A78BFA" }]),
+    ...(data.hasLongTerm ? [{ id: "long", label: "Long term · years", accent: palette.trend }] : []),
+    { id: "mid", label: "Mid term · weeks–months", accent: palette.trend },
+    { id: "short", label: "Short term · days–weeks", accent: palette.trend },
+    { id: "chart", label: "Chart & signals", accent: palette.trend },
+    ...(guided ? [] : [{ id: "indicators", label: "All indicators", accent: palette.trend }]),
   ];
 
   // A section that is open when the mode changes underneath it would otherwise
@@ -323,7 +324,7 @@ export function TechnicalPanel({
                   <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full"
                         style={{ background: chip.tone === "bull" ? UP
                                              : chip.tone === "bear" ? DOWN
-                                             : chip.tone === "warn" ? FAST : "#63748A" }} />
+                                             : chip.tone === "warn" ? FAST : palette.faint }} />
                   <span className="eyebrow">{chip.label}</span>
                 </div>
                 <div className={cn("num text-base font-semibold", TONE[chip.tone] ?? "text-chalk")}>
@@ -347,7 +348,16 @@ export function TechnicalPanel({
           <CardTitle>Floors and ceilings</CardTitle>
           <DownloadButton onClick={downloadSeries}>Indicators CSV</DownloadButton>
         </CardHeader>
+        {/* GUIDED KEEPS THE COUNT, NOT AN EMPTY BOX. The tuning fields are Full's;
+            hiding them used to leave Guided a header over a blank body, which
+            reads as a panel that failed to load. */}
         <CardBody>
+          {guided && (
+            <p className="text-meta text-ash">
+              {levels.length} level{levels.length === 1 ? "" : "s"} drawn on the chart. Switch to
+              Full to change how far apart the turning points must be.
+            </p>
+          )}
           <div className={guided ? "hidden" : "flex flex-wrap items-end gap-3"}>
             <Field label="Turning points apart (days)"
                    hint="Larger keeps only the major turns.">
@@ -383,8 +393,8 @@ export function TechnicalPanel({
                     isAnimationActive={false} />
               {levels.map((level) => (
                 <ReferenceLine key={level} y={level} strokeDasharray="4 4"
-                               stroke={level > latest.close ? "#EF9A9A" : "#80CBC4"} strokeOpacity={0.45}
-                               label={{ value: num(level), position: "insideLeft", fill: "#7A8CA0", fontSize: 10 }} />
+                               stroke={level > latest.close ? palette.levelAbove : palette.levelBelow} strokeOpacity={0.45}
+                               label={{ value: num(level), position: "insideLeft", fill: palette.axis, fontSize: 10 }} />
               ))}
               <Line dataKey="close" stroke={TECH} strokeWidth={1.5} dot={false} isAnimationActive={false} />
               <Line dataKey="sma50" stroke={FAST} strokeWidth={1.2} dot={false} connectNulls
@@ -404,7 +414,7 @@ export function TechnicalPanel({
               <YAxis domain={[0, 100]} ticks={[30, 50, 70]} tickLine={false} axisLine={false} width={56} />
               <ReferenceLine y={70} stroke={DOWN} strokeOpacity={0.35} strokeDasharray="3 3" />
               <ReferenceLine y={30} stroke={UP} strokeOpacity={0.35} strokeDasharray="3 3" />
-              <Line dataKey="rsi" stroke="#4DD0E1" strokeWidth={1.3} dot={false} connectNulls
+              <Line dataKey="rsi" stroke={palette.seriesCyan} strokeWidth={1.3} dot={false} connectNulls
                     isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
@@ -415,7 +425,7 @@ export function TechnicalPanel({
               <CartesianGrid strokeDasharray="2 4" vertical={false} />
               <XAxis dataKey="date" hide />
               <YAxis tickLine={false} axisLine={false} width={56} />
-              <ReferenceLine y={0} stroke="#7A8CA0" strokeOpacity={0.4} />
+              <ReferenceLine y={0} stroke={palette.axis} strokeOpacity={0.4} />
               <Bar dataKey="macdHist" isAnimationActive={false}
                    shape={(props: unknown) => {
                      // Recharts passes the rect geometry plus the source row;
@@ -430,7 +440,7 @@ export function TechnicalPanel({
                    }} />
               <Line dataKey="macd" stroke={TECH} strokeWidth={1.3} dot={false} connectNulls
                     isAnimationActive={false} />
-              <Line dataKey="macdSignal" stroke="#FFB74D" strokeWidth={1.1} dot={false} connectNulls
+              <Line dataKey="macdSignal" stroke={palette.seriesOrange} strokeWidth={1.1} dot={false} connectNulls
                     isAnimationActive={false} />
             </ComposedChart>
           </ResponsiveContainer>
