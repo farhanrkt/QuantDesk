@@ -15,6 +15,7 @@ import type { ExplainMap, ValuationResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
 import { alpha, palette } from "@/lib/palette";
+import { SensitivityGrid } from "@/components/valuation/SensitivityGrid";
 
 const DCF = palette.dcf;
 const DDM = palette.ddm;
@@ -181,6 +182,8 @@ export function ValuationPanel({
           </CardBody>
         </Card>
       )}
+
+      {data.sensitivity && <SensitivityGrid data={data.sensitivity} accent={accent} />}
 
       <Card accent={accent}>
         <CardHeader>

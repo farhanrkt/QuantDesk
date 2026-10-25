@@ -509,6 +509,30 @@ for (const [file, src] of uiFiles) {
   }
 }
 
+// 13. THE SENSITIVITY GRID IS NUMBERS, NOT A HEAT MAP. A grid of fair values
+//     coloured green above the price and red below it is a buy/sell signal with
+//     extra steps — the owner named that exact risk before it was built. So the
+//     grid's file may not touch a tone class or the tone maps, and may not
+//     compare anything with the price; the price is printed beside the grid
+//     and the reader does the comparing.
+const GRID_FILE = "components/valuation/SensitivityGrid.tsx";
+for (const [file, src] of uiFiles) {
+  if (file !== GRID_FILE) continue;
+  const tone = src.match(/\b(?:text|bg|border|ring|fill)-(?:acc|dist|warn)\b|\bTONE_[A-Z]+\b|\.tone\b/);
+  // Operators with whitespace on both sides: `cell.value > price`. The first
+  // version also matched the JSX text "Market price <span", which is a tag,
+  // not a comparison — narrowed on its first run.
+  const versus = src.match(/\s[<>]=?\s+(?:data\.)?price\b|\bprice\s+[<>]=?\s/);
+  if (tone || versus) {
+    fail(file, `The sensitivity grid ${tone ? `uses a tone (${tone[0]})` : `compares with the price (${versus[0]})`}.`,
+         "Cells are uncoloured numbers; the price sits beside the grid. See PRODUCT.md constraint 1.");
+  }
+}
+if (!uiFiles.some(([file]) => file === GRID_FILE)) {
+  fail(GRID_FILE, "Rule 13 is guarding a file that no longer exists.",
+       "Point GRID_FILE at the grid's new home rather than deleting the rule.");
+}
+
 // A LINK TO THE FIELD MANUAL RESOLVES. "New to this?" pointed at
 // /docs/field-manual.html for months while production returned a 404: docs/
 // was excluded from the upload and nothing copied the file into public/. The
@@ -530,7 +554,7 @@ if (designFailures.length) {
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 13 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 14 checked across ${uiFiles.length} UI files`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));

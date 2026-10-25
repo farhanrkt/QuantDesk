@@ -646,6 +646,8 @@ export interface ValuationResponse {
   market: { code: string; name: string; symbol: string };
   engine: "DCF" | "DDM" | "RI"; autoEngine: "DCF" | "DDM"; routeReason: string;
   rateName: string; price: number; priceLabel: string;
+  /** The base case across a grid of its two biggest inputs — never compared with the price. */
+  sensitivity?: ValuationSensitivity;
   /** Which Yahoo endpoint the price came from, and the bar it belongs to.
    *  The valuation used to read the quote endpoint while every other lens
    *  read the chart endpoint; they do not always agree. */
@@ -1936,4 +1938,20 @@ export interface CompanyResponse {
   nextEarnings: { date: string | null; past: string[]; source: string; reading: string };
   record: TrackRecord;
   explain: ExplainMap;
+}
+
+/** `valuation.sensitivity_grid`. Values only: no tone, no count, no "above the price". */
+export interface ValuationSensitivity {
+  engine: "DCF" | "DDM" | "RI";
+  rowAxis: { name: "growth" | "roe"; label: string; values: number[]; assumedIndex: number };
+  colAxis: { name: "rate"; label: string; values: number[]; assumedIndex: number };
+  cells: { value: number | null; label: string | null; refused: "spread" | "undefined" | null }[][];
+  assumed: { row: number; col: number };
+  terminalGrowth: number;
+  price: number | null;
+  priceLabel: string | null;
+  impliedRow: { rate: number; impliedGrowth: number | null; reason: "spread" | "unreachable" | null }[] | null;
+  impliedRowReason: string | null;
+  refusals: Record<string, string>;
+  reading: string;
 }

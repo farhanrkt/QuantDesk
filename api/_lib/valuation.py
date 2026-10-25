@@ -588,6 +588,145 @@ def implied_growth(engine, price, base, rate, terminal_growth,
         return None
 
 
+# =============================================================================
+# 5a. SENSITIVITY: the same model across a grid of its two biggest inputs
+# =============================================================================
+# Growth moves in two-point steps, the discount rate in one-point steps: a
+# point of discount rate moves a DCF roughly as much as two points of growth,
+# so the grid spans comparable distances in both directions.
+SENS_GROWTH_STEPS = (-0.06, -0.04, -0.02, 0.0, 0.02, 0.04, 0.06)
+SENS_RATE_STEPS = (-0.02, -0.01, 0.0, 0.01, 0.02)
+# The same bounds the /api/intrinsic-value route accepts for these inputs, so
+# the grid never shows a cell nobody could type into the assumption fields.
+SENS_GROWTH_BOUNDS = (-0.50, 1.00)
+SENS_RATE_BOUNDS = (0.005, 0.50)
+
+SPREAD_REFUSAL = ("Within 1.5 points of perpetual growth the terminal value diverges, so "
+                  "no value is shown here rather than the clamped number the model would "
+                  "otherwise produce.")
+RI_IMPLIED_REASON = ("Residual income values book value plus excess returns rather than a "
+                     "growing stream, so no single growth rate is the lever a price implies.")
+
+
+def _axis(centre: float, steps, bounds) -> tuple[list[float], int]:
+    """Centre plus each step, clipped to bounds, de-duplicated, centre kept exact."""
+    low, high = bounds
+    values: list[float] = []
+    for step in steps:
+        value = float(centre) if step == 0 else float(np.clip(centre + step, low, high))
+        if not any(abs(value - v) < 1e-9 for v in values):
+            values.append(value)
+    values.sort()
+    return values, next(i for i, v in enumerate(values) if abs(v - centre) < 1e-9)
+
+
+def sensitivity_grid(engine, base, growth, rate, terminal_growth, *, cash=0.0, debt=0.0,
+                     shares=1.0, payout=0.0, price=None, fmt=None,
+                     growth_steps=SENS_GROWTH_STEPS, rate_steps=SENS_RATE_STEPS) -> dict:
+    """The base-case value per share across a grid of growth and discount rate.
+
+    WHY A GRID AND NOT ANOTHER NUMBER. The panel already says the answer moves
+    enormously with the growth and discount rate assumed, and tells the reader
+    to change an input and watch. A grid does that for them, in both directions
+    at once, so "how much does this rest on my 10%?" has an answer on the page.
+
+    THE DETERMINISTIC BASE CASE, NOT THE SIMULATION'S MEDIAN. The assumed cell
+    is the same calculation as `baseCase.impliedPrice`, so the grid and the
+    figure above it agree to the last digit. The Monte Carlo median differs from
+    it by construction (the model is non-linear in both inputs), and a panel
+    quoting two different "centres" is the kind of contradiction this codebase
+    keeps having to remove.
+
+    NOTHING IS COMPARED WITH THE PRICE HERE. The price travels beside the grid
+    so the reader can do that themselves; there is no count of cells above it,
+    no fill, no tone. A grid of fair values coloured against price is a buy/sell
+    heat map, which PRODUCT.md constraint 1 refuses.
+
+    A CELL TOO CLOSE TO PERPETUAL GROWTH IS REFUSED, NOT CLAMPED. The core
+    silently floors the spread at MIN_SPREAD, so computing such a cell would
+    print a number that is not the stated formula. It is None, and says why.
+
+    One vectorised call: the valid cells are flattened into the draw axis of the
+    same functions the simulation uses, and reshaped back.
+    """
+    fmt = fmt or (lambda v: f"{v:,.2f}")
+    if engine == "RI":
+        rows, row_at = _axis(growth, growth_steps, RI_ROE_BOUNDS)
+        row_axis = {"name": "roe", "label": "Return on equity", "values": rows, "assumedIndex": row_at}
+    else:
+        rows, row_at = _axis(growth, growth_steps, SENS_GROWTH_BOUNDS)
+        row_axis = {"name": "growth", "label": "Growth, years 1-5", "values": rows,
+                    "assumedIndex": row_at}
+    cols, col_at = _axis(rate, rate_steps, SENS_RATE_BOUNDS)
+    rate_label = "WACC" if engine == "DCF" else "Cost of equity"
+
+    g_grid, r_grid = np.meshgrid(np.array(rows), np.array(cols), indexing="ij")
+    if engine == "RI":
+        valid = np.ones_like(g_grid, dtype=bool)
+    else:
+        valid = (r_grid - terminal_growth) >= MIN_SPREAD - 1e-12
+    g_flat, r_flat = g_grid[valid], r_grid[valid]
+
+    values = np.full(g_grid.shape, np.nan)
+    if g_flat.size:
+        if engine == "DCF":
+            out = dcf_implied_price(base, g_flat, r_flat, np.full(g_flat.shape, terminal_growth),
+                                    cash, debt, shares)
+        elif engine == "DDM":
+            out = ddm_implied_price(base, g_flat, r_flat, np.full(g_flat.shape, terminal_growth))
+        else:
+            out, _, _, _ = residual_income_value(np.full(g_flat.shape, base), g_flat, r_flat,
+                                                 np.full(g_flat.shape, payout))
+        values[valid] = np.asarray(out, dtype=float).ravel()
+
+    cells = []
+    for i in range(len(rows)):
+        line = []
+        for j in range(len(cols)):
+            v = values[i, j]
+            if not valid[i, j]:
+                line.append({"value": None, "label": None, "refused": "spread"})
+            elif not np.isfinite(v):
+                line.append({"value": None, "label": None, "refused": "undefined"})
+            else:
+                line.append({"value": float(v), "label": fmt(float(v)), "refused": None})
+        cells.append(line)
+
+    implied_row = None
+    if engine in ("DCF", "DDM"):
+        implied_row = []
+        for r in cols:
+            if r - terminal_growth < MIN_SPREAD - 1e-12:
+                implied_row.append({"rate": r, "impliedGrowth": None, "reason": "spread"})
+                continue
+            g = implied_growth(engine, price, base, r, terminal_growth,
+                               cash=cash, debt=debt, shares=shares)
+            implied_row.append({"rate": r, "impliedGrowth": g,
+                                "reason": None if g is not None else "unreachable"})
+
+    price_f = _safe_float(price)
+    return {
+        "engine": engine,
+        "rowAxis": row_axis,
+        "colAxis": {"name": "rate", "label": rate_label, "values": cols, "assumedIndex": col_at},
+        "cells": cells,
+        "assumed": {"row": row_at, "col": col_at},
+        "terminalGrowth": float(terminal_growth),
+        "price": float(price_f) if np.isfinite(price_f) else None,
+        "priceLabel": fmt(float(price_f)) if np.isfinite(price_f) else None,
+        "impliedRow": implied_row,
+        "impliedRowReason": RI_IMPLIED_REASON if engine == "RI" else None,
+        "refusals": {"spread": SPREAD_REFUSAL,
+                     "unreachable": ("Today's price lies outside what any growth rate between "
+                                     "-60% and +60% a year can produce at this discount rate.")},
+        "reading": ("Each cell is the model's base-case value per share at that "
+                    f"{'return on equity' if engine == 'RI' else 'growth rate'} and "
+                    f"{rate_label if rate_label.isupper() else rate_label.lower()}, with every "
+                    "other input as assumed. It is not a "
+                    "forecast, and the market price sits beside the grid rather than inside it."),
+    }
+
+
 def base_case_schedule(engine, base, growth, rate, terminal_growth,
                        cash=0.0, debt=0.0, shares=1.0):
     projected, pv_explicit, pv_terminal, terminal_value = pv_of_growing_stream(
@@ -1354,6 +1493,15 @@ def analyze(
             shares=shares if engine == "DCF" else 1.0,
         )
 
+    # The same model across a grid of its two biggest inputs. Computed from the
+    # inputs actually used above, so its assumed cell IS the base case.
+    sensitivity = sensitivity_grid(
+        engine, base_value, growth_input, discount_rate, terminal_growth,
+        cash=cash_used, debt=debt_used, shares=shares if engine == "DCF" else 1.0,
+        payout=payout_used if engine == "RI" else 0.0, price=price,
+        fmt=lambda v: fmt_price(v, market),
+    )
+
     sims = run_monte_carlo(
         engine, base_value, growth_input, discount_rate, terminal_growth,
         n_sims=n_sims, sd_growth=sd_g, sd_rate=sd_r, sd_terminal=sd_t,
@@ -1572,6 +1720,7 @@ def analyze(
             "histogram": histogram,
         },
         "verdict": verdict,
+        "sensitivity": sensitivity,
         "schedule": schedule_rows,
         "streamLabel": stream_label,
         "bridge": [{"component": k, "amount": v} for k, v in bridge],

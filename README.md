@@ -193,9 +193,12 @@ simulation to produce a range rather than a single number.
 today's price correct? On AAPL that came out at **37% a year for five years** against a 10%
 assumption — which is a claim about the world you can agree or disagree with, rather than a fair
 value you have no basis to judge. It is stated as conditional on the other inputs, because it is:
-lower the discount rate and the implied growth falls with it. The panel says so and tells you
-to change the input and watch the number move — there is no sensitivity grid computing that
-range for you, which is a gap rather than a claim (see RESEARCH_ROADMAP).
+lower the discount rate and the implied growth falls with it. The panel says so, and a
+**sensitivity grid** shows it: the base-case value across growth ±6 points and the discount
+rate ±2, with the growth today's price implies at each rate along the bottom. The grid is
+uncoloured numbers with the price printed beside it rather than inside it, because a grid of
+fair values coloured against price is a buy/sell heat map — and the build fails if anyone
+colours it.
 
 **What it can't tell you.** Anything with confidence. A DCF is an opinion with arithmetic
 attached — the answer moves enormously with the growth and discount rate you assume, which

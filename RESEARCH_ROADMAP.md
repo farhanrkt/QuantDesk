@@ -1806,24 +1806,71 @@ two docstrings without actually doing.
 
 ---
 
+## 19. The sensitivity grid, and the company record
+
+Two descriptive additions in the October 2026 overhaul. Neither predicts anything, so
+PRODUCT.md constraint 2 does not ask for a measurement; both are written up because each
+has a way to be read as more than it is.
+
+### 19.1 Value across growth and discount rate, and why it is not coloured
+
+`valuation.sensitivity_grid` evaluates the base case across growth ±6 points (2-point steps)
+and the discount rate ±2 points (1-point steps), clipped to what the route accepts. It is
+the deterministic base case, not the Monte Carlo median: the assumed cell equals
+`baseCase.impliedPrice` exactly, which a test pins, because two different "centres" on one
+panel would be a contradiction the reader cannot resolve. Cells within 1.5 points of
+perpetual growth are refused rather than computed — the core floors the spread silently,
+so such a cell would print a number that is not the stated formula. The bottom row solves
+for the growth today's price implies at each discount rate, which is the range the README
+once claimed the app showed and did not.
+
+The owner named the risk before it was built: "a grid of fair values against price,
+coloured, is a buy/sell heat map". So the grid is uncoloured mono numerals, the assumed
+cell is outlined in the engine's identity colour, and the price is printed beside the grid
+rather than used inside it. `check_frontend.mjs` rule 13 fails the build if the grid's file
+touches a tone or compares anything with the price; both halves were planted and seen to
+fail. Every cell is checked against an independently written closed form.
+
+### 19.2 The record year by year
+
+`trackrecord.series` hands over the statement lines the valuation and quality lenses had
+already fetched — revenue, operating and net income, operating and free cash flow, capital
+spending, debt, cash, equity — as a table of fiscal years. A missing year is null, never
+zero; lenders' free cash flow and debt are withheld for the reasons §18.5 gives; statements
+left in their reporting currency are labelled with it. It rides in `/api/confluence` as a
+`company` leg that neither the synthesis nor the pre-trade checks are handed.
+
+Writing it found that `trackrecord.read` quoted Indonesian base rates — "two thirds of this
+market", "a median of 3.0", "a commodity upswing" — under any company, including the US
+names the scanner sweeps. The reading now takes the market and reports a US company's
+figures bare, with `baseRatesNote` saying no sample has been measured there.
+
+It also found that yfinance's earnings table needs lxml, which was never installed. The
+bare `except` around the fetch swallowed the ImportError, so `earnings_dates` returned an
+empty list on every call and the event study's earnings-proximity tag never fired: "no
+earnings nearby" is a legitimate answer, so nothing looked wrong. lxml is pinned, the
+calendar is cached for the day and shared, and the provider's calendar backs up the next
+date alone when the table is unavailable.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
 |---|---|
 | Placing a company in a book-to-market quintile | §8 declines this rather than inventing a breakpoint. It needs a universe-wide scan of book values, and fundamentals do not batch |
 | Multi-factor cost of equity (Fama-French) | Factor returns are freely available for the US; constructing IDX factors is a project in itself |
-| Sensitivity grid (growth × discount rate) | Cheap, though not quite as cheap as this row used to claim: `pv_of_growing_stream` is vectorised over DRAWS, with growth, discount rate and terminal growth broadcast row-wise, so a grid means flattening a meshgrid into that axis rather than an outer product it already supports |
 | Peer / sector relative multiples | Needs a peer-set source beyond yfinance. §18 supplies half of it — a field membership from the provider's industry label — but those labels are coarse ("Conglomerates" is not a field anyone competes in) and a quarter of the exchange cannot be placed at all, so they are not yet a base for a multiple |
 | IDX fundamentals curation | The durable moat, and the largest single effort |
 | Single-name exposure betas | §16 ships the portfolio half, which is descriptive. "This stock moves 0.7x as hard as its sector" invites forward use, so it is gated on a stability study — do this period's betas predict next period's — mirroring `measure_correlation_stability.py`. A four-year probe gives year-over-year rank correlations of +0.29 to +0.66, inside the band that licensed the portfolio feature, on three transitions where that study had six. Eight blocks are available; MBMA, NCKL and TAPG cannot supply them and must be excluded by name rather than quietly run on fewer |
+| Track-record base rates for the US | §19 stops the reading quoting the Indonesian ones under a US company; nothing has measured what "profitable every year" or "a median of 3.0x" looks like on a US sample, so the US reading reports its figures bare. A measurement over the US listings file would let it say how ordinary each one is |
 | Fundamental exposure — revenue against commodity prices | **Rejected on feasibility, not deferred.** `market_data` fetches annual statements only, five columns, and yfinance's quarterlies for these names return five or six with gaps — ADRO and PTBA are both missing 2025-09-30. Five irregular observations is not a weak estimate, it is not an estimate. Consequence: the reverse DCF's implied growth cannot be restated as an implied commodity path |
 
 **Corrected while writing this:** README quoted the price-implied growth rate moving across
 "24% to 42%" over a range of discount rates, in a sentence that read as something the app
-shows. It does not: varying the discount rate is a query parameter a reader can drive by hand,
-and the sensitivity grid that would present the range is the open item two rows above. The
-sentence now says what the panel actually does, which is to state the conditionality and point
-at the editable input.
+shows. It did not, then: varying the discount rate was a query parameter a reader could drive
+by hand. §19's grid now presents exactly that range — the bottom row is the implied growth at
+each discount rate — and the README sentence can say so.
 
 **Explicitly rejected:** calendar effects (January, Halloween) — precisely where the
 multiple-testing critique bites hardest; headline sentiment — Loughran-McDonald is the right
