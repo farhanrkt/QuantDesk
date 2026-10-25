@@ -1008,3 +1008,47 @@ def test_without_a_parser_the_calendar_still_supplies_the_next_date(monkeypatch)
     assert out["next"] == soon.isoformat()
     assert out["dates"] == [] and out["past"] == [], "no past dates are invented"
     assert "Earnings Average" not in str(out), "an analyst estimate never leaves this function"
+
+
+# --------------------------------------------------------------------------- #
+# yf.download keeps its results in module globals; two at once cross over
+# --------------------------------------------------------------------------- #
+def test_concurrent_downloads_never_hand_one_symbol_anothers_prices(monkeypatch):
+    """A fake `download` with yfinance's actual flaw: results go into one shared
+    dict that every call resets on entry and reads on exit. Without the lock in
+    market_data, threads interleave and a symbol receives another's frame —
+    exactly how a made-up ticker came back with Microsoft's history."""
+    import threading as th
+    import types
+
+    shared = {}
+
+    def download(ticker, **_kw):
+        shared.clear()                             # "shared._DFS = {}"
+        time.sleep(0.01)                           # the network, during which others run
+        level = {"AAA": 10.0, "BBB": 500.0, "CCC": 9000.0}[ticker]
+        idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=30)
+        shared[ticker] = pd.DataFrame({"Open": level, "High": level, "Low": level,
+                                       "Close": level, "Volume": 1000.0}, index=idx)
+        time.sleep(0.01)
+        return next(iter(shared.values()))         # assembled from the shared dict
+
+    monkeypatch.setattr(MD, "yf", types.SimpleNamespace(download=download))
+    results: dict[str, float] = {}
+    errors: list[str] = []
+
+    def fetch(symbol, expected):
+        frame = MD.ohlcv(symbol, start=dt.date.today() - dt.timedelta(days=60),
+                         end=dt.date.today(), allow_stale=True)
+        got = float(frame["Close"].iloc[-1])
+        results[symbol] = got
+        if got != expected:
+            errors.append(f"{symbol} received {got}, expected {expected}")
+
+    threads = [th.Thread(target=fetch, args=(s, v))
+               for s, v in [("AAA", 10.0), ("BBB", 500.0), ("CCC", 9000.0)] * 4]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors, errors

@@ -252,6 +252,23 @@ def is_stale(frame: Optional[pd.DataFrame], asked_through: Optional[dt.date] = N
     return age > limit
 
 
+# ONE yf.download AT A TIME, PER PROCESS. yfinance's `download` keeps its results
+# in module-level globals — it sets `shared._DFS = {}` on entry and assembles its
+# return value from that dict on exit — so two downloads running at once in one
+# process can hand each caller the OTHER caller's frame. Found by putting four
+# companies side by side in the compare view: a made-up ticker came back with
+# 1,610 bars of real price history, which were Microsoft's, while the same
+# request's anomaly leg (a different fetch path) correctly said "no data".
+#
+# It was never only the compare view. /api/confluence runs its legs in threads,
+# and the technical leg and the valuation's beta estimate both download in the
+# same request; the local server, a warm serverless instance and the scanner all
+# overlap requests too. A plausible wrong answer with no error, which is the
+# shape of defect this codebase most often has. `Ticker(...).history` builds its
+# frame on its own instance and does not need this; every `yf.download` does.
+_DOWNLOAD_LOCK = threading.Lock()
+
+
 def ohlcv(symbol: str, *, period: Optional[str] = None,
           start: Optional[dt.date] = None, end: Optional[dt.date] = None,
           auto_adjust: bool = True,
@@ -279,12 +296,13 @@ def ohlcv(symbol: str, *, period: Optional[str] = None,
         if period:
             raw = yf.Ticker(ticker).history(period=period, auto_adjust=auto_adjust)
         else:
-            raw = yf.download(
-                ticker, start=start,
-                end=(end + dt.timedelta(days=1)) if end else None,
-                interval="1d", auto_adjust=auto_adjust, actions=False,
-                progress=False, threads=False,
-            )
+            with _DOWNLOAD_LOCK:
+                raw = yf.download(
+                    ticker, start=start,
+                    end=(end + dt.timedelta(days=1)) if end else None,
+                    interval="1d", auto_adjust=auto_adjust, actions=False,
+                    progress=False, threads=False,
+                )
     except Exception:
         return None
     frame = normalise(raw)
@@ -317,11 +335,14 @@ def ohlcv_batch(symbols_list: Sequence[str], start: dt.date, end: dt.date,
     for position in range(0, len(unique), chunk_size):
         chunk = unique[position:position + chunk_size]
         try:
-            raw = yf.download(
-                chunk, start=start, end=end + dt.timedelta(days=1), interval="1d",
-                auto_adjust=True, actions=False, progress=False,
-                group_by="ticker", threads=True,
-            )
+            # yfinance's own threads inside one call are fine; two CALLS at once
+            # share its globals — see _DOWNLOAD_LOCK.
+            with _DOWNLOAD_LOCK:
+                raw = yf.download(
+                    chunk, start=start, end=end + dt.timedelta(days=1), interval="1d",
+                    auto_adjust=True, actions=False, progress=False,
+                    group_by="ticker", threads=True,
+                )
         except Exception:
             continue
         if raw is None or raw.empty:
