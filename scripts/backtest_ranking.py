@@ -151,9 +151,9 @@ def _headline(total: int, significant: list, raw_hits: list, results: dict) -> s
                   if v["informationCoefficient"].get("minimumDetectable")]
         floor = min(floors) if floors else None
         tail = (f" The most sensitive of them could only have detected a mean information "
-                f"coefficient of about {floor:.2f}, and a useful one in this field is "
-                f"nearer 0.03 — so this is 'no edge large enough to see here', not "
-                f"'no edge'." if floor else "")
+                f"coefficient of about {floor:.2f}, against the 0.03 this app sets as "
+                f"its own bar for a useful one — so this is 'no edge large enough to "
+                f"see here', not 'no edge'." if floor else "")
         chance = round(total * 2 * 0.05, 1)
         raw = ""
         if raw_hits:
