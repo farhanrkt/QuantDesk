@@ -161,6 +161,25 @@ for (const [lens, family] of Object.entries(pyFamilies)) {
     process.exit(1);
   }
 }
+// cn() KNOWS EVERY FONT SIZE THE CONFIG DEFINES. tailwind-merge files an
+// unknown `text-*` as a colour, so a size missing from lib/utils.ts is silently
+// dropped whenever a tone class follows it — which is how every toned figure
+// lost its 24px. The two lists are compared here so a new size cannot repeat it.
+{
+  const tw = readFileSync(join(ROOT, "tailwind.config.ts"), "utf8");
+  const block = tw.match(/fontSize:\s*\{([\s\S]*?)\n\s*\},/);
+  const sizes = block ? [...block[1].matchAll(/^\s*(\w+):\s*\[/gm)].map((m) => m[1]) : [];
+  const utils = readFileSync(join(ROOT, "lib/utils.ts"), "utf8");
+  const known = utils.match(/text:\s*\[([^\]]*)\]/)?.[1] ?? "";
+  const missing = sizes.filter((size) => !new RegExp(`"${size}"`).test(known));
+  if (!sizes.length || missing.length) {
+    console.error(`lib/utils.ts does not tell tailwind-merge about font size(s) `
+                  + `${missing.join(", ") || "(none found in tailwind.config.ts)"}. `
+                  + "cn() would treat them as colours and drop one beside a tone class.");
+    process.exit(1);
+  }
+}
+
 // THE BROWSER RESOLVES SYMBOLS THE WAY THE SERVER DOES. lib/symbols.ts exists
 // so the URL names the symbol the engines will actually fetch; if its pattern
 // or suffix map drifted from the Python ones, /stock/BBCA could open a page
@@ -575,13 +594,96 @@ for (const [file, src] of uiFiles) {
   }
 }
 
+// 16. A SCROLL CONTAINER A KEYBOARD CAN SCROLL. A table in a bare
+//     `overflow-x-auto` box can be scrolled by a mouse and a finger and not by a
+//     keyboard, unless something inside it takes focus; axe found the first on
+//     the flagged-days table, and at a phone's width nearly every table in the
+//     app overflows. `ScrollRegion` becomes a labelled, focusable region exactly
+//     when its content overflows. Two exemptions, each holding its own focus:
+//     the tab strip (every tab is focusable, and the active one is scrolled into
+//     view) and the palette's list (driven by aria-activedescendant from the
+//     input, which scrolls the active option into view).
+const SCROLL_EXEMPT = new Set([
+  "components/ui/scroll.tsx", "components/ui/tabs.tsx", "components/palette/CommandPalette.tsx",
+]);
+for (const [file, src] of uiFiles) {
+  if (SCROLL_EXEMPT.has(file) || !file.endsWith(".tsx")) continue;
+  const m = src.match(/\boverflow-(?:x-|y-)?auto\b/);
+  if (m) {
+    fail(file, `A bare scroll container (${m[0]}).`,
+         "Use <ScrollRegion label=...> from components/ui/scroll.tsx so a keyboard can scroll it.");
+  }
+}
+
+// 17. A SCATTER CHART NEVER REACHES THE ACCESSIBILITY TREE. Recharts stamps
+//     role="img" on every scatter symbol with no name, so one chart can put
+//     hundreds of "image" announcements in front of a screen reader: 1,464 on
+//     the anomaly chart in September, then 120 on the exposure chart and 360 on
+//     the annotated chart in October, each found by axe and not by reading. A
+//     chart that draws `<Scatter` must sit inside an `aria-hidden` wrapper, and
+//     its panel must say the finding in text.
+for (const [file, src] of uiFiles) {
+  if (!/<Scatter\b/.test(src)) continue;
+  let from = 0;
+  for (const m of src.matchAll(/<Scatter\b/g)) {
+    const container = src.lastIndexOf("<ResponsiveContainer", m.index);
+    if (container < from) continue;
+    from = container + 1;
+    if (!/aria-hidden/.test(src.slice(Math.max(0, container - 200), container))) {
+      fail(file, "A Recharts <Scatter> outside an aria-hidden wrapper.",
+           "Wrap its <ResponsiveContainer> in <div aria-hidden> and state the finding in prose; "
+           + "each scatter symbol is an unlabelled role=img otherwise.");
+    }
+  }
+}
+
+// 18. EVERY COLOUR ON SCREEN HAS ONE ON PAPER. The first print of the Value
+//     tab set its "what this cannot tell you" well in mid-grey with grey text
+//     on it — `bg-sunken/40` was missing from a print reset that named
+//     `bg-ink/` and `bg-raised/` only — and the numbered next steps in
+//     `text-tech` at 2.4:1 on white. A class the print block does not name
+//     prints in its screen colour. So every text token and every ground a UI
+//     file uses must be named in globals.css's print block, and every paper
+//     text token must clear AA on white. Colours set inline are mapped by the
+//     plugin in tailwind.config.ts, from the palette, so they cannot drift.
+const GLOBALS = readFileSync(join(ROOT, "app/globals.css"), "utf8");
+const PRINT_CSS = GLOBALS.slice(GLOBALS.indexOf("@media print"));
+const PALETTE_TOKENS = new Set([...CONFIG.matchAll(/^\s+(\w+):\s*"#[0-9A-Fa-f]{6}"/gm)].map((m) => m[1]));
+const printNames = new Map();   // selector the print block must contain -> first file using it
+for (const [file, src] of uiFiles) {
+  for (const m of src.matchAll(/\btext-([a-zA-Z]+)\b/g)) {
+    // `ink` is the dark text on a filled control, already dark on paper.
+    if (!PALETTE_TOKENS.has(m[1]) || m[1] === "ink" || m[1].startsWith("print")) continue;
+    if (!printNames.has(`.text-${m[1]}`)) printNames.set(`.text-${m[1]}`, file);
+  }
+  for (const m of src.matchAll(/\bbg-(ink|panel|raised|sunken)(\/\d+)?\b/g)) {
+    const selector = m[2] ? `[class*="bg-${m[1]}/"]` : `.bg-${m[1]}`;
+    if (!printNames.has(selector)) printNames.set(selector, file);
+  }
+}
+for (const [selector, file] of printNames) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!new RegExp(`${escaped}(?![\\w-])`).test(PRINT_CSS)) {
+    fail(file, `\`${selector}\` has no print equivalent.`,
+         "Name it in the @media print block of app/globals.css, mapped to a print token from lib/palette.ts.");
+  }
+}
+for (const token of ["printText", "printBody", "printMuted", "printAcc", "printDist", "printWarn"]) {
+  const hex = hexOf(token);
+  const ratio = hex ? contrast(hex, "#FFFFFF") : 0;
+  if (ratio < AA) {
+    fail("lib/palette.ts", `Print token \`${token}\` clears ${ratio.toFixed(2)}:1 on white.`,
+         `Paper text must clear ${AA}:1 like screen text does.`);
+  }
+}
+
 if (designFailures.length) {
   console.error("\nDesign-system rules broken (see DESIGN.md):\n");
   console.error(designFailures.join("\n\n"));
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 15 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 18 checked across ${uiFiles.length} UI files`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));

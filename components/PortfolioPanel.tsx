@@ -10,6 +10,7 @@ import { cn, num, pct } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { Textarea } from "@/components/ui/input";
 import { StateCard } from "@/components/ui/state";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 /**
  * Where this candidate sits against what the reader already owns.
@@ -293,7 +294,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
             </span>
           </CardHeader>
           <CardBody className="px-0">
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Where the risk sits">
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -331,7 +332,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
                   })}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
             <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
               Compare the two columns. A holding with a tenth of the money and a quarter of the
               risk is not diversified by being one of ten — it is the whole portfolio under a

@@ -13,6 +13,7 @@ import { palette } from "@/lib/palette";
 import { Textarea } from "@/components/ui/input";
 import { StateCard } from "@/components/ui/state";
 import { useSessionState } from "@/lib/session";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 const ACC = palette.acc;
 const DIST = palette.dist;
@@ -167,7 +168,7 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
                 result, not a failure.
               </p>
             ) : (
-              <div className="overflow-x-auto">
+              <ScrollRegion label="Screener results">
                 <table className="w-full text-left text-meta">
                   <thead>
                     <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -233,7 +234,7 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ScrollRegion>
             )}
           </CardBody>
         </Card>

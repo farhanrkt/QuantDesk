@@ -40,7 +40,10 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: "bg-tech font-semibold text-ink hover:bg-tech/85 disabled:bg-rule disabled:text-faint disabled:opacity-100",
+        // Disabled text is `ash`, not `faint`: WCAG exempts inactive controls,
+        // but faint on `rule` is 3.96:1 and the empty landing shows this state
+        // first. ash clears 4.5 on the same ground.
+        primary: "bg-tech font-semibold text-ink hover:bg-tech/85 disabled:bg-rule disabled:text-ash disabled:opacity-100",
         secondary: "border border-tech/50 bg-tech/10 text-chalk hover:bg-tech/20",
         quiet: "border border-rule text-body hover:border-ruleStrong hover:bg-raised hover:text-chalk",
         danger: "border border-dist/40 text-dist hover:bg-dist/10",

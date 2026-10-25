@@ -122,7 +122,8 @@ function FactorChart({ factor, rows, materialAt, highlight, yMax }: {
         <span className="text-h3 font-semibold text-chalk">{factor.label}</span>
         <span className="font-mono text-micro text-faint">{factor.symbol}</span>
       </div>
-      <div className="h-64 w-full">
+      {/* Hidden from assistive tech: the sr-only sentence below states every named point; Recharts stamps role=img on each scatter symbol, which axe counted as 120 unlabelled images. */}
+      <div className="h-64 w-full" aria-hidden>
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 14, right: 22, bottom: 26, left: 4 }}>
             <CartesianGrid stroke={GRID} strokeDasharray="2 4" />

@@ -22,6 +22,7 @@ import { palette } from "@/lib/palette";
 import { Textarea } from "@/components/ui/input";
 import { StateCard } from "@/components/ui/state";
 import { useSessionState } from "@/lib/session";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 const CUSTOM = "__custom__";
 // A stable empty list: the session store returns its initial value by identity.
@@ -414,11 +415,11 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               {/* The ticker column stays put while the signal columns scroll,
                   because a row of seven percentiles is unreadable once you can
                   no longer see which name it belongs to. */}
-              <div className="max-h-[36rem] overflow-auto">
+              <ScrollRegion vertical label="Ranked names" className="max-h-[36rem]">
                 <table className="w-full text-left text-meta">
                   <thead className="sticky top-0 z-20 bg-panel">
                     <tr className="eyebrow border-b border-rule [&>th]:px-3 [&>th]:py-2 [&>th]:font-normal [&>th]:align-bottom">
-                      <th scope="col" className="w-8 bg-panel" />
+                      <th scope="col" className="w-8 bg-panel"><span className="sr-only">How it ranked</span></th>
                       <th scope="col" className="w-10 bg-panel text-right">#</th>
                       <SortHeader label="Ticker" active={sortKey === "ticker"}
                                   ascending={ascending} onClick={() => toggleSort("ticker")}
@@ -512,7 +513,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                     })}
                   </tbody>
                 </table>
-              </div>
+              </ScrollRegion>
 
               {/* Two different empties. A scan that ranked nobody is a fact about
                   the list; a filter that hides everybody is a fact about the
@@ -609,7 +610,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               )}
 
               {deepState.status === "ready" && (
-                <div className="overflow-x-auto">
+                <ScrollRegion label="Quality and value for the shortlist">
                   <table className="w-full text-left text-meta">
                     <thead>
                       <tr className="eyebrow border-b border-rule [&>th]:px-3 [&>th]:py-2 [&>th]:font-normal">
@@ -629,7 +630,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                   <p className="pt-3 text-meta leading-relaxed text-ash">
                     {deepState.data.caveat}
                   </p>
-                </div>
+                </ScrollRegion>
               )}
             </CardBody>
           </Card>

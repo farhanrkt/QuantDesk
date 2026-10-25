@@ -10,6 +10,9 @@ __pycache__
 out
 # A build-time copy of docs/field-manual.html; docs/ is the one source.
 public/docs/
+# The accessibility audit's engine, copied in for a run and deleted after
+# (DESIGN.md). 580 KB of tooling must never ship as an asset.
+public/axe.min.js
 *.tsbuildinfo
 # Next regenerates this on every build; it is in create-next-app's ignore list too.
 next-env.d.ts

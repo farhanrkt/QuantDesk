@@ -13,6 +13,7 @@ import { useHorizon } from "@/components/ui/horizon";
 import type { ExplainMap, LongTermBlock } from "@/lib/types";
 import { cn, num, pct, signedPct } from "@/lib/utils";
 import { alpha, palette } from "@/lib/palette";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 const UP = palette.acc;
 const DOWN = palette.dist;
@@ -146,7 +147,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
             <span className="font-mono text-micro text-ash">% per year</span>
           </CardHeader>
           <CardBody className="px-0">
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Every holding period in the history">
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -229,7 +230,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                   })}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
             <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
               Read a row as: buying on <em>any</em> day in this history and holding that many
               years, here is the range of yearly returns you would have got. The
@@ -340,7 +341,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
             </span>
           </CardHeader>
           <CardBody className="px-0">
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Returns against the index">
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -379,7 +380,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                   })}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
             <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
               The real alternative was never cash — it was the index fund you could have bought
               instead. A stock up 40% while the market rose 60% has cost its holder money in the

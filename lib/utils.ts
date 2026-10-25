@@ -1,5 +1,25 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+
+/**
+ * tailwind-merge, told about this app's type scale.
+ *
+ * WITHOUT THIS, EVERY TONED FIGURE LOST ITS SIZE. tailwind-merge resolves
+ * conflicts by class group, and it recognises `text-sm`/`text-lg` as font
+ * sizes but not this project's `text-micro`/`text-meta`/`text-figure`… So it
+ * filed them as COLOURS, and `cn("text-figure", "text-acc")` kept only the
+ * later "colour": a stat the server judged good rendered at body size instead
+ * of 24px, a toned caption lost its 13px, and a small primary button lost its
+ * dark text and printed light grey on blue at 1.71:1 — which is how axe found
+ * it. The names here must match `fontSize` in tailwind.config.ts.
+ */
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      "font-size": [{ text: ["micro", "meta", "base", "lead", "h3", "h2", "h1", "figure", "display"] }],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

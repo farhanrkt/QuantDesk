@@ -7,6 +7,7 @@ import type { CarSummary, EventStudyResponse, Engine } from "@/lib/types";
 import { cn, num, pct } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { StateCard } from "@/components/ui/state";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 const UP = palette.acc;
 const DOWN = palette.dist;
@@ -133,7 +134,7 @@ export function EventStudyPanel({
           </span>
         </CardHeader>
         <CardBody className="px-0">
-          <div className="overflow-x-auto">
+          <ScrollRegion label="Abnormal returns after each anomaly">
             <table className="w-full text-left text-meta">
               <thead>
                 <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -152,7 +153,7 @@ export function EventStudyPanel({
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
 
           <div className={cn("mx-5 mt-4 rounded border px-4 py-3 text-meta leading-relaxed",
                              anySignificant
@@ -169,7 +170,7 @@ export function EventStudyPanel({
         <Card>
           <CardHeader><CardTitle>By flow direction</CardTitle></CardHeader>
           <CardBody className="px-0">
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Abnormal returns by flow direction">
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -201,7 +202,7 @@ export function EventStudyPanel({
                   )}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
             <div className="px-5 pt-3">
               <Explainer summary="If both rows look alike, the buying/selling label means nothing">
                 The question here is not whether unusual days predict returns. It is whether

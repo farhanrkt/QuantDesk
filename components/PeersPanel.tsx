@@ -102,9 +102,12 @@ export function PeersPanel({
     <Card>
       <CardHeader>
         <CardTitle>Against {universe.name}</CardTitle>
-        <div className="flex items-center gap-3">
+        {/* WRAPS on a phone: the picker's longest option is "Dow Jones
+            Industrial Average (30)", and beside the count it pushed the page
+            28px past a 375px screen. */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
           {candidates.length > 1 && (
-            <Select value={universe.id} aria-label="Peer group" className="h-8"
+            <Select value={universe.id} aria-label="Peer group" className="h-8 max-w-full"
                     onChange={(e) => onCompare(e.target.value)}>
               {candidates.map((c) => (
                 <option key={c.id} value={c.id}>{c.name} ({c.count})</option>

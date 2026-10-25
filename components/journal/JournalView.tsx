@@ -76,7 +76,7 @@ export function JournalView() {
       </header>
 
       {entries.length === 0 ? (
-        <StateCard kind="empty" title="No entries yet">
+        <StateCard kind="empty" level={2} title="No entries yet">
           Open a company and use its Thesis tab to write down what has to be true and what would
           prove it wrong — before you act. Entries are kept in this browser only.
         </StateCard>
@@ -94,7 +94,7 @@ export function JournalView() {
           </div>
 
           {groups.length === 0 && (
-            <StateCard kind="empty" title="No entry matches that ticker" />
+            <StateCard kind="empty" level={2} title="No entry matches that ticker" />
           )}
 
           {groups.map(([ticker, list]) => (

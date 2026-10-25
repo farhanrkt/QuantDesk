@@ -19,6 +19,7 @@ import type { TechPoint, TechnicalResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { TONE, cn, num, pct, splitEmphasis } from "@/lib/utils";
 import { palette } from "@/lib/palette";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 const TECH = palette.tech;
 const FAST = palette.seriesFast;
@@ -388,68 +389,75 @@ export function TechnicalPanel({
           <span className="font-mono text-micro text-ash">{data.currency}</span>
         </CardHeader>
         <CardBody>
-          <ResponsiveContainer width="100%" height={320}>
-            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={48} />
-              <YAxis domain={["auto", "auto"]} tickLine={false} axisLine={false} width={56} />
-              <Tooltip content={<TechTooltip />} />
-              <Area dataKey="bbBase" stackId="bb" stroke="none" fill="transparent" isAnimationActive={false} />
-              <Area dataKey="bbSpan" stackId="bb" stroke="none" fill={BAND} fillOpacity={0.10}
-                    isAnimationActive={false} />
-              {levels.map((level) => (
-                <ReferenceLine key={level} y={level} strokeDasharray="4 4"
-                               stroke={level > latest.close ? palette.levelAbove : palette.levelBelow} strokeOpacity={0.45}
-                               label={{ value: num(level), position: "insideLeft", fill: palette.axis, fontSize: 10 }} />
-              ))}
-              <Line dataKey="close" stroke={TECH} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line dataKey="sma50" stroke={FAST} strokeWidth={1.2} dot={false} connectNulls
-                    isAnimationActive={false} />
-              <Line dataKey="sma200" stroke={SLOW} strokeWidth={1.2} dot={false} connectNulls
-                    isAnimationActive={false} />
-              <Scatter dataKey="buy" fill={UP} shape="triangle" isAnimationActive={false} />
-              <Scatter dataKey="sell" fill={DOWN} shape="triangle" isAnimationActive={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          {/* Hidden from assistive tech: the crossover table and the levels list carry what the chart shows; Recharts stamps role=img on each buy/sell marker. */}
+          <div aria-hidden>
+            <ResponsiveContainer width="100%" height={320}>
+              <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" vertical={false} />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={48} />
+                <YAxis domain={["auto", "auto"]} tickLine={false} axisLine={false} width={56} />
+                <Tooltip content={<TechTooltip />} />
+                <Area dataKey="bbBase" stackId="bb" stroke="none" fill="transparent" isAnimationActive={false} />
+                <Area dataKey="bbSpan" stackId="bb" stroke="none" fill={BAND} fillOpacity={0.10}
+                      isAnimationActive={false} />
+                {levels.map((level) => (
+                  <ReferenceLine key={level} y={level} strokeDasharray="4 4"
+                                 stroke={level > latest.close ? palette.levelAbove : palette.levelBelow} strokeOpacity={0.45}
+                                 label={{ value: num(level), position: "insideLeft", fill: palette.axis, fontSize: 10 }} />
+                ))}
+                <Line dataKey="close" stroke={TECH} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                <Line dataKey="sma50" stroke={FAST} strokeWidth={1.2} dot={false} connectNulls
+                      isAnimationActive={false} />
+                <Line dataKey="sma200" stroke={SLOW} strokeWidth={1.2} dot={false} connectNulls
+                      isAnimationActive={false} />
+                <Scatter dataKey="buy" fill={UP} shape="triangle" isAnimationActive={false} />
+                <Scatter dataKey="sell" fill={DOWN} shape="triangle" isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
 
           <div className="eyebrow mt-5 mb-1">RSI (14) · above 70 stretched, below 30 washed out</div>
-          <ResponsiveContainer width="100%" height={110}>
-            <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="date" hide />
-              <YAxis domain={[0, 100]} ticks={[30, 50, 70]} tickLine={false} axisLine={false} width={56} />
-              <ReferenceLine y={70} stroke={DOWN} strokeOpacity={0.35} strokeDasharray="3 3" />
-              <ReferenceLine y={30} stroke={UP} strokeOpacity={0.35} strokeDasharray="3 3" />
-              <Line dataKey="rsi" stroke={palette.seriesCyan} strokeWidth={1.3} dot={false} connectNulls
-                    isAnimationActive={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <div aria-hidden>
+            <ResponsiveContainer width="100%" height={110}>
+              <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" vertical={false} />
+                <XAxis dataKey="date" hide />
+                <YAxis domain={[0, 100]} ticks={[30, 50, 70]} tickLine={false} axisLine={false} width={56} />
+                <ReferenceLine y={70} stroke={DOWN} strokeOpacity={0.35} strokeDasharray="3 3" />
+                <ReferenceLine y={30} stroke={UP} strokeOpacity={0.35} strokeDasharray="3 3" />
+                <Line dataKey="rsi" stroke={palette.seriesCyan} strokeWidth={1.3} dot={false} connectNulls
+                      isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
 
           <div className="eyebrow mt-5 mb-1">MACD (12, 26, 9)</div>
-          <ResponsiveContainer width="100%" height={110}>
-            <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="date" hide />
-              <YAxis tickLine={false} axisLine={false} width={56} />
-              <ReferenceLine y={0} stroke={palette.axis} strokeOpacity={0.4} />
-              <Bar dataKey="macdHist" isAnimationActive={false}
-                   shape={(props: unknown) => {
-                     // Recharts passes the rect geometry plus the source row;
-                     // it has no exported type for a custom Bar shape.
-                     const { x, y, width, height, payload } = props as {
-                       x: number; y: number; width: number; height: number;
-                       payload: ChartPoint;
-                     };
-                     const positive = (payload.macdHist ?? 0) >= 0;
-                     return <rect x={x} y={y} width={width} height={height}
-                                  fill={positive ? UP : DOWN} opacity={0.5} />;
-                   }} />
-              <Line dataKey="macd" stroke={TECH} strokeWidth={1.3} dot={false} connectNulls
-                    isAnimationActive={false} />
-              <Line dataKey="macdSignal" stroke={palette.seriesOrange} strokeWidth={1.1} dot={false} connectNulls
-                    isAnimationActive={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <div aria-hidden>
+            <ResponsiveContainer width="100%" height={110}>
+              <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" vertical={false} />
+                <XAxis dataKey="date" hide />
+                <YAxis tickLine={false} axisLine={false} width={56} />
+                <ReferenceLine y={0} stroke={palette.axis} strokeOpacity={0.4} />
+                <Bar dataKey="macdHist" isAnimationActive={false}
+                     shape={(props: unknown) => {
+                       // Recharts passes the rect geometry plus the source row;
+                       // it has no exported type for a custom Bar shape.
+                       const { x, y, width, height, payload } = props as {
+                         x: number; y: number; width: number; height: number;
+                         payload: ChartPoint;
+                       };
+                       const positive = (payload.macdHist ?? 0) >= 0;
+                       return <rect x={x} y={y} width={width} height={height}
+                                    fill={positive ? UP : DOWN} opacity={0.5} />;
+                     }} />
+                <Line dataKey="macd" stroke={TECH} strokeWidth={1.3} dot={false} connectNulls
+                      isAnimationActive={false} />
+                <Line dataKey="macdSignal" stroke={palette.seriesOrange} strokeWidth={1.1} dot={false} connectNulls
+                      isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         </CardBody>
       </Card>
 
@@ -464,7 +472,7 @@ export function TechnicalPanel({
               The 50-day and 200-day averages never crossed inside this range. Try a longer one.
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Every crossover in this range">
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -489,7 +497,7 @@ export function TechnicalPanel({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           )}
         </CardBody>
       </Card>

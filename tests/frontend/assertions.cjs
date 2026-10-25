@@ -273,6 +273,16 @@ t("ids carry the ticker and the instant, so two theses cannot collide", () => {
   assert.notEqual(J.newId(when, "AAPL"), J.newId(when, "MSFT"));
 });
 
+// ---- cn(): the custom type scale is a font size, not a colour ----
+const { cn } = require("./lib/utils.js");
+
+t("a toned figure keeps its size, and a small button keeps its text colour", () => {
+  assert.equal(cn("num text-figure font-semibold", "text-acc"), "num text-figure font-semibold text-acc");
+  assert.equal(cn("bg-tech text-ink", "h-9 px-3.5 text-meta"), "bg-tech text-ink h-9 px-3.5 text-meta");
+  assert.equal(cn("text-meta text-ash", "text-warn"), "text-meta text-warn", "a later tone still replaces a colour");
+  assert.equal(cn("text-meta", "text-lead"), "text-lead", "a later size still replaces a size");
+});
+
 // ---- analytics: a page view carries a route template, never a ticker ----
 const { redactPath, redactUrl } = require("./lib/redact.js");
 

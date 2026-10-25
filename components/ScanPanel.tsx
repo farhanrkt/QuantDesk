@@ -9,6 +9,7 @@ import type { Engine, ScanResponse, ScanRow } from "@/lib/types";
 import { cn, num } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { useSessionState } from "@/lib/session";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 /**
  * A market scan that already ran, shown in the app rather than left in a file.
@@ -698,7 +699,7 @@ export function ScanPanel({ state, market, onSelect }: {
                 : "Nothing in this scan matches that filter."}
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Every name the scan scored">
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule
@@ -837,7 +838,7 @@ export function ScanPanel({ state, market, onSelect }: {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           )}
 
           {/* A RANK RENDERED WITHOUT THIS READS AS MARKET SHARE, which nothing

@@ -162,7 +162,7 @@ export function CompareView() {
       )}
 
       {n === 0 ? (
-        <StateCard kind="empty" title="Nothing to compare yet">
+        <StateCard kind="empty" level={2} title="Nothing to compare yet">
           Add two to four tickers. Each column runs all four lenses on that company — the same
           read its own page gives — and the rows line up so the same question sits side by side.
         </StateCard>

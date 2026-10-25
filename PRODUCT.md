@@ -324,14 +324,17 @@ Audited and fixed 29 Aug 2026. What the audit found and what happened to it:
 
 Verified by walking the real tab order: 64 focusables, none unnamed, none without a
 visible focus style, no positive `tabindex`. These rules and the ones added since are
-enforced by `npm run check:frontend` (fifteen design rules, plus the privacy, analytics and
+enforced by `npm run check:frontend` (eighteen design rules, plus the privacy, analytics and
 drift checks) so they cannot come back.
 
 *Overhaul, 25 Oct 2026:* the command palette is a native `<dialog>` with the ARIA combobox
 pattern (`aria-activedescendant`, arrow keys, Escape returns focus); the phone menu and the
 shortcut list are native dialogs too; every page has a skip link and exactly one `h1`;
 confirmations go through live regions that exist before any message; the lens tabs scroll
-on one row instead of wrapping into three sticky rows on a phone.
+on one row instead of wrapping into three sticky rows on a phone. Re-audited the same day
+with axe-core on every route and tab: zero violations after six fixes. Also re-checked: no
+sideways scroll at 375px anywhere, and a printed tearsheet that clears AA on every tab.
+DESIGN.md lists what each pass found.
 
 **Not a conformance claim.** Nobody has listened to this with a screen reader — the
 keyboard contract is implemented and measured, but how it *sounds* is untested.

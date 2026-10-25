@@ -12,6 +12,7 @@ import type { AnomalyPoint, AnomalyResponse, ExplainMap } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn, num, pct } from "@/lib/utils";
 import { palette } from "@/lib/palette";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 const ACC = palette.acc;
 const DIST = palette.dist;
@@ -192,7 +193,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
             </span>
           </CardHeader>
           <CardBody className="px-0">
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Accumulation and distribution episodes">
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -225,7 +226,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
             {ex.cusumEpisode && (
               <div className="mx-5 mt-3 rounded border border-rule bg-ink/40 px-3 py-2">
                 <ExplanationBody explain={ex.cusumEpisode} />
@@ -268,7 +269,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
               the cutoff is fixed, so a calm stock genuinely returns nothing.
             </p>
           ) : (
-            <div className="max-h-[22rem] overflow-auto">
+            <ScrollRegion vertical label="Flagged days" className="max-h-[22rem]">
               <table className="w-full text-left text-meta">
                 <thead className="sticky top-0 bg-panel">
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -304,7 +305,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           )}
         </CardBody>
       </Card>

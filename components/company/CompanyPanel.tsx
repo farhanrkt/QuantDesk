@@ -11,6 +11,7 @@ import { StateCard } from "@/components/ui/state";
 import { alpha, palette } from "@/lib/palette";
 import type { BusinessProfile, CompanyResponse, HistoryRow } from "@/lib/types";
 import { cn, compact, num } from "@/lib/utils";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 /**
  * "What it is" — the company itself, before any lens reads it.
@@ -298,7 +299,7 @@ function HistoryTable({
   history, guided,
 }: { history: Extract<CompanyResponse["history"], { available: true }>; guided: boolean }) {
   const table = (
-    <div className="overflow-x-auto rounded-lg border border-ruleSoft">
+    <ScrollRegion label="Statement lines by fiscal year" className="rounded-lg border border-ruleSoft">
       <table className="w-full min-w-[32rem] text-left text-meta">
         <caption className="sr-only">Statement lines by fiscal year, in {history.currency ?? "the reporting currency"}</caption>
         <thead>
@@ -320,7 +321,7 @@ function HistoryTable({
           ))}
         </tbody>
       </table>
-    </div>
+    </ScrollRegion>
   );
   return guided ? (
     <Explainer summary="Every line, every year, as figures — a dash is a year the source did not report, never a zero">

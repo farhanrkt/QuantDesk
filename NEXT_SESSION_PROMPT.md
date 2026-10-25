@@ -16,8 +16,8 @@ plus main's IC-bar commit and the fix-ci advisory commit (merged, not
 cherry-picked), plus the October 2026 overhaul. Nothing pushed; nothing was
 asked to be. The overhaul's commits each state what they changed and why.
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
-single Vercel Python function on the back. ~1,690 offline pytest tests, 59
-frontend assertions, 15 enforced design rules plus structural checks. US and
+single Vercel Python function on the back. ~1,690 offline pytest tests, 60
+frontend assertions, 18 enforced design rules plus structural checks. US and
 Indonesian (IDX) listings. lxml is now a runtime dependency (see below).
 
 The full battery, all green as of the last commit:
@@ -50,8 +50,8 @@ results per symbol for the tab; lib/cache.ts shares confluence payloads across
 views for five minutes. Read lib/url.ts before touching routing, and
 lib/compare.ts before touching Compare.
 
-FOUR SILENT BUGS THE OVERHAUL FOUND, ALL LONG-STANDING
--------------------------------------------------------
+FIVE SILENT BUGS THE OVERHAUL FOUND, FOUR OF THEM LONG-STANDING
+----------------------------------------------------------------
 1. yf.download KEEPS ITS RESULTS IN MODULE GLOBALS. Two downloads at once in
    one process could hand a caller the other's frame: a made-up ticker came
    back with Microsoft's 1,610 bars and an "Uptrend". market_data now holds a
@@ -66,6 +66,19 @@ FOUR SILENT BUGS THE OVERHAUL FOUND, ALL LONG-STANDING
    the previous answer for five minutes. It is in CDN-Cache-Control now.
 4. THE TRACK RECORD QUOTED INDONESIAN BASE RATES UNDER US COMPANIES. read()
    takes the market; off the IDX the figures are reported bare.
+5. cn() DROPPED THE APP'S OWN FONT SIZES. tailwind-merge files an unknown
+   `text-*` as a colour, so `text-figure` lost to any tone after it (every
+   toned headline figure rendered at body size) and small primary buttons lost
+   `text-ink` to `text-meta` (1.71:1). lib/utils.ts extends the merge with the
+   scale; check_frontend fails if the two lists drift. Found by axe, not by
+   looking — the page looked plausible.
+
+VERIFIED IN THE BROWSER, 25 OCTOBER 2026
+-----------------------------------------
+axe-core on every route, tab, sub-tab, loaded panel and dialog: zero
+violations. 375px: no sideways scroll anywhere. Print emulation on every stock
+tab: every text node clears AA, explanations open, score tab refused. DESIGN.md
+("Second audit") lists the fixes; rules 16-18 keep them fixed.
 
 Also: the on-demand panels (event study, peers, portfolio, score) ran for the
 text in the ticker box rather than the loaded ticker; the exposure panel's

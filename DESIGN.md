@@ -157,7 +157,18 @@ and `Textarea` share one ground; `StateCard` has four kinds — `error`, `refuse
 `loading` — and `refused` is styled quiet so a model that does not apply never looks like a
 failure; skeletons are shaped like what they stand in for; `Toaster` confirms actions (never
 findings) through live regions rendered before any message; `Kbd` is the one file allowed a
-key glyph.
+key glyph. `ScrollRegion` wraps every table that can overflow: it becomes a labelled,
+focusable region exactly when its content is wider than its box, so a keyboard can scroll
+it. It is `relative` on purpose — without it the sr-only label escaped the overflow clip and
+widened a 375px page by 4px. `StateCard` takes `level={2}` when the state is the page's
+whole content under its `h1` (an empty compare view or journal), so the outline never jumps
+from h1 to h3.
+
+**`cn()` knows the type scale.** tailwind-merge files any `text-*` it does not recognise as a
+colour, so `cn("text-figure", "text-acc")` silently dropped the size: every toned headline
+figure lost its 24px, and every small primary button lost its dark text to `text-meta` and
+rendered at 1.71:1. `lib/utils.ts` extends the merge with the custom sizes, and
+`check_frontend.mjs` fails if `tailwind.config.ts` defines a size the list does not name.
 
 **Lens chips.** Four lenses, four words, four tone dots, on a fixed grid. The one
 piece of at-a-glance this app allows itself, agreed with the owner on 29 August
@@ -251,6 +262,15 @@ the private score are hidden; collapsed explanations are opened for the print an
 after; a print-only header carries the ticker, the time, the close the prices are from, the
 source, and "not investment advice".
 
+**Colours set inline print too.** Lens hues, card titles and tone badges arrive as
+`style={{ color }}`, which no class rule can reach, and the first print of the Value tab set
+them at 1.8-2.7:1 on white. A plugin in `tailwind.config.ts` generates `!important` print
+rules from the palette that match the style attribute in both spellings React writes
+(`color:#E8B44C` and `color: rgb(232, 180, 76)`): any inline colour prints as text, and the
+tones and muted greys print as their paper equivalents. Identity hues do not survive onto
+paper. The lens name carries the identity there, and a pale amber title is not worth
+keeping for its hue. Rule 18 keeps the class side complete.
+
 ## Accessibility
 
 Not a conformance claim — these are the things v2 actually fixed.
@@ -317,10 +337,39 @@ are now fixed:
   stays outside the hidden subtree.
 - **The text palette did not clear AA**, covered above.
 
+**Second audit, 25 October 2026**, after the overhaul. axe-core (A and AA, then
+every rule including best practice) on every route — landing, all nine stock
+tabs for AAPL and BBCA.JK in Guided and Full, the Technical sub-tabs, every
+on-demand panel loaded, all four Markets views, Compare empty and with three
+columns, the journal empty and with an entry, the 404, the palette, the
+shortcut list and the phone menu: **zero violations** once these were fixed:
+
+- **Tables a keyboard could not scroll** (`scrollable-region-focusable`) —
+  nearly every table at phone width. Now `ScrollRegion` (rule 16).
+- **Scatter charts in the accessibility tree again:** 120 unlabelled images on
+  the exposure chart, 360 on the annotated chart. Now `aria-hidden` (rule 17).
+- **Heading order:** the empty Compare and journal pages went h1 → h3.
+- **A second `main`:** the 404 and error pages nested one inside the layout's.
+- **An empty table header** on the ranking table's first column.
+- **Contrast:** the tailwind-merge bug above, and the disabled primary
+  button's `faint` text on `rule` (3.96:1; now `ash`).
+
+At **375px**, no route, tab, sub-tab or loaded panel scrolls sideways. The
+peer-group picker had pushed the page 28px wide and now wraps. **Print** on
+every stock tab clears AA for every text node (151-316 per tab), with every
+explanation opened and the score tab printing only its one-line refusal.
+Getting there took the inline-colour plugin above, a print reset that had
+missed `bg-sunken/40` (the "what this cannot tell you" well printed mid-grey
+with grey text on it), `text-tech` step numbers at 2.4:1, the Portfolio
+signpost printing as the first line of the Trend tab, and the histogram's
+"Median" label, which was clipped at the chart's top edge on screen as well.
+
 To repeat it: `axe-core` is a devDependency; copy `node_modules/axe-core/
-axe.min.js` into `public/`, load it from the page (the CSP allows same-origin
-scripts), and call `axe.run`. Delete it afterwards — it is a 580 KB audit tool,
-not an asset.
+axe.min.js` into `public/` (gitignored), load it from the page (the CSP allows
+same-origin scripts), and call `axe.run`. Under `next dev`, exclude `[hidden]`:
+React's streamed Suspense placeholder leaves a hidden duplicate of the stock
+workspace in the DOM that production does not have. Delete the file afterwards
+— it is a 580 KB audit tool, not an asset.
 
 **One false positive worth naming**, because it cost three rounds of chasing.
 `getComputedStyle` through a CDP bridge can return a *stale* value for an
@@ -336,7 +385,7 @@ it *sounds* is still untested — an automated pass is a floor, not a substitute
 
 ## The rules are enforced, not just written
 
-`npm run check:frontend` enforces fifteen of them, and each describes a bug
+`npm run check:frontend` enforces eighteen of them, and each describes a bug
 that was really in this codebase. It walks `components/` and `app/`
 recursively — the first version listed three directories by hand, so a file in
 any new subfolder was exempt from every rule without anyone deciding so.
@@ -378,6 +427,14 @@ any new subfolder was exempt from every rule without anyone deciding so.
     compare file. It caught a layout `Math.max` on its first run.
 15. A `/docs/` link with no file behind it — the field manual 404'd in
     production for months.
+16. A bare `overflow-auto` / `overflow-x-auto` container outside
+    `ScrollRegion`, the tab strip and the palette's list — axe found tables a
+    keyboard could not scroll.
+17. A Recharts `<Scatter>` whose container is not inside an `aria-hidden`
+    wrapper. Three charts put 120 to 1,464 unlabelled images into the
+    accessibility tree between them.
+18. A text token or a ground used on screen and not named in the print block,
+    or a print text token below AA on white.
 
 Rule 4 now covers every text and tone token, not only `chalk` and `ash`; eight
 `text-warn/90`-style sites had walked past it. Rule 7's budget is eight hits in
@@ -387,9 +444,9 @@ sign of a mean.
 
 Beside the design rules the same script holds three structural checks:
 `lib/api.ts` may not import the journal or watchlist stores or touch browser
-storage; every analytics `track(` carries only `market` and `lenses`; and
+storage; every analytics `track(` carries only `market` and `lenses`;
 `lib/symbols.ts` must resolve tickers with the same pattern and suffix map as
-the Python.
+the Python; and `cn()` must know every font size the config defines.
 
 Comments are stripped before the greps — rule 7 fired on its own explanation the
 first time it ran, because `LongTermPanel`'s docstring quotes the expression it

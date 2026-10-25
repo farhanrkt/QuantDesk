@@ -5,6 +5,7 @@ import type { AgreementMeasurement, Synthesis } from "@/lib/types";
 import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
 import { cn, pct, signed } from "@/lib/utils";
 import { palette } from "@/lib/palette";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 /**
  * What the four lenses add up to, in sentences.
@@ -146,7 +147,7 @@ function Measured({ data }: { data: AgreementMeasurement }) {
           <p className="prose-col text-meta text-ash">{data.reading}</p>
 
           {rows.length > 0 && (
-            <div className="overflow-x-auto">
+            <ScrollRegion label="How the lenses agree, measured">
               <table className="w-full text-left text-micro">
                 <caption className="sr-only">
                   Chance-corrected agreement between each pair of lenses
@@ -184,7 +185,7 @@ function Measured({ data }: { data: AgreementMeasurement }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           )}
 
           <p className="prose-col text-meta leading-relaxed text-faint">

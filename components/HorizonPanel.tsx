@@ -8,6 +8,7 @@ import {
 import type { ExplainMap, HorizonBlock, PivotSet } from "@/lib/types";
 import { cn, num, pct, signedPct } from "@/lib/utils";
 import { palette } from "@/lib/palette";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 const UP = palette.acc;
 const WARN = palette.warn;
@@ -434,7 +435,7 @@ function PivotTable({
   return (
     <div>
       <div className="eyebrow mb-1.5">{title}</div>
-      <div className="overflow-x-auto">
+      <ScrollRegion label={title}>
         <table className="w-full text-left text-meta">
           <tbody>
             {rows.map(([label, value]) => (
@@ -454,7 +455,7 @@ function PivotTable({
             ))}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
     </div>
   );
 }

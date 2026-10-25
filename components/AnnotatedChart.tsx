@@ -277,154 +277,157 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
         {/* ---------------------------------------------------------------- */}
         {/* Price                                                             */}
         {/* ---------------------------------------------------------------- */}
-        <ResponsiveContainer width="100%" height={360}>
-          <ComposedChart data={rows} margin={{ top: 6, right: 96, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="2 4" vertical={false} stroke={palette.grid} />
-            <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={56}
-                   tick={{ fontSize: 10, fill: palette.axis }} />
-            <YAxis domain={domain as [number, number]} tickLine={false} axisLine={false}
-                   width={60} tick={{ fontSize: 10, fill: palette.axis }}
-                   tickFormatter={(value: number) => num(value)} />
-            <Tooltip content={<PriceTooltip />} />
+        {/* Hidden from assistive tech: the caption and legend below say what each layer is; Recharts stamps role=img on each scatter symbol, which axe counted as 360 unlabelled images. */}
+        <div aria-hidden>
+          <ResponsiveContainer width="100%" height={360}>
+            <ComposedChart data={rows} margin={{ top: 6, right: 96, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="2 4" vertical={false} stroke={palette.grid} />
+              <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={56}
+                     tick={{ fontSize: 10, fill: palette.axis }} />
+              <YAxis domain={domain as [number, number]} tickLine={false} axisLine={false}
+                     width={60} tick={{ fontSize: 10, fill: palette.axis }}
+                     tickFormatter={(value: number) => num(value)} />
+              <Tooltip content={<PriceTooltip />} />
 
-            {/* WHERE THE YEAR'S TRADE HAPPENED. Bands on the price axis only —
-                every figure is a y-range, so it draws exactly and cannot drift
-                out of alignment the way a second chart matched by hand would.
-                Drawn before the candles so it sits behind them. */}
-            {showProfile && profile?.valueArea.low != null
-              && profile.valueArea.high != null && (
-              <ReferenceArea y1={profile.valueArea.low} y2={profile.valueArea.high}
-                             fill={PROFILE} fillOpacity={0.05}
-                             ifOverflow="extendDomain" />
-            )}
-            {showProfile && profile?.pointOfControl.low != null
-              && profile.pointOfControl.high != null && (
-              <ReferenceArea y1={profile.pointOfControl.low}
-                             y2={profile.pointOfControl.high}
-                             fill={PROFILE} fillOpacity={0.30}
-                             ifOverflow="extendDomain"
-                             label={{
-                               value: `most traded · ${
-                                 ((profile.pointOfControl.share ?? 0) * 100).toFixed(0)}%`,
-                               position: "insideLeft", fontSize: 9, fill: PROFILE,
-                             }} />
-            )}
-            {showProfile && (profile?.shelves ?? []).map((shelf, i) => {
-              if (shelf.low == null || shelf.high == null) return null;
-              // A SHELF CONTAINING THE POINT OF CONTROL GOES UNLABELLED. The two
-              // bands nest — the most-traded bin is usually inside the widest
-              // shelf — so both labels land on the same pixels and render as an
-              // unreadable overstrike. The POC's own label already names the
-              // region; a second caption on top of it adds nothing.
-              const poc = profile?.pointOfControl;
-              const nested = poc?.low != null && poc.high != null
-                && shelf.low <= poc.low && shelf.high >= poc.high;
-              return (
-                <ReferenceArea key={`shelf-${i}`} y1={shelf.low} y2={shelf.high}
-                               fill={PROFILE} fillOpacity={0.12}
+              {/* WHERE THE YEAR'S TRADE HAPPENED. Bands on the price axis only —
+                  every figure is a y-range, so it draws exactly and cannot drift
+                  out of alignment the way a second chart matched by hand would.
+                  Drawn before the candles so it sits behind them. */}
+              {showProfile && profile?.valueArea.low != null
+                && profile.valueArea.high != null && (
+                <ReferenceArea y1={profile.valueArea.low} y2={profile.valueArea.high}
+                               fill={PROFILE} fillOpacity={0.05}
+                               ifOverflow="extendDomain" />
+              )}
+              {showProfile && profile?.pointOfControl.low != null
+                && profile.pointOfControl.high != null && (
+                <ReferenceArea y1={profile.pointOfControl.low}
+                               y2={profile.pointOfControl.high}
+                               fill={PROFILE} fillOpacity={0.30}
                                ifOverflow="extendDomain"
-                               label={nested ? undefined : {
-                                 value: `${((shelf.share ?? 0) * 100).toFixed(0)}% of the year`,
-                                 position: "insideTopLeft", fontSize: 9, fill: PROFILE,
+                               label={{
+                                 value: `most traded · ${
+                                   ((profile.pointOfControl.share ?? 0) * 100).toFixed(0)}%`,
+                                 position: "insideLeft", fontSize: 9, fill: PROFILE,
                                }} />
-              );
-            })}
+              )}
+              {showProfile && (profile?.shelves ?? []).map((shelf, i) => {
+                if (shelf.low == null || shelf.high == null) return null;
+                // A SHELF CONTAINING THE POINT OF CONTROL GOES UNLABELLED. The two
+                // bands nest — the most-traded bin is usually inside the widest
+                // shelf — so both labels land on the same pixels and render as an
+                // unreadable overstrike. The POC's own label already names the
+                // region; a second caption on top of it adds nothing.
+                const poc = profile?.pointOfControl;
+                const nested = poc?.low != null && poc.high != null
+                  && shelf.low <= poc.low && shelf.high >= poc.high;
+                return (
+                  <ReferenceArea key={`shelf-${i}`} y1={shelf.low} y2={shelf.high}
+                                 fill={PROFILE} fillOpacity={0.12}
+                                 ifOverflow="extendDomain"
+                                 label={nested ? undefined : {
+                                   value: `${((shelf.share ?? 0) * 100).toFixed(0)}% of the year`,
+                                   position: "insideTopLeft", fontSize: 9, fill: PROFILE,
+                                 }} />
+                );
+              })}
 
-            {/* The pattern's own window, so the five points are read in context. */}
-            {active?.fromDate && active?.toDate && (
-              <ReferenceArea x1={active.fromDate} x2={active.toDate} fill={PATTERN}
-                             fillOpacity={0.07} stroke={PATTERN} strokeOpacity={0.2} />
-            )}
+              {/* The pattern's own window, so the five points are read in context. */}
+              {active?.fromDate && active?.toDate && (
+                <ReferenceArea x1={active.fromDate} x2={active.toDate} fill={PATTERN}
+                               fillOpacity={0.07} stroke={PATTERN} strokeOpacity={0.2} />
+              )}
 
-            {/* WHERE THE TRADE IS WRONG, AND WHAT IS OVERHEAD. Two bands from the
-                entry: down to the nearest defended floor, up to the first
-                ceiling. The hues are definitional rather than a judgement —
-                below the entry is where the position loses — and the ratio's
-                own verdict comes from `structure.band`, in words, below. */}
-            {showTrade && trade?.stop != null && (
-              <ReferenceArea y1={trade.stop} y2={trade.entry} fill={PRICE_DOWN}
-                             fillOpacity={0.07} ifOverflow="extendDomain" />
-            )}
-            {showTrade && trade?.target != null && (
-              <ReferenceArea y1={trade.entry} y2={trade.target} fill={PRICE_UP}
-                             fillOpacity={0.07} ifOverflow="extendDomain" />
-            )}
+              {/* WHERE THE TRADE IS WRONG, AND WHAT IS OVERHEAD. Two bands from the
+                  entry: down to the nearest defended floor, up to the first
+                  ceiling. The hues are definitional rather than a judgement —
+                  below the entry is where the position loses — and the ratio's
+                  own verdict comes from `structure.band`, in words, below. */}
+              {showTrade && trade?.stop != null && (
+                <ReferenceArea y1={trade.stop} y2={trade.entry} fill={PRICE_DOWN}
+                               fillOpacity={0.07} ifOverflow="extendDomain" />
+              )}
+              {showTrade && trade?.target != null && (
+                <ReferenceArea y1={trade.entry} y2={trade.target} fill={PRICE_UP}
+                               fillOpacity={0.07} ifOverflow="extendDomain" />
+              )}
 
-            {/* TWO SEPARATE EXPRESSIONS, NOT ONE FRAGMENT AROUND THE PAIR.
-                Recharts reads its children to work out what to render and does
-                NOT look inside a React fragment, so `{flag && (<><Line/><Line/></>)}`
-                type-checks, lints, renders no error, and silently draws
-                nothing. Both Bollinger lines vanished this way and the toggle
-                above them still looked like it was working. */}
-            {showBands && (
-              <Line dataKey="bbUpper" stroke={BAND} strokeWidth={1} dot={false}
-                    strokeOpacity={0.45} connectNulls isAnimationActive={false} />
-            )}
-            {showBands && (
-              <Line dataKey="bbLower" stroke={BAND} strokeWidth={1} dot={false}
-                    strokeOpacity={0.45} connectNulls isAnimationActive={false} />
-            )}
+              {/* TWO SEPARATE EXPRESSIONS, NOT ONE FRAGMENT AROUND THE PAIR.
+                  Recharts reads its children to work out what to render and does
+                  NOT look inside a React fragment, so `{flag && (<><Line/><Line/></>)}`
+                  type-checks, lints, renders no error, and silently draws
+                  nothing. Both Bollinger lines vanished this way and the toggle
+                  above them still looked like it was working. */}
+              {showBands && (
+                <Line dataKey="bbUpper" stroke={BAND} strokeWidth={1} dot={false}
+                      strokeOpacity={0.45} connectNulls isAnimationActive={false} />
+              )}
+              {showBands && (
+                <Line dataKey="bbLower" stroke={BAND} strokeWidth={1} dot={false}
+                      strokeOpacity={0.45} connectNulls isAnimationActive={false} />
+              )}
 
-            {/* EVERY LEVEL CARRIES ITS TOUCH COUNT. A level defended four times
-                and one defended twice are drawn identically everywhere else in
-                this app, which invites a reader to treat them as equivalent. */}
-            {showLevels && (chart.levels ?? []).map((level) => (
-              <ReferenceLine key={`${level.side}-${level.price}`} y={level.price}
-                             stroke={level.side === "support" ? SUPPORT : RESISTANCE}
-                             strokeOpacity={level.nearest ? 0.85 : 0.3}
-                             strokeDasharray={level.nearest ? undefined : "4 4"}
-                             strokeWidth={level.nearest ? 1.4 : 1}
-                             ifOverflow="extendDomain"
-                             label={{
-                               value: `${num(level.price)} · ${level.touches}x`,
-                               position: "right", fontSize: 9,
-                               fill: level.nearest ? palette.body : palette.faint,
-                             }} />
-            ))}
+              {/* EVERY LEVEL CARRIES ITS TOUCH COUNT. A level defended four times
+                  and one defended twice are drawn identically everywhere else in
+                  this app, which invites a reader to treat them as equivalent. */}
+              {showLevels && (chart.levels ?? []).map((level) => (
+                <ReferenceLine key={`${level.side}-${level.price}`} y={level.price}
+                               stroke={level.side === "support" ? SUPPORT : RESISTANCE}
+                               strokeOpacity={level.nearest ? 0.85 : 0.3}
+                               strokeDasharray={level.nearest ? undefined : "4 4"}
+                               strokeWidth={level.nearest ? 1.4 : 1}
+                               ifOverflow="extendDomain"
+                               label={{
+                                 value: `${num(level.price)} · ${level.touches}x`,
+                                 position: "right", fontSize: 9,
+                                 fill: level.nearest ? palette.body : palette.faint,
+                               }} />
+              ))}
 
-            <Bar dataKey="candle" shape={CandleShape} isAnimationActive={false} />
+              <Bar dataKey="candle" shape={CandleShape} isAnimationActive={false} />
 
-            <Line dataKey="sma20" stroke={MA_FAST} strokeWidth={1} dot={false}
-                  connectNulls isAnimationActive={false} />
-            <Line dataKey="sma50" stroke={MA_MID} strokeWidth={1.2} dot={false}
-                  connectNulls isAnimationActive={false} />
-            <Line dataKey="sma200" stroke={MA_SLOW} strokeWidth={1.2} dot={false}
-                  connectNulls isAnimationActive={false} />
+              <Line dataKey="sma20" stroke={MA_FAST} strokeWidth={1} dot={false}
+                    connectNulls isAnimationActive={false} />
+              <Line dataKey="sma50" stroke={MA_MID} strokeWidth={1.2} dot={false}
+                    connectNulls isAnimationActive={false} />
+              <Line dataKey="sma200" stroke={MA_SLOW} strokeWidth={1.2} dot={false}
+                    connectNulls isAnimationActive={false} />
 
-            {/* The curve the detector saw — refitted on its own window, ending on
-                the detection bar. It stops there on purpose: extending it to
-                today would be the two-sided smoother reading forward. */}
-            {active && (
-              <Line dataKey="patternPath" stroke={PATTERN} strokeWidth={2} dot={false}
-                    connectNulls={false} isAnimationActive={false} />
-            )}
-            {active && (
-              <Scatter dataKey="patternPoint" fill={PATTERN} shape="circle"
-                       isAnimationActive={false} />
-            )}
+              {/* The curve the detector saw — refitted on its own window, ending on
+                  the detection bar. It stops there on purpose: extending it to
+                  today would be the two-sided smoother reading forward. */}
+              {active && (
+                <Line dataKey="patternPath" stroke={PATTERN} strokeWidth={2} dot={false}
+                      connectNulls={false} isAnimationActive={false} />
+              )}
+              {active && (
+                <Scatter dataKey="patternPoint" fill={PATTERN} shape="circle"
+                         isAnimationActive={false} />
+              )}
 
-            {/* Necklines and boundaries. No projection: see the caption. */}
-            {active?.guides.map((guide, i) => (
-              guide.from.date && guide.to.date ? (
-                <ReferenceLine key={`${guide.role}-${i}`} stroke={GUIDE}
-                               strokeOpacity={0.5} strokeDasharray="5 4"
-                               segment={[
-                                 { x: guide.from.date, y: guide.from.price },
-                                 { x: guide.to.date, y: guide.to.price },
-                               ]} />
-              ) : null
-            ))}
+              {/* Necklines and boundaries. No projection: see the caption. */}
+              {active?.guides.map((guide, i) => (
+                guide.from.date && guide.to.date ? (
+                  <ReferenceLine key={`${guide.role}-${i}`} stroke={GUIDE}
+                                 strokeOpacity={0.5} strokeDasharray="5 4"
+                                 segment={[
+                                   { x: guide.from.date, y: guide.from.price },
+                                   { x: guide.to.date, y: guide.to.price },
+                                 ]} />
+                ) : null
+              ))}
 
-            {(chart.crossovers ?? []).map((cross) => (
-              cross.price != null ? (
-                <ReferenceDot key={`${cross.date}-${cross.type}`} x={cross.date}
-                              y={cross.price} r={3.5}
-                              fill={cross.type === "Buy" ? PRICE_UP : PRICE_DOWN}
-                              stroke={palette.ink} strokeWidth={1} />
-              ) : null
-            ))}
-          </ComposedChart>
-        </ResponsiveContainer>
+              {(chart.crossovers ?? []).map((cross) => (
+                cross.price != null ? (
+                  <ReferenceDot key={`${cross.date}-${cross.type}`} x={cross.date}
+                                y={cross.price} r={3.5}
+                                fill={cross.type === "Buy" ? PRICE_UP : PRICE_DOWN}
+                                stroke={palette.ink} strokeWidth={1} />
+                ) : null
+              ))}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
 
         {/* ---------------------------------------------------------------- */}
         {/* Volume, with the heavy sessions the tape test counted              */}
@@ -438,16 +441,18 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
               </span>
             )}
           </div>
-          <ResponsiveContainer width="100%" height={78}>
-            <ComposedChart data={rows} margin={{ top: 2, right: 96, left: 0, bottom: 0 }}>
-              <XAxis dataKey="date" hide />
-              <YAxis tickLine={false} axisLine={false} width={60} tick={false} />
-              <Bar dataKey="volumeOrdinary" stackId="v" fill={ORDINARY}
-                   isAnimationActive={false} />
-              <Bar dataKey="volumeHeavy" stackId="v" fill={HEAVY} fillOpacity={0.9}
-                   isAnimationActive={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <div aria-hidden>
+            <ResponsiveContainer width="100%" height={78}>
+              <ComposedChart data={rows} margin={{ top: 2, right: 96, left: 0, bottom: 0 }}>
+                <XAxis dataKey="date" hide />
+                <YAxis tickLine={false} axisLine={false} width={60} tick={false} />
+                <Bar dataKey="volumeOrdinary" stackId="v" fill={ORDINARY}
+                     isAnimationActive={false} />
+                <Bar dataKey="volumeHeavy" stackId="v" fill={HEAVY} fillOpacity={0.9}
+                     isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
         {/* ---------------------------------------------------------------- */}
@@ -474,42 +479,44 @@ export function AnnotatedChart({ chart }: { chart: VerdictChart }) {
                 </>
               )}
             </div>
-            <ResponsiveContainer width="100%" height={96}>
-              <ComposedChart data={rows}
-                             margin={{ top: 4, right: 96, left: 0, bottom: 6 }}>
-                <CartesianGrid strokeDasharray="2 4" vertical={false} stroke={palette.grid} />
-                <XAxis dataKey="date" hide />
-                {/* Padded past the extremes so a session that closed exactly at
-                    its high or low is a dot rather than a half-dot on the
-                    frame. */}
-                <YAxis domain={[-1.12, 1.12]} ticks={[-1, 0, 1]} tickLine={false}
-                       axisLine={false} width={60}
-                       tick={{ fontSize: 9, fill: palette.axis }}
-                       tickFormatter={(v: number) =>
-                         v === 1 ? "at high" : v === -1 ? "at low" : "middle"} />
-                {/* THE COMPARISON THE TEST ACTUALLY MADE. Not zero — the middle
-                    of the range is the wrong null, and mistaking it for the
-                    right one is an error this app has made three times in three
-                    different modules. The grey line is this name's own ordinary
-                    sessions, which is what the heavy ones were tested against.
+            <div aria-hidden>
+              <ResponsiveContainer width="100%" height={96}>
+                <ComposedChart data={rows}
+                               margin={{ top: 4, right: 96, left: 0, bottom: 6 }}>
+                  <CartesianGrid strokeDasharray="2 4" vertical={false} stroke={palette.grid} />
+                  <XAxis dataKey="date" hide />
+                  {/* Padded past the extremes so a session that closed exactly at
+                      its high or low is a dot rather than a half-dot on the
+                      frame. */}
+                  <YAxis domain={[-1.12, 1.12]} ticks={[-1, 0, 1]} tickLine={false}
+                         axisLine={false} width={60}
+                         tick={{ fontSize: 9, fill: palette.axis }}
+                         tickFormatter={(v: number) =>
+                           v === 1 ? "at high" : v === -1 ? "at low" : "middle"} />
+                  {/* THE COMPARISON THE TEST ACTUALLY MADE. Not zero — the middle
+                      of the range is the wrong null, and mistaking it for the
+                      right one is an error this app has made three times in three
+                      different modules. The grey line is this name's own ordinary
+                      sessions, which is what the heavy ones were tested against.
 
-                    NEITHER LINE IS LABELLED ON THE CHART. The whole question is
-                    whether these two numbers differ, so they sit within a few
-                    hundredths of each other on almost every name and two labels
-                    at the same height render as one unreadable smear. They are
-                    named in the heading above instead, where there is room. */}
-                {tape.ordinaryMeanLocation != null && (
-                  <ReferenceLine y={tape.ordinaryMeanLocation} stroke={MA_SLOW}
-                                 strokeDasharray="4 4" />
-                )}
-                {tape.heavyMeanLocation != null && (
-                  <ReferenceLine y={tape.heavyMeanLocation} stroke={HEAVY}
-                                 strokeOpacity={0.9} />
-                )}
-                <Scatter dataKey="heavyLocation" fill={HEAVY} shape="circle"
-                         isAnimationActive={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
+                      NEITHER LINE IS LABELLED ON THE CHART. The whole question is
+                      whether these two numbers differ, so they sit within a few
+                      hundredths of each other on almost every name and two labels
+                      at the same height render as one unreadable smear. They are
+                      named in the heading above instead, where there is room. */}
+                  {tape.ordinaryMeanLocation != null && (
+                    <ReferenceLine y={tape.ordinaryMeanLocation} stroke={MA_SLOW}
+                                   strokeDasharray="4 4" />
+                  )}
+                  {tape.heavyMeanLocation != null && (
+                    <ReferenceLine y={tape.heavyMeanLocation} stroke={HEAVY}
+                                   strokeOpacity={0.9} />
+                  )}
+                  <Scatter dataKey="heavyLocation" fill={HEAVY} shape="circle"
+                           isAnimationActive={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
 

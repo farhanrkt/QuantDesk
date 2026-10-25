@@ -63,8 +63,10 @@ export function Panel<T>({
  * compete with the lens's reading for authority.
  */
 export function PortfolioSignpost({ onOpen }: { onOpen: () => void }) {
+  // Navigation, not a reading, so it stays off the tearsheet with the rest of
+  // the chrome — printed, it was the first line of the Trend tab.
   return (
-    <Card>
+    <Card className="print:hidden">
       <CardBody className="flex flex-wrap items-center justify-between gap-3 py-4">
         <p className="max-w-measure text-lead leading-snug text-chalk">
           Holdings that each look fine on their own can be one bet.

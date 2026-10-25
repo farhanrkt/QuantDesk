@@ -5,6 +5,7 @@ import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/compon
 import { useDetail } from "@/components/ui/explain";
 import type { ValuationSensitivity } from "@/lib/types";
 import { cn, pct } from "@/lib/utils";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 /**
  * The base case across a grid of growth and discount rate.
@@ -33,7 +34,7 @@ export function SensitivityGrid({
   const anyUnreachable = impliedRow?.some((e) => e.reason === "unreachable") ?? false;
 
   const table = (
-    <div className="overflow-x-auto rounded-lg border border-ruleSoft">
+    <ScrollRegion label="Sensitivity grid" className="rounded-lg border border-ruleSoft">
       <table className="w-full min-w-[30rem] text-meta">
         <caption className="sr-only">
           Base-case value per share by {lower(rowAxis.label)} (rows) and{" "}
@@ -97,7 +98,7 @@ export function SensitivityGrid({
           </tfoot>
         )}
       </table>
-    </div>
+    </ScrollRegion>
   );
 
   return (

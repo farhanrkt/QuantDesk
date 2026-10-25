@@ -1,5 +1,45 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
 import { palette } from "./lib/palette";
+
+/**
+ * PRINT FOR COLOURS SET INLINE. The print block in globals.css maps every text
+ * and tone CLASS to its paper equivalent, but a lens hue, a card title and a
+ * tone badge arrive as `style={{ color }}` from the palette — and none of those
+ * were mapped. The first print of the Value tab set "What this is worth" in
+ * value amber on white at 1.8:1 and the tone badge in screen red at 2.5:1.
+ *
+ * An author `!important` beats an inline declaration, so these select on the
+ * style attribute itself. React writes it two ways — `color:#E8B44C` and, when
+ * it sets the property through the DOM, `color: rgb(232, 180, 76);` — so each
+ * value is matched in both spellings. Any inline colour prints as text; the
+ * tones and the muted greys then print as their paper equivalents, so a "bad"
+ * reading still prints red. `html` lifts these above the class rules, because
+ * an inline colour already won over its element's class on screen.
+ */
+const printInlineColours = plugin(({ addBase }) => {
+  const rgb = (hex: string) =>
+    `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
+  const declaring = (hex: string) => [
+    `html [style^="color:${hex}" i]`, `html [style*=";color:${hex}" i]`,
+    `html [style^="color: ${rgb(hex)}"]`, `html [style*="; color: ${rgb(hex)}"]`,
+  ].join(", ");
+  const onPaper: [string, string][] = [
+    [palette.acc, palette.printAcc],
+    [palette.dist, palette.printDist],
+    [palette.warn, palette.printWarn],
+    [palette.ash, palette.printMuted],
+    [palette.faint, palette.printMuted],
+  ];
+  addBase({
+    "@media print": {
+      'html [style^="color"], html [style*=";color"], html [style*="; color"]':
+        { color: `${palette.printText} !important` },
+      ...Object.fromEntries(onPaper.map(([screen, paper]) =>
+        [declaring(screen), { color: `${paper} !important` }])),
+    },
+  });
+});
 
 /**
  * Colours come from lib/palette.ts and nowhere else — that file explains the
@@ -63,6 +103,6 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [printInlineColours],
 };
 export default config;

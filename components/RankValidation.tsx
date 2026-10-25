@@ -3,6 +3,7 @@
 import { FlaskConical } from "lucide-react";
 import type { RankValidation as Validation } from "@/lib/types";
 import { cn, num, signedPct } from "@/lib/utils";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 /**
  * Does this ranking predict anything?
@@ -47,7 +48,7 @@ export function RankValidation({ data }: { data?: Validation }) {
         </p>
 
         {rows.length > 0 && (
-          <div className="mt-4 overflow-x-auto">
+          <ScrollRegion label="Ranking backtest results" className="mt-4">
             <table className="w-full text-left text-meta">
               <thead>
                 <tr className="border-b border-rule text-ash">
@@ -83,7 +84,7 @@ export function RankValidation({ data }: { data?: Validation }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollRegion>
         )}
 
         {/* The distinction the whole panel turns on. */}

@@ -35,9 +35,15 @@ export type StateKind = "error" | "refused" | "empty" | "loading";
 const ICON = { error: AlertTriangle, refused: CircleSlash, empty: Inbox } as const;
 
 export function StateCard({
-  kind, title, children, action, shape = "chart", bare, className,
+  kind, title, children, action, shape = "chart", bare, className, level = 3,
 }: {
   kind: StateKind;
+  /**
+   * The title's heading level. 3 inside a card or a tab (the default); 2 when
+   * the state IS the page's content under its h1 — an empty compare view or
+   * journal — so the outline does not jump from h1 to h3.
+   */
+  level?: 2 | 3;
   /** One line that states the condition. Optional for `loading`. */
   title?: string;
   children?: React.ReactNode;
@@ -67,6 +73,7 @@ export function StateCard({
   }
 
   const Icon = ICON[kind];
+  const Heading = level === 2 ? "h2" : "h3";
   return (
     <div className={cn(surface, bare ? "" : "p-5", className)}
          role={kind === "error" ? "alert" : undefined}>
@@ -75,8 +82,8 @@ export function StateCard({
           kind === "error" ? "text-dist" : "text-ash")} />
         <div className="min-w-0 flex-1 space-y-2">
           {title && (
-            <h3 className={cn("text-lead",
-              kind === "error" ? "text-dist" : "text-chalk")}>{title}</h3>
+            <Heading className={cn("text-lead",
+              kind === "error" ? "text-dist" : "text-chalk")}>{title}</Heading>
           )}
           {children && (
             <div className="prose-col text-base leading-relaxed text-body">{children}</div>
