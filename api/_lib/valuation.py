@@ -181,6 +181,10 @@ ROW_ALIASES = {
     "current_liabilities": ["Current Liabilities", "Total Current Liabilities"],
     "retained_earnings": ["Retained Earnings"],
     "ebit": ["EBIT", "Operating Income", "Earnings Before Interest And Taxes"],
+    # OPERATING INCOME FIRST, which `ebit` is not: its first alias is EBIT, and
+    # the two differ by non-operating items. The company view charts the line
+    # the business earns from operations, so it asks for that line by name.
+    "operating_income": ["Operating Income", "Total Operating Income As Reported"],
     "total_liabilities": [
         "Total Liabilities Net Minority Interest", "Total Liabilities",
     ],

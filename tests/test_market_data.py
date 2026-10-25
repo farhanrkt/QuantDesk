@@ -926,3 +926,85 @@ def test_without_a_yardstick_the_conversion_proceeds(monkeypatch, record):
     full = {**record, "income": pd.DataFrame()}
     out = MD._apply_fx(full)
     assert out["fx_rate"] == 16_300.0
+
+
+# --------------------------------------------------------------------------- #
+# Earnings calendar: one fetch a day, shared by the event study and the company view
+# --------------------------------------------------------------------------- #
+def test_earnings_calendar_splits_past_from_next_and_caches_for_the_day(monkeypatch):
+    import datetime as dt
+    import types
+
+    import pandas as pd
+
+    today = dt.date.today()
+    calls = {"n": 0}
+
+    class Ticker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        @property
+        def earnings_dates(self):
+            calls["n"] += 1
+            index = pd.DatetimeIndex([
+                pd.Timestamp(today + dt.timedelta(days=40)),
+                pd.Timestamp(today + dt.timedelta(days=5)),
+                pd.Timestamp(today - dt.timedelta(days=85)),
+            ]).tz_localize("America/New_York")
+            return pd.DataFrame({"EPS Estimate": [1.0, 1.0, 1.0]}, index=index)
+
+    monkeypatch.setattr(MD, "yf", types.SimpleNamespace(Ticker=Ticker))
+    MD._EARNINGS_CACHE.clear()
+    first = MD.earnings_calendar("PLNT")
+    second = MD.earnings_calendar("plnt")
+    assert calls["n"] == 1, "the second caller must read the day cache"
+    assert first["next"] == (today + dt.timedelta(days=5)).isoformat()
+    assert first["past"] == [(today - dt.timedelta(days=85)).isoformat()]
+    assert len(second["dates"]) == 3, "the event study still gets every timestamp"
+    assert MD.earnings_dates("PLNT") == second["dates"]
+
+
+def test_earnings_calendar_failure_is_empty_not_an_exception(monkeypatch):
+    import types
+
+    class Broken:
+        def __init__(self, symbol):
+            pass
+
+        @property
+        def earnings_dates(self):
+            raise RuntimeError("throttled")
+
+    monkeypatch.setattr(MD, "yf", types.SimpleNamespace(Ticker=Broken))
+    MD._EARNINGS_CACHE.clear()
+    out = MD.earnings_calendar("NOPE")
+    assert out["available"] is False and out["next"] is None and out["dates"] == []
+
+
+def test_without_a_parser_the_calendar_still_supplies_the_next_date(monkeypatch):
+    """The earnings table needs lxml and raised ImportError silently for years.
+    The calendar needs no parser; it backs up the NEXT date and nothing else."""
+    import datetime as dt
+    import types
+
+    soon = dt.date.today() + dt.timedelta(days=9)
+
+    class NoParser:
+        def __init__(self, symbol):
+            pass
+
+        @property
+        def earnings_dates(self):
+            raise ImportError("Missing optional dependency 'lxml'.")
+
+        @property
+        def calendar(self):
+            return {"Earnings Date": [soon], "Earnings Average": 1.98, "Revenue High": 1e11}
+
+    monkeypatch.setattr(MD, "yf", types.SimpleNamespace(Ticker=NoParser))
+    MD._EARNINGS_CACHE.clear()
+    out = MD.earnings_calendar("PLNT")
+    assert out["next"] == soon.isoformat()
+    assert out["dates"] == [] and out["past"] == [], "no past dates are invented"
+    assert "Earnings Average" not in str(out), "an analyst estimate never leaves this function"

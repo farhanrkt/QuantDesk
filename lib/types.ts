@@ -972,6 +972,8 @@ export interface ConfluenceResponse {
   valuation: Leg<ValuationResponse>;
   quality: Leg<QualityResponse>;
   news: Leg<NewsResponse>;
+  /** Description, not a lens: neither the synthesis nor the pre-trade checks read it. */
+  company?: Leg<CompanyResponse>;
   synthesis: Synthesis;
   preTrade: PreTrade;
 }
@@ -1864,4 +1866,74 @@ export interface SymbolSearch {
   /** How old each listing file is, so a missing IPO reads as "not indexed", not "no such company". */
   listings: Record<string, { asOf: string; count: number } | null>;
   note: string;
+}
+
+/** What the provider says the company sells — `field.profile`. */
+export type BusinessProfile = NonNullable<QualityResponse["business"]>;
+
+export const HISTORY_ROWS = [
+  "revenue", "operatingIncome", "netIncome", "dilutedEps", "operatingCashFlow", "capex",
+  "freeCashFlow", "totalDebt", "cash", "equity",
+] as const;
+export type HistoryRow = (typeof HISTORY_ROWS)[number];
+
+/** The statements year by year — `trackrecord.series`. Null is "not reported", never zero. */
+export type CompanyHistory =
+  | { available: false; yearsAvailable: number; reason: string }
+  | {
+      available: true;
+      yearsAvailable: number;
+      fiscalYears: string[];
+      rows: Record<HistoryRow, (number | null)[]>;
+      currency: string | null;
+      freeCashFlowMethod: string | null;
+      financial: boolean;
+      missing: Partial<Record<HistoryRow, string>>;
+      reading: string;
+    };
+
+/** The record compressed to the facts a scan filters on — `trackrecord.read`. */
+export type TrackRecord =
+  | { available: false; yearsAvailable: number; reason: string }
+  | {
+      available: true;
+      yearsAvailable: number;
+      yearsProfitable: number;
+      everyYearProfitable: boolean;
+      latestNetMargin: number | null;
+      returnOnEquity: number | null;
+      operatingCashFlowPositive: boolean;
+      freeCashFlowYears: number | null;
+      freeCashFlowOf: number | null;
+      revenueCagr: number | null;
+      profitCagr: number | null;
+      netDebt: number | null;
+      netCash: boolean | null;
+      netDebtToEbitda: number | null;
+      financial: boolean;
+      baseRates: Record<string, number | string> | null;
+      baseRatesNote: string | null;
+      reading: string;
+    };
+
+export interface CompanyResponse {
+  ticker: string;
+  name: string;
+  profile: BusinessProfile;
+  listing: {
+    exchange: string | null; market: Market; marketCap: number | null; price: number | null;
+    priceAsOf: string | null; priceSource: string | null;
+  };
+  currency: { trading: string | null; reporting: string | null; fxRate: number | null; note: string | null };
+  history: CompanyHistory;
+  dividends: {
+    available: boolean;
+    perShare: { year: string; amount: number; partial: boolean }[];
+    basis?: string;
+    ttm?: number | null;
+    reading: string;
+  };
+  nextEarnings: { date: string | null; past: string[]; source: string; reading: string };
+  record: TrackRecord;
+  explain: ExplainMap;
 }

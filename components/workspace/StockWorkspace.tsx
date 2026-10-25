@@ -3,6 +3,8 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnomalyPanel } from "@/components/AnomalyPanel";
+import { CompanyHeader } from "@/components/company/CompanyHeader";
+import { CompanyPanel } from "@/components/company/CompanyPanel";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
 import { EventStudyPanel } from "@/components/EventStudyPanel";
 import { ExposurePanel } from "@/components/ExposurePanel";
@@ -45,6 +47,11 @@ import {
  * lib/palette, so a chip in the rail and the tab that owns it are one colour.
  */
 const TABS: (Tab & { id: StockTab })[] = [
+  // ORIENTATION FIRST IN THE ORDER, NOT THE DEFAULT. What the company is and
+  // what its filings say it has done is the question a newcomer has before any
+  // lens makes sense; Trend stays the tab a run lands on, for the reason in
+  // lib/url.ts, and a one-line company header answers "who is this" on every tab.
+  { id: "company", label: "What it is", accent: palette.company },
   { id: "flow", label: "Who is trading it", accent: palette.flow },
   { id: "trend", label: "What the price did", accent: palette.trend },
   { id: "value", label: "What it is worth", accent: palette.value },
@@ -120,7 +127,7 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
 
   // --- data ---------------------------------------------------------------
   const engines = useEngines(symbol);
-  const { anomaly, technical, valuation, quality, news, synthesis, preTrade } = engines;
+  const { anomaly, technical, valuation, quality, news, company, synthesis, preTrade } = engines;
   const { state: eventStudy, validate } = useEventStudy(symbol);
   const { state: peers, compare: comparePeers } = usePeers(symbol);
   const { state: portfolio, compare: comparePortfolio } = usePortfolio(symbol);
@@ -229,6 +236,7 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
       <ConfluenceRail
         ticker={resolvedTicker} anomaly={anomaly} technical={technical}
         valuation={valuation} quality={quality}
+        subtitle={<CompanyHeader state={company} />}
         actions={<StockActions watched={watched} onWatch={onWatch} onCompare={onCompare}
                                onCopy={onCopy} onPrint={onPrint} />}
       />
@@ -259,6 +267,9 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
           <Tabs tabs={TABS} active={visible} onChange={setTab} />
         </div>
         <div className="pt-6">
+          <TabPanel id="company" active={visible}>
+            <Panel state={company}>{(d) => <CompanyPanel data={d} />}</Panel>
+          </TabPanel>
           <TabPanel id="flow" active={visible}>
             <div className="space-y-4">
               <Panel state={anomaly}>{(d) => <AnomalyPanel data={d} />}</Panel>

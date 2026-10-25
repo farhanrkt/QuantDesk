@@ -4360,3 +4360,120 @@ def for_pretrade(flags: Sequence[dict], base_conditions: Sequence[dict],
             + " None of this is a recommendation."
         ),
     }
+
+
+# --------------------------------------------------------------------------- #
+# Company — what the filings say the business has done
+# --------------------------------------------------------------------------- #
+# Description, not a lens: nothing here is voted, summed into the synthesis or
+# read by the pre-trade checks. The base rates come from `trackrecord.py` and
+# were measured on Indonesian listings, so they are quoted only when the
+# company is one (`market="ID"`); anywhere else the figure is reported bare and
+# the reading says no comparison has been measured.
+def _id_market(market) -> bool:
+    return (market or "").strip().upper() == "ID"
+
+
+@metric("yearsProfitable")
+def _years_profitable(value, years=None, profitable=None, market=None, **_):
+    label = "Years profitable"
+    what = ("The share of the years in the filings in which the company made a net profit. "
+            "The data source keeps four or five years, which does not span a business cycle.")
+    if not _known(value):
+        return unavailable(label, what, "fewer than three years of income statement came back")
+    band = _ladder(value, ((0.5, "poor"), (0.999, "fair"), (None, "good")))
+    count = (f"{profitable} of {years} years" if _known(profitable) and _known(years)
+             else f"{_pct(value, 0)} of the years covered")
+    reading = f"Profitable in {count}. "
+    if _id_market(market):
+        reading += ("Two thirds of Indonesian listings are profitable in every year their "
+                    "filings cover, so a full record is common here rather than a distinction.")
+    else:
+        reading += ("No base rate has been measured for this market, so how ordinary that is "
+                    "here is not established.")
+    return make(label, what, reading,
+                "Read it with the window: four profitable years inside one good cycle say less "
+                "than the count suggests. Whether the profit arrived as cash is the next line.",
+                band, "high", evidence="moderate", value_text=count)
+
+
+@metric("revenueCagr")
+def _revenue_cagr(value, years=None, market=None, **_):
+    label = "Revenue growth"
+    what = ("How fast sales compounded each year, from the oldest year in the filings to the "
+            "newest. Two endpoints, so one unusual year at either end moves it a lot.")
+    if not _known(value):
+        return unavailable(label, what, "revenue was missing or not positive at one end")
+    span = f" over {int(years) - 1} years" if _known(years) and years > 1 else ""
+    reading = f"{_pct(value, 1)} a year{span}. "
+    if _id_market(market):
+        reading += ("The median Indonesian listing grew about 5% a year over the same kind of "
+                    "window, and the top quarter about 15% or more.")
+    else:
+        reading += "No market median has been measured for this listing's market."
+    return make(label, what, reading,
+                "Growth is a description of the past, not a forecast. Compare it with the growth "
+                "the share price requires on the Value tab.",
+                "context", "high", evidence="moderate", value_text=_pct(value, 1))
+
+
+@metric("netDebtToEbitda")
+def _net_debt_to_ebitda(value, market=None, **_):
+    label = "Borrowings against earnings"
+    what = ("Net debt — borrowings minus cash — divided by a year's operating earnings before "
+            "depreciation. Roughly, how many years of earnings the debt represents.")
+    if not _known(value):
+        return unavailable(label, what,
+                           "it carries net cash, has no positive earnings to measure against, "
+                           "or the balance sheet did not arrive")
+    reading = f"{_num(value, 1)} times a year's earnings. "
+    if _id_market(market):
+        reading += ("The median for Indonesian listings that borrow at all is 3.0, so this is "
+                    f"{'above' if value > 3.0 else 'at or below'} the typical borrower here — a "
+                    "comparison, not a verdict.")
+    else:
+        reading += "No median has been measured for this market, so it is reported bare."
+    return make(label, what, reading,
+                "No line is drawn here on purpose: the textbook 3x is the middle of the "
+                "Indonesian distribution. What the debt pays for decides whether it matters.",
+                "context", "low", evidence="moderate", value_text=f"{_num(value, 1)}x")
+
+
+@metric("freeCashFlowYears")
+def _free_cash_flow_years(value, positive=None, of=None, **_):
+    label = "Years of positive free cash flow"
+    what = ("The share of years in which operating cash flow exceeded spending on assets. A "
+            "company building something will fall short for a while, which is not a flaw.")
+    if not _known(value):
+        return unavailable(label, what,
+                           "no free-cash-flow line came back, or the company is a lender, "
+                           "for whom capital spending describes nothing")
+    count = (f"{positive} of {of} years" if _known(positive) and _known(of)
+             else f"{_pct(value, 0)} of years")
+    reading = f"Free cash flow was positive in {count}. "
+    reading += ("Mostly negative is what a build-out looks like, and whether that is good depends "
+                "on what the spending bought." if value < 0.5 else
+                "The spending on assets mostly stayed inside what the business generated.")
+    return make(label, what, reading, CONTEXT_NOT_TRIGGER,
+                "context", "high", evidence="moderate", value_text=count)
+
+
+def for_company(record: dict, market: str) -> dict:
+    """Explanations for the track record's headline figures, or {} if there is none."""
+    if not isinstance(record, dict) or not record.get("available"):
+        return {}
+    years = record.get("yearsAvailable")
+    profitable = record.get("yearsProfitable")
+    out = {}
+    if years:
+        out["yearsProfitable"] = explain("yearsProfitable", profitable / years if profitable is not None else None,
+                                         years=years, profitable=profitable, market=market)
+    out["revenueCagr"] = explain("revenueCagr", record.get("revenueCagr"), years=years, market=market)
+    if not record.get("financial"):
+        out["netDebtToEbitda"] = explain("netDebtToEbitda", record.get("netDebtToEbitda"), market=market)
+        fcf_of = record.get("freeCashFlowOf")
+        fcf_pos = record.get("freeCashFlowYears")
+        out["freeCashFlowYears"] = explain("freeCashFlowYears",
+                                           fcf_pos / fcf_of if fcf_of else None,
+                                           positive=fcf_pos, of=fcf_of)
+    return {k: v for k, v in out.items() if v}

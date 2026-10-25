@@ -603,7 +603,9 @@ def cache_path(symbol: str, day: str) -> Path:
 #
 # 4 — `trackrecord` stopped reporting a missing balance sheet as net cash, which
 #     changes `netCash`/`netDebt` on any name whose sheet did not arrive.
-PROFILE_LEG_VERSION = 4
+# 5 — `trackrecord.read` takes the market: off the IDX it no longer quotes
+#     Indonesian base rates, and the payload gains `baseRatesNote`.
+PROFILE_LEG_VERSION = 5
 
 
 def read_profile(symbol: str) -> dict:
@@ -628,7 +630,9 @@ def read_profile(symbol: str) -> dict:
             # borrowings over the years the filings cover — description, never a
             # score; see `trackrecord.py` for why "profitable" alone admits 67%
             # of this market and is therefore not a screen.
-            "trackRecord": trackrecord.read(record)}
+            # The market follows the symbol: every comparison in the reading was
+            # measured on IDX listings, and a US sweep must not quote them.
+            "trackRecord": trackrecord.read(record, symbols.market_of(symbol))}
 
 
 def refresh_free_legs(symbol: str, legs: dict) -> bool:

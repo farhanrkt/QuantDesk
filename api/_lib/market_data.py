@@ -385,17 +385,84 @@ def currency(symbol: str, default: str = "USD") -> str:
     return value.upper() if isinstance(value, str) and value else default
 
 
+_EARNINGS_CACHE: dict[tuple[str, str], dict] = {}
+_EARNINGS_GUARD = threading.Lock()
+
+
+def earnings_calendar(symbol: str) -> dict:
+    """Past and announced earnings dates, cached for the day.
+
+    ONE FETCH, TWO READERS. The event study tags anomalies that sit beside an
+    earnings print, and the company view shows when the next report is due.
+    Both want the same table, and it was fetched uncached on every event-study
+    request; a day cache keyed like the company record lets them share it.
+
+    NEVER AN ANALYST FIELD. The same provider object carries recommendation
+    counts and price targets; this reads the dates and nothing else, because the
+    published views refuse third-party composites for the same reason they
+    refuse their own.
+
+    `next` is the provider's date and is often an estimate until the company
+    confirms it; the payload that shows it says so.
+
+    THE TABLE NEEDS lxml, AND FOR ITS WHOLE LIFE IT DID NOT HAVE IT. yfinance
+    parses this page with pandas' HTML reader, which raises ImportError without
+    lxml; the bare `except` here swallowed it, so `earnings_dates` returned []
+    on every call and the event study's "this anomaly sat beside an earnings
+    print" tag never fired once. Nothing failed and no test noticed, because
+    "no earnings nearby" is a legitimate answer. lxml is now pinned; and the
+    calendar endpoint, which needs no parser, backs up the NEXT date alone when
+    the table is unavailable — its estimates fields are never read.
+    """
+    today = dt.date.today()
+    key = (symbol.upper(), today.isoformat())
+    with _EARNINGS_GUARD:
+        hit = _EARNINGS_CACHE.get(key)
+    if hit is not None:
+        return {**hit, "dates": list(hit["dates"])}
+    handle = None
+    try:
+        handle = yf.Ticker(symbol)
+        table = handle.earnings_dates
+        dates = list(table.index) if table is not None else []
+    except Exception:
+        dates = []
+    fallback_next = None
+    if not dates and handle is not None:
+        try:
+            calendar = handle.calendar or {}
+            announced = calendar.get("Earnings Date") if isinstance(calendar, dict) else None
+            if isinstance(announced, (list, tuple)) and announced:
+                fallback_next = min(pd.Timestamp(d).date() for d in announced)
+        except Exception:
+            fallback_next = None
+    days = sorted({pd.Timestamp(d).tz_localize(None).date() if pd.Timestamp(d).tzinfo
+                   else pd.Timestamp(d).date() for d in dates})
+    upcoming = [d for d in days if d >= today]
+    if not upcoming and fallback_next is not None and fallback_next >= today:
+        upcoming = [fallback_next]
+    out = {
+        "available": bool(days) or bool(upcoming),
+        "dates": dates,
+        "past": [d.isoformat() for d in days if d < today][-8:],
+        "next": upcoming[0].isoformat() if upcoming else None,
+        "asOf": today.isoformat(),
+    }
+    with _EARNINGS_GUARD:
+        if len(_EARNINGS_CACHE) > 256:
+            _EARNINGS_CACHE.clear()
+        _EARNINGS_CACHE[key] = out
+    return {**out, "dates": list(dates)}
+
+
 def earnings_dates(symbol: str) -> list:
     """Announced and historical earnings dates, or [] when unavailable.
 
     Used to tag an anomaly that sits beside an earnings print, where the drift
-    afterwards is a documented effect rather than anyone's footprint.
+    afterwards is a documented effect rather than anyone's footprint. Reads the
+    day-cached calendar, so the company view and the event study share a fetch.
     """
-    try:
-        table = yf.Ticker(symbol).earnings_dates
-        return list(table.index) if table is not None else []
-    except Exception:
-        return []
+    return earnings_calendar(symbol)["dates"]
 
 
 # --------------------------------------------------------------------------- #
@@ -868,6 +935,9 @@ def _company_uncached(ticker: str, convert: bool = True) -> dict:
         "employees": _safe_float(info.get("fullTimeEmployees")),
         "country": info.get("country") or "",
         "website": info.get("website") or "",
+        # Where it lists, in the provider's words ("NasdaqGS", "Jakarta"). Optional
+        # for consumers: records cached before this key existed lack it.
+        "exchange": info.get("fullExchangeName") or info.get("exchange") or "",
         "price": price,
         "shares": shares,
         "beta": _safe_float(info.get("beta")),

@@ -126,8 +126,17 @@ def _cagr(newest: float, oldest: float, periods: int) -> Optional[float]:
     return float((newest / oldest) ** (1.0 / periods) - 1.0)
 
 
-def read(company: Optional[dict]) -> dict:
-    """Profits, cash and growth over the years the statements cover."""
+def read(company: Optional[dict], market: str = "ID") -> dict:
+    """Profits, cash and growth over the years the statements cover.
+
+    `market` decides which comparisons the reading may make. Every base rate and
+    median in this module was measured on Indonesian listings; quoting "two
+    thirds of this market" or "a median of 3.0 for the listings here" under a
+    US company would state a fact about the wrong exchange as if it were about
+    this one. Off the IDX the figures are reported bare, `baseRates` is None,
+    and `baseRatesNote` says why rather than leaving a silent gap.
+    """
+    measured = (market or "").strip().upper() == "ID"
     record = company if isinstance(company, dict) else {}
     income = record.get("income")
     net_income = _series(income, "net_income")
@@ -251,13 +260,14 @@ def read(company: Optional[dict]) -> dict:
         "consistentlyProfitable": consistent,
         "financial": financial,
         "thresholds": {"minYears": MIN_YEARS, "growingAt": GROWING_AT},
-        "baseRates": BASE_RATES,
+        "baseRates": BASE_RATES if measured else None,
+        "baseRatesNote": None if measured else UNMEASURED_NOTE,
         "reading": _reading(years, profitable, every_year, cash_backed, growth,
                             growing, margin, fcf_years,
                             None if fcf is None else len(fcf), financial,
                             (None if financial or net_debt is None
                              else bool(net_debt <= 0)),
-                            None if financial else leverage),
+                            None if financial else leverage, measured=measured),
     }
 
 
@@ -278,6 +288,12 @@ BASE_RATES = {
 }
 
 
+# What a non-IDX reading says in place of the comparisons it may not make.
+UNMEASURED_NOTE = ("These figures are compared against nothing: every base rate and median "
+                   "in this module was measured on 523 Indonesian listings, and no sample "
+                   "has been measured for this listing's market.")
+
+
 def _latest(frame, key: str) -> Optional[float]:
     series = _series(frame, key)
     return None if series is None else _finite(series.values[0])
@@ -287,13 +303,13 @@ def _reading(years: int, profitable: int, every_year: bool, cash_backed: bool,
              growth: Optional[float], growing: bool, margin: Optional[float],
              fcf_years: Optional[int], fcf_of: Optional[int],
              financial: bool, net_cash: Optional[bool] = None,
-             leverage: Optional[float] = None) -> str:
+             leverage: Optional[float] = None, measured: bool = True) -> str:
     window = (f"across the {years} years the filings cover"
               if years > 1 else "in the one year the filings cover")
 
     if every_year:
-        head = (f"Profitable in every one of the {years} years the statements cover, "
-                f"which two thirds of this market also manages")
+        head = (f"Profitable in every one of the {years} years the statements cover"
+                + (", which two thirds of this market also manages" if measured else ""))
     else:
         head = (f"Profitable in {profitable} of {years} years {window}")
 
@@ -303,6 +319,8 @@ def _reading(years: int, profitable: int, every_year: bool, cash_backed: bool,
 
     if growth is None:
         pace = " Revenue growth could not be computed from these statements."
+    elif not measured:
+        pace = f" Revenue compounded at {growth * 100:.1f}% a year over that window."
     elif growing:
         pace = (f" Revenue compounded at {growth * 100:.1f}% a year over that window, "
                 f"which is inside this market's top quartile.")
@@ -343,7 +361,11 @@ def _reading(years: int, profitable: int, every_year: bool, cash_backed: bool,
     owed = ""
     if net_cash is True:
         owed = (" It holds more cash than borrowings, which 39% of this market's "
-                "non-financial listings also do.")
+                "non-financial listings also do." if measured else
+                " It holds more cash than borrowings.")
+    elif leverage is not None and not measured:
+        owed = (f" Net borrowings are {leverage:.1f} times EBITDA. No median has been "
+                f"measured for this market, so the ratio is reported without a comparison.")
     elif leverage is not None:
         owed = (f" Net borrowings are {leverage:.1f} times EBITDA, against a median of "
                 f"3.0 for the listings here that borrow at all — so this is "
@@ -358,5 +380,115 @@ def _reading(years: int, profitable: int, every_year: bool, cash_backed: bool,
                 "is unknown here rather than settled either way.")
 
     return head + pace + cash + spend + owed + (
-        f" {years} years is a short window — it does not span a cycle, and on this "
-        f"exchange those years were a commodity upswing.")
+        f" {years} years is a short window — it does not span a cycle"
+        + (", and on this exchange those years were a commodity upswing." if measured else "."))
+
+
+# --------------------------------------------------------------------------- #
+# The record year by year
+# --------------------------------------------------------------------------- #
+# Each line the company view charts: (payload key, ROW_ALIASES key, statement).
+SERIES_ROWS = (
+    ("revenue", "revenue", "income"),
+    ("operatingIncome", "operating_income", "income"),
+    ("netIncome", "net_income", "income"),
+    ("dilutedEps", "eps", "income"),
+    ("operatingCashFlow", "ocf", "cashflow"),
+    ("capex", "capex", "cashflow"),
+    ("freeCashFlow", "fcf", "cashflow"),
+    ("totalDebt", "total_debt", "balance"),
+    ("cash", "cash", "balance"),
+    ("equity", "equity", "balance"),
+)
+
+# Lines that describe nothing for a lender, for the reasons `read` gives.
+NOT_FOR_LENDERS = {"freeCashFlow", "capex", "totalDebt"}
+
+
+def _by_year(frame, key: str) -> dict[int, float]:
+    """One statement line as {fiscal year: value}, the latest column per year."""
+    row = _get_row(frame, key)
+    if row is None:
+        return {}
+    out: dict[int, float] = {}
+    for label, value in pd.Series(row).items():
+        try:
+            year = pd.Timestamp(label).year
+        except (TypeError, ValueError):
+            continue
+        number = _finite(value)
+        if number is not None and year not in out:
+            out[year] = number
+    return out
+
+
+def series(company: Optional[dict]) -> dict:
+    """The statements as a table of years, for the company view's charts.
+
+    WHY THIS EXISTS BESIDE `read`. `read` compresses the record into the handful
+    of facts a scan can filter on. A reader looking at one company wants the
+    record itself — did revenue rise every year or once, did the profit arrive
+    as cash in the year it was booked — and every one of those statements was
+    already fetched and day-cached for the valuation and quality lenses, then
+    thrown away before the payload. This hands them over, unscored.
+
+    A MISSING VALUE IS NULL, NEVER ZERO. A year where the provider returned no
+    revenue line is not a year of zero revenue, and a chart that drew it as one
+    would invent a collapse. Each line that came back empty says so in `missing`.
+
+    Values are in the currency the statements are written in after the record's
+    own conversion: the trading currency when a rate was applied, otherwise the
+    reporting currency — which `currency` names, so a chart cannot label rupiah
+    as dollars (the exact ITMG.JK bug `_convert_statements` exists to prevent).
+    """
+    record = company if isinstance(company, dict) else {}
+    lines = {key: _by_year(record.get(statement), alias)
+             for key, alias, statement in SERIES_ROWS}
+    years = sorted(set(lines["revenue"]) | set(lines["netIncome"]))
+    if not years:
+        return {"available": False, "yearsAvailable": 0,
+                "reason": "no income statement came back for this listing"}
+
+    financial = is_financial(record.get("sector") or "", record.get("industry") or "")
+    fcf_method = "reported"
+    if not lines["freeCashFlow"] and lines["operatingCashFlow"] and lines["capex"]:
+        # Capital expenditure is a negative line on these statements, so free
+        # cash flow is the SUM — and only for years where both arrived.
+        lines["freeCashFlow"] = {y: lines["operatingCashFlow"][y] + lines["capex"][y]
+                                 for y in lines["operatingCashFlow"] if y in lines["capex"]}
+        fcf_method = "operating cash flow less capital expenditure"
+
+    rows: dict[str, list] = {}
+    missing: dict[str, str] = {}
+    for key, _, _ in SERIES_ROWS:
+        if financial and key in NOT_FOR_LENDERS:
+            rows[key] = [None] * len(years)
+            missing[key] = "not meaningful for a lender, whose borrowing and spending are the business"
+            continue
+        rows[key] = [lines[key].get(y) for y in years]
+        if all(v is None for v in rows[key]):
+            missing[key] = "not reported by the data source for this listing"
+
+    trading = (record.get("currency") or "").upper() or None
+    reporting = (record.get("financial_currency") or "").upper() or None
+    converted = record.get("fx_rate") is not None
+    currency = trading if (converted or not reporting or reporting == trading) else reporting
+
+    first, last = years[0], years[-1]
+    reading = (f"{len(years)} fiscal year{'' if len(years) == 1 else 's'} of statements, "
+               f"FY{first}" + (f" to FY{last}" if last != first else "")
+               + f", in {currency or 'the reporting currency'}"
+               + (f" (converted from {reporting} at today's rate)" if converted and reporting else "")
+               + ". Four or five years is what the data source keeps; it does not span a "
+                 "business cycle.")
+    return {
+        "available": True,
+        "yearsAvailable": len(years),
+        "fiscalYears": [f"FY{y}" for y in years],
+        "rows": rows,
+        "currency": currency,
+        "freeCashFlowMethod": None if financial else fcf_method,
+        "financial": financial,
+        "missing": missing,
+        "reading": reading,
+    }

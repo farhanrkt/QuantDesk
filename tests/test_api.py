@@ -29,6 +29,52 @@ def client():
     return TestClient(index.app)
 
 
+def planted_company(**overrides) -> dict:
+    """A company record shaped like `market_data.company`, with no network behind it."""
+    import pandas as pd
+    years = [pd.Timestamp(f"{2025 - i}-12-31") for i in range(4)]
+    income = pd.DataFrame({y: {"Total Revenue": r, "Net Income": n, "Operating Income": o}
+                           for y, r, n, o in zip(years, [400.0, 360.0, 330.0, 300.0],
+                                                 [40.0, 36.0, 30.0, 25.0],
+                                                 [60.0, 55.0, 48.0, 40.0], strict=True)})
+    cashflow = pd.DataFrame({y: {"Operating Cash Flow": c, "Free Cash Flow": f}
+                             for y, c, f in zip(years, [50.0, 45.0, 40.0, 30.0],
+                                                [20.0, -5.0, 10.0, 8.0], strict=True)})
+    balance = pd.DataFrame({y: {"Stockholders Equity": 200.0, "Cash And Cash Equivalents": 30.0,
+                                "Total Debt": 90.0, "Long Term Debt": 90.0} for y in years})
+    record = {
+        "ok": True, "name": "Planted Corp", "sector": "Technology",
+        "industry": "Software - Infrastructure", "business_summary": "Planted Corp sells planted things.",
+        "employees": 1200.0, "country": "United States", "website": "https://example.com",
+        "exchange": "NasdaqGS", "price": 50.0, "shares": 10.0, "beta": 1.0, "currency": "USD",
+        "financial_currency": "USD", "market_cap": 500.0, "price_as_of": "2026-10-23",
+        "price_source": "last daily close", "ttm_dividend": 1.0,
+        "dividend_history": pd.DataFrame({"Year": ["2026", "2025", "2024"],
+                                          "Dividend / Share": [0.5, 1.0, 0.9]}),
+        "income": income, "cashflow": cashflow, "balance": balance, "fx_rate": None,
+    }
+    record.update(overrides)
+    return record
+
+
+@pytest.fixture(autouse=True)
+def offline_company(monkeypatch):
+    """Every route test gets a planted company record and earnings calendar.
+
+    THE QUALITY LEG OF /api/confluence WAS REACHING THE NETWORK. The confluence
+    tests stubbed the anomaly, technical, valuation and news engines but not the
+    company fetch the quality leg makes, so each of them called yfinance and
+    passed on whatever came back — which is the test that gets skipped the day
+    the upstream is down. The company leg reads the same record plus the
+    earnings calendar, so both are planted here for every test; a test that
+    needs a different record patches over this one.
+    """
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda symbol: planted_company())
+    monkeypatch.setattr(index.market_data, "earnings_calendar", lambda symbol: {
+        "available": True, "dates": [], "past": ["2026-07-30"], "next": "2026-10-30",
+        "asOf": "2026-10-25"})
+
+
 # --------------------------------------------------------------------------- #
 # C4 — ticker validation
 # --------------------------------------------------------------------------- #
@@ -54,7 +100,7 @@ def test_ticker_pattern_rejects_hostile_input(bad):
 @pytest.mark.parametrize("bad", ["../../etc/passwd", 'AAPL"x', "A" * 21])
 def test_routes_reject_bad_tickers_with_422(client, bad):
     for path in ("/api/isolation-forest", "/api/technical-analysis",
-                 "/api/intrinsic-value", "/api/news", "/api/confluence"):
+                 "/api/intrinsic-value", "/api/news", "/api/confluence", "/api/company"):
         response = client.get(path, params={"ticker": bad})
         assert response.status_code == 422, f"{path} accepted {bad!r}"
 
@@ -631,3 +677,79 @@ def test_the_ranking_routes_are_rate_limited_more_tightly_than_the_default(clien
     assert RATE_LIMITS["/api/rank/deepen"][0] < RATE_LIMITS["/api/rank"][0], (
         "deepening does not batch, so it must be capped harder than ranking"
     )
+
+
+# --------------------------------------------------------------------------- #
+# The company block: description, never a lens
+# --------------------------------------------------------------------------- #
+def _stub_lenses(monkeypatch):
+    monkeypatch.setattr(index, "whale_payload", lambda *a, **k: {"stub": "anomaly"})
+    monkeypatch.setattr(index.technical, "analyze", lambda *a, **k: {"stub": "technical"})
+    monkeypatch.setattr(index.valuation, "analyze", lambda *a, **k: {"stub": "valuation"})
+    monkeypatch.setattr(index.news, "fetch_news", lambda *a, **k: [])
+
+
+def test_confluence_carries_the_company_block(client, monkeypatch):
+    _stub_lenses(monkeypatch)
+    company = client.get("/api/confluence", params={"ticker": "FAKE"}).json()["company"]
+    assert company["ok"] is True
+    data = company["data"]
+    assert data["name"] == "Planted Corp"
+    assert data["listing"]["exchange"] == "NasdaqGS"
+    assert data["history"]["fiscalYears"] == ["FY2022", "FY2023", "FY2024", "FY2025"]
+    assert data["history"]["rows"]["revenue"] == [300.0, 330.0, 360.0, 400.0]
+    assert data["history"]["rows"]["operatingIncome"] == [40.0, 48.0, 55.0, 60.0]
+    assert data["nextEarnings"]["date"] == "2026-10-30"
+    assert "estimate" in data["nextEarnings"]["reading"]
+    assert data["profile"]["summary"].startswith("Planted Corp")
+    assert set(data["explain"]) >= {"yearsProfitable", "revenueCagr"}
+
+
+def test_the_company_block_never_changes_what_the_lenses_say(client, monkeypatch):
+    """The synthesis and the pre-trade checks read the lenses only. Their
+    output must be identical whether the company block arrived or failed."""
+    _stub_lenses(monkeypatch)
+    with_company = client.get("/api/confluence", params={"ticker": "FAKE"}).json()
+    index._RATE_HITS.clear()
+    monkeypatch.setattr(index, "company_payload",
+                        lambda symbol: (_ for _ in ()).throw(RuntimeError("no record")))
+    without = client.get("/api/confluence", params={"ticker": "FAKE"}).json()
+    assert without["company"]["ok"] is False
+    assert with_company["synthesis"] == without["synthesis"]
+    assert with_company["preTrade"] == without["preTrade"]
+
+
+def test_a_failed_company_block_sinks_nothing_else(client, monkeypatch):
+    _stub_lenses(monkeypatch)
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda symbol: {"ok": False})
+    body = client.get("/api/confluence", params={"ticker": "FAKE"}).json()
+    assert body["company"]["ok"] is False
+    assert body["anomaly"]["ok"] and body["technical"]["ok"] and body["valuation"]["ok"]
+
+
+def test_the_company_route_returns_the_same_block(client):
+    body = client.get("/api/company", params={"ticker": "fake"}).json()
+    assert body["ticker"] == "FAKE"
+    assert body["dividends"]["perShare"][-1] == {"year": "2026", "amount": 0.5, "partial": True}
+    assert body["dividends"]["available"] is True
+
+
+def test_a_dividend_record_off_by_an_exchange_rate_is_withheld(client, monkeypatch):
+    import pandas as pd
+    # A rupiah price with a dividend recorded in dollars: 0.016 against Rp 9,000
+    # is a 0.0002% "yield" — a units problem, not a dividend.
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda symbol: planted_company(
+        price=9000.0, currency="IDR",
+        dividend_history=pd.DataFrame({"Year": ["2025", "2024"], "Dividend / Share": [0.016, 0.015]})))
+    body = client.get("/api/company", params={"ticker": "FAKE.JK"}).json()
+    assert body["dividends"]["available"] is False
+    assert body["dividends"]["perShare"] == []
+    assert "units problem" in body["dividends"]["reading"]
+
+
+def test_statements_in_another_currency_say_they_were_converted(client, monkeypatch):
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda symbol: planted_company(
+        currency="IDR", financial_currency="USD", fx_rate=16000.0))
+    body = client.get("/api/company", params={"ticker": "FAKE.JK"}).json()
+    assert body["currency"]["note"] and "converted" in body["currency"]["note"]
+    assert body["history"]["currency"] == "IDR"

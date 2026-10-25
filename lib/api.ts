@@ -6,7 +6,7 @@ import { createTtlCache } from "./cache";
 import { readSession, useSessionState, writeSession } from "./session";
 import type { RunTuning } from "./url";
 import type {
-  AnomalyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
+  AnomalyResponse, CompanyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
   ExposureScanResponse,
   Leg, ManualInputs, EventStudyResponse, Market, NewsResponse, QualityResponse,
   PeersResponse, PortfolioResponse, PreTrade, RankResponse, ScanResponse,
@@ -222,8 +222,10 @@ export function simulationCsvUrl(o: RunOptions, v: ValuationOptions) {
   return `/api/intrinsic-value/simulation?${queryString(valuationParams(o, v) as never)}`;
 }
 
-type Lens = "anomaly" | "technical" | "valuation" | "quality" | "news";
-const ALL_LENSES: Lens[] = ["anomaly", "technical", "valuation", "quality", "news"];
+// "company" rides in the same request and settles with it, so it is guarded
+// like a leg; it is not a lens and nothing counts it as one.
+type Lens = "anomaly" | "technical" | "valuation" | "quality" | "news" | "company";
+const ALL_LENSES: Lens[] = ["anomaly", "technical", "valuation", "quality", "news", "company"];
 
 /**
  * Every confluence payload this tab has already fetched, keyed by the exact
@@ -256,6 +258,7 @@ export interface EngineSet {
   valuation: Engine<ValuationResponse>;
   quality: Engine<QualityResponse>;
   news: Engine<NewsResponse>;
+  company: Engine<CompanyResponse>;
   // The synthesis arrives with the confluence payload and is the only piece of
   // state here that is not per-lens: it is a statement ABOUT the four together,
   // so a partial re-run of one lens deliberately clears it rather than leaving
@@ -278,7 +281,7 @@ export interface EngineSet {
 }
 
 const EMPTY_SET: EngineSet = {
-  anomaly: IDLE, technical: IDLE, valuation: IDLE, quality: IDLE, news: IDLE,
+  anomaly: IDLE, technical: IDLE, valuation: IDLE, quality: IDLE, news: IDLE, company: IDLE,
   synthesis: null, preTrade: null, runKey: null, at: null,
   valuationOptions: {}, technicalOptions: {},
 };
@@ -287,6 +290,7 @@ const LOADING_SET = (runKey: string): EngineSet => ({
   ...EMPTY_SET,
   anomaly: { status: "loading" }, technical: { status: "loading" },
   valuation: { status: "loading" }, quality: { status: "loading" }, news: { status: "loading" },
+  company: { status: "loading" },
   runKey,
 });
 
@@ -297,6 +301,9 @@ const setFromPayload = (payload: ConfluenceResponse, runKey: string, at: number)
   valuation: fromLeg(payload.valuation),
   quality: fromLeg(payload.quality),
   news: fromLeg(payload.news),
+  // An older cached payload (or an API without the leg) simply has no company
+  // block; that is "not asked", not a failure.
+  company: payload.company ? fromLeg(payload.company) : IDLE,
   synthesis: payload.synthesis ?? null,
   preTrade: payload.preTrade ?? null,
   runKey, at,

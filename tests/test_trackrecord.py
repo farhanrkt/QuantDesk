@@ -295,3 +295,91 @@ def test_a_lender_and_an_unread_sheet_are_both_none_but_read_differently():
     assert lender["netCash"] is None and unread["netCash"] is None
     assert "would describe nothing" in lender["reading"]
     assert "No balance sheet came back" in unread["reading"]
+
+
+# --------------------------------------------------------------------------- #
+# The comparisons belong to the market they were measured on
+# --------------------------------------------------------------------------- #
+INDONESIAN_ONLY = ("two thirds", "67%", "39%", "top quartile", "median of 3.0",
+                   "commodity", "market median of about 5%")
+
+
+def test_a_us_reading_quotes_no_indonesian_base_rate():
+    record = statements([10.0, 9.0, 8.0, 7.0], revenue=[100.0, 90.0, 70.0, 50.0],
+                        ocf=[12.0, 11.0, 9.0, 8.0], cash=[5.0, 5.0, 5.0, 5.0],
+                        debt=[40.0, 40.0, 40.0, 40.0], ebit=[15.0, 14.0, 12.0, 10.0])
+    out = T.read(record, "US")
+    lowered = out["reading"].lower()
+    for phrase in INDONESIAN_ONLY:
+        assert phrase.lower() not in lowered, f"US reading quotes {phrase!r}"
+    assert out["baseRates"] is None
+    assert "523 Indonesian listings" in out["baseRatesNote"]
+    # The figures themselves are unchanged: only what they are compared with.
+    assert out["revenueCagr"] == T.read(record, "ID")["revenueCagr"]
+
+
+def test_the_indonesian_reading_is_unchanged_by_default():
+    record = statements([10.0, 9.0, 8.0], revenue=[100.0, 90.0, 80.0], ocf=[1.0, 1.0, 1.0])
+    assert T.read(record) == T.read(record, "ID")
+    assert T.read(record)["baseRates"] == T.BASE_RATES
+    assert T.read(record)["baseRatesNote"] is None
+
+
+# --------------------------------------------------------------------------- #
+# series(): the record year by year
+# --------------------------------------------------------------------------- #
+def test_series_runs_oldest_to_newest_and_aligns_across_statements():
+    record = statements([10.0, 9.0, 8.0], revenue=[100.0, 90.0, 80.0],
+                        ocf=[12.0, 11.0, 9.0], cash=[3.0, 2.0, 1.0])
+    out = T.series(record)
+    assert out["fiscalYears"] == ["FY2023", "FY2024", "FY2025"]
+    assert out["rows"]["revenue"] == [80.0, 90.0, 100.0]
+    assert out["rows"]["netIncome"] == [8.0, 9.0, 10.0]
+    assert out["rows"]["operatingCashFlow"] == [9.0, 11.0, 12.0]
+    assert out["rows"]["cash"] == [1.0, 2.0, 3.0]
+
+
+def test_a_missing_value_is_null_never_zero():
+    record = statements([10.0, np.nan, 8.0], revenue=[100.0, 90.0, np.nan])
+    out = T.series(record)
+    assert out["rows"]["revenue"] == [None, 90.0, 100.0]
+    assert out["rows"]["netIncome"] == [8.0, None, 10.0]
+    assert "equity" in out["missing"], "a line that never arrived says so"
+    assert out["rows"]["equity"] == [None, None, None]
+
+
+def test_free_cash_flow_is_derived_only_where_both_halves_arrived():
+    record = statements([1.0, 1.0, 1.0])
+    years = list(record["income"].columns)            # newest first, as served
+    record["cashflow"] = pd.DataFrame({
+        year: {"Operating Cash Flow": ocf, "Capital Expenditure": capex}
+        for year, ocf, capex in zip(years, [10.0, 8.0, np.nan], [-4.0, np.nan, -2.0], strict=True)})
+    out = T.series(record)
+    # FY2025: 10 - 4; FY2024: capex missing; FY2023: ocf missing.
+    assert out["rows"]["freeCashFlow"] == [None, None, 6.0]
+    assert out["freeCashFlowMethod"] == "operating cash flow less capital expenditure"
+
+
+def test_lines_that_describe_nothing_for_a_lender_are_withheld():
+    record = statements([5.0, 4.0, 3.0], ocf=[1.0, 1.0, 1.0], fcf=[1.0, 1.0, 1.0])
+    record["sector"] = "Financial Services"
+    record["industry"] = "Banks - Regional"
+    out = T.series(record)
+    assert out["rows"]["freeCashFlow"] == [None, None, None]
+    assert "lender" in out["missing"]["freeCashFlow"]
+    assert out["freeCashFlowMethod"] is None
+
+
+def test_the_currency_named_is_the_one_the_statements_are_in():
+    base = statements([1.0, 1.0, 1.0], revenue=[1.0, 1.0, 1.0])
+    converted = {**base, "currency": "IDR", "financial_currency": "USD", "fx_rate": 16000.0}
+    unconverted = {**base, "currency": "IDR", "financial_currency": "USD", "fx_rate": None}
+    assert T.series(converted)["currency"] == "IDR"
+    assert "converted from USD" in T.series(converted)["reading"]
+    assert T.series(unconverted)["currency"] == "USD", (
+        "statements left in dollars must not be labelled rupiah — the ITMG.JK bug")
+
+
+def test_no_income_statement_is_a_stated_gap():
+    assert T.series({})["available"] is False
+    assert T.series(None)["reason"]

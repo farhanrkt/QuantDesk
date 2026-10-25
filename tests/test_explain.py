@@ -136,6 +136,10 @@ SAMPLES: dict[str, tuple] = {
                             "tested": [{"key": "oil", "label": "the energy complex",
                                         "available": True, "correlation": 0.50}],
                             "ambiguous": False, "name_at": 0.45}),
+    "yearsProfitable": (0.75, {"years": 4, "profitable": 3, "market": "ID"}),
+    "revenueCagr": (0.124, {"years": 5, "market": "US"}),
+    "netDebtToEbitda": (2.4, {"market": "ID"}),
+    "freeCashFlowYears": (0.25, {"positive": 1, "of": 4}),
 }
 
 
@@ -233,6 +237,7 @@ HIGHER_IS_BETTER = {
     "fromHigh52w": [-0.70, -0.40, -0.20, -0.10, -0.01],
     "fromAllTimeHigh": [-0.80, -0.50, -0.30, -0.10, -0.01],
     "moveVsSpread": [0.5, 1.5, 3.0, 9.0],
+    "yearsProfitable": [0.25, 0.75, 1.0],
 }
 
 LOWER_IS_BETTER = {

@@ -38,6 +38,7 @@ GET /api/confluence                 every lens at once, in ONE invocation
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import io
 import math
 import os
@@ -53,6 +54,7 @@ sys.path.append(str(Path(__file__).parent))
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -61,8 +63,8 @@ from pydantic import BaseModel, Field
 from _lib import (accumulation, chartlayers, eventstudy, explain, exposure,
                   field, listings, market_data, microstructure, news, ownership,
                   patterns, portfolio, pretrade, quality, ranking, riskmodel,
-                  structure, symbols, tape, technical, universes, valuation,
-                  verdict, volumeprofile)
+                  structure, symbols, tape, technical, trackrecord, universes,
+                  valuation, verdict, volumeprofile)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -1679,6 +1681,123 @@ def intrinsic_value_simulation(
 # --------------------------------------------------------------------------- #
 # Engine 4 — accounting quality and solvency
 # --------------------------------------------------------------------------- #
+def _finite_or_none(value) -> Optional[float]:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if out == out and out not in (float("inf"), float("-inf")) else None
+
+
+def _dividend_record(company: dict) -> dict:
+    """Dividends per share by calendar year, as paid — or why there are none.
+
+    CHECKED AGAINST THE PRICE BEFORE IT IS SHOWN. The provider is not internally
+    consistent about which currency its dividend fields use (valuation.py has
+    the ADRO.JK case: one field in dollars, another in rupiah), and a figure off
+    by an exchange rate looks like a perfectly ordinary small dividend. So the
+    latest complete year must imply a yield inside the same plausibility band
+    the valuation uses, or the series is withheld with the reason — a gap, not
+    a chart of the wrong numbers.
+    """
+    history = company.get("dividend_history")
+    price = _finite_or_none(company.get("price"))
+    if not isinstance(history, pd.DataFrame) or history.empty:
+        return {"available": False, "perShare": [],
+                "reading": ("No dividend payments in the provider's record for this listing. "
+                            "That is either a company that does not pay one or a record that "
+                            "is incomplete; the data cannot say which.")}
+    this_year = str(dt.date.today().year)
+    rows = []
+    for _, row in history.iloc[::-1].iterrows():
+        amount = _finite_or_none(row.get("Dividend / Share"))
+        if amount is None:
+            continue
+        year = str(row.get("Year"))
+        rows.append({"year": year, "amount": amount, "partial": year == this_year})
+    complete = [r for r in rows if not r["partial"]]
+    low, high = valuation.PLAUSIBLE_YIELD_BAND
+    if complete and price and not (low <= complete[-1]["amount"] / price <= high):
+        return {"available": False, "perShare": [],
+                "reading": (f"The provider's dividend record implies a "
+                            f"{complete[-1]['amount'] / price * 100:.3g}% yield against "
+                            f"today's price, which is a units problem rather than a dividend, "
+                            f"so the series is withheld.")}
+    paid = len(complete)
+    reading = (f"Paid in each of the {paid} complete calendar year{'' if paid == 1 else 's'} the "
+               f"record covers" if paid else "No complete calendar year in the record")
+    reading += ("; the current year is year to date." if any(r["partial"] for r in rows) else ".")
+    return {
+        "available": bool(rows),
+        "perShare": rows,
+        "basis": "calendar year, as paid, in the trading currency",
+        "ttm": _finite_or_none(company.get("ttm_dividend")),
+        "reading": reading,
+    }
+
+
+def company_payload(symbol: str) -> dict:
+    """Who the company is and what its filings say it has done, year by year.
+
+    DESCRIPTION, AND NOTHING ELSE. Nothing in this block is a lens: it casts no
+    vote, `explain.for_synthesis` and `pretrade.assess` never read it, and a test
+    asserts both produce identical output with and without it.
+
+    ONE FETCH THAT WAS ALREADY PAID FOR. Inside a confluence request the
+    valuation and quality legs have fetched and day-cached the same company
+    record, so this costs the earnings calendar and nothing more. A separate
+    route fetched by the page would often land on a different warm instance and
+    refetch four or five statements — which is why the UI reads this from the
+    confluence payload, and `/api/company` exists for curl and parity.
+    """
+    company = valuation.fetch_company(symbol)
+    if not company.get("ok"):
+        raise HTTPException(
+            status_code=404,
+            detail=f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+        )
+    market_code = symbols.market_of(symbol)
+    record = trackrecord.read(company, market_code)
+    calendar = market_data.earnings_calendar(symbol)
+    trading = (company.get("currency") or "").upper() or None
+    reporting = (company.get("financial_currency") or "").upper() or None
+    fx_rate = _finite_or_none(company.get("fx_rate"))
+    return {
+        "ticker": symbol,
+        "name": company.get("name") or symbol,
+        "profile": field.profile(company),
+        "listing": {
+            "exchange": company.get("exchange") or None,
+            "market": market_code,
+            "marketCap": _finite_or_none(company.get("market_cap")),
+            "price": _finite_or_none(company.get("price")),
+            "priceAsOf": company.get("price_as_of"),
+            "priceSource": company.get("price_source"),
+        },
+        "currency": {
+            "trading": trading,
+            "reporting": reporting,
+            "fxRate": fx_rate,
+            "note": (f"The statements are in {reporting} and were converted to {trading} at "
+                     f"today's rate, so the history carries the currency's moves as well as "
+                     f"the company's." if fx_rate and reporting and reporting != trading
+                     else None),
+        },
+        "history": trackrecord.series(company),
+        "dividends": _dividend_record(company),
+        "nextEarnings": {
+            "date": calendar["next"],
+            "past": calendar["past"],
+            "source": "the data source's earnings calendar",
+            "reading": ("The provider's date for the next report. It is often an estimate "
+                        "until the company confirms it." if calendar["next"] else
+                        "No upcoming report date in the provider's calendar."),
+        },
+        "record": record,
+        "explain": explain.for_company(record, market_code),
+    }
+
+
 def quality_payload(symbol: str) -> dict:
     """Piotroski / Altman / Beneish from the statements already fetched.
 
@@ -1840,6 +1959,24 @@ def find_symbols(
 
 
 # --------------------------------------------------------------------------- #
+# The company itself
+# --------------------------------------------------------------------------- #
+@app.get("/api/company")
+def company_view(
+    ticker: str = Query(..., pattern=TICKER_PATTERN),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+):
+    """What the company does, its listing, and its statements year by year.
+
+    The same block `/api/confluence` carries as its `company` leg. The UI reads
+    it from there, where the company record is already in hand; this route is
+    for curl, and costs a fetch of its own.
+    """
+    symbol, _ = resolved_with_market(ticker, market)
+    return ok(company_payload(symbol))
+
+
+# --------------------------------------------------------------------------- #
 # Contextual catalyst
 # --------------------------------------------------------------------------- #
 @app.get("/api/news")
@@ -1924,8 +2061,13 @@ async def confluence(
         leg("quality", lambda: quality_payload(symbol)),
         leg("news", lambda: {"ticker": symbol,
                              "items": news.fetch_news(symbol, limit=news_limit)}),
+        leg("company", lambda: company_payload(symbol)),
     )
     legs = dict(results)
+    # THE COMPANY BLOCK IS NOT A LENS, and the two readers of the assembled
+    # payload are handed the lenses only — so neither can start quoting a
+    # description as if it were evidence.
+    lenses = {name: value for name, value in legs.items() if name != "company"}
     # The synthesis reads the ASSEMBLED payload rather than running its own
     # analysis, for the same reason every `explain` layer in this app does: it
     # must quote the figures the panels actually render, and a parallel
@@ -1938,11 +2080,11 @@ async def confluence(
                # was taken on a different population in each market, and a bare
                # code with the wrong market selected would quote the wrong one.
                "synthesis": explain.for_synthesis(
-                   legs, market=symbols.market_of(symbol)),
+                   lenses, market=symbols.market_of(symbol)),
                # The market decides which population the firing rates describe.
                # Taken from the RESOLVED symbol rather than the query parameter,
                # for the same reason every engine downstream of `symbols.resolve`
                # takes it from there: the suffix is what actually determines the
                # listing, and a bare code with the wrong market selected would
                # otherwise be scored against the wrong universe.
-               "preTrade": pretrade.assess(legs, market=symbols.market_of(symbol))})
+               "preTrade": pretrade.assess(lenses, market=symbols.market_of(symbol))})
