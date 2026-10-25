@@ -104,7 +104,17 @@ app.add_middleware(
 # freshness, and the client previously sent `cache: "no-store"`, which shared
 # caches are specified to honour — so the edge cache below was never exercised.
 # Verify with the `x-vercel-cache` response header (HIT on a repeat request).
-CACHE = "public, max-age=0, s-maxage=60, stale-while-revalidate=300"
+#
+# STALE-WHILE-REVALIDATE IS FOR THE EDGE ONLY. It used to sit in Cache-Control,
+# where browsers honour it too: with max-age=0 every response is instantly
+# stale, and swr=300 let Chrome serve the previous answer for five minutes
+# while revalidating behind it — so "the browser always revalidates" was not
+# true, and a re-run within five minutes could show the old payload. It moved
+# to CDN-Cache-Control, which the Vercel edge reads and browsers ignore;
+# s-maxage stays in Cache-Control for any CDN that does not know the newer
+# header.
+CACHE = "public, max-age=0, must-revalidate, s-maxage=60"
+CDN_CACHE = "public, s-maxage=60, stale-while-revalidate=300"
 
 # The wire cap for daily series. `period=max` on a long-listed US name is ~11k
 # rows x 10 fields, which is megabytes of JSON and as many Recharts points.
@@ -271,7 +281,8 @@ async def rate_limit(request: Request, call_next):
 def ok(payload: dict) -> JSONResponse:
     # Cache at the edge: quotes move, but not within 60s, and every engine
     # re-runs a network fetch that we do not want to pay for on each keystroke.
-    return JSONResponse(content=clean(payload), headers={"Cache-Control": CACHE})
+    return JSONResponse(content=clean(payload),
+                        headers={"Cache-Control": CACHE, "CDN-Cache-Control": CDN_CACHE})
 
 
 def private_ok(payload: dict) -> JSONResponse:

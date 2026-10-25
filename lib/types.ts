@@ -285,7 +285,7 @@ export interface QualityResponse {
   /** Where the three numbers came from. Absent when the lens refused to score. */
   domains?: ValidationDomains;
   /** Machine-readable reason the lens declined, when it did. */
-  cause?: "financial" | "no-statements";
+  cause?: "financial" | "no-statements" | "unknown-sector";
   explain?: ExplainMap;
 }
 

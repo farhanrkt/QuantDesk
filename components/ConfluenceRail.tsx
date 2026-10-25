@@ -260,11 +260,18 @@ function readQuality(state: Engine<QualityResponse>): Reading {
   const question = "Are the numbers real?";
   if (state.status !== "ready") return blank("Quality", question, "filings", state.status);
   const d = state.data;
+  // THE REFUSAL SAYS WHICH REFUSAL. This printed the bank sentence for every
+  // `applicable: false`, so a throttled fetch that returned no sector for
+  // Microsoft read "built on non-financial firms ... do not transfer to banks"
+  // — a confident statement that Microsoft is a lender. The server sends the
+  // cause and a sentence for each; only the designed refusal gets the short one.
   if (!d.applicable)
     return {
       lens: "Quality", question, verdict: "n/a",
-      detail: "These three accounting models were built on non-financial firms and do not "
-        + "transfer to banks or insurers, so no score is reported.",
+      detail: d.cause === "financial" || (!d.cause && !d.reason)
+        ? "These three accounting models were built on non-financial firms and do not "
+          + "transfer to banks or insurers, so no score is reported."
+        : d.reason ?? "No score could be computed for this listing.",
       color: ASH, vote: 0, family: "filings",
     };
 
@@ -479,3 +486,10 @@ export function ConfluenceRail({
     </section>
   );
 }
+
+// THE COMPARE VIEW READS EACH COMPANY THROUGH THE SAME FOUR SENTENCES. Exported
+// here, in one statement at the end, rather than by prefixing the functions:
+// the lens-family drift check in check_frontend.mjs splits this file on lines
+// that START with `function`, and an `export` in front would merge the blocks
+// it reads. `agreementOf` is deliberately not used there — see lib/compare.ts.
+export { readAnomaly, readQuality, readTechnical, readValuation, voteTone };

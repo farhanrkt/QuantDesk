@@ -551,10 +551,15 @@ def test_ranking_a_list_validates_like_the_query_did(client, body):
 # Q5/Q8 — response headers and payload size
 # --------------------------------------------------------------------------- #
 def test_cache_header_serves_the_edge_and_revalidates_the_browser(client):
-    cache = client.get("/api/health").headers["Cache-Control"]
+    headers = client.get("/api/health").headers
+    cache = headers["Cache-Control"]
     assert "s-maxage=60" in cache      # edge caches for a minute
     assert "max-age=0" in cache        # browser always revalidates
     assert "no-store" not in cache     # ...which would suppress the edge cache
+    # Browsers honour stale-while-revalidate too, and with max-age=0 it let
+    # Chrome serve the previous answer for five minutes. Edge only, now.
+    assert "stale-while-revalidate" not in cache
+    assert "stale-while-revalidate=300" in headers["CDN-Cache-Control"]
 
 
 def test_thin_for_wire_never_drops_a_flagged_day():

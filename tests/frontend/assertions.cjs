@@ -438,6 +438,77 @@ t("a label prefix outranks a word match outranks a keyword", () => {
   assert.deepEqual(C.rankCommands(cmds, "").map((c) => c.id), ["a", "b", "c"], "no query keeps order");
 });
 
+// ---- lib/compare: side by side, and never a decision ----
+const { buildCompare } = require("./lib/compare.js");
+
+const EXPLAIN = (valueText, tone) => ({ label: "x", what: "x", reading: `reads ${valueText}`, action: "x",
+                                       band: "fair", tone, goodDirection: "high", evidence: null, valueText });
+const PAYLOAD = (symbol, verdict, tone) => ({
+  status: "ready",
+  data: {
+    ticker: symbol,
+    anomaly: { ok: false, error: "no bars" },
+    technical: { ok: false, error: "no bars" },
+    quality: { ok: false, error: "no statements" },
+    news: { ok: true, data: { ticker: symbol, items: [] } },
+    valuation: { ok: true, data: {
+      ticker: symbol, engine: "DCF", verdict, market: { code: symbol.endsWith(".JK") ? "ID" : "US" },
+      monteCarlo: { upside: 0.2, p50Label: "$10", probUndervalued: 0.6 },
+      explain: { impliedGrowth: EXPLAIN("12.0%", tone), terminalShare: EXPLAIN("70%", "warn") },
+    } },
+    company: { ok: true, data: {
+      name: `${symbol} Corp`, profile: { industry: "Widgets", sector: "Industrials", summaryShort: null },
+      listing: { exchange: "X", marketCap: 1e9 }, currency: { trading: symbol.endsWith(".JK") ? "IDR" : "USD" },
+      nextEarnings: { date: null }, explain: {},
+    } },
+    synthesis: { headline: "Both independent readings constructive" },
+    preTrade: { flags: [{ explain: { label: "Balance sheet in the distress zone" } }],
+                caveat: "An empty panel is not a clean bill of health." },
+  },
+});
+
+t("columns keep the reader's order under every permutation", () => {
+  const a = { symbol: "AAA", state: PAYLOAD("AAA", "UNDERVALUED", "good") };
+  const b = { symbol: "BBB.JK", state: PAYLOAD("BBB.JK", "OVERVALUED", "bad") };
+  const c = { symbol: "CCC", state: { status: "error", failure: { message: "nope" } } };
+  for (const order of [[a, b, c], [c, a, b], [b, c, a]]) {
+    const model = buildCompare(order, 3);
+    assert.deepEqual(model.columns.map((x) => x.symbol), order.map((x) => x.symbol));
+    for (const section of model.sections) {
+      for (const row of section.rows) assert.equal(row.cells.length, order.length);
+    }
+  }
+});
+t("each cell carries its own company's server tone, and nothing across columns", () => {
+  const model = buildCompare([
+    { symbol: "AAA", state: PAYLOAD("AAA", "UNDERVALUED", "good") },
+    { symbol: "BBB", state: PAYLOAD("BBB", "OVERVALUED", "bad") },
+  ], 3);
+  const implied = model.sections.find((s) => s.key === "value").rows.find((r) => r.key === "impliedGrowth");
+  assert.deepEqual(implied.cells.map((c) => c.tone), ["good", "bad"]);
+});
+t("no aggregate, winner or agreement count appears anywhere in the model", () => {
+  const model = buildCompare([
+    { symbol: "AAA", state: PAYLOAD("AAA", "UNDERVALUED", "good") },
+    { symbol: "BBB.JK", state: PAYLOAD("BBB.JK", "OVERVALUED", "bad") },
+  ], 3);
+  const keys = new Set();
+  const walk = (o) => { if (o && typeof o === "object") for (const [k, v] of Object.entries(o)) { keys.add(k); walk(v); } };
+  walk(model);
+  for (const banned of ["score", "total", "rank", "composite", "winner", "best", "overall", "count", "tally"]) {
+    assert.ok(!keys.has(banned), `compare model carries "${banned}"`);
+  }
+  const text = JSON.stringify(model);
+  assert.ok(!/independent reading/i.test(text), "the rail's agreement count must not repeat per column");
+  assert.match(model.currencyNote, /not converted/);
+});
+t("fired conditions are listed, never counted", () => {
+  const model = buildCompare([{ symbol: "AAA", state: PAYLOAD("AAA", "UNDERVALUED", "good") }], 3);
+  const fired = model.sections.find((s) => s.key === "pretrade").rows[0].cells[0];
+  assert.deepEqual(fired.items, ["Balance sheet in the distress zone"]);
+  assert.ok(!/\d/.test(fired.text), "no number in the fired cell");
+});
+
 Promise.all(pending).then(() => {
   console.log(`  ${n} frontend assertions passed`);
 });

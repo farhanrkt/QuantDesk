@@ -62,6 +62,8 @@ const SOURCES = [
   "lib/watchlist.ts",
   "lib/shortcuts.ts",
   "lib/commands.ts",
+  // The compare view's row model: order kept, nothing computed across columns.
+  "lib/compare.ts",
 ];
 
 // Real packages the compiled output requires at load time.
@@ -533,6 +535,31 @@ if (!uiFiles.some(([file]) => file === GRID_FILE)) {
        "Point GRID_FILE at the grid's new home rather than deleting the rule.");
 }
 
+// 14. A COMPARISON NEVER DECIDES. Two to four companies side by side is the
+//     layout where "which is best" arrives without anyone deciding to build it:
+//     a sort, a max, a sum across columns, the rail's agreement count repeated
+//     per column, the private score. None of those may appear in the compare
+//     files. lib/compare.ts is read explicitly because lib/ is outside the UI
+//     walk; the columns stay in the reader's order and are moved by hand.
+const COMPARE_FORBIDDEN =
+  /\bagreementOf\b|\buseVerdict\b|api\/verdict|\bVerdictPanel\b|\.sort\(|\btoSorted\(|\bMath\.max\b|\.reduce\(/;
+const compareSources = [
+  ...uiFiles.filter(([file]) => /^(components|app)\/compare\//.test(file)),
+  ["lib/compare.ts", stripComments(readFileSync(join(ROOT, "lib/compare.ts"), "utf8"))],
+];
+for (const [file, src] of compareSources) {
+  const m = src.match(COMPARE_FORBIDDEN);
+  if (m) {
+    fail(file, `The compare view uses ${m[0]}.`,
+         "Compare keeps the reader's order and computes nothing across columns — no sort, "
+         + "max, sum, agreement count or score. See lib/compare.ts.");
+  }
+}
+if (compareSources.length < 2) {
+  fail("components/compare", "Rule 14 found no compare component to guard.",
+       "Point the rule at the compare view's new home rather than deleting it.");
+}
+
 // A LINK TO THE FIELD MANUAL RESOLVES. "New to this?" pointed at
 // /docs/field-manual.html for months while production returned a 404: docs/
 // was excluded from the upload and nothing copied the file into public/. The
@@ -554,7 +581,7 @@ if (designFailures.length) {
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 14 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 15 checked across ${uiFiles.length} UI files`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));
