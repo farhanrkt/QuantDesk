@@ -8,6 +8,8 @@ __pycache__
 # --- build output ---
 .next
 out
+# A build-time copy of docs/field-manual.html; docs/ is the one source.
+public/docs/
 *.tsbuildinfo
 # Next regenerates this on every build; it is in create-next-app's ignore list too.
 next-env.d.ts

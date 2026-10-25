@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { Analytics } from "@vercel/analytics/next";
 import { IBM_Plex_Mono, Inter } from "next/font/google";
+import { AnalyticsRedacted } from "@/components/shell/AnalyticsRedacted";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
@@ -76,8 +76,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           from an external host, which this CSP correctly refuses; rendering it
           only in production keeps the local console clean and means the numbers
           are not polluted by our own reloads.
+
+          ROUTE TEMPLATES ONLY. Once a ticker could appear in the path, the
+          stock package would have reported it on every page view. The wrapper
+          reports `/stock/[symbol]` and strips every query string — see
+          lib/redact.ts, which is an allowlist for exactly that reason.
         */}
-        {process.env.NODE_ENV === "production" && <Analytics />}
+        {process.env.NODE_ENV === "production" && <AnalyticsRedacted />}
       </body>
     </html>
   );

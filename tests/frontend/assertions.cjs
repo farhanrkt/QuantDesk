@@ -273,4 +273,24 @@ t("ids carry the ticker and the instant, so two theses cannot collide", () => {
   assert.notEqual(J.newId(when, "AAPL"), J.newId(when, "MSFT"));
 });
 
+// ---- analytics: a page view carries a route template, never a ticker ----
+const { redactPath, redactUrl } = require("./lib/redact.js");
+
+t("a stock page is reported as its template", () => {
+  assert.equal(redactPath("/stock/AAPL"), "/stock/[symbol]");
+  assert.equal(redactPath("/stock/BBCA.JK/"), "/stock/[symbol]");
+  assert.equal(redactPath("/stock/%5EGSPC"), "/stock/[symbol]");
+});
+t("query strings and fragments never survive", () => {
+  assert.equal(redactPath("/compare?symbols=AAPL,MSFT"), "/compare");
+  assert.equal(redactPath("/stock/AAPL?tab=value#peers"), "/stock/[symbol]");
+  assert.equal(redactUrl("https://q.example/compare?symbols=AAPL,BBCA.JK"), "https://q.example/compare");
+});
+t("an unknown path is /other, so a new route cannot leak by being forgotten", () => {
+  assert.equal(redactPath("/AAPL"), "/other");
+  assert.equal(redactPath("/stock/AAPL/extra"), "/other");
+  assert.equal(redactPath(null), "/");
+  assert.equal(redactUrl("not a url"), "/other");
+});
+
 console.log(`  ${n} frontend assertions passed`);

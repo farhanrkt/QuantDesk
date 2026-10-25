@@ -1,7 +1,11 @@
 <title>The QuantDesk Field Manual</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Serif:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<!--
+  NO WEB FONTS, ON PURPOSE. The app serves this file at /docs/field-manual.html
+  under its own Content-Security-Policy, where font-src and style-src are 'self'.
+  A Google Fonts link there is refused, logs a CSP violation on every load, and
+  falls back anyway. Loosening the app's policy for one document was the worse
+  trade, so every face below names its system fallback and that is what renders.
+-->
 
 <style>
 /* ==========================================================================

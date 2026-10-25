@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "predev": "node -e \"const f=require('fs');f.mkdirSync('public/docs',{recursive:true});f.copyFileSync('docs/field-manual.html','public/docs/field-manual.html')\"",
     "dev": "next dev",
     "dev:api": ".venv/bin/python -m uvicorn index:app --app-dir api --reload --port 8000",
+    "prebuild": "node -e \"const f=require('fs');f.mkdirSync('public/docs',{recursive:true});f.copyFileSync('docs/field-manual.html','public/docs/field-manual.html')\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx",

@@ -7,5 +7,8 @@ node_modules
 .next
 tests
 .github
-docs
+# The field manual is the one file in docs/ the deployed app serves: `prebuild`
+# copies it into public/docs/, and the build cannot copy what was never uploaded.
+docs/*
+!docs/field-manual.html
 scripts

@@ -32,7 +32,7 @@
 
 import { spawnSync } from "node:child_process";
 import {
-  mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, cpSync,
+  cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -50,6 +50,9 @@ const SOURCES = [
   // live in Python with the rest of this project's judgement. This is the
   // escape hatch that already exists for exactly that case.
   "lib/journal.ts",
+  // What the analytics beacon is allowed to learn about the page. A privacy
+  // property, so it is pinned by assertion rather than by reading the source.
+  "lib/redact.ts",
 ];
 
 // Real packages the compiled output requires at load time.
@@ -73,6 +76,53 @@ if (FORBIDDEN_IN_REQUESTS.test(requestLayer)) {
   console.error("lib/api.ts mentions the thesis journal. Nothing about a reader's own "
                 + "thesis may cross the wire — see components/ThesisPanel.tsx.");
   process.exit(1);
+}
+
+// THE SAME INVARIANT, STATED STRUCTURALLY, for everything a reader keeps in
+// this browser: the journal, the watchlist, recent tickers, holdings. A keyword
+// grep cannot be widened to cover them — this file's own comments already say
+// "watchlist" when explaining what analytics must never see — so the rule is
+// about what the request layer can REACH instead. It may not import the
+// browser-only stores, and it may not open browser storage itself; whatever a
+// request needs from them has to be handed to it explicitly by a component,
+// where a reviewer can see it cross.
+const rawRequestLayer = readFileSync(join(ROOT, "lib/api.ts"), "utf8");
+const strippedRequestLayer = rawRequestLayer
+  .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+for (const [pattern, why] of [
+  [/from\s+["'](?:\.\/|@\/lib\/)(?:journal|watchlist)["']/, "imports a browser-only store"],
+  [/\b(?:localStorage|sessionStorage)\b/, "reads browser storage directly"],
+]) {
+  if (pattern.test(strippedRequestLayer)) {
+    console.error(`lib/api.ts ${why}. The request layer must not be able to reach what a `
+                  + "reader keeps in this browser; pass the specific value in from a component.");
+    process.exit(1);
+  }
+}
+
+// ANALYTICS EVENTS CARRY TWO KEYS, AND NEITHER IS A TICKER. The one custom
+// event reports the market and how many lenses answered. A third key is how a
+// ticker, a watchlist size or a compare list would start leaking, one helpful
+// property at a time, so the shape of every `track(` call is fixed here.
+const TRACK_KEYS = new Set(["market", "lenses"]);
+const trackSources = ["lib", "components", "app"].flatMap((dir) => {
+  const walkAll = (d) => readdirSync(join(ROOT, d), { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walkAll(join(d, e.name))
+                    : /\.(ts|tsx)$/.test(e.name) ? [join(d, e.name)] : []);
+  return walkAll(dir);
+});
+for (const file of trackSources) {
+  const src = readFileSync(join(ROOT, file), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  for (const m of src.matchAll(/\btrack\(([^)]*)\)/g)) {
+    const body = m[1].match(/\{([^}]*)\}/);
+    const keys = body ? [...body[1].matchAll(/(\w+)\s*:/g)].map((k) => k[1]) : null;
+    if (!keys || keys.some((k) => !TRACK_KEYS.has(k))) {
+      console.error(`${file}: an analytics event carries ${keys ? keys.join(", ") : "an unreadable payload"}. `
+                    + "Only `market` and `lenses` may be sent — see the comment in lib/api.ts.");
+      process.exit(1);
+    }
+  }
 }
 
 // THE CONFLUENCE RAIL KEEPS ITS OWN COPY OF WHICH LENS READS WHICH DATA, and
@@ -126,13 +176,17 @@ if (Object.keys(railFamilies).length < 4) {
 const stripComments = (src) =>
   src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-const uiFiles = [];
-for (const dir of ["components", "components/ui", "app"]) {
-  for (const name of readdirSync(join(ROOT, dir))) {
-    if (!/\.(tsx|css)$/.test(name)) continue;
-    uiFiles.push([join(dir, name), stripComments(readFileSync(join(ROOT, dir, name), "utf8"))]);
-  }
-}
+// RECURSIVE, AND IT WAS NOT. The first version listed three directories by
+// hand — components/, components/ui/, app/ — so a file in any new subfolder was
+// simply never read, and every rule below passed on it by not looking. A route
+// under app/stock/[symbol]/ or a panel moved into components/rank/ would have
+// been exempt from the whole design system without anyone deciding that. Keys
+// stay repo-relative posix paths, so SIGN_TONE_BUDGET entries are unchanged.
+const walkUi = (dir) => readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? walkUi(join(dir, e.name))
+                  : /\.(tsx|css)$/.test(e.name) ? [join(dir, e.name)] : []);
+const uiFiles = ["components", "app"].flatMap(walkUi).sort()
+  .map((file) => [file, stripComments(readFileSync(join(ROOT, file), "utf8"))]);
 
 const designFailures = [];
 const fail = (file, rule, detail) => designFailures.push(`  ${file}\n    ${rule}\n    ${detail}`);
@@ -378,13 +432,28 @@ for (const [file, src] of uiFiles) {
 // asserts that contract on the real report. A shape guaranteed by the server
 // needs no rule on the client.
 
+// A LINK TO THE FIELD MANUAL RESOLVES. "New to this?" pointed at
+// /docs/field-manual.html for months while production returned a 404: docs/
+// was excluded from the upload and nothing copied the file into public/. The
+// copy now happens in `prebuild`, and this checks the other half — that every
+// /docs/ path the UI links to names a file that exists to be copied.
+for (const [file, src] of uiFiles) {
+  for (const m of src.matchAll(/["'`](\/docs\/[^"'`#?]+)/g)) {
+    if (!existsSync(join(ROOT, m[1].slice(1)))) {
+      fail(file, `Links to ${m[1]}, which is not in docs/.`,
+           "prebuild copies docs/field-manual.html into public/docs/; a link to anything "
+           + "else under /docs/ will 404 in production.");
+    }
+  }
+}
+
 if (designFailures.length) {
   console.error("\nDesign-system rules broken (see DESIGN.md):\n");
   console.error(designFailures.join("\n\n"));
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 10 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 11 checked across ${uiFiles.length} UI files`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));
