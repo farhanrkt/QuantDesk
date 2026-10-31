@@ -20,12 +20,17 @@ WHAT THESE TESTS PROTECT, IN ORDER OF HOW BADLY IT WOULD HURT TO LOSE IT
 5. HOLD IS NOT MEASURED. It is what the scanner says when it has nothing to
    say, so scoring it would measure the market.
 
-The wording is free to change. Those five are not.
+6. A CALL IS NOT AN OBSERVATION. A name called on six scans in a fortnight is
+   one outcome over one window, and counting it six times is how thirty
+   observations get made out of five companies.
+
+The wording is free to change. Those six are not.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import itertools
 
 import numpy as np
 import pandas as pd
@@ -44,6 +49,21 @@ def series(start: dt.date, days: int, drift: float = 0.0, level: float = 1000.0)
     index = pd.bdate_range(start, periods=days)
     values = level * np.exp(np.cumsum(np.full(days, drift)))
     return pd.Series(values, index=index)
+
+
+_tickers = itertools.count()
+
+
+def companies(n, action="BUY", excess=0.05):
+    """`n` resolved calls, each on a different company, so each is one observation.
+
+    The rate tests below were written when a row was the unit, and their rows
+    named no company. A row with no ticker cannot be shown to be a different
+    company from the next one, so each now gets its own; nothing they assert
+    depended on the rows sharing a name.
+    """
+    return [{"ticker": f"C{next(_tickers)}.JK", "action": action, "open": False,
+             "excess": excess} for _ in range(n)]
 
 
 # ============================================================================ #
@@ -144,7 +164,7 @@ def test_a_rising_market_does_not_make_every_call_look_right():
 # 1. No rate under the floor
 # ============================================================================ #
 def test_a_handful_of_resolved_calls_refuses_to_quote_a_rate():
-    resolved = [{"action": "BUY", "open": False, "excess": 0.1} for _ in range(5)]
+    resolved = companies(5, "BUY", 0.1)
     summary = S.summarise(resolved)
     assert summary["available"] is False
     assert summary["closed"] == 5
@@ -153,9 +173,8 @@ def test_a_handful_of_resolved_calls_refuses_to_quote_a_rate():
 
 
 def test_enough_resolved_calls_produces_a_rate():
-    resolved = ([{"action": "BUY", "open": False, "excess": 0.05} for _ in range(25)]
-                + [{"action": "BUY", "open": False, "excess": -0.02} for _ in range(10)]
-                + [{"action": "AVOID", "open": False, "excess": -0.04} for _ in range(12)])
+    resolved = (companies(25, "BUY", 0.05) + companies(10, "BUY", -0.02)
+                + companies(12, "AVOID", -0.04))
     summary = S.summarise(resolved)
     assert summary["available"] is True
     assert summary["buys"]["calls"] == 35
@@ -165,7 +184,7 @@ def test_enough_resolved_calls_produces_a_rate():
 
 
 def test_the_summary_never_claims_significance():
-    resolved = [{"action": "BUY", "open": False, "excess": 0.05} for _ in range(40)]
+    resolved = companies(40, "BUY", 0.05)
     summary = S.summarise(resolved)
     assert "No significance is claimed" in summary["reading"]
     assert "pValue" not in summary
@@ -177,7 +196,7 @@ def test_the_summary_never_claims_significance():
 # ============================================================================ #
 def test_hold_is_excluded_from_every_rate():
     resolved = ([{"action": "HOLD", "open": False, "excess": 0.5} for _ in range(100)]
-                + [{"action": "BUY", "open": False, "excess": 0.01} for _ in range(31)])
+                + companies(31, "BUY", 0.01))
     summary = S.summarise(resolved)
     assert summary["closed"] == 31, "HOLD leaked into the measured set"
     assert "HOLD" not in S.DIRECTIONAL
@@ -185,12 +204,199 @@ def test_hold_is_excluded_from_every_rate():
 
 def test_an_avoid_is_right_when_the_excess_is_negative():
     """The sign that counts as correct depends on which way the call pointed."""
-    resolved = ([{"action": "AVOID", "open": False, "excess": -0.05}
-                 for _ in range(20)]
-                + [{"action": "BUY", "open": False, "excess": 0.05} for _ in range(20)])
+    resolved = companies(20, "AVOID", -0.05) + companies(20, "BUY", 0.05)
     summary = S.summarise(resolved)
     assert summary["sells"]["hitRate"] == 1.0
     assert summary["buys"]["hitRate"] == 1.0
+
+
+# ============================================================================ #
+# 6. A call is not an observation
+# ============================================================================ #
+# The six Indonesian scan dates of September 2026. The log holds 74 buy calls
+# on 23 names from them, every one inside a single 63-session window.
+SEPTEMBER = ["2026-09-09", "2026-09-11", "2026-09-12", "2026-09-14",
+             "2026-09-20", "2026-09-21"]
+
+
+def window_end(scanned: str, horizon: int = 63) -> str:
+    """The session `resolve` would close a call on, on a calendar with no holidays."""
+    first = np.busday_offset(np.datetime64(scanned, "D") + 1, 0, roll="forward")
+    return str(np.busday_offset(first, horizon - 1))
+
+
+def call(ticker, scanned, action="BUY", excess=0.05, *, resolved=True):
+    row = {"ticker": ticker, "scannedOn": scanned, "action": action, "score": 70.0}
+    if not resolved:
+        return {**row, "open": True, "excess": None, "days": 20}
+    return {**row, "open": False, "excess": excess, "days": 63,
+            "resolvedOn": window_end(scanned)}
+
+
+def test_six_overlapping_calls_on_one_name_count_once():
+    rows = [call("ADRO.JK", day) for day in SEPTEMBER]
+    observed = S.observations(rows)
+    assert len(observed) == 1
+    assert observed[0]["scannedOn"] == "2026-09-09", "the call that opened it is scored"
+    assert [c["scannedOn"] for c in observed[0]["calls"]] == SEPTEMBER
+
+    summary = S.summarise(rows)
+    assert summary["closed"] == 1
+    assert (summary["calls"], summary["names"]) == (6, 1)
+    assert summary["scanDates"] == SEPTEMBER
+
+
+def test_thirty_calls_on_five_names_refuses():
+    """What the log as first written would have quoted a rate on."""
+    rows = [call(f"N{i}.JK", day) for i in range(5) for day in SEPTEMBER]
+    assert len(rows) == S.MIN_CLOSED
+    summary = S.summarise(rows)
+    assert summary["available"] is False
+    assert summary["closed"] == 5
+    assert (summary["calls"], summary["names"]) == (30, 5)
+    assert "hitRate" not in summary and "buys" not in summary
+    assert "30 calls on 5 names" in summary["reading"]
+
+
+def test_non_overlapping_windows_on_one_name_count_separately():
+    rows = [call("A.JK", "2026-01-05"), call("A.JK", "2026-02-02"),
+            call("A.JK", "2026-06-01"), call("A.JK", "2026-06-15")]
+    observed = S.observations(rows)
+    assert [o["scannedOn"] for o in observed] == ["2026-01-05", "2026-06-01"]
+    assert [len(o["calls"]) for o in observed] == [2, 2]
+    assert S.summarise(rows)["closed"] == 2
+
+
+def test_the_window_ends_on_the_session_the_earlier_call_resolved():
+    first = call("A.JK", "2026-01-05")
+    end = first["resolvedOn"]
+    before = str(np.busday_offset(np.datetime64(end, "D"), -1))
+    assert len(S.observations([first, call("A.JK", before)])) == 1
+    assert len(S.observations([first, call("A.JK", end)])) == 2, (
+        "a call made on the closing session shares no day with the one before it")
+
+
+def test_the_windows_are_the_ones_resolve_measured():
+    """End to end, so `resolvedOn` comes from a series rather than a fixture."""
+    prices = {"A.JK": series(dt.date(2025, 12, 1), 400, drift=0.001)}
+    benchmark = series(dt.date(2025, 12, 1), 400, drift=0.0005)
+
+    def logged(day):
+        return {"scannedOn": day, "ticker": "A.JK", "action": "BUY", "score": 70.0}
+
+    first = S.resolve([logged("2026-01-05")], prices, benchmark=benchmark)[0]
+    end = first["resolvedOn"]
+    before = str(np.busday_offset(np.datetime64(end, "D"), -1))
+    days = ["2026-01-05", "2026-01-07", "2026-01-12", before, end]
+    observed = S.observations(S.resolve([logged(d) for d in days], prices,
+                                        benchmark=benchmark))
+    assert [o["scannedOn"] for o in observed] == ["2026-01-05", end]
+    assert observed[0]["excess"] == pytest.approx(first["excess"])
+
+
+def test_a_call_on_the_other_side_inside_a_window_is_the_same_observation():
+    """Seven US names went from Buy on 12 September 2026 to Reduce or Avoid on the
+    21st. Each is one outcome, scored on the call that opened its window."""
+    rows = [call("AGL", "2026-09-12", "BUY", 0.04),
+            call("AGL", "2026-09-21", "REDUCE", 0.03)]
+    observed = S.observations(rows)
+    assert len(observed) == 1
+    assert (observed[0]["action"], observed[0]["excess"]) == ("BUY", 0.04)
+    assert [c["action"] for c in observed[0]["calls"]] == ["BUY", "REDUCE"]
+
+
+def test_what_has_not_resolved_adds_at_most_one_observation_per_name():
+    rows = [
+        # A's open call falls inside its resolved window, so it is not a new one.
+        call("A.JK", "2026-01-05"), call("A.JK", "2026-02-02", resolved=False),
+        # B has not resolved at all: two calls, one window that has not ended.
+        call("B.JK", "2026-03-02", resolved=False),
+        call("B.JK", "2026-03-09", resolved=False),
+        # C's open call comes after its resolved window closed.
+        call("C.JK", "2026-01-05"), call("C.JK", "2026-06-01", resolved=False),
+    ]
+    summary = S.summarise(rows)
+    assert summary["closed"] == 2
+    assert summary["open"] == 2
+
+
+def test_a_call_that_could_not_be_priced_cannot_hide_one_that_could():
+    unpriced = {**call("A.JK", "2026-01-05", resolved=False),
+                "reason": "no usable price on the scan date"}
+    assert S.summarise([unpriced, call("A.JK", "2026-01-12")])["closed"] == 1
+
+
+def test_a_hold_still_waiting_is_not_counted_as_open():
+    rows = ([call(f"H{i}.JK", "2026-09-09", "HOLD", resolved=False) for i in range(50)]
+            + [call("B.JK", "2026-09-09", resolved=False)])
+    summary = S.summarise(rows)
+    assert (summary["open"], summary["calls"]) == (1, 1)
+
+
+def test_a_log_of_distinct_names_counts_exactly_as_its_rows_did():
+    """Where every call is its own company, nothing about the read changes."""
+    rows = (companies(25, "BUY", 0.05) + companies(10, "BUY", -0.02)
+            + companies(12, "AVOID", -0.04))
+    summary = S.summarise(rows)
+    assert summary["closed"] == summary["calls"] == summary["names"] == 47
+    buys = summary["buys"]
+    assert buys["observations"] == buys["calls"] == buys["names"] == 35
+    assert buys["meanExcess"] == pytest.approx((25 * 0.05 - 10 * 0.02) / 35)
+    assert buys["medianExcess"] == pytest.approx(0.05)
+    assert summary["spread"] == pytest.approx(buys["meanExcess"] + 0.04)
+
+
+def test_the_reading_says_when_every_call_is_one_draw_of_the_market():
+    resolved = [call(f"N{i}.JK", day) for i in range(40) for day in SEPTEMBER[:2]]
+    summary = S.summarise(resolved)
+    assert summary["available"] is True and summary["oneQuarter"] is True
+    assert "one draw of the market, not many" in summary["reading"]
+
+    # And before anything resolves, which is when it is worth knowing.
+    pending = [call(f"N{i}.JK", day, resolved=False)
+               for i in range(23) for day in SEPTEMBER]
+    early = S.summarise(pending)
+    assert early["available"] is False and early["oneQuarter"] is True
+    assert "one draw of the market, not many" in early["reading"]
+
+
+def test_calls_spread_across_quarters_are_not_called_one_draw():
+    quarters = ["2026-01-05", "2026-04-06", "2026-07-06", "2026-10-05"]
+    summary = S.summarise([call(f"N{i}.JK", quarters[i % 4]) for i in range(40)])
+    assert summary["available"] is True and summary["oneQuarter"] is False
+    assert "one draw" not in summary["reading"]
+
+
+def test_one_quarter_is_judged_on_what_resolved_once_a_rate_is_quoted():
+    """The December read with the weekly scans restarted: September has resolved,
+    and calls on new names made since are open and stretch the log past one
+    window. The rates rest on September alone, and the reading must still say so."""
+    rows = ([call(f"S{i}.JK", "2026-09-09") for i in range(30)]
+            + [call(f"L{i}.JK", "2026-12-07", resolved=False) for i in range(10)])
+    summary = S.summarise(rows)
+    assert summary["available"] is True
+    assert summary["scanDates"] == ["2026-09-09", "2026-12-07"]
+    assert summary["oneQuarter"] is True
+
+
+def test_a_spread_one_name_can_reverse_says_so():
+    rows = ([call(f"B{i}.JK", "2026-09-09", "BUY", -0.01) for i in range(10)]
+            + [call("BIG.JK", "2026-09-09", "BUY", 0.50)]
+            + [call(f"S{i}.JK", "2026-09-09", "AVOID", 0.0) for i in range(20)])
+    summary = S.summarise(rows)
+    assert summary["spread"] > 0
+    assert summary["spreadLeaveOneOut"]["signHolds"] is False
+    assert summary["spreadLeaveOneOut"]["lowest"] == pytest.approx(-0.01)
+    assert "rests on a single name" in summary["reading"]
+
+
+def test_a_spread_no_single_name_can_reverse_holds():
+    rows = ([call(f"B{i}.JK", "2026-09-09", "BUY", 0.05) for i in range(15)]
+            + [call(f"S{i}.JK", "2026-09-09", "REDUCE", -0.05) for i in range(15)])
+    summary = S.summarise(rows)
+    assert summary["spreadLeaveOneOut"]["signHolds"] is True
+    assert summary["spreadLeaveOneOut"]["lowest"] == pytest.approx(0.10)
+    assert "rests on a single name" not in summary["reading"]
 
 
 # --------------------------------------------------------------------------- #
@@ -349,3 +555,18 @@ def test_open_calls_are_not_counted_as_resolved():
             + [resolved_row(f"O{i}.JK", open_call=True) for i in range(9)])
     block = S.summarise_screens(rows)["neglected"]
     assert block["closed"] == 4 and block["open"] == 9
+
+
+def test_six_overlapping_selections_on_one_name_count_once():
+    rows = [{**call("KETR.JK", day, "HOLD"), "neglected": True} for day in SEPTEMBER]
+    block = S.summarise_screens(rows)["neglected"]
+    assert block["closed"] == 1
+    assert (block["selected"], block["names"]) == (6, 1)
+    assert block["scanDates"] == SEPTEMBER
+    # One observation is not many sharing a path; it is not called one draw.
+    assert block["oneQuarter"] is False
+
+    rows += [{**call("ITMG.JK", day, "HOLD"), "neglected": True} for day in SEPTEMBER]
+    block = S.summarise_screens(rows)["neglected"]
+    assert (block["closed"], block["selected"], block["names"]) == (2, 12, 2)
+    assert "one draw of the market, not many" in block["reading"]

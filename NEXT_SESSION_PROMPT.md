@@ -108,9 +108,10 @@ NOT DONE IN THE OVERHAUL, AND WORTH DOING
   portfolio to it means per-symbol returns AND re-running
   measure_correlation_stability.py and measure_exposure_stability.py. See the
   RESEARCH_ROADMAP open row.
-- THE SCANNER'S FORWARD LOG counts rows, not names: 74 Indonesian buy calls
-  are 23 names logged on six dates in twelve days. Fix the counting in
-  _lib/scanlog.py before its first calls resolve in early December, and
+- THE SCANNER'S FORWARD LOG now counts names, not rows (scanlog.observations:
+  a name once per 63-session window), and its December read is pre-registered
+  in RESEARCH_ROADMAP section 21: run review_scanlog.py for ID and US on or
+  after 22 December 2026, and read it by that section's nulls. Still to do:
   restart the weekly scans (none since 21 September).
 - RankingPanel (~770 lines), ScanPanel (~930) and VerdictPanel (~730) were not
   split into subcomponents. Their state was lifted into lib/session.ts, which

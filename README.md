@@ -962,10 +962,13 @@ is more useful than a confident deduction from eleven names.
 **And the half that cannot be backtested at all** is written down instead. Every scan
 appends what it said — ticker, action, score, conviction, the price on the day — to a
 local, gitignored log. `scanlog.summarise` refuses to compute a hit rate under thirty
-resolved calls, because the first ten resolved calls of anything are noise and reading
-them is how a method gets abandoned or trusted for no reason. It is a slow instrument and
-produces nothing for months; it is also the only honest way the value and quality
-components will ever be measured.
+resolved observations, because the first ten resolved calls of anything are noise and
+reading them is how a method gets abandoned or trusted for no reason. An observation is a
+name over one 63-session window, not a row: the scanner names the same company scan after
+scan, and the first Indonesian log's 74 buy calls are 23 companies. What its first read in
+December will report, and what will count as a null, were fixed before any call resolved;
+see RESEARCH_ROADMAP §21. It is a slow instrument and produces nothing for months; it is
+also the only honest way the value and quality components will ever be measured.
 
 **Then it is shrunk toward 50 by how much evidence there actually was.** Families that
 disagree, a family that never read, components that were missing — each pulls the result

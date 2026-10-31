@@ -1920,6 +1920,132 @@ days on which only one instrument could cross its line, and the first live run r
 
 ---
 
+## 21. The forward log's first read, fixed before it resolves
+
+`_lib/scanlog.py` writes down what the scanner said on the day it said it, because the
+value and quality components cannot be reconstructed on a past date and waiting is the only
+honest way to measure them. The first calls reach their 63rd session in December 2026. This
+section was written on 1 November 2026, when no call in either log had resolved. It fixes
+what that first read reports and what counts as nothing, for the reason §12 gives the thesis
+journal: the only version worth keeping is the one written before the outcome.
+
+### 21.1 The log counted rows
+
+Until now `summarise` treated every logged row as an independent call. The scanner names the
+same company on scan after scan, so the rows were not independent:
+
+| | IDX | US |
+|---|---|---|
+| Scans | 6, from 9 to 21 September 2026 | 3, from 11 to 21 September 2026 |
+| Buy and strong buy | 74 calls on 23 names | 518 calls on 382 names |
+| Reduce and avoid | 574 calls on 136 names | 2,318 calls on 1,364 names |
+| Observations, counted once per name | 159 | 1,739 |
+
+Every call in each log was made inside a single 63-session window, so the calls on one name
+are one outcome measured several times. Counted as rows, `MIN_CLOSED = 30` could have been met
+by five Indonesian companies called on every scan; the six most-called buy names supply 31
+rows between them. The `open` count was wider still: it counted every row not yet resolved,
+HOLD and NO_ACTION included, 3,588 for the Indonesian log against 159 observations.
+
+`scanlog.observations` now counts a name once per window:
+
+- **The opening call is the observation.** The call that opens a window is scored on its own
+  action and its own outcome.
+- **Later calls inside it add nothing.** A later call on the same name before that window's
+  `resolvedOn` session is the same observation, whatever it says.
+- **A call after the window opens the next.** A call on or after `resolvedOn` starts a new
+  observation.
+
+Both floors, `MIN_CLOSED` overall and a third of it per side, count these. The payload
+reports the calls, distinct names and scan dates beside them, and `scripts/review_scanlog.py`
+prints every name with every date it was called on.
+
+Seven US names were called Buy on 12 September and Reduce or Avoid on 21 September. Each is
+one observation, scored on the Buy that opened its window. That is why the US has 1,364
+reduce/avoid names but 1,357 reduce/avoid observations. No Indonesian name was called on both
+sides.
+
+The new counting was checked by hand against the real logs, offline. Counting each name's
+windows in plain Python, on synthetic prices running into January, agreed with the payload on
+every count in both markets, before resolution and after.
+
+### 21.2 When it is read
+
+By weekday count, the September windows close on the IDX between 7 December (calls of 9
+September) and 17 December (calls of 21 September). On the NYSE, which shuts for Thanksgiving,
+they close between 10 and 18 December. Each observation is its name's first call, so names
+first called on 20 or 21 September resolve last. A run before then reads only the names first
+called earliest. That is a partial read, not this one.
+
+**The read is the first run of `review_scanlog.py --market ID` and `--market US` on or after
+22 December 2026.** An observation still open on that run, because of a holiday not counted
+here or a missing price, is reported as open. It is not waited for and not dropped.
+
+No call made after 21 September can have resolved by then. None was made between 21 September
+and this writing, and a call made after it closes no earlier than late January. A later call
+on a September name inside its window is absorbed into that observation and changes nothing.
+
+### 21.3 What the read reports
+
+Per market, and per side (buy and strong buy; reduce and avoid):
+
+- **Counts.** The distinct names, the observations, and the calls behind them. Names and
+  observations are equal for this cohort, since no name can have two windows inside twelve
+  days.
+- **Excess return.** The mean and the median, over 63 sessions, against the market's index
+  (^JKSE, ^GSPC), from the close on or before the scan date, as `resolve` computes it.
+- **Hit rate.** The share of buys whose excess was positive, and of reduce and avoid calls
+  whose excess was negative.
+- **Spread.** The buy-minus-sell spread of mean excess, with the lowest and highest values it
+  reaches when each single name is dropped in turn (`spreadLeaveOneOut`).
+
+All of it is published whatever it says, nulls included. Nothing is substituted for it on the
+day: no other horizon, benchmark, definition of a hit, or subset by sector, score, conviction,
+gate or scan date. The code that produces it is the code committed with this section. If that
+code has to change before 22 December, the change and its reason are written here first.
+
+### 21.4 What counts as a null
+
+- **A market with fewer than 30 names.** `summarise` refuses it anyway.
+- **A side with fewer than 30 names.** Its figures are printed and are evidence of nothing. The
+  code prints a side from 10 observations (`MIN_CLOSED // 3`). That floor decides whether a
+  side is shown; this one decides what it is worth. Thirty applies per side because a hit rate
+  is a rate over that side's names, and the argument for thirty is the module's own: a rate
+  quoted from twenty observations describes the twenty.
+- **A spread.** It is a null if either side is a null, if it is zero, or if its sign flips when
+  any single name is dropped (`spreadLeaveOneOut.signHolds` is false).
+
+On the logs as they stand, that settles three things before anything has resolved. **The
+Indonesian buy side is a null in December whatever it shows, because it has 23 names. So is
+the Indonesian spread.** The Indonesian reduce/avoid side (136 names) and both US sides (382 and
+1,357) can be read, and so can the US spread, unless a single name reverses its sign.
+
+### 21.5 What a read that passes still describes
+
+One quarter of one market path, per market. Every observation in each log was opened inside a
+single 63-session window, so every outcome shares that quarter's index path, its sector moves
+and its news. An excess over the index removes the index's level, not what moved inside it: a
+coal rally lifts every Indonesian coal buy at once. The reading sentence says so itself, from
+`oneQuarter` in the payload: *one draw of the market, not many*.
+
+A spread that holds says the ordering worked in that market over the fourth quarter of 2026.
+It does not say the ordering works. No significance test or interval is quoted.
+
+### 21.6 What it does not measure
+
+- **The components the log was built for.** The log exists because the value and quality
+  components cannot be backtested, and this read does not isolate them. It scores the blended
+  action, and a buy is a buy whatever drove it. Family scores are kept in the scan reports
+  beside the log (`reports/scan-*-2026-09-*.json`); on 21 September, 551 of the 770 Indonesian
+  names had a `filings` score. So a read by the filings family is possible. It is not
+  pre-registered here, and anything computed from it in December is exploratory.
+- **The screens.** `neglected`, `leadsField`, `soleListing` and `compounding` print their own
+  reads in the same run and are counted the same way. On the IDX they hold 43, 32, 14 and 78
+  names, recorded from 20 September; in the US, 0, 31, 1 and 262 names, recorded on 21
+  September only. They are not part of this pre-registration.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
