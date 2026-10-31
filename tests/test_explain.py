@@ -140,6 +140,7 @@ SAMPLES: dict[str, tuple] = {
     "revenueCagr": (0.124, {"years": 5, "market": "US"}),
     "netDebtToEbitda": (2.4, {"market": "ID"}),
     "freeCashFlowYears": (0.25, {"positive": 1, "of": 4}),
+    "dailyMove": (97.0, {}),
 }
 
 

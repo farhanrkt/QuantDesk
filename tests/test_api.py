@@ -329,6 +329,94 @@ def test_the_feed_read_is_bounded():
     assert "raw = response.read()" not in source, "an unbounded read must not return"
 
 
+def planted_board(available: bool = True) -> dict:
+    """A board built offline: every instrument on a quiet two-year walk."""
+    import numpy as np
+    import pandas as pd
+
+    from _lib import marketboard
+
+    if not available:
+        return marketboard.build({})
+    index_ = pd.bdate_range(end="2026-10-30", periods=500)
+    frames = {}
+    for n, instrument in enumerate(marketboard.INSTRUMENTS):
+        closes = 100 * np.exp(np.cumsum(np.random.default_rng(n).normal(0, 0.01, 500)))
+        frames[instrument.symbol] = pd.DataFrame(
+            {"Open": closes, "High": closes, "Low": closes, "Close": closes,
+             "Volume": np.full(500, 1.0)}, index=index_)
+    return marketboard.build(frames, fetched_at="2026-11-01T09:00+00:00")
+
+
+def test_the_market_board_takes_no_parameters_and_is_cached_five_minutes(client, monkeypatch):
+    """One cache entry for every reader, and no ticker anywhere in the request."""
+    monkeypatch.setattr(index.marketboard, "fetch", lambda: planted_board())
+    response = client.get("/api/markets/today")
+    assert response.status_code == 200
+    assert "s-maxage=300" in response.headers["Cache-Control"]
+    assert "max-age=0" in response.headers["Cache-Control"]
+    assert "stale-while-revalidate=600" in response.headers["CDN-Cache-Control"]
+    body = response.json()
+    assert [row["key"] for row in body["rows"]] == [i.key for i in index.marketboard.INSTRUMENTS]
+    assert set(body["explain"]["markets"]) == {"US", "ID"}
+    assert all(row["tone"] == "neutral" for row in body["rows"])
+
+
+def test_a_board_with_no_prices_at_all_is_an_error_not_an_empty_board(client, monkeypatch):
+    monkeypatch.setattr(index.marketboard, "fetch", lambda: planted_board(available=False))
+    assert client.get("/api/markets/today").status_code == 502
+
+
+def test_headline_topics_come_from_a_declared_list(client, monkeypatch):
+    """A request picks a topic; it can never write the query."""
+    from _lib import news
+    monkeypatch.setattr(news, "_fetch_feed", lambda url: b"<rss><channel></channel></rss>")
+    assert client.get("/api/markets/headlines", params={"topics": "market,oil"}).status_code == 200
+    assert client.get("/api/markets/headlines", params={"topics": "market,evil"}).status_code == 422
+    assert client.get("/api/markets/headlines",
+                      params={"topics": "market,oil,gold,copper,rates"}).status_code == 422
+    assert client.get("/api/markets/headlines",
+                      params={"topics": "stock market"}).status_code == 422
+
+
+def test_a_headline_feed_that_failed_is_not_reported_as_no_news(client, monkeypatch):
+    from _lib import news
+
+    def broken(url):
+        raise OSError("timed out")
+
+    monkeypatch.setattr(news, "_fetch_feed", broken)
+    feed = client.get("/api/markets/headlines",
+                      params={"market": "ID", "topics": "oil"}).json()["topics"][0]
+    assert feed["available"] is False and feed["items"] == [] and feed["reason"]
+
+    monkeypatch.setattr(news, "_fetch_feed", lambda url: b"<rss><channel></channel></rss>")
+    feed = client.get("/api/markets/headlines",
+                      params={"market": "ID", "topics": "oil"}).json()["topics"][0]
+    assert feed["available"] is True and feed["items"] == []
+    assert feed["query"] == "harga minyak", "Indonesian readers get the Indonesian query"
+
+
+def test_market_headlines_are_newest_first_and_ask_for_the_past_day(monkeypatch):
+    from _lib import news
+    seen = {}
+    feed = (b"<rss><channel>"
+            b"<item><title>Older story - Wire</title><source>Wire</source>"
+            b"<pubDate>Fri, 30 Oct 2026 08:00:00 GMT</pubDate></item>"
+            b"<item><title>Newer story - Desk</title><source>Desk</source>"
+            b"<pubDate>Sat, 31 Oct 2026 16:00:00 GMT</pubDate></item>"
+            b"</channel></rss>")
+
+    def fetch(url):
+        seen["url"] = url
+        return feed
+
+    monkeypatch.setattr(news, "_fetch_feed", fetch)
+    out = news.fetch_headlines("oil", "US")
+    assert [item["title"] for item in out["items"]] == ["Newer story", "Older story"]
+    assert "when%3A1d" in seen["url"]
+
+
 def test_the_rate_limiter_reads_the_routed_path_not_the_reconstructed_url(client):
     """A FORGED HOST HEADER USED TO TURN THE CAP OFF ENTIRELY.
 

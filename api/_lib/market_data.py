@@ -314,7 +314,8 @@ def ohlcv(symbol: str, *, period: Optional[str] = None,
 
 
 def ohlcv_batch(symbols_list: Sequence[str], start: dt.date, end: dt.date,
-                chunk_size: int = CHUNK_SIZE) -> dict[str, pd.DataFrame]:
+                chunk_size: int = CHUNK_SIZE, *,
+                own_sessions: bool = False) -> dict[str, pd.DataFrame]:
     """Daily history for many symbols in as few upstream calls as possible.
 
     THIS IS WHAT MAKES THE BREADTH TIER POSSIBLE. The per-symbol path costs one
@@ -328,8 +329,27 @@ def ohlcv_batch(symbols_list: Sequence[str], start: dt.date, end: dt.date,
     holding delisted six months ago still clears `portfolio.MIN_OVERLAP` inside a
     252-day window, so it was contributing a correlation computed against a
     price that had stopped moving.
+
+    A BATCH SHARES ONE CALENDAR, and `own_sessions` is how to leave it. yfinance
+    aligns every symbol in a call onto the union of their dates, so a day one
+    symbol traded and another did not arrives as an all-NaN row for the second
+    — and `normalise` fills interior gaps, which turns that row into a session
+    with the previous close and no move. Measured on 1 November 2026: in one
+    batch with BTC-USD, the S&P 500 came back with 208 weekend bars, every one
+    a 0.00% day. `own_sessions=True` drops a row on which the symbol has no
+    field at all before normalising, so each symbol keeps the sessions it
+    actually traded; a row with partial data is still a gap and still filled.
+
+    The default stays the shared calendar because the measured artifacts were
+    taken on it — `portfolio` and `exposure` read these frames — and changing
+    what they see means re-running those measurements, not editing a default.
+    Within one market the difference is a handful of holiday rows; across
+    markets, or with anything that trades at weekends, it is not.
     """
     frames: dict[str, pd.DataFrame] = {}
+
+    def own(frame: pd.DataFrame) -> pd.DataFrame:
+        return frame.dropna(how="all") if own_sessions else frame
     unique = list(dict.fromkeys(s.strip().upper() for s in symbols_list if s and s.strip()))
 
     for position in range(0, len(unique), chunk_size):
@@ -361,11 +381,11 @@ def ohlcv_batch(symbols_list: Sequence[str], start: dt.date, end: dt.date,
             for symbol in chunk:
                 if symbol not in present:
                     continue
-                cleaned = normalise(raw[symbol])
+                cleaned = normalise(own(raw[symbol]))
                 if cleaned is not None and not is_stale(cleaned, end):
                     frames[symbol] = cleaned
         elif len(chunk) == 1:
-            cleaned = normalise(raw)
+            cleaned = normalise(own(raw))
             if cleaned is not None and not is_stale(cleaned, end):
                 frames[chunk[0]] = cleaned
     return frames

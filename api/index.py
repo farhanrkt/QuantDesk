@@ -47,6 +47,7 @@ import sys
 import threading
 import time
 from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor
 
 import json
 from pathlib import Path
@@ -61,10 +62,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from _lib import (accumulation, chartlayers, eventstudy, explain, exposure,
-                  field, listings, market_data, microstructure, news, ownership,
-                  patterns, portfolio, pretrade, quality, ranking, riskmodel,
-                  structure, symbols, tape, technical, trackrecord, universes,
-                  valuation, verdict, volumeprofile)
+                  field, listings, market_data, marketboard, microstructure, news,
+                  ownership, patterns, portfolio, pretrade, quality, ranking,
+                  riskmodel, structure, symbols, tape, technical, trackrecord,
+                  universes, valuation, verdict, volumeprofile)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -174,6 +175,12 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # scan of two JSON files already in memory — no upstream call at all. A cap
     # at the default would throttle somebody typing a company name.
     "/api/symbols": (120, 60),
+    # The board names nothing and is cached at the edge for five minutes, so
+    # almost every poll is served without reaching this function. The cap is
+    # for the ones that do: one batch download, then arithmetic.
+    "/api/markets/today": (30, 60),
+    # Up to four feeds per call, each one bounded and timed out.
+    "/api/markets/headlines": (20, 60),
     None: (40, 60),                      # default for every other route
 }
 RATE_EXEMPT = {"/api/health", "/api/docs", "/openapi.json"}
@@ -1967,6 +1974,68 @@ def find_symbols(
         "note": ("The provider's equity listings as of these dates. Funds, indices, crypto "
                  "and recent listings are not in them; type a full symbol to open it anyway."),
     }), headers={"Cache-Control": SYMBOLS_CACHE})
+
+
+# --------------------------------------------------------------------------- #
+# What moved the markets
+# --------------------------------------------------------------------------- #
+# FIVE MINUTES AT THE EDGE, and the request carries nothing, so one upstream
+# fetch serves every reader polling the board. The provider's quotes already
+# trail the market by up to twenty minutes; refetching every minute would buy
+# nothing a reader can see. The browser still revalidates on every request,
+# for the reason `CACHE` gives above.
+BOARD_CACHE = "public, max-age=0, must-revalidate, s-maxage=300"
+BOARD_CDN_CACHE = "public, s-maxage=300, stale-while-revalidate=600"
+HEADLINES_CACHE = "public, max-age=0, must-revalidate, s-maxage=600"
+HEADLINES_CDN_CACHE = "public, s-maxage=600, stale-while-revalidate=1200"
+HEADLINE_TOPICS_MAX = 4
+
+
+@app.get("/api/markets/today")
+def markets_today():
+    """The stock indices, rates, currencies, commodities and bitcoin, each move
+    set against that instrument's own past year. Context, never a lens.
+
+    TAKES NO PARAMETERS, deliberately. The board is the same for everyone, so
+    it is one cache entry; and which of these a particular stock moves with is
+    matched in the browser from the Trend tab's exposure figures, so no ticker
+    is ever sent for it. See `_lib/marketboard.py`.
+    """
+    board = marketboard.fetch()
+    if not any(row.get("available") for row in board["rows"]):
+        raise HTTPException(status_code=502,
+                            detail="The price provider returned nothing for the board just now.")
+    board["explain"] = explain.for_market_board(board)
+    return JSONResponse(content=clean(board),
+                        headers={"Cache-Control": BOARD_CACHE, "CDN-Cache-Control": BOARD_CDN_CACHE})
+
+
+@app.get("/api/markets/headlines")
+def market_headlines(
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+    topics: str = Query("market", pattern=r"^[a-z]{2,12}(,[a-z]{2,12}){0,3}$",
+                        description="Up to four keys from news.HEADLINE_TOPICS, comma separated."),
+    limit: int = Query(5, ge=1, le=8),
+):
+    """Third-party headlines from the past day that mention a market.
+
+    Display-only context and never an instruction source, like `/api/news`.
+    Each topic is a key from a declared table, so a request cannot choose the
+    query text. A topic whose feed failed says so (`available: false`) rather
+    than arriving as an empty list that reads as "no news".
+    """
+    keys = list(dict.fromkeys(topics.split(",")))
+    unknown = [key for key in keys if key not in news.HEADLINE_TOPICS]
+    if unknown:
+        raise HTTPException(status_code=422,
+                            detail=f"Unknown topic {', '.join(unknown)}. Known: "
+                                   f"{', '.join(news.HEADLINE_TOPICS)}.")
+    code = market.upper()
+    with ThreadPoolExecutor(max_workers=HEADLINE_TOPICS_MAX) as pool:
+        feeds = list(pool.map(lambda key: news.fetch_headlines(key, code, limit=limit), keys))
+    return JSONResponse(content=clean({"market": code, "topics": feeds}),
+                        headers={"Cache-Control": HEADLINES_CACHE,
+                                 "CDN-Cache-Control": HEADLINES_CDN_CACHE})
 
 
 # --------------------------------------------------------------------------- #
