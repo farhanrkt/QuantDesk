@@ -262,9 +262,9 @@ same place:
 
 | Route | What it is |
 |---|---|
-| `/` | The landing: which company? Type it, pick a preset, or open one from your watchlist or recent tickers. No numbers about anything — a figure here would be one nobody asked about. |
+| `/` | The landing: which company? Type it, pick a preset, or open one from your watchlist or recent tickers. No figures about any company — one here would be one nobody asked about — and one sentence on what moved the markets today. |
 | `/stock/AAPL` | One company through every lens. `?tab=value` picks the tab; only tuning that differs from the defaults is written. Indonesian listings are `/stock/BBCA.JK`. |
-| `/markets` | The tools that read a whole list at once: rank a universe, scan for unusual activity, what a market moves with, and the local scanner report. |
+| `/markets` | **What moved the markets today**, then the tools that read a whole list at once: rank a universe (`?view=rank`), scan for unusual activity, what a market moves with, and the local scanner report. |
 | `/compare?symbols=AAPL,BBCA.JK` | Two to four companies, read the same way, side by side. |
 | `/journal` | Every thesis you have written, for every company. |
 
@@ -286,6 +286,45 @@ thesis survives a trip to another tab. Each page says when its figures were fetc
 **Print** gives a tearsheet of the tab you are on, dark on white, with the ticker, the time,
 the close the prices are from, and "not investment advice" in the header. The private score
 is never printed.
+
+---
+
+## What moved the markets
+
+The day's context, beside whatever company you are reading. **Markets → Today** (the page
+`/markets` opens on) shows 22 instruments in fixed groups: the US, Jakarta, Hong Kong and
+Shanghai indices, the VIX, US Treasury yields, the dollar index, USD/IDR and EUR/USD, crude,
+natural gas, gold, silver, copper and bitcoin. A **Markets now** bar at the foot of every page
+(an inline strip on a phone) keeps eight of them in view while you work.
+
+**Calibrated, not coloured.** A day's move has no good or bad: crude falling helps an airline
+and hurts a coal miner. So nothing is red or green. Each move is set against **that
+instrument's own daily moves over the past year**: "larger than 98% of its days", "its
+largest fall since 5 June". At the 95th percentile a move is marked *unusual*. One sentence at
+the top names the unusual moves, in the board's order, never ranked by size. The board also
+says how often "unusual" happens: on about 40% of weekdays, something among twenty
+instruments moves that much. Yields move in basis points, and the VIX in points.
+
+**Each instrument on its own calendar.** The S&P 500 has about 251 sessions a year, the
+Jakarta Composite 239 and bitcoin 365. A shared calendar would pad the S&P with a hundred
+weekend 0.00% days, so each series keeps only the days it traded.
+
+**Linked to the stock on screen, by measurement only.** On a stock page the bar marks:
+- the stock's own index;
+- for a US listing, the 10-year yield its valuation discounts from;
+- any reference the Trend tab *measured* it moving with ("ITMG.JK has moved with the energy
+  complex over the past 5 years"), with those related quotes first.
+
+Nothing is marked from a sector or a guess, and the board's request never carries a ticker.
+
+**Headlines from the past day** sit beside it, for the market and for each unusual mover,
+newest first. They are labelled as *mentioning* a market: this app cannot tell which story,
+if any, moved a price.
+
+**What it cannot show.** Newcastle coal, nickel, tin, palm oil and the Indonesian 10-year
+yield are not available from this data source, and the board names each one with the
+reason. Quotes are the provider's, up to about twenty minutes behind the market, and are
+refreshed every five minutes while the page is visible.
 
 ---
 
@@ -1132,6 +1171,8 @@ Interactive docs at `/api/docs`.
 | `GET /api/confluence` | **All four lenses in one call, plus the synthesis, the pre-trade checks and the company block** — what the UI actually uses |
 | `GET /api/company` | **What the company is**: profile, listing, statements year by year, dividends, next report. The same block confluence carries |
 | `GET /api/symbols` | **Listings matching a name or ticker**, for the command palette. Reads the committed listing files; no provider call |
+| `GET /api/markets/today` | **What moved the markets**: 22 instruments, each move against its own past year, the unusual ones named, the base rate, and what the source cannot supply. Takes no parameters; five minutes at the edge |
+| `GET /api/markets/headlines` | **The past day's headlines** for a market (`market=US\|ID`) and up to four declared `topics` (market, rates, dollar, rupiah, oil, gas, gold, silver, copper, bitcoin). A feed that failed says so |
 | `GET /api/isolation-forest` | Flow: anomalies, accumulation regimes, liquidity profile |
 | `GET /api/technical-analysis` | Trend: indicators, levels, signals, narrative |
 | `GET /api/intrinsic-value` | Value: DCF / DDM / RI with Monte Carlo percentiles and the sensitivity grid |
@@ -1160,7 +1201,8 @@ dividend history still returns its other three panels.
 **Limits.** Per-IP rate limiting (40/min default; 3/min for the screener, the ranking scan
 and the verdict, which runs a universe scan *and* four lenses; 2/min for shortlist deepening,
 which is the one route that does *not* batch; 6/min for the event study; 120/min for the
-symbol finder, which reads two files already in memory and has to keep up with typing). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
+symbol finder, which reads two files already in memory and has to keep up with typing; 30/min
+for the market board and 20/min for its headlines, most of which the edge cache answers). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
 8. These exist because each of those requests fans out to upstream calls — the caps are sized
 to what actually batches.
 

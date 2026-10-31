@@ -519,6 +519,82 @@ t("fired conditions are listed, never counted", () => {
   assert.ok(!/\d/.test(fired.text), "no number in the fired cell");
 });
 
+// ---- the market board: order kept, marks only from measured facts ----
+{
+  const MB = require("./lib/marketboard.js");
+  const row = (key, extra = {}) => ({
+    key, name: key.toUpperCase(), short: key, symbol: key, group: "stocks", change: "pct",
+    unit: "points", markets: ["US", "ID"], note: null, exposureKey: null, topic: "market",
+    digits: 2, weekends: false, tone: "neutral", available: true, last: 100, move: 0.01,
+    direction: "up", percentile: 50, unusual: false, ...extra,
+  });
+  // Planted in an order that is NOT the order of the moves, so a sort would show.
+  const board = {
+    groups: [{ key: "stocks", label: "Stocks" }],
+    rows: [
+      row("sp500", { move: 0.001 }),
+      row("jkse", { markets: ["ID"], move: -0.05, unusual: true, direction: "down", topic: "market" }),
+      row("t10y", { change: "bp", move: 11, unusual: true, topic: "rates", digits: 3, last: 4.929 }),
+      row("oil", { exposureKey: "oil", move: 0.03, unusual: true, topic: "oil" }),
+      row("gold", { exposureKey: "gold", markets: ["US", "ID"], topic: "gold" }),
+      row("bitcoin", { markets: ["US"], topic: "bitcoin", digits: 0, last: 77480.25, weekends: true }),
+    ],
+    missing: [], unusualAt: 95, minHistory: 120, fetchedAt: null, source: "", delay: "",
+    markets: {
+      US: { strip: ["bitcoin", "sp500", "oil"], unusual: [], unavailable: [], baseRate: null },
+      ID: { strip: ["gold", "jkse"], unusual: [], unavailable: [], baseRate: null },
+    },
+    explain: { rows: {}, markets: {} },
+  };
+
+  t("a market's rows keep the declared order, never the order of the moves", () => {
+    assert.deepEqual(MB.rowsFor(board, "US").map((r) => r.key), ["sp500", "t10y", "oil", "gold", "bitcoin"]);
+    assert.deepEqual(MB.rowsFor(board, "ID").map((r) => r.key), ["sp500", "jkse", "t10y", "oil", "gold"]);
+  });
+  t("the strip is the declared subset, in board order not strip-list order", () => {
+    assert.deepEqual(MB.stripFor(board, "US").map((r) => r.key), ["sp500", "oil", "bitcoin"]);
+  });
+  t("marks come only from measured exposure, the stock's market and the Value tab's rate", () => {
+    const marks = MB.marksFor(board, { symbol: "ITMG.JK", market: "ID",
+                                       factors: [{ key: "oil", label: "the energy complex", weeks: 257 }] });
+    assert.deepEqual(Object.keys(marks).sort(), ["jkse", "oil"]);
+    assert.equal(marks.oil[0].text, "ITMG.JK has moved with the energy complex over the past 5 years");
+    assert.ok(!marks.t10y, "an IDX valuation does not discount from the US 10-year");
+    const us = MB.marksFor(board, { symbol: "AAPL", market: "US", factors: [] });
+    assert.deepEqual(Object.keys(us).sort(), ["sp500", "t10y"]);
+    assert.deepEqual(MB.marksFor(board, null), {});
+    const pending = MB.marksFor(board, { symbol: "AAPL", market: "US", factors: null });
+    assert.ok(!Object.values(pending).flat().some((m) => m.kind === "movesWith"),
+              "nothing is marked as moving with anything before the Trend tab has measured it");
+  });
+  t("related rows lead by partition, each part still in declared order", () => {
+    const marks = { gold: [{ kind: "movesWith", text: "" }], jkse: [{ kind: "itsMarket", text: "" }] };
+    assert.deepEqual(MB.relatedFirst(MB.rowsFor(board, "ID"), marks).map((r) => r.key),
+                     ["jkse", "gold", "sp500", "t10y", "oil"]);
+  });
+  t("headlines: the market's own feed, then each unusual mover's topic, at most four", () => {
+    assert.deepEqual(MB.headlineTopics(board, "US"), ["market", "rates", "oil"]);
+    assert.deepEqual(MB.headlineTopics(board, "US", 2), ["market", "rates"]);
+  });
+  t("levels, dates and ages read the way a board is read", () => {
+    assert.equal(MB.levelText(board.rows[5]), "77,480");
+    assert.equal(MB.levelText(board.rows[2]), "4.929");
+    assert.equal(MB.levelText(row("x", { last: null })), "—");
+    assert.equal(MB.dayText("2026-10-30"), "30 Oct", "an ISO date is not shifted by the reader's time zone");
+    const now = Date.parse("2026-11-01T12:00:00Z");
+    assert.equal(MB.agoText("Sun, 01 Nov 2026 11:15:00 GMT", now), "45 min ago");
+    assert.equal(MB.agoText("Sat, 31 Oct 2026 09:00:00 GMT", now), "27 h ago");
+    assert.equal(MB.agoText("not a date", now), null);
+    assert.equal(MB.periodText(260), " over the past 5 years");
+    assert.equal(MB.periodText(40), " over the past 40 weeks");
+  });
+  t("'largest since' is said only of an unusual move", () => {
+    assert.equal(MB.sinceText(row("a", { unusual: true, direction: "down", largestSince: "2026-06-05" })),
+                 "largest fall since 5 Jun 2026");
+    assert.equal(MB.sinceText(row("a", { unusual: false, largestSince: "2026-06-05" })), null);
+  });
+}
+
 Promise.all(pending).then(() => {
   console.log(`  ${n} frontend assertions passed`);
 });

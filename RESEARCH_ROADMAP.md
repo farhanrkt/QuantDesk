@@ -1854,6 +1854,72 @@ date alone when the table is unavailable.
 
 ---
 
+## 20. What moved the markets — a calibration, not a signal
+
+`_lib/marketboard.py` puts the day's indices, rates, currencies, commodities and bitcoin
+beside the stock being read. The owner asked for it as a live tracker. What makes it more
+than a ticker tape is the same thing `/api/peers` does for a stock's own figures: it tells a
+reader whether a number is ordinary.
+
+### 20.1 The definition
+
+A move's **percentile** is the share of the instrument's own daily moves over the previous
+365 calendar days that were strictly smaller in size.
+
+- **Units.** Prices move in percent, yields in basis points, and the VIX in points.
+- **Unusual.** At 95 or above a move is called unusual.
+- **Refusal.** Below 120 sessions in the window there is no percentile, only a refusal.
+- **Largest since.** "Largest since" is the most recent earlier move at least as large in
+  the same direction, over the two years fetched.
+
+Each instrument is read on its own sessions, so no annualisation constant is involved. On 1
+November 2026 that was 251 sessions for the S&P 500, 239 for the Jakarta Composite, 242 for
+Shanghai, 246 for the Hang Seng, 259 for EUR/USD and 365 for bitcoin.
+
+### 20.2 How often "unusual" happens, stated on the board
+
+At a 95% line each instrument is unusual about one day in twenty. With 15 to 17 instruments
+on a market's board, **at least one of them was unusual on 39% (US) and 40% (IDX) of the
+past year's weekdays**, measured on 1 November 2026. The board prints that figure under its
+summary, because a flag that fires on two days in five and does not say so reads as news
+every time it fires.
+
+Weekdays only: bitcoin trades at weekends and nothing else does. Counting weekends added 104
+days on which only one instrument could cross its line, and the first live run reported 29%.
+
+### 20.3 Three things measuring it first found
+
+1. **A batch shares one calendar.** yfinance aligns every symbol in a call onto the union
+   of their dates, and `normalise` fills interior gaps. In one batch with BTC-USD, the S&P 500
+   came back with 208 weekend bars, every one a 0.00% day. A distribution of daily moves
+   padded with a hundred zeros pushes every real move up the percentiles.
+   `ohlcv_batch(own_sessions=True)` drops rows on which a symbol has no field at all. The
+   default is unchanged, because the portfolio and exposure measurements were taken on it;
+   see the open row below.
+2. **USDIDR=X printed on a Saturday.** Open, high, low and close were all 18,120 with no
+   volume: an indicative quote on a closed market, which read as a +0.27% rupiah move.
+   Instruments that do not trade at weekends now drop weekend prints.
+3. **Neither coal contract in the source returns prices** (`NCF=F`, `MTF=F`). Coal, nickel,
+   tin, palm oil and the Indonesian 10-year yield are named on the board as unavailable,
+   with the reason. For coal names the Trend tab's measured exposure to crude (§16) is the
+   stand-in.
+
+### 20.4 What it does not claim
+
+- **No forecasts.** No move forecasts anything, the next day's move in the same instrument
+  included.
+- **Size only.** The percentile is about size; direction is never coloured, because crude
+  falling helps an airline and hurts a miner.
+- **Headlines explain nothing.** The headlines beside the board are labelled as mentioning
+  a market, never as explaining it.
+- **Relation only where measured.** On a stock page the board marks a relation only where
+  one was measured: the stock's own index, the 10-year yield a US valuation discounts from,
+  and a reference the stock's own five-year exposure (§16, |t| ≥ 3) says it moved with.
+  "ITMG.JK has moved with the energy complex over the past 5 years" is a record, and the
+  strip says so.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
@@ -1864,6 +1930,7 @@ date alone when the table is unavailable.
 | IDX fundamentals curation | The durable moat, and the largest single effort |
 | Single-name exposure betas | §16 ships the portfolio half, which is descriptive. "This stock moves 0.7x as hard as its sector" invites forward use, so it is gated on a stability study — do this period's betas predict next period's — mirroring `measure_correlation_stability.py`. A four-year probe gives year-over-year rank correlations of +0.29 to +0.66, inside the band that licensed the portfolio feature, on three transitions where that study had six. Eight blocks are available; MBMA, NCKL and TAPG cannot supply them and must be excluded by name rather than quietly run on fewer |
 | Track-record base rates for the US | §19 stops the reading quoting the Indonesian ones under a US company; nothing has measured what "profitable every year" or "a median of 3.0x" looks like on a US sample, so the US reading reports its figures bare. A measurement over the US listings file would let it say how ordinary each one is |
+| Portfolio and exposure on one shared calendar | Found while building §20. `ohlcv_batch` aligns a mixed batch onto the union of its symbols' dates and forward-fills, so on a day one market traded and another did not, the second gets a 0.00% day. `portfolio.daily_returns` promises that a name which did not trade "contributes nothing to that day", and for a book mixing US and IDX names, or holding bitcoin, it contributes a zero instead, which pulls correlations toward zero. Weekly exposure sums are unaffected, since a zero adds nothing to a week. The fix is `own_sessions=True` with returns computed per symbol before aligning. It is not a default edit, because it changes what `measure_correlation_stability.py` and `measure_exposure_stability.py` measured, and both must be re-run with it. The size of the bias on real mixed books has not been measured |
 | Fundamental exposure — revenue against commodity prices | **Rejected on feasibility, not deferred.** `market_data` fetches annual statements only, five columns, and yfinance's quarterlies for these names return five or six with gaps — ADRO and PTBA are both missing 2025-09-30. Five irregular observations is not a weak estimate, it is not an estimate. Consequence: the reverse DCF's implied growth cannot be restated as an implied commodity path |
 
 **Corrected while writing this:** README quoted the price-implied growth rate moving across

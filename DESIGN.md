@@ -220,16 +220,19 @@ so a dense table row still reads as a table row.
 ## The shell
 
 Routes replaced the single page: `/` (landing), `/stock/[symbol]` (one company, `?tab=` and
-any non-default tuning in the query), `/markets` (`?view=rank|screener|exposure|scan`),
+any non-default tuning in the query), `/markets` (opens on Today; `?view=rank|screener|exposure|scan`),
 `/compare?symbols=` and `/journal`. A top bar is on every page — brand link, Markets /
 Compare / Journal, search, Guided/Full, field manual; on a phone the links move into a native
 `<dialog>` menu. Every route owns exactly one `h1`: on a stock page it is the ticker, still
 the largest thing on the page.
 
-**The landing shows no numbers.** One question (which company?), answered three ways — type
-it, pick a preset, or open one from your desk — then the app in three lines and the market
-tools as named destinations. A number on that page would be a number nobody asked about,
-presented without the four lenses this app exists to put around every figure.
+**The landing shows no company's numbers.** One question (which company?), answered three
+ways — type it, pick a preset, or open one from your desk — then the app in three lines and
+the market tools as named destinations. A company's figure on that page would be one nobody
+asked about, presented without the four lenses this app exists to put around every figure.
+*Since 1 November 2026* it also carries the market board's one sentence and the market's
+headlines. They are about markets, not about any company, and every move in that sentence
+is already set against its own year, so nothing on the landing is an unexplained figure.
 
 **Lens tabs are one row.** They used to wrap, which on a phone made three sticky rows
 covering a third of the screen; they scroll sideways now, stick under the top bar, and keep
@@ -252,6 +255,54 @@ than inside it. A grid of fair values coloured against price is a buy/sell heat 
 
 **Compare** lines up two to four companies in the reader's order, same widths, no
 highlight, no totals, and says when the currencies differ.
+
+## The market board
+
+**Where it lives.**
+- **Markets → Today** is the whole board, and the view `/markets` opens on.
+- **Markets now** is a 44px bar fixed to the foot of every page on a tablet or wider. It is
+  at the foot because the top of a stock page already holds the top bar and the sticky lens
+  tabs, and a third sticky row there would take a fifth of a laptop screen. The shell adds
+  the same height after the footer, so the bar covers nothing. It steps aside on the Today
+  view, can be collapsed (remembered in this browser), and is never printed.
+- **On a phone** a bar fixed to the foot would sit on the browser's own toolbar, so phones
+  get an inline strip at the top of the stock page and the landing instead.
+
+**Calibration, not colour.** Every row's tone is neutral and nothing is coloured by sign: a
+day's move has no good or bad. What carries weight is whether a move was **unusual for its
+own instrument**, at the 95th percentile of its past year's daily moves. An unusual row
+gets:
+- a semibold name and move;
+- an "unusual" pill drawn in hairline and chalk;
+- a faint `raised` wash.
+
+The percentile is a position bar in `ash` with a chalk tick at 95, like the peers bar: a
+position, not a score. Sparklines are one `ash` line with a chalk end point, never green
+for up.
+
+**Order.**
+- Rows sit in fixed groups in the server's declared order, and the summary sentence names
+  unusual moves in that order. Nothing is sorted by size: a leaderboard of moves invites
+  reading its first line as the day's story.
+- On a stock page, the quotes related to the stock lead the bar. That is a partition by a
+  measured relation, each part still in declared order, so the related quotes are not the
+  ones scrolled out of sight.
+
+**Relation, marked only from facts.** A link icon, a hairline ring and the full sentence in
+the accessible name and tooltip mark three things only:
+- the stock's own index;
+- for a US listing, the 10-year yield its valuation discounts from;
+- a reference the Trend tab measured it moving with.
+
+On a phone the strip says the measured relation in words.
+
+**Absence is named.** Instruments the source cannot supply are listed with the reason, a
+quote that did not come back says "no price", and a headline feed that failed says so
+instead of showing an empty list.
+
+**Focus survives the bar.** Hiding the bar moves focus to the "Markets now" button that
+replaces it, and showing it moves focus back to "Hide", so a keyboard reader is not dropped
+to the top of the page.
 
 ## Print
 
@@ -385,7 +436,7 @@ it *sounds* is still untested — an automated pass is a floor, not a substitute
 
 ## The rules are enforced, not just written
 
-`npm run check:frontend` enforces eighteen of them, and each describes a bug
+`npm run check:frontend` enforces nineteen of them, and each describes a bug
 that was really in this codebase. It walks `components/` and `app/`
 recursively — the first version listed three directories by hand, so a file in
 any new subfolder was exempt from every rule without anyone deciding so.
@@ -435,6 +486,9 @@ any new subfolder was exempt from every rule without anyone deciding so.
     accessibility tree between them.
 18. A text token or a ground used on screen and not named in the print block,
     or a print text token below AA on white.
+19. A sort, or a tone class, `TONE_` map or `.tone` read, in any market board file
+    (`lib/marketboard.ts`, the Today view, the bar, the strip, the landing section). The
+    board keeps its declared order and colours nothing by direction.
 
 Rule 4 now covers every text and tone token, not only `chalk` and `ash`; eight
 `text-warn/90`-style sites had walked past it. Rule 7's budget is eight hits in
@@ -446,7 +500,9 @@ Beside the design rules the same script holds three structural checks:
 `lib/api.ts` may not import the journal or watchlist stores or touch browser
 storage; every analytics `track(` carries only `market` and `lenses`;
 `lib/symbols.ts` must resolve tickers with the same pattern and suffix map as
-the Python; and `cn()` must know every font size the config defines.
+the Python; `cn()` must know every font size the config defines; and the market board's
+requests carry no ticker: the board takes no parameters at all, and its headlines take a
+market and declared topic keys.
 
 Comments are stripped before the greps — rule 7 fired on its own explanation the
 first time it ran, because `LongTermPanel`'s docstring quotes the expression it

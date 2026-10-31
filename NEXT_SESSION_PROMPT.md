@@ -13,11 +13,13 @@ STATE
 =====
 Branch: claude/codebase-app-overhaul-e51579 — feature/personal-verdict-scanner
 plus main's IC-bar commit and the fix-ci advisory commit (merged, not
-cherry-picked), plus the October 2026 overhaul. Nothing pushed; nothing was
-asked to be. The overhaul's commits each state what they changed and why.
+cherry-picked), plus the October 2026 overhaul. It is open for review as PR
+farhanrkt/QuantDesk#5. The market board (November 2026) is on
+claude/markets-today, stacked on that branch so #5 stays reviewable: merge #5
+first. Each commit states what it changed and why.
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
-single Vercel Python function on the back. ~1,690 offline pytest tests, 60
-frontend assertions, 18 enforced design rules plus structural checks. US and
+single Vercel Python function on the back. ~1,720 offline pytest tests, 67
+frontend assertions, 19 enforced design rules plus structural checks. US and
 Indonesian (IDX) listings. lxml is now a runtime dependency (see below).
 
 The full battery, all green as of the last commit:
@@ -35,7 +37,7 @@ running dev server: stop it, delete `.next`, start it again.
 THE OCTOBER 2026 OVERHAUL — WHAT EXISTS NOW
 -------------------------------------------
 Routes: / (landing), /stock/[symbol] (?tab=, non-default tuning), /markets
-(?view=rank|screener|exposure|scan), /compare?symbols=, /journal. A shell
+(opens on Today; ?view=rank|screener|exposure|scan), /compare?symbols=, /journal. A shell
 (components/shell/) with a top bar, phone menu, command palette (⌘K, backed by
 GET /api/symbols over the committed listing files), shortcuts ([ ] w ?),
 toasts, a watchlist and recent tickers (localStorage only), print styles.
@@ -44,6 +46,16 @@ New on the stock page: a "What it is" tab first in the order (Trend still the
 default) fed by a `company` leg in /api/confluence — description only, never
 read by the synthesis or pre-trade checks — and a sensitivity grid on the
 Value tab. New page: Compare, which never sorts, sums or highlights.
+
+THE MARKET BOARD (1 November 2026). Markets -> Today and a "Markets now" bar at
+the foot of every page (a strip on phones): 22 instruments, each move set
+against that instrument's own past year (api/_lib/marketboard.py), headlines
+labelled as MENTIONING a market (news.fetch_headlines). Tone-neutral, declared
+order, no ticker in any of its requests — rule 19 and a structural check hold
+those. On a stock page it marks only measured relations: the stock's index, a
+US valuation's 10-year, and the Trend tab's own exposure factors. Read
+RESEARCH_ROADMAP §20 before touching it. Coal, nickel, tin, palm oil and the
+Indonesian 10-year are not in the source; the board names them.
 
 lib/palette.ts is the only place a colour is written; lib/session.ts keeps
 results per symbol for the tab; lib/cache.ts shares confluence payloads across
@@ -88,6 +100,18 @@ bank refusal for any unscorable company.
 
 NOT DONE IN THE OVERHAUL, AND WORTH DOING
 -----------------------------------------
+- PORTFOLIO CORRELATIONS RUN ON ONE SHARED CALENDAR. Found building the
+  board: market_data.ohlcv_batch forward-fills a symbol across days another
+  symbol in the batch traded, so a book mixing US and IDX names (or holding
+  bitcoin) gets 0.00% days that pull its correlations toward zero, against
+  portfolio.daily_returns' own docstring. `own_sessions=True` exists; switching
+  portfolio to it means per-symbol returns AND re-running
+  measure_correlation_stability.py and measure_exposure_stability.py. See the
+  RESEARCH_ROADMAP open row.
+- THE SCANNER'S FORWARD LOG counts rows, not names: 74 Indonesian buy calls
+  are 23 names logged on six dates in twelve days. Fix the counting in
+  _lib/scanlog.py before its first calls resolve in early December, and
+  restart the weekly scans (none since 21 September).
 - RankingPanel (~770 lines), ScanPanel (~930) and VerdictPanel (~730) were not
   split into subcomponents. Their state was lifted into lib/session.ts, which
   was the functional half; the split is maintainability only.

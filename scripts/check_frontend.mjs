@@ -64,6 +64,9 @@ const SOURCES = [
   "lib/commands.ts",
   // The compare view's row model: order kept, nothing computed across columns.
   "lib/compare.ts",
+  // The market board's browser half: which rows a market sees, what the stock
+  // on screen is related to, and nothing reordered by the size of a move.
+  "lib/marketboard.ts",
 ];
 
 // Real packages the compiled output requires at load time.
@@ -133,6 +136,28 @@ for (const file of trackSources) {
                     + "Only `market` and `lenses` may be sent — see the comment in lib/api.ts.");
       process.exit(1);
     }
+  }
+}
+
+// THE MARKET BOARD NAMES NOTHING. Which instruments a stock moves with is
+// matched in the browser from the Trend tab's exposure figures, so the board's
+// request carries no ticker and every reader shares one edge-cache entry; the
+// headlines carry a market and keys from a declared topic list. A "helpful"
+// ticker parameter here would send which stock somebody is reading to a route
+// that has no use for it, and would split the cache by stock.
+{
+  const today = strippedRequestLayer.match(/"\/api\/markets\/today",\s*(\{[^}]*\})/);
+  const headlines = strippedRequestLayer.match(/"\/api\/markets\/headlines",\s*(\{[^}]*\})/);
+  const todayOk = today && today[1].replace(/\s/g, "") === "{}";
+  // A property name is an identifier right after `{` or `,` — not the `4` in `limit: 4`.
+  const keys = headlines
+    ? [...headlines[1].matchAll(/(?:^|[{,])\s*([A-Za-z_]\w*)\s*(?=[:,}])/g)].map((k) => k[1])
+    : null;
+  const headlinesOk = keys && keys.every((k) => ["market", "topics", "limit"].includes(k));
+  if (!todayOk || !headlinesOk) {
+    console.error("lib/api.ts: a market board request carries more than a market and declared "
+                  + "topics. The board names nothing; see fetchMarketBoard.");
+    process.exit(1);
   }
 }
 
@@ -677,13 +702,49 @@ for (const token of ["printText", "printBody", "printMuted", "printAcc", "printD
   }
 }
 
+// 19. THE MARKET BOARD NEVER RANKS A MOVE AND NEVER COLOURS ONE. A board of
+//     today's moves sorted by size is a leaderboard that invites reading its top
+//     line as the day's real story, and a red fall or a green rise is a verdict
+//     picked from a sign — crude falling helps an airline and hurts a miner. The
+//     rows keep the server's declared order (a stock page may lift the rows it is
+//     related to to the front, by filtering, never by sorting), every tone is
+//     neutral, and emphasis comes only from a move being unusual for its own
+//     instrument. lib/marketboard.ts is read explicitly; lib/ is outside the walk.
+const BOARD_FILES = [
+  "components/markets/TodayView.tsx", "components/markets/MarketDock.tsx",
+  "components/markets/MarketStrip.tsx", "components/markets/quotes.tsx",
+  "components/landing/MarketsToday.tsx",
+];
+const BOARD_FORBIDDEN = [
+  [/\.sort\(|\btoSorted\(/, "sorts"],
+  [/\b(?:text|bg|border|ring)-(?:acc|dist|warn)\b|\bTONE_[A-Z]+\b|\.tone\b/, "colours by tone"],
+];
+const boardSources = [
+  ...uiFiles.filter(([file]) => BOARD_FILES.includes(file)),
+  ["lib/marketboard.ts", stripComments(readFileSync(join(ROOT, "lib/marketboard.ts"), "utf8"))],
+];
+for (const [file, src] of boardSources) {
+  for (const [pattern, what] of BOARD_FORBIDDEN) {
+    const m = src.match(pattern);
+    if (m) {
+      fail(file, `The market board ${what} (${m[0]}).`,
+           "Rows keep the declared order and every move is tone-neutral; emphasis is for a "
+           + "move unusual for its own instrument. See api/_lib/marketboard.py.");
+    }
+  }
+}
+if (boardSources.length !== BOARD_FILES.length + 1) {
+  fail("components/markets", "Rule 19 could not find every market board file it guards.",
+       "Point BOARD_FILES at the board's new home rather than deleting the rule.");
+}
+
 if (designFailures.length) {
   console.error("\nDesign-system rules broken (see DESIGN.md):\n");
   console.error(designFailures.join("\n\n"));
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 18 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 19 checked across ${uiFiles.length} UI files`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));
