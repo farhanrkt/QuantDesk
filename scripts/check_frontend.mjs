@@ -67,6 +67,9 @@ const SOURCES = [
   // The market board's browser half: which rows a market sees, what the stock
   // on screen is related to, and nothing reordered by the size of a move.
   "lib/marketboard.ts",
+  // The calendar's browser half: the reader's day, the exchange clock, the .ics.
+  "lib/marketclock.ts",
+  "lib/calendar.ts",
 ];
 
 // Real packages the compiled output requires at load time.
@@ -149,14 +152,47 @@ for (const file of trackSources) {
   const today = strippedRequestLayer.match(/"\/api\/markets\/today",\s*(\{[^}]*\})/);
   const headlines = strippedRequestLayer.match(/"\/api\/markets\/headlines",\s*(\{[^}]*\})/);
   const todayOk = today && today[1].replace(/\s/g, "") === "{}";
+  // The calendar is the same for everyone, so it takes nothing either.
+  const calendar = strippedRequestLayer.match(/"\/api\/markets\/calendar",\s*(\{[^}]*\})/);
+  const calendarOk = calendar && calendar[1].replace(/\s/g, "") === "{}";
+  // A watchlist is personal: its report dates are asked for in a POST body and
+  // nowhere else, the rule /api/rank/list and /api/portfolio follow.
+  const earningsCalls = [...strippedRequestLayer.matchAll(/(\w+)<[^>]*>\("\/api\/markets\/earnings"/g)];
+  const earningsOk = earningsCalls.length > 0 && earningsCalls.every((m) => m[1] === "post");
   // A property name is an identifier right after `{` or `,` — not the `4` in `limit: 4`.
   const keys = headlines
     ? [...headlines[1].matchAll(/(?:^|[{,])\s*([A-Za-z_]\w*)\s*(?=[:,}])/g)].map((k) => k[1])
     : null;
   const headlinesOk = keys && keys.every((k) => ["market", "topics", "limit"].includes(k));
-  if (!todayOk || !headlinesOk) {
-    console.error("lib/api.ts: a market board request carries more than a market and declared "
-                  + "topics. The board names nothing; see fetchMarketBoard.");
+  const problems = [
+    !todayOk && "the board request carries a parameter; it names nothing (fetchMarketBoard)",
+    !calendarOk && "the calendar request carries a parameter; it names nothing (fetchMarketCalendar)",
+    !headlinesOk && "the headlines request carries more than a market and declared topics",
+    !earningsOk && "the watchlist's report dates are not asked for in a POST body (fetchWatchlistEarnings)",
+  ].filter(Boolean);
+  if (problems.length) {
+    console.error(`lib/api.ts: ${problems.join("; ")}.`);
+    process.exit(1);
+  }
+}
+
+// THE NEWS THUMBNAILS COME FROM TWO HOSTS, AND BOTH LISTS SAY THE SAME TWO.
+// Next's image optimizer fetches a thumbnail only from a host `next.config.mjs`
+// allows, and `market_data.NEWS_IMAGE_HOSTS` drops any other before it reaches a
+// page. If the two drifted, a thumbnail the server let through would fail to
+// load, or the config would allow a host the server never vets.
+{
+  const python = readFileSync(join(ROOT, "api/_lib/market_data.py"), "utf8")
+    .match(/NEWS_IMAGE_HOSTS = \(([^)]*)\)/);
+  const config = readFileSync(join(ROOT, "next.config.mjs"), "utf8");
+  const allowed = new Set(python ? [...python[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : []);
+  const configured = new Set([...config.matchAll(/hostname:\s*"([^"]+)"/g)].map((m) => m[1]));
+  const same = allowed.size > 0 && allowed.size === configured.size
+    && [...allowed].every((host) => configured.has(host));
+  if (!same) {
+    console.error(`next.config.mjs allows ${[...configured].join(", ") || "no image host"} but `
+                  + `market_data.NEWS_IMAGE_HOSTS lists ${[...allowed].join(", ") || "none"}. `
+                  + "They must be the same hosts.");
     process.exit(1);
   }
 }
@@ -711,9 +747,10 @@ for (const token of ["printText", "printBody", "printMuted", "printAcc", "printD
 //     neutral, and emphasis comes only from a move being unusual for its own
 //     instrument. lib/marketboard.ts is read explicitly; lib/ is outside the walk.
 const BOARD_FILES = [
-  "components/markets/TodayView.tsx", "components/markets/MarketDock.tsx",
-  "components/markets/MarketStrip.tsx", "components/markets/quotes.tsx",
-  "components/landing/MarketsToday.tsx",
+  "components/markets/TodayView.tsx", "components/markets/MarketRail.tsx",
+  "components/markets/MarketBand.tsx", "components/markets/PriceTile.tsx",
+  "components/markets/NewsList.tsx", "components/markets/CalendarList.tsx",
+  "components/markets/ExchangeStatus.tsx", "components/landing/MarketsToday.tsx",
 ];
 const BOARD_FORBIDDEN = [
   [/\.sort\(|\btoSorted\(/, "sorts"],

@@ -390,6 +390,8 @@ export interface UniversesResponse {
 
 export interface NewsItem {
   title: string; source: string; link: string; published: string;
+  /** A thumbnail on an allowlisted host, served through Next's image optimizer. */
+  image?: { url: string; width: number; height: number } | null;
 }
 export interface NewsResponse { ticker: string; items: NewsItem[] }
 
@@ -2008,9 +2010,28 @@ export interface BoardMarket {
               from: string; to: string } | null;
 }
 
+/** On how many past event days an instrument moved more than on its median day. */
+export interface EventHistoryRow {
+  key: string;
+  name: string;
+  change: "pct" | "bp" | "points";
+  available: boolean;
+  reason?: string;
+  events?: number;
+  above?: number;
+  share?: number;
+  eventMedian?: number;
+  allMedian?: number;
+  /** Two-sided exact binomial against a fair coin. */
+  p?: number;
+  since?: string;
+}
+
 export interface MarketBoard {
   /** Declaration order, never move order. */
   groups: { key: string; label: string }[];
+  /** Keyed by event kind: fomc, cpi, jobs, bi-rate. */
+  eventHistory: Record<string, EventHistoryRow[]>;
   rows: BoardRow[];
   missing: { key: string; name: string; markets: Market[]; reason: string }[];
   markets: Record<Market, BoardMarket>;
@@ -2023,6 +2044,7 @@ export interface MarketBoard {
     rows: Record<string, { reading: string; moveText: string | null;
                            percentile: Explanation | null }>;
     markets: Record<Market, { summary: string; baseRate: string | null }>;
+    eventHistory: Record<string, Record<string, { reading: string; share: Explanation | null }>>;
   };
 }
 
@@ -2033,7 +2055,63 @@ export interface HeadlineFeed {
   /** False when the feed could not be read — which is not the same as no news. */
   available: boolean;
   items: NewsItem[];
+  /** "Yahoo Finance" (with images) or "Google News". */
+  source: string;
   reason: string | null;
 }
 
 export interface MarketHeadlines { market: Market; topics: HeadlineFeed[] }
+
+// --------------------------------------------------------------------------- //
+// The calendar — /api/markets/calendar and /api/markets/earnings
+// --------------------------------------------------------------------------- //
+
+export type CalendarKind =
+  | "fomc" | "cpi" | "jobs" | "pce" | "gdp" | "bi-rate" | "holiday" | "early-close" | "earnings";
+
+export interface CalendarEvent {
+  kind: CalendarKind;
+  /** The event's own local date. */
+  date: string;
+  time?: string | null;
+  tz: string;
+  market: Market;
+  source: string;
+  title: string;
+  detail?: string | null;
+  /** The moment in UTC, or null for an all-day date. */
+  utc: string | null;
+  allDay: boolean;
+  label: string;
+  projections?: boolean;
+  tentative?: boolean;
+  /** A published schedule rather than a decision already taken. */
+  scheduled?: boolean;
+  /** For earnings: whose report it is, and whether it is the stock on screen or the watchlist. */
+  ticker?: string;
+  origin?: "stock" | "watchlist";
+}
+
+export interface ExchangeInfo {
+  name: string;
+  tz: string;
+  /** Regular sessions by weekday group, in the exchange's own time. */
+  sessions: { "mon-thu": [string, string][]; fri: [string, string][] };
+  source: string;
+  closures: { date: string; kind: "holiday" | "early-close"; time: string | null; detail: string | null }[];
+}
+
+export interface MarketCalendar {
+  verifiedOn: string;
+  events: CalendarEvent[];
+  kinds: Record<string, { label: string; about: string }>;
+  exchanges: Record<Market, ExchangeInfo>;
+  coverage: Record<string, string>;
+  pending: { kind: string; note: string }[];
+  sources: Record<string, { name: string; url: string }>;
+}
+
+export interface WatchlistEarnings {
+  items: { ticker: string; next: string | null; available: boolean }[];
+  note: string;
+}

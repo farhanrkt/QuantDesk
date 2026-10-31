@@ -30,11 +30,12 @@ import re
 import ssl
 import urllib.parse
 import urllib.request
+import datetime as dt
 import xml.etree.ElementTree as ET
 from email.utils import parsedate_to_datetime
 from typing import Optional
 
-from . import symbols
+from . import market_data, symbols
 
 USER_AGENT = "Mozilla/5.0 (compatible; QuantDesk/1.0)"
 MAX_ITEMS = 5
@@ -201,16 +202,37 @@ def _published(item: dict) -> float:
         return float("-inf")
 
 
+# How recent a story must be to count as the day's news. A day and a half rather
+# than twenty-four hours, so a Monday morning in Jakarta still sees Friday's US
+# close; Google's own `when:1d` filter does the same job on its feed.
+RECENT_HOURS = 36
+
+
+def _yahoo(query: str, limit: int) -> list[dict]:
+    """Yahoo Finance's search results for a query, newest first, from the past day and a half."""
+    cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=RECENT_HOURS)
+    items = [item for item in market_data.news_search(query, count=max(limit, 8))
+             if _published(item) >= cutoff.timestamp()]
+    return sorted(items, key=_published, reverse=True)[:limit]
+
+
 def fetch_headlines(topic: str, market: str = "US", limit: int = MAX_ITEMS) -> dict:
     """The past day's headlines that mention a market, newest first.
 
     A FAILURE IS NOT "NO NEWS". `fetch_news` returns an empty list either way,
     which is how the news panel once looked identical whether a company had no
     coverage or the feed had failed. This says which: `available` is False when
-    the feed could not be read, and True with an empty list when it was read and
-    held nothing from the past day.
+    no feed could be read, and True with an empty list when one was read and held
+    nothing from the past day.
 
-    The order is by time, newest first. Google ranks the feed by relevance, and
+    TWO SOURCES, CHOSEN BY EDITION. The US edition asks Yahoo Finance's search
+    first, because it carries a thumbnail for most stories and dates every one;
+    if it fails or has nothing recent, Google News answers instead. Yahoo has no
+    Indonesian coverage at all — "IHSG" returned nothing on 1 November 2026 — so
+    the Indonesian edition reads Google News in Indonesian, without images. Each
+    feed says which source it came from.
+
+    The order is by time, newest first. Google ranks its feed by relevance, and
     a board of what moved today should not lead with the most-linked story of
     the week.
     """
@@ -218,14 +240,22 @@ def fetch_headlines(topic: str, market: str = "US", limit: int = MAX_ITEMS) -> d
     market = (market or "US").strip().upper()
     edition = market if market in queries else "US"
     query = queries[edition]
+    if edition == "US":
+        try:
+            items = _yahoo(query, limit)
+        except Exception:
+            items = []
+        if items:
+            return {"topic": topic, "market": market, "query": query, "available": True,
+                    "items": items, "source": "Yahoo Finance", "reason": None}
     try:
         root = _parse_feed(_fetch_feed(_search_url(f"{query} {RECENT}", edition)))
     except Exception:
         return {"topic": topic, "market": market, "query": query, "available": False,
-                "items": [],
+                "items": [], "source": "Google News",
                 "reason": "The news feed could not be read just now, which is not the same "
                           "as there being no news."}
     items = sorted(_items(root), key=_published, reverse=True)[:limit]
     return {"topic": topic, "market": market, "query": query, "available": True,
-            "items": items,
+            "items": items, "source": "Google News",
             "reason": None if items else "The feed held no headlines from the past day."}

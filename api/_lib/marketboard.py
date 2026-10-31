@@ -96,7 +96,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from . import exposure, market_data
+from . import econcalendar, exposure, market_data
 
 # A move at or above this percentile of its own past year is "unusual".
 UNUSUAL_AT = 95.0
@@ -397,6 +397,92 @@ def base_rate(histories: dict[str, pd.Series], as_of: Optional[pd.Timestamp] = N
     }
 
 
+# --------------------------------------------------------------------------- #
+# What past event days were like
+# --------------------------------------------------------------------------- #
+# Which instruments each kind of event is read against. Each pair is aligned to
+# the SAME session: a 14:00 FOMC statement and an 08:30 CPI or jobs release land
+# inside that day's US session, and a Bank Indonesia decision inside the IDX
+# one. A US release is never read against IDX instruments, because it lands
+# overnight in Jakarta and the move it caused belongs to the NEXT Jakarta session.
+EVENT_PAIRS: dict[str, tuple[str, ...]] = {
+    "fomc": ("sp500", "t10y", "dollar"),
+    "cpi": ("sp500", "t10y"),
+    "jobs": ("sp500", "t10y"),
+    "bi-rate": ("jkse", "usdidr"),
+}
+
+# Fewer past events than this and the comparison is a refusal.
+MIN_EVENTS = 8
+
+
+def binomial_p(k: int, n: int) -> float:
+    """Two-sided exact binomial p-value against a fair coin."""
+    from math import comb
+    probabilities = [comb(n, i) / 2 ** n for i in range(n + 1)]
+    observed = probabilities[k]
+    return min(1.0, sum(p for p in probabilities if p <= observed * (1 + 1e-9)))
+
+
+def event_history(histories: dict[str, pd.Series], doc: Optional[dict] = None) -> dict:
+    """On how many past event days each instrument moved more than on its median day.
+
+    WHAT WAS MEASURED BEFORE THIS WAS WIRED, 1 November 2026, over the two
+    years the board holds. The share of event days with a larger-than-median
+    move, where any day's chance is one half:
+
+        FOMC     S&P 500  7 of 17   10-year  10 of 17   dollar index 12 of 17
+        CPI      S&P 500 11 of 23   10-year  10 of 23
+        jobs     S&P 500 15 of 22   10-year  11 of 22
+        BI       IHSG    15 of 25   USD/IDR  12 of 25
+
+    Not one of the nine is outside what chance produces at its sample size
+    (two-sided binomial; the smallest p is 0.13, for the S&P 500 on jobs
+    days, and 0.14 for the dollar on FOMC days), and on FOMC days the S&P 500 moved
+    LESS than on its median day more often than not. The belief that these are
+    the big days is mostly not borne out here, and the panel says so rather
+    than implying it. A release on a day the market was shut (the April 2026
+    jobs report, on Good Friday) is read against the next session.
+    """
+    out: dict[str, list[dict]] = {}
+    for kind, keys in EVENT_PAIRS.items():
+        rows = []
+        for key in keys:
+            instrument = next(i for i in INSTRUMENTS if i.key == key)
+            series = histories.get(key)
+            base = {"key": key, "name": instrument.name, "change": instrument.change}
+            if series is None or series.empty:
+                rows.append({**base, "available": False, "reason": NO_QUOTE})
+                continue
+            sizes = series.abs()
+            sessions = sizes.index
+            days = [pd.Timestamp(day) for day in
+                    econcalendar.past_dates(kind, sessions[-1].date(), doc)]
+            days = [day for day in days if day >= sessions[0]]
+            positions = sorted({int(p) for p in sessions.searchsorted(pd.DatetimeIndex(days))
+                                if p < len(sessions)})
+            on_events = sizes.iloc[positions]
+            if len(on_events) < MIN_EVENTS:
+                rows.append({**base, "available": False, "events": len(on_events),
+                             "reason": f"Fewer than {MIN_EVENTS} of these in the history held."})
+                continue
+            median = float(sizes.median())
+            above = int((on_events > median).sum())
+            rows.append({
+                **base,
+                "available": True,
+                "events": len(on_events),
+                "above": above,
+                "share": above / len(on_events),
+                "eventMedian": float(on_events.median()),
+                "allMedian": median,
+                "p": binomial_p(above, len(on_events)),
+                "since": on_events.index[0].date().isoformat(),
+            })
+        out[kind] = rows
+    return out
+
+
 def build(frames: dict[str, pd.DataFrame], fetched_at: Optional[str] = None) -> dict:
     """The whole board from frames already fetched. Pure, so it is tested offline."""
     rows, histories = [], {}
@@ -422,6 +508,7 @@ def build(frames: dict[str, pd.DataFrame], fetched_at: Optional[str] = None) -> 
     return {
         # Declaration order, never move order — see the module docstring.
         "groups": [{"key": key, "label": label} for key, label in GROUPS],
+        "eventHistory": event_history(histories),
         "rows": rows,
         "missing": [{**item, "markets": list(item["markets"])} for item in MISSING],
         "markets": markets,

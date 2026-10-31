@@ -141,6 +141,7 @@ SAMPLES: dict[str, tuple] = {
     "netDebtToEbitda": (2.4, {"market": "ID"}),
     "freeCashFlowYears": (0.25, {"positive": 1, "of": 4}),
     "dailyMove": (97.0, {}),
+    "eventDayMove": (0.41, {"events": 17}),
 }
 
 

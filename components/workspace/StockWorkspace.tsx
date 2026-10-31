@@ -18,7 +18,6 @@ import { SynthesisPanel } from "@/components/SynthesisPanel";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { ThesisPanel } from "@/components/ThesisPanel";
 import { TickerBar } from "@/components/TickerBar";
-import { MarketStrip } from "@/components/markets/MarketStrip";
 import { useBoardFocus } from "@/components/shell/marketboard";
 import { ManualRescue } from "@/components/ValuationControls";
 import { ValuationPanel } from "@/components/ValuationPanel";
@@ -140,6 +139,8 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
     factors: technical.status === "ready"
       ? (technical.data.exposure?.factors ?? []).map((f) => ({ key: f.key, label: f.label, weeks: f.weeks }))
       : null,
+    // The provider's next report date, for the panel's calendar.
+    earnings: company.status === "ready" ? company.data.nextEarnings?.date ?? null : null,
   });
   const { state: eventStudy, validate } = useEventStudy(symbol);
   const { state: peers, compare: comparePeers } = usePeers(symbol);
@@ -266,9 +267,6 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
         <TickerBar opts={draft} onChange={setDraft} onRun={submit} busy={busy} />
         <RunStatus symbol={symbol} busy={busy} failed={failed} at={engines.at} />
       </div>
-
-      {/* Phones only: a wider screen has the market bar at the foot of the page. */}
-      <MarketStrip className="md:hidden" />
 
       <ConfluenceRail
         ticker={resolvedTicker} anomaly={anomaly} technical={technical}

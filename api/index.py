@@ -61,7 +61,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from _lib import (accumulation, chartlayers, eventstudy, explain, exposure,
+from _lib import (accumulation, chartlayers, econcalendar, eventstudy, explain, exposure,
                   field, listings, market_data, marketboard, microstructure, news,
                   ownership, patterns, portfolio, pretrade, quality, ranking,
                   riskmodel, structure, symbols, tape, technical, trackrecord,
@@ -181,6 +181,11 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     "/api/markets/today": (30, 60),
     # Up to four feeds per call, each one bounded and timed out.
     "/api/markets/headlines": (20, 60),
+    # A committed file and some date arithmetic; the edge answers most of these.
+    "/api/markets/calendar": (30, 60),
+    # One provider call per name and none of them batch, the shape of cost the
+    # shortlist deepening has, so it takes a cap of the same order.
+    "/api/markets/earnings": (3, 60),
     None: (40, 60),                      # default for every other route
 }
 RATE_EXEMPT = {"/api/health", "/api/docs", "/openapi.json"}
@@ -2008,6 +2013,55 @@ def markets_today():
     board["explain"] = explain.for_market_board(board)
     return JSONResponse(content=clean(board),
                         headers={"Cache-Control": BOARD_CACHE, "CDN-Cache-Control": BOARD_CDN_CACHE})
+
+
+CALENDAR_CACHE = "public, max-age=0, must-revalidate, s-maxage=3600"
+CALENDAR_CDN_CACHE = "public, s-maxage=3600, stale-while-revalidate=86400"
+EARNINGS_MAX = 20
+
+
+@app.get("/api/markets/calendar")
+def markets_calendar():
+    """The dates that move markets for the next 90 days, from a committed file.
+
+    Takes no parameters: the calendar is the same for every reader. Carries the
+    exchanges' hours and closures so the browser can say "open" or "closed"
+    every minute without asking again, the coverage of each source, and what is
+    not published yet. See `_lib/econcalendar.py`.
+    """
+    return JSONResponse(content=clean(econcalendar.payload(dt.date.today())),
+                        headers={"Cache-Control": CALENDAR_CACHE,
+                                 "CDN-Cache-Control": CALENDAR_CDN_CACHE})
+
+
+class EarningsRequest(BaseModel):
+    """The watchlist whose next report dates the calendar should show.
+
+    A THIRD POST, FOR THE SAME REASON AS THE OTHER TWO. A watchlist is a fact
+    about the person who keeps it, so it travels in a body, which no hop between
+    here and the browser logs by default, and the answer is `no-store`. See
+    `RankListRequest`.
+    """
+    tickers: list[str] = Field(..., min_length=1, max_length=EARNINGS_MAX)
+
+
+@app.post("/api/markets/earnings")
+def markets_earnings(body: EarningsRequest):
+    """The next report date for each name on a reader's watchlist, as the provider has it."""
+    symbols_list = parse_ticker_list(",".join(body.tickers), "US")[:EARNINGS_MAX]
+
+    def one(symbol: str) -> dict:
+        calendar = market_data.earnings_calendar(symbol)
+        return {"ticker": symbol, "next": calendar.get("next"),
+                "available": bool(calendar.get("available"))}
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        items = list(pool.map(one, symbols_list))
+    return private_ok({
+        "items": items,
+        "note": ("The data provider's dates. A date is often an estimate until the company "
+                 "confirms it."),
+    })
 
 
 @app.get("/api/markets/headlines")

@@ -1918,6 +1918,64 @@ days on which only one instrument could cross its line, and the first live run r
   "ITMG.JK has moved with the energy complex over the past 5 years" is a record, and the
   strip says so.
 
+
+### 20.5 The calendar, and what past event days were like
+
+The panel's calendar (`_lib/econcalendar.py`, `calendar_events.json`) carries the dates the
+board's instruments are read against. Each date is transcribed from an official source and
+cites its URL:
+- **Fed:** FOMC meetings.
+- **BLS:** CPI and the jobs report.
+- **BEA:** GDP and PCE.
+- **Bank Indonesia:** its BI-Rate decisions and its meeting schedule.
+- **NYSE and IDX:** their holidays and early closes.
+
+Four things found while transcribing:
+
+1. **A schedule is not a decision.** Bank Indonesia published 15-16 July 2026 for its July
+   meeting and decided on 22 July. It raised its rate between meetings on 9 June. Past
+   decisions are taken from its BI-Rate table, and upcoming ones from the schedule, marked
+   "scheduled".
+2. **The 2025 shutdown moved the US data.** BLS's 2025 schedule page carries the dates that
+   actually happened:
+   - September CPI on 24 October;
+   - September jobs on 20 November;
+   - November jobs on 16 December, with October folded in;
+   - November CPI on 18 December.
+
+   October CPI was never published.
+3. **Three sources refuse to be read by a script.** BLS answers 403. BPS's release calendar
+   could not be found at all. Bank Indonesia pages its decision table by form post. So
+   `scripts/refresh_calendar.py` checks the Fed, BEA (its .ics feed) and NYSE itself and
+   names the rest. BPS's inflation dates and Bank Indonesia's 2027 meetings are listed as
+   `pending` and shown as not known, never guessed.
+4. **Neither coal contract** in the price source returns prices (§20.3), so the calendar,
+   like the board, says nothing about coal.
+
+**What past event days were like** was measured before it was wired, over the two years of
+prices the board holds. The event day is the first session on or after the release, so the
+April 2026 jobs report, which landed on Good Friday, is read against the Monday after. The
+statistic is how many event days had a larger-than-median move; on any day, half do. Two-sided
+exact binomial:
+
+| Event | Instrument | Larger than median | p |
+|---|---|---|---|
+| FOMC decisions | S&P 500 | 7 of 17 | 0.63 |
+| FOMC decisions | 10-year yield | 10 of 17 | 0.63 |
+| FOMC decisions | dollar index | 12 of 17 | 0.14 |
+| CPI releases | S&P 500 | 11 of 23 | 1.00 |
+| CPI releases | 10-year yield | 10 of 23 | 0.68 |
+| jobs reports | S&P 500 | 15 of 22 | 0.13 |
+| jobs reports | 10-year yield | 11 of 22 | 1.00 |
+| BI decisions | IHSG | 15 of 25 | 0.42 |
+| BI decisions | USD/IDR | 12 of 25 | 1.00 |
+
+**Not one pair is outside what chance produces at its sample size.** On FOMC days the S&P
+500 moved less than on its median day more often than not. The belief that these are the
+big days is mostly not borne out in this window, and the panel says so in those words. Each
+line is a count against one half, with its sample size and "within chance" where it is, and
+never a forecast. Nine pairs are tested at once, so a single p below 0.05 would turn up by
+luck alone on about one board in three (1 - 0.95^9 = 0.37); none came close.
 ---
 
 ## What is still open

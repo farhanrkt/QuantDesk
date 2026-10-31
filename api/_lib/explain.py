@@ -4517,6 +4517,55 @@ def _size_phrase(percentile: float) -> str:
     return f"smaller than {100 - percentile:.0f}% of its daily moves in the past year"
 
 
+@metric("eventDayMove")
+def _event_day_move(value, events=None, **_):
+    label = "How past event days compare"
+    what = ("On the days a given event happened — an FOMC decision, a CPI release — how often "
+            "an instrument moved more than on its median day. On any day, half do, so a share "
+            "near one half means event days looked like ordinary days.")
+    if not _known(value):
+        return unavailable(label, what, "too few of these events in the history held")
+    count = f" of {int(events)} event days" if _known(events) else ""
+    reading = f"Moved more than on its median day on {_pct(value, 0)}{count}"
+    reading += (", about what any day shows." if 0.4 <= value <= 0.6 else
+                ", more often than an ordinary day." if value > 0.6 else
+                ", less often than an ordinary day.")
+    return make(label, what, reading, CONTEXT_NOT_TRIGGER, "context", "none",
+                value_text=_pct(value, 0))
+
+
+# The event and the instrument as a sentence says them.
+_EVENT_DAYS = {"fomc": "FOMC decision days", "cpi": "CPI release days",
+               "jobs": "jobs-report days", "bi-rate": "Bank Indonesia decision days"}
+_HISTORY_NAMES = {"sp500": "the S&P 500", "t10y": "the 10-year yield",
+                  "dollar": "the dollar index", "jkse": "IHSG", "usdidr": "the rupiah"}
+
+
+def _size_text(value: float, change: str) -> str:
+    if change == "bp":
+        return f"{value:,.1f} bp"
+    if change == "points":
+        return f"{value:,.2f} points"
+    return f"{value * 100:,.2f}%"
+
+
+def history_reading(kind: str, row: dict) -> str:
+    """One past-occurrence line, worded as history and never as a forecast."""
+    if not row.get("available"):
+        return row.get("reason") or "No history to compare."
+    name = _HISTORY_NAMES.get(row["key"], row.get("name", "it"))
+    days = _EVENT_DAYS.get(kind, "event days")
+    text = (f"On {row['above']} of the last {row['events']} {days}, {name} moved more than on "
+            f"its median day; on any day, half do.")
+    if row["p"] > 0.05:
+        text += " A gap this size is within what chance produces over that many days."
+    else:
+        text += f" That is more often than chance alone usually produces over {row['events']} days."
+    text += (f" Its median move on those days was {_size_text(row['eventMedian'], row['change'])}, "
+             f"against {_size_text(row['allMedian'], row['change'])} on all days.")
+    return text
+
+
 def _board_date(iso: Optional[str], with_year: bool = False) -> str:
     try:
         day = dt.date.fromisoformat(iso) if iso else None
@@ -4625,4 +4674,10 @@ def for_market_board(board: dict) -> dict:
                                       entry.get("unavailable") or []),
             "baseRate": _board_base_rate(entry.get("baseRate")),
         }
-    return {"rows": out_rows, "markets": markets}
+    history = {kind: {row["key"]: {"reading": history_reading(kind, row),
+                                   "share": (explain("eventDayMove", row.get("share"),
+                                                     events=row.get("events"))
+                                             if row.get("available") else None)}
+                      for row in rows_}
+               for kind, rows_ in (board.get("eventHistory") or {}).items()}
+    return {"rows": out_rows, "markets": markets, "eventHistory": history}

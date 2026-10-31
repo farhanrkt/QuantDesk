@@ -595,6 +595,102 @@ t("fired conditions are listed, never counted", () => {
   });
 }
 
+// ---- the exchange clock and the calendar: computed in the browser, every minute ----
+{
+  const MC = require("./lib/marketclock.js");
+  const CAL = require("./lib/calendar.js");
+  const MB = require("./lib/marketboard.js");
+  const nyse = {
+    name: "NYSE", tz: "America/New_York", source: "",
+    sessions: { "mon-thu": [["09:30", "16:00"]], fri: [["09:30", "16:00"]] },
+    closures: [
+      { date: "2026-11-26", kind: "holiday", time: null, detail: "Thanksgiving Day." },
+      { date: "2026-11-27", kind: "early-close", time: "13:00", detail: "The day after Thanksgiving." },
+    ],
+  };
+  const idx = {
+    name: "IDX", tz: "Asia/Jakarta", source: "", closures: [],
+    sessions: { "mon-thu": [["09:00", "12:00"], ["13:30", "16:00"]], fri: [["09:00", "11:30"], ["14:00", "16:00"]] },
+  };
+  const at = (iso) => new Date(iso);
+
+  t("a US release moves an hour in UTC when the clocks change", () => {
+    assert.equal(MC.zonedInstant("2026-03-06", "08:30", "America/New_York").toISOString(), "2026-03-06T13:30:00.000Z");
+    assert.equal(MC.zonedInstant("2026-03-10", "08:30", "America/New_York").toISOString(), "2026-03-10T12:30:00.000Z");
+  });
+  t("NYSE is open mid-session and says when it closes", () => {
+    const status = MC.exchangeStatus(nyse, at("2026-11-02T15:00:00Z"));       // Mon 10:00 ET
+    assert.equal(status.state, "open");
+    assert.equal(status.next.kind, "closes");
+    assert.equal(status.next.at.toISOString(), "2026-11-02T21:00:00.000Z");
+  });
+  t("before the bell it is closed and opens at 09:30 New York", () => {
+    const status = MC.exchangeStatus(nyse, at("2026-11-02T13:00:00Z"));       // Mon 08:00 ET
+    assert.equal(status.state, "closed");
+    assert.equal(status.next.at.toISOString(), "2026-11-02T14:30:00.000Z");
+  });
+  t("a holiday is closed, says why, and points at the next session", () => {
+    const status = MC.exchangeStatus(nyse, at("2026-11-26T15:00:00Z"));       // Thanksgiving
+    assert.equal(status.state, "closed");
+    assert.equal(status.reason, "Thanksgiving Day.");
+    assert.equal(status.next.at.toISOString(), "2026-11-27T14:30:00.000Z");
+  });
+  t("an early close shuts at 1 p.m., and the weekend is skipped", () => {
+    assert.equal(MC.exchangeStatus(nyse, at("2026-11-27T17:30:00Z")).state, "open");   // 12:30 ET
+    const late = MC.exchangeStatus(nyse, at("2026-11-27T18:30:00Z"));                  // 13:30 ET
+    assert.equal(late.state, "closed");
+    assert.equal(late.next.at.toISOString(), "2026-11-30T14:30:00.000Z", "Monday 09:30 ET");
+  });
+  t("IDX takes a longer Friday break and reopens at 14:00 Jakarta", () => {
+    const status = MC.exchangeStatus(idx, at("2026-11-06T05:00:00Z"));        // Fri 12:00 WIB
+    assert.equal(status.state, "break");
+    assert.equal(status.next.kind, "reopens");
+    assert.equal(status.next.at.toISOString(), "2026-11-06T07:00:00.000Z");
+    assert.equal(MC.exchangeStatus(idx, at("2026-11-05T04:45:00Z")).state, "open", "Thursday 11:45 is still session one");
+    assert.equal(MC.exchangeStatus(idx, at("2026-11-06T04:45:00Z")).state, "break", "Friday 11:45 is already the break");
+  });
+
+  const ev = (extra) => ({ kind: "cpi", date: "2026-11-10", time: "08:30", tz: "America/New_York", market: "US",
+                           source: "bls", title: "US consumer prices (CPI)", detail: "October 2026.",
+                           utc: "2026-11-10T13:30:00Z", allDay: false, label: "CPI", ...extra });
+  t("a timed event falls on the reader's own day; an all-day date keeps its own", () => {
+    const fomc = ev({ kind: "fomc", date: "2026-12-09", time: "14:00", utc: "2026-12-09T19:00:00Z" });
+    assert.equal(CAL.dayOf(fomc, "Asia/Jakarta"), "2026-12-10", "02:00 the next morning in Jakarta");
+    assert.equal(CAL.dayOf(fomc, "America/New_York"), "2026-12-09");
+    assert.equal(CAL.dayOf(ev({ utc: null, allDay: true, time: null, date: "2026-11-18" }), "Asia/Jakarta"), "2026-11-18");
+    assert.equal(CAL.timeText(ev({}), "Asia/Jakarta"), "20:30");
+    assert.equal(CAL.dayHeading("2026-11-10"), "Tue 10 Nov");
+  });
+  t("upcoming drops what has happened and keeps time order", () => {
+    const list = CAL.upcoming([
+      ev({ date: "2026-12-10", utc: "2026-12-10T13:30:00Z" }),
+      ev({ date: "2026-10-14", utc: "2026-10-14T12:30:00Z" }),
+      ev({}),
+    ], at("2026-11-01T00:00:00Z"), 60, "UTC");
+    assert.deepEqual(list.map((e) => e.date), ["2026-11-10", "2026-12-10"]);
+  });
+  t("an .ics is valid iCalendar, timed in UTC or all-day, with text escaped", () => {
+    const timed = CAL.toIcs(ev({ title: "US CPI, October" }), at("2026-11-01T00:00:00Z"));
+    assert.ok(timed.includes("DTSTART:20261110T133000Z\r\n"));
+    assert.ok(timed.includes("SUMMARY:US CPI\\, October\r\n"), "commas are escaped");
+    assert.ok(timed.startsWith("BEGIN:VCALENDAR\r\n") && timed.endsWith("END:VCALENDAR\r\n"));
+    const allDay = CAL.toIcs(ev({ kind: "bi-rate", date: "2026-11-18", utc: null, allDay: true, time: null }), at("2026-11-01T00:00:00Z"));
+    assert.ok(allDay.includes("DTSTART;VALUE=DATE:20261118") && allDay.includes("DTEND;VALUE=DATE:20261119"));
+  });
+  t("report dates become events once per ticker, on the ticker's own market", () => {
+    const out = CAL.earningsEvents({ symbol: "ITMG.JK", date: "2026-11-20" },
+      [{ ticker: "ITMG.JK", next: "2026-11-21" }, { ticker: "AAPL", next: "2027-01-28" }, { ticker: "MSFT", next: null }]);
+    assert.deepEqual(out.map((e) => [e.ticker, e.date, e.market, e.origin]),
+      [["ITMG.JK", "2026-11-20", "ID", "stock"], ["AAPL", "2027-01-28", "US", "watchlist"]]);
+  });
+  t("the panel's history line is history, and says when it is within chance", () => {
+    assert.equal(MB.historyShort({ name: "S&P 500", available: true, events: 17, above: 7, p: 0.63 }),
+      "S&P 500: bigger than a median day on 7 of the last 17 (half expected), within chance");
+    assert.equal(MB.historyShort({ name: "S&P 500", available: false }), null);
+    assert.equal(MB.relationLabel({ kind: "itsMarket", text: "" }), "its market");
+  });
+}
+
 Promise.all(pending).then(() => {
   console.log(`  ${n} frontend assertions passed`);
 });

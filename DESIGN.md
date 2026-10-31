@@ -259,14 +259,38 @@ highlight, no totals, and says when the currencies differ.
 ## The market board
 
 **Where it lives.**
-- **Markets → Today** is the whole board, and the view `/markets` opens on.
-- **Markets now** is a 44px bar fixed to the foot of every page on a tablet or wider. It is
-  at the foot because the top of a stock page already holds the top bar and the sticky lens
-  tabs, and a third sticky row there would take a fifth of a laptop screen. The shell adds
-  the same height after the footer, so the bar covers nothing. It steps aside on the Today
-  view, can be collapsed (remembered in this browser), and is never printed.
-- **On a phone** a bar fixed to the foot would sit on the browser's own toolbar, so phones
-  get an inline strip at the top of the stock page and the landing instead.
+- **Markets → Today** is the whole board, and the view `/markets` opens on: the table, 60
+  days of the calendar with filters, what past event days were like, and the headlines with
+  thumbnails.
+- **The markets panel** is a 352px column beside every other page, from 1280px. It scrolls
+  on its own, can be hidden (remembered in this browser), steps aside on Today, and is never
+  printed. The page keeps its own 1280px measure inside its column, so hiding the panel
+  widens nothing.
+- **Below 1280px**, the panel becomes a band at the top of the page: the same tiles in one
+  row that scrolls sideways, the exchanges' status, the measured relation in words, and the
+  next two dates.
+- **Why the side.** The first version was a 44px bar of 13px chips fixed to the foot of the
+  page, and the owner's verdict was that it was too small to read. The side was the owner's
+  choice. A column holds large tiles, a fortnight of dates and the news one above the other,
+  and it leaves the stock page's sticky lens tabs where they were.
+
+**Tiles are large.** The level is set at the lead size, with the move and a 64px sparkline
+under it, two to a row in the panel and 160px wide in the band.
+
+**The calendar is on the reader's clock.**
+- **Times:** UTC instants are computed on the server with `zoneinfo` and formatted in the
+  browser, so a 14:00 FOMC statement is 02:00 the next day in Jakarta and sits under that
+  day.
+- **Badges:** each event carries plain badges (US or IDX, "with projections", "scheduled",
+  "your watchlist"), a "What is this?" disclosure, and an add-to-calendar button that builds
+  the `.ics` in the browser.
+- **Exchange status:** computed from the hours and closures every half minute. It shows a
+  filled dot for open and a hollow one otherwise, a state rather than a colour.
+
+**Thumbnails come through our own origin.** `next/image` fetches them from the two hosts
+`next.config.mjs` allows, so the CSP stays `img-src 'self'`. Their `alt` is empty, because
+the headline beside them is the content. `check_frontend.mjs` fails the build if those hosts
+drift from the Python allowlist.
 
 **Calibration, not colour.** Every row's tone is neutral and nothing is coloured by sign: a
 day's move has no good or bad. What carries weight is whether a move was **unusual for its
@@ -294,15 +318,15 @@ the accessible name and tooltip mark three things only:
 - for a US listing, the 10-year yield its valuation discounts from;
 - a reference the Trend tab measured it moving with.
 
-On a phone the strip says the measured relation in words.
+On a narrower screen the band says the measured relation in words.
 
 **Absence is named.** Instruments the source cannot supply are listed with the reason, a
 quote that did not come back says "no price", and a headline feed that failed says so
 instead of showing an empty list.
 
-**Focus survives the bar.** Hiding the bar moves focus to the "Markets now" button that
-replaces it, and showing it moves focus back to "Hide", so a keyboard reader is not dropped
-to the top of the page.
+**Focus survives the panel.** Hiding the panel moves focus to the "Show the markets panel"
+button that replaces it, and showing it moves focus back to "Hide", so a keyboard reader is
+not dropped to the top of the page.
 
 ## Print
 
@@ -487,8 +511,10 @@ any new subfolder was exempt from every rule without anyone deciding so.
 18. A text token or a ground used on screen and not named in the print block,
     or a print text token below AA on white.
 19. A sort, or a tone class, `TONE_` map or `.tone` read, in any market board file
-    (`lib/marketboard.ts`, the Today view, the bar, the strip, the landing section). The
-    board keeps its declared order and colours nothing by direction.
+    (`lib/marketboard.ts`, the Today view, the panel, the band, the tiles, the calendar and
+    news lists, the exchange status, the landing section). The board keeps its declared
+    order and colours nothing by direction; the calendar's time order lives in
+    `lib/calendar.ts`, outside the rule.
 
 Rule 4 now covers every text and tone token, not only `chalk` and `ash`; eight
 `text-warn/90`-style sites had walked past it. Rule 7's budget is eight hits in
@@ -500,9 +526,10 @@ Beside the design rules the same script holds three structural checks:
 `lib/api.ts` may not import the journal or watchlist stores or touch browser
 storage; every analytics `track(` carries only `market` and `lenses`;
 `lib/symbols.ts` must resolve tickers with the same pattern and suffix map as
-the Python; `cn()` must know every font size the config defines; and the market board's
-requests carry no ticker: the board takes no parameters at all, and its headlines take a
-market and declared topic keys.
+the Python; `cn()` must know every font size the config defines; the market board's
+requests carry no ticker: the board and the calendar take no parameters at all, the
+headlines take a market and declared topic keys, and the watchlist's report dates go only in
+a POST body; and the news image hosts in `next.config.mjs` equal the Python allowlist.
 
 Comments are stripped before the greps — rule 7 fired on its own explanation the
 first time it ran, because `LongTermPanel`'s docstring quotes the expression it

@@ -8,8 +8,8 @@ import type { RunTuning } from "./url";
 import type {
   AnomalyResponse, CompanyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
   ExposureScanResponse,
-  Leg, ManualInputs, EventStudyResponse, Market, MarketBoard, MarketHeadlines, NewsResponse,
-  QualityResponse,
+  Leg, ManualInputs, EventStudyResponse, Market, MarketBoard, MarketCalendar, MarketHeadlines,
+  NewsResponse, QualityResponse, WatchlistEarnings,
   PeersResponse, PortfolioResponse, PreTrade, RankResponse, ScanResponse,
   ScreenerResponse, SymbolSearch,
   Synthesis, TechnicalResponse,
@@ -663,4 +663,19 @@ export function fetchMarketBoard(signal?: AbortSignal) {
 export function fetchMarketHeadlines(market: Market, topics: string[], signal?: AbortSignal) {
   return get<MarketHeadlines>("/api/markets/headlines",
                               { market, topics: topics.join(","), limit: 4 }, signal);
+}
+
+/** The dates that move markets for the next 90 days. Takes nothing, like the board. */
+export function fetchMarketCalendar(signal?: AbortSignal) {
+  return get<MarketCalendar>("/api/markets/calendar", {}, signal);
+}
+
+/**
+ * The next report date for each name a reader passes in. A WATCHLIST IS
+ * PERSONAL, so it goes in a POST body like "Rank these", never in a URL — and
+ * this layer does not read the watchlist itself: a component hands it the list
+ * (check_frontend.mjs holds both rules).
+ */
+export function fetchWatchlistEarnings(tickers: string[], signal?: AbortSignal) {
+  return post<WatchlistEarnings>("/api/markets/earnings", { tickers }, signal);
 }

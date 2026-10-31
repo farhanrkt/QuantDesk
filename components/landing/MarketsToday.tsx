@@ -2,8 +2,7 @@
 
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { MarketStrip } from "@/components/markets/MarketStrip";
-import { BoardHeadlines } from "@/components/markets/TodayView";
+import { NewsCard } from "@/components/markets/NewsList";
 import { useMarketBoard } from "@/components/shell/marketboard";
 import { StateCard } from "@/components/ui/state";
 import { marketsHref } from "@/lib/url";
@@ -13,8 +12,8 @@ const MARKET_ONLY = ["market"];
 /**
  * The day's market context on the first screen: one sentence on what moved
  * unusually, the market's own headlines, and the way to the whole board.
- * The quotes themselves are in the bar at the foot of the page, or the strip
- * here on a phone. If the board cannot load, the landing simply goes without it;
+ * The prices themselves are in the markets panel beside the page, or the band
+ * above it on a narrower screen. If the board cannot load, the landing simply goes without it;
  * the bar says so.
  */
 export function MarketsToday() {
@@ -36,8 +35,7 @@ export function MarketsToday() {
           <p className="max-w-measureWide text-lead leading-snug text-body">
             {board.explain.markets[market]?.summary}
           </p>
-          <MarketStrip className="md:hidden" />
-          <BoardHeadlines board={board} market={market} topics={MARKET_ONLY} limit={3} />
+          <NewsCard board={board} market={market} topics={MARKET_ONLY} limit={3} />
         </>
       ) : (
         <StateCard kind="loading" shape="lines" title="Fetching the day's markets" />

@@ -72,11 +72,14 @@ meaning into the numbers belongs in the engine that owns that meaning.
 from __future__ import annotations
 
 import datetime as dt
+import email.utils
 import os
 import pickle
 import threading
+import time
 from pathlib import Path
 from typing import Optional, Sequence
+from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
@@ -1121,6 +1124,74 @@ def _apply_fx(out: dict) -> dict:
             _convert_statements(out, rate)
             out["fx_rate"] = rate
     return out
+
+
+# --------------------------------------------------------------------------- #
+# News search, for the market board's headlines
+# --------------------------------------------------------------------------- #
+# THE ONLY IMAGE HOSTS A THUMBNAIL MAY COME FROM. The browser never fetches these
+# itself — Next's image optimizer does, from our own origin, so the page's CSP
+# stays `img-src 'self'` — and `next.config.mjs` must allow exactly these hosts;
+# `scripts/check_frontend.mjs` fails the build if the two lists drift.
+NEWS_IMAGE_HOSTS = ("media.zenfs.com", "s.yimg.com")
+NEWS_TTL_SECONDS = 600
+_NEWS_CACHE: dict[tuple[str, int], tuple[float, list[dict]]] = {}
+_NEWS_GUARD = threading.Lock()
+
+
+def _news_image(thumbnail) -> Optional[dict]:
+    """The largest thumbnail on an allowed https host, or None."""
+    best = None
+    for item in (thumbnail or {}).get("resolutions") or []:
+        url = item.get("url") or ""
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or parsed.hostname not in NEWS_IMAGE_HOSTS:
+            continue
+        width, height = item.get("width") or 0, item.get("height") or 0
+        if best is None or width * height > best["width"] * best["height"]:
+            best = {"url": url, "width": int(width), "height": int(height)}
+    return best if best and best["width"] and best["height"] else None
+
+
+def news_search(query: str, count: int = 8) -> list[dict]:
+    """Recent articles matching a query, from Yahoo Finance's search, with thumbnails.
+
+    WHY SEARCH AND NOT A TICKER'S NEWS. `Ticker(...).news` comes back empty for
+    indices and futures (measured 1 November 2026 on ^GSPC, ^JKSE and CL=F),
+    while the search endpoint returns the day's stories for "oil prices". It has
+    nothing for "IHSG", so Indonesian headlines stay on Google News (`news.py`).
+
+    Raises on failure: the caller decides whether a failed fetch means falling
+    back to another source or saying the feed could not be read. Held for ten
+    minutes per query, because every reader of the board asks the same ones.
+    """
+    key = (query, count)
+    now = time.monotonic()
+    with _NEWS_GUARD:
+        held = _NEWS_CACHE.get(key)
+        if held and now - held[0] < NEWS_TTL_SECONDS:
+            return [dict(item) for item in held[1]]
+    result = yf.Search(query, max_results=1, news_count=count, lists_count=0,
+                       include_cb=False, recommended=0)
+    items = []
+    for raw in result.news or []:
+        title, link = (raw.get("title") or "").strip(), (raw.get("link") or "").strip()
+        stamp = raw.get("providerPublishTime")
+        if not title or not link.startswith("https://") or not isinstance(stamp, (int, float)):
+            continue
+        published = dt.datetime.fromtimestamp(stamp, tz=dt.timezone.utc)
+        items.append({
+            "title": title,
+            "source": (raw.get("publisher") or "Yahoo Finance").strip(),
+            "link": link,
+            "published": email.utils.format_datetime(published),
+            "image": _news_image(raw.get("thumbnail")),
+        })
+    with _NEWS_GUARD:
+        if len(_NEWS_CACHE) > 64:
+            _NEWS_CACHE.clear()
+        _NEWS_CACHE[key] = (now, items)
+    return [dict(item) for item in items]
 
 
 def last_close(symbol: str, period: str = "5d") -> Optional[float]:

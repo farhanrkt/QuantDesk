@@ -18,7 +18,7 @@ farhanrkt/QuantDesk#5. The market board (November 2026) is on
 claude/markets-today, stacked on that branch so #5 stays reviewable: merge #5
 first. Each commit states what it changed and why.
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
-single Vercel Python function on the back. ~1,720 offline pytest tests, 67
+single Vercel Python function on the back. ~1,740 offline pytest tests, 78
 frontend assertions, 19 enforced design rules plus structural checks. US and
 Indonesian (IDX) listings. lxml is now a runtime dependency (see below).
 
@@ -47,15 +47,19 @@ default) fed by a `company` leg in /api/confluence — description only, never
 read by the synthesis or pre-trade checks — and a sensitivity grid on the
 Value tab. New page: Compare, which never sorts, sums or highlights.
 
-THE MARKET BOARD (1 November 2026). Markets -> Today and a "Markets now" bar at
-the foot of every page (a strip on phones): 22 instruments, each move set
-against that instrument's own past year (api/_lib/marketboard.py), headlines
-labelled as MENTIONING a market (news.fetch_headlines). Tone-neutral, declared
-order, no ticker in any of its requests — rule 19 and a structural check hold
-those. On a stock page it marks only measured relations: the stock's index, a
-US valuation's 10-year, and the Trend tab's own exposure factors. Read
-RESEARCH_ROADMAP §20 before touching it. Coal, nickel, tin, palm oil and the
-Indonesian 10-year are not in the source; the board names them.
+THE MARKET BOARD (1 November 2026). Markets -> Today, and a markets panel in
+its own column beside every page from 1280px (a band of the same tiles above
+the page below that). 22 instruments, each move set against that instrument's
+own past year (api/_lib/marketboard.py). A calendar of FOMC, CPI, jobs, PCE,
+GDP, Bank Indonesia and exchange closures (api/_lib/econcalendar.py, a
+committed file; scripts/refresh_calendar.py re-checks it), with each event's
+past occurrences counted against the half any day shows — all nine pairs are
+within chance. US headlines from Yahoo with thumbnails through next/image; the
+Indonesian press from Google News as text. Tone-neutral, declared order, no
+ticker in any GET, the watchlist's report dates only in a POST body — rule 19
+and structural checks hold those. Read RESEARCH_ROADMAP §20 before touching
+it. THE CALENDAR GOES STALE: its coverage and pending notes are on the page;
+Bank Indonesia's 2027 meetings and BPS's inflation dates still need adding.
 
 lib/palette.ts is the only place a colour is written; lib/session.ts keeps
 results per symbol for the tab; lib/cache.ts shares confluence payloads across

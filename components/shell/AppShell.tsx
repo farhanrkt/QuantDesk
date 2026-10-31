@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { DockSpacer, MarketDock } from "@/components/markets/MarketDock";
+import { MarketBand } from "@/components/markets/MarketBand";
+import { MarketRail } from "@/components/markets/MarketRail";
 import { CommandPalette } from "@/components/palette/CommandPalette";
 import { MarketBoardProvider } from "@/components/shell/marketboard";
 import { PreferencesProvider } from "@/components/shell/preferences";
@@ -35,11 +36,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Skip to content
           </a>
           <TopBar onSearch={openPalette} />
-          <main id="main" tabIndex={-1}
-                className="mx-auto min-h-[70vh] max-w-7xl px-4 pb-16 pt-6 focus:outline-none
-                           sm:px-6 sm:pt-8 lg:px-8">
-            {children}
-          </main>
+          {/* THE PAGE AND THE MARKETS PANEL SIDE BY SIDE from 1280px. The page
+              keeps its own 1280px measure inside its column, so hiding the
+              panel widens nothing; below 1280px the panel becomes the band at
+              the top of the page. */}
+          <div className="xl:flex">
+            <main id="main" tabIndex={-1}
+                  className="min-h-[70vh] min-w-0 flex-1 px-4 pb-16 pt-6 focus:outline-none
+                             sm:px-6 sm:pt-8 lg:px-8">
+              <div className="mx-auto max-w-7xl">
+                <MarketBand className="mb-6 xl:hidden" />
+                {children}
+              </div>
+            </main>
+            <MarketRail />
+          </div>
           <footer className="border-t border-rule print:border-0">
             <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
               <p className="prose-col text-meta leading-relaxed text-faint">
@@ -48,8 +59,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </p>
             </div>
           </footer>
-          <DockSpacer />
-          <MarketDock />
           <CommandPalette open={paletteOpen} onClose={closePalette} />
           <ShortcutLayer onPalette={openPalette} paletteOpen={paletteOpen} />
         </ToastProvider>

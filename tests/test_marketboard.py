@@ -275,3 +275,52 @@ def test_the_board_is_held_for_minutes_and_a_failure_is_not(monkeypatch):
     second = B.fetch()
     assert calls["n"] == 3, "held, not refetched"
     assert len(second["rows"]) == len(B.INSTRUMENTS), "...cannot damage what is held"
+
+
+# --------------------------------------------------------------------------- #
+# What past event days were like
+# --------------------------------------------------------------------------- #
+def planted_calendar(kind: str, dates: list[str]) -> dict:
+    return {"events": [{"kind": kind, "date": d} for d in dates]}
+
+
+def test_event_days_read_the_first_session_on_or_after_the_event():
+    """A release on a day the market was shut is read against the next session."""
+    index = weekdays(300)
+    moves = pd.Series(0.001, index=index)
+    friday = index[-6]
+    assert friday.dayofweek == 4
+    monday = index[-5]
+    assert monday.dayofweek == 0
+    moves.loc[monday] = 0.05
+    saturday = (friday + pd.Timedelta(days=1)).date().isoformat()
+    doc = planted_calendar("jobs", [index[i].date().isoformat() for i in range(10, 90, 10)]
+                           + [saturday])
+    rows = B.event_history({"sp500": moves}, doc=doc)["jobs"]
+    sp = next(r for r in rows if r["key"] == "sp500")
+    assert sp["available"] and sp["events"] == 9
+    assert sp["above"] == 1, "the Saturday release landed on Monday's large move"
+
+
+def test_too_few_events_is_a_refusal():
+    index = weekdays(300)
+    doc = planted_calendar("fomc", [index[i].date().isoformat() for i in (20, 60, 100)])
+    rows = B.event_history({"sp500": pd.Series(0.01, index=index)}, doc=doc)["fomc"]
+    assert rows[0]["available"] is False and "Fewer than" in rows[0]["reason"]
+
+
+def test_an_ordinary_result_is_said_to_be_within_chance():
+    rng = np.random.default_rng(1)
+    index = weekdays(400)
+    moves = pd.Series(rng.normal(0, 0.01, 400), index=index)
+    doc = planted_calendar("cpi", [index[i].date().isoformat() for i in range(20, 400, 20)])
+    row = next(r for r in B.event_history({"sp500": moves}, doc=doc)["cpi"] if r["key"] == "sp500")
+    reading = explain.history_reading("cpi", row)
+    assert row["p"] > 0.05 and "within what chance produces" in reading
+    assert "forecast" not in reading and "will" not in reading
+
+
+def test_the_binomial_is_two_sided_and_exact():
+    assert B.binomial_p(5, 10) == pytest.approx(1.0)
+    assert B.binomial_p(10, 10) == pytest.approx(2 / 1024)
+    assert B.binomial_p(0, 10) == pytest.approx(2 / 1024)

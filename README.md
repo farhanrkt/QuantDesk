@@ -294,8 +294,17 @@ is never printed.
 The day's context, beside whatever company you are reading. **Markets → Today** (the page
 `/markets` opens on) shows 22 instruments in fixed groups: the US, Jakarta, Hong Kong and
 Shanghai indices, the VIX, US Treasury yields, the dollar index, USD/IDR and EUR/USD, crude,
-natural gas, gold, silver, copper and bitcoin. A **Markets now** bar at the foot of every page
-(an inline strip on a phone) keeps eight of them in view while you work.
+natural gas, gold, silver, copper and bitcoin, plus 60 days of the dates that move markets and
+the day's headlines.
+
+**The markets panel** sits in its own column beside every other page on a screen 1280px or
+wider. It scrolls on its own and can be hidden.
+- **Prices:** eight large price tiles, each with a three-month sparkline.
+- **Exchange status:** whether NYSE and IDX are open, ticking on your clock.
+- **Calendar:** the next 14 days.
+- **Headlines:** with thumbnails.
+
+Narrower screens get a band of the same tiles at the top of the page, with the next two dates.
 
 **Calibrated, not coloured.** A day's move has no good or bad: crude falling helps an airline
 and hurts a coal miner. So nothing is red or green. Each move is set against **that
@@ -320,6 +329,35 @@ Nothing is marked from a sector or a guess, and the board's request never carrie
 **Headlines from the past day** sit beside it, for the market and for each unusual mover,
 newest first. They are labelled as *mentioning* a market: this app cannot tell which story,
 if any, moved a price.
+- **US stories** come from Yahoo Finance with a thumbnail. The thumbnail is fetched by this
+  app's own image optimizer, so your browser never contacts Yahoo.
+- **Indonesian stories** come from Google News as text, because Yahoo has no Indonesian
+  coverage.
+
+**The calendar.**
+- **US:** FOMC decisions (with the Fed's projections marked), CPI, the jobs report, PCE and
+  GDP.
+- **Indonesia:** Bank Indonesia's rate decisions.
+- **Closures:** NYSE and IDX holidays and early closes.
+- **Report dates:** the next report for the stock on screen and for each name on your
+  watchlist. The watchlist is sent in a request body, never a URL, and nothing about it is
+  stored.
+
+Every timed event is shown on your own clock, and any event can be added to your calendar
+as an `.ics` file built in the browser. The dates are transcribed from the Fed, BLS, BEA,
+Bank Indonesia, NYSE and IDX schedules into a committed file, which
+`scripts/refresh_calendar.py` re-checks against the sources. The calendar says what it does
+not know: Bank Indonesia has not published 2027, and BPS's inflation calendar could not be
+read.
+
+**What past event days were like.** Beside each FOMC, CPI, jobs and Bank Indonesia date sits
+how often the market moved more than on its median day on the past ones, over the two years
+the board holds. On any day, half do.
+- **FOMC days:** the S&P 500 moved more than on its median day on 7 of the last 17.
+- **Within chance:** none of the nine event-and-market pairs measured is outside what chance
+  produces.
+
+The panel says that, and it is history, never a forecast.
 
 **What it cannot show.** Newcastle coal, nickel, tin, palm oil and the Indonesian 10-year
 yield are not available from this data source, and the board names each one with the
@@ -1162,8 +1200,9 @@ receives the resolved symbol.
 
 ## API
 
-Everything the UI does is a plain `GET`, except the two routes whose input is personal —
-a holdings list and a reader's own list to rank — which are `POST` with `no-store`.
+Everything the UI does is a plain `GET`, except the three routes whose input is personal —
+a holdings list, a reader's own list to rank, and the watchlist whose report dates the
+calendar shows — which are `POST` with `no-store`.
 Interactive docs at `/api/docs`.
 
 | Endpoint | What it returns |
@@ -1172,6 +1211,8 @@ Interactive docs at `/api/docs`.
 | `GET /api/company` | **What the company is**: profile, listing, statements year by year, dividends, next report. The same block confluence carries |
 | `GET /api/symbols` | **Listings matching a name or ticker**, for the command palette. Reads the committed listing files; no provider call |
 | `GET /api/markets/today` | **What moved the markets**: 22 instruments, each move against its own past year, the unusual ones named, the base rate, and what the source cannot supply. Takes no parameters; five minutes at the edge |
+| `GET /api/markets/calendar` | **The dates that move markets** for the next 90 days, with each exchange's hours and closures, each source's coverage, and what is not published yet. Takes no parameters; an hour at the edge |
+| `POST /api/markets/earnings` | **The next report date for each name on a reader's watchlist** (up to 20), in a body, `no-store` |
 | `GET /api/markets/headlines` | **The past day's headlines** for a market (`market=US\|ID`) and up to four declared `topics` (market, rates, dollar, rupiah, oil, gas, gold, silver, copper, bitcoin). A feed that failed says so |
 | `GET /api/isolation-forest` | Flow: anomalies, accumulation regimes, liquidity profile |
 | `GET /api/technical-analysis` | Trend: indicators, levels, signals, narrative |
@@ -1202,7 +1243,8 @@ dividend history still returns its other three panels.
 and the verdict, which runs a universe scan *and* four lenses; 2/min for shortlist deepening,
 which is the one route that does *not* batch; 6/min for the event study; 120/min for the
 symbol finder, which reads two files already in memory and has to keep up with typing; 30/min
-for the market board and 20/min for its headlines, most of which the edge cache answers). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
+for the market board, its calendar and 20/min for its headlines, most of which the edge
+cache answers; 3/min for the watchlist's report dates, one provider call per name). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
 8. These exist because each of those requests fans out to upstream calls — the caps are sized
 to what actually batches.
 

@@ -152,6 +152,12 @@ These are durable product facts. Future work preserves them; none is a style pre
    - **Relation only where measured.** It marks what a stock is related to only from its
      own index, its valuation's discount rate and the exposure the Trend tab measured, and
      its requests never carry a ticker.
+   - **Event history is history.** The calendar's line on how past FOMC, CPI, jobs and Bank
+     Indonesia days went is a count against the half any day shows, with its sample size.
+     It says when the result is within chance, as all nine measured pairs are, and is never
+     worded as a forecast.
+   - **The watchlist stays personal.** Its report dates are asked for in a POST body,
+     `no-store`, like holdings and a reader's own ranking list.
 
    Rule 19 and a structural check in `scripts/check_frontend.mjs` enforce it.
 

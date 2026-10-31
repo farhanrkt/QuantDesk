@@ -2,20 +2,20 @@
 
 import { RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { MarketSwitch } from "@/components/markets/quotes";
+import { CalendarList } from "@/components/markets/CalendarList";
+import { eventsFor } from "@/components/markets/MarketRail";
+import { NewsCard } from "@/components/markets/NewsList";
+import { MarketSwitch } from "@/components/markets/PriceTile";
 import { useFullBoard, useMarketBoard } from "@/components/shell/marketboard";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
 import { Explain } from "@/components/ui/explain";
-import { HeadlineList } from "@/components/ui/headlines";
 import { ScrollRegion } from "@/components/ui/scroll";
 import { Sparkline } from "@/components/ui/sparkline";
 import { StateCard } from "@/components/ui/state";
-import { fetchMarketHeadlines } from "@/lib/api";
-import {
-  TOPIC_LABEL, clockText, dayText, headlineTopics, levelText, rowsFor, sinceText,
-} from "@/lib/marketboard";
-import type { BoardRow, Engine, Market, MarketBoard, MarketHeadlines } from "@/lib/types";
+import { earningsEvents, upcoming } from "@/lib/calendar";
+import { clockText, dayText, levelText, rowsFor, sinceText } from "@/lib/marketboard";
+import type { BoardRow, CalendarKind, Market, MarketBoard } from "@/lib/types";
 import { cn, ordinal } from "@/lib/utils";
 
 /**
@@ -76,7 +76,9 @@ export function TodayView() {
 
       <BoardTable board={board} market={market} />
       <Missing board={board} market={market} />
-      <BoardHeadlines board={board} market={market} />
+      <FullCalendar board={board} market={market} />
+      <EventHistory board={board} />
+      <NewsCard board={board} market={market} />
 
       <Note>
         A description of one day, not a forecast of the next, and not a reason to buy or sell
@@ -219,67 +221,121 @@ function Missing({ board, market }: { board: MarketBoard; market: Market }) {
   );
 }
 
+/** Which kinds of date each filter shows. */
+const CALENDAR_FILTERS: { key: string; label: string; kinds: CalendarKind[] }[] = [
+  { key: "banks", label: "Central banks", kinds: ["fomc", "bi-rate"] },
+  { key: "data", label: "Data releases", kinds: ["cpi", "jobs", "pce", "gdp"] },
+  { key: "closed", label: "Exchange holidays", kinds: ["holiday", "early-close"] },
+  { key: "earnings", label: "Your watchlist's reports", kinds: ["earnings"] },
+];
+
 /**
- * The past day's headlines that mention this market and each unusual mover.
- * Fetched after the board, so the quotes never wait on a news feed, and
- * labelled as MENTIONING a market: the app cannot tell which story, if any,
- * moved a price.
+ * Sixty days of the dates that move markets, filterable by kind, each with what
+ * it is and — for FOMC, CPI, jobs and Bank Indonesia — every instrument's line
+ * on how its past occurrences went. Closures are the market in view's own.
  */
-export function BoardHeadlines({
-  board, market, topics: only, limit,
-}: { board: MarketBoard; market: Market; topics?: string[]; limit?: number }) {
-  const topics = useMemo(() => only ?? headlineTopics(board, market), [only, board, market]);
-  const key = `${market}:${topics.join(",")}`;
-  const [state, setState] = useState<Engine<MarketHeadlines>>({ status: "idle" });
-
-  // Keyed by a string, and the request rebuilt from it, so a new array with
-  // the same topics on a re-render does not refetch.
+function FullCalendar({ board, market }: { board: MarketBoard; market: Market }) {
+  const { calendar, earnings } = useMarketBoard();
+  const [shown, setShown] = useState<Set<string>>(() => new Set(CALENDAR_FILTERS.map((f) => f.key)));
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const [asked, list] = key.split(":");
-    const controller = new AbortController();
-    setState({ status: "loading" });
-    fetchMarketHeadlines(asked as Market, list.split(","), controller.signal)
-      .then((data) => { if (!controller.signal.aborted) setState({ status: "ready", data }); })
-      .catch((failure) => {
-        if (!controller.signal.aborted) {
-          setState({ status: "error", failure: { message: failure?.message ?? "Headlines did not load." } });
-        }
-      });
-    return () => controller.abort();
-  }, [key]);
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const events = useMemo(() => {
+    if (calendar.status !== "ready") return [];
+    const kinds = new Set(CALENDAR_FILTERS.filter((f) => shown.has(f.key)).flatMap((f) => f.kinds));
+    const reports = earningsEvents(null, earnings.status === "ready" ? earnings.data.items : []);
+    return upcoming(eventsFor([...calendar.data.events, ...reports], market), new Date(now), 60)
+      .filter((e) => kinds.has(e.kind));
+  }, [calendar, earnings, market, shown, now]);
 
-  const now = Date.now();
+  const toggle = (key: string) => setShown((current) => {
+    const next = new Set(current);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  });
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Headlines from the past day</CardTitle>
-        <span className="font-mono text-micro text-ash">Google News</span>
+        <CardTitle>The next 60 days</CardTitle>
+        <div role="group" aria-label="Which dates to show" className="flex flex-wrap gap-1">
+          {CALENDAR_FILTERS.map((filter) => (
+            <Button key={filter.key} variant="chip" size="xs" aria-pressed={shown.has(filter.key)}
+                    onClick={() => toggle(filter.key)}>
+              {filter.label}
+            </Button>
+          ))}
+        </div>
       </CardHeader>
-      <CardBody className="space-y-4 px-0">
-        {state.status === "error" && (
-          <p className="px-5 text-meta text-ash">
-            {state.failure.message} The board above does not read the news, so nothing on it is affected.
+      <CardBody className="space-y-4">
+        {calendar.status === "ready" ? (
+          <>
+            {events.length > 0
+              ? <CalendarList events={events} kinds={calendar.data.kinds} board={board} />
+              : <p className="text-meta text-ash">Nothing of the kinds chosen in the next 60 days.</p>}
+            <p className="prose-col text-micro leading-snug text-ash">
+              Times are on your clock. Transcribed from the{" "}
+              {Object.values(calendar.data.sources).map((source, i, all) => (
+                <span key={source.url}>
+                  <a href={source.url} target="_blank" rel="noopener noreferrer" className="text-tech hover:underline">
+                    {source.name.split(",")[0]}
+                  </a>
+                  {i < all.length - 1 ? ", " : ""}
+                </span>
+              ))}{" "}
+              schedules, checked {dayText(calendar.data.verifiedOn)} {calendar.data.verifiedOn.slice(0, 4)}.
+              {calendar.data.pending.length > 0 && ` Not shown: ${calendar.data.pending
+                .map((p) => p.note.replace(/\.$/, "")).join("; ")}.`}
+            </p>
+          </>
+        ) : (
+          <p className="text-meta text-ash" role="status">
+            {calendar.status === "error" ? "The calendar did not load." : "Fetching the calendar…"}
           </p>
         )}
-        {(state.status === "idle" || state.status === "loading") && (
-          <p className="px-5 text-meta text-ash" role="status">Fetching headlines…</p>
-        )}
-        {state.status === "ready" && state.data.topics.map((feed) => (
-          <section key={feed.topic} aria-labelledby={`headlines-${feed.topic}`}>
-            <h3 id={`headlines-${feed.topic}`} className="px-5 pb-1 text-meta font-semibold text-chalk">
-              Mentioning {TOPIC_LABEL[feed.topic]?.[market] ?? feed.topic}
-            </h3>
-            {feed.items.length > 0
-              ? <HeadlineList items={limit ? feed.items.slice(0, limit) : feed.items} now={now} />
-              : <p className="px-5 text-meta text-ash">{feed.reason}</p>}
+      </CardBody>
+    </Card>
+  );
+}
+
+const HISTORY_TITLES: Record<string, string> = {
+  fomc: "FOMC decisions", cpi: "US CPI releases", jobs: "US jobs reports", "bi-rate": "Bank Indonesia decisions",
+};
+
+/**
+ * How markets moved on the past occurrences of each event, over the two years
+ * the board holds. Mostly about as much as on any day — which is the finding,
+ * and it is said rather than implied away.
+ */
+function EventHistory({ board }: { board: MarketBoard }) {
+  const kinds = Object.keys(board.eventHistory ?? {});
+  if (kinds.length === 0) return null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>What past event days were like</CardTitle>
+      </CardHeader>
+      <CardBody className="space-y-4">
+        {kinds.map((kind) => (
+          <section key={kind} aria-label={HISTORY_TITLES[kind] ?? kind} className="space-y-1.5">
+            <h4 className="text-meta font-semibold text-chalk">{HISTORY_TITLES[kind] ?? kind}</h4>
+            {board.eventHistory[kind].map((row) => (
+              <div key={row.key} className="flex items-start gap-2">
+                <p className="prose-col text-meta leading-relaxed text-body">
+                  {board.explain.eventHistory?.[kind]?.[row.key]?.reading ?? row.reason}
+                </p>
+                <Explain explain={board.explain.eventHistory?.[kind]?.[row.key]?.share ?? undefined} />
+              </div>
+            ))}
           </section>
         ))}
-        <div className="px-5">
-          <Note>
-            Third-party headlines, matched by search and unverified. A headline that mentions oil
-            on a day oil fell is not evidence of why it fell.
-          </Note>
-        </div>
+        <Note>
+          History over the two years of prices this board holds, never a forecast. Each event is
+          read against the session it landed in, and a release on a day the market was shut
+          against the next one.
+        </Note>
       </CardBody>
     </Card>
   );

@@ -44,7 +44,14 @@ export interface BoardFocus {
   market: Market;
   /** `weeks` is the window the exposure was estimated over — five years, not one. */
   factors: { key: string; label: string; weeks?: number }[] | null;
+  /** The stock's next report date from the company leg, when the provider has one. */
+  earnings?: string | null;
 }
+
+/** The instrument each kind of event's one-line history is told against in the compact panel. */
+export const PRIMARY_HISTORY: Record<string, string> = {
+  fomc: "sp500", cpi: "sp500", jobs: "sp500", "bi-rate": "jkse",
+};
 
 /** "over the past 5 years", from the weeks an exposure was estimated over. */
 export function periodText(weeks: number | undefined): string {
@@ -164,4 +171,23 @@ export function relatedFirst(rows: BoardRow[], marks: Record<string, Mark[]>): B
   const related = rows.filter((row) => (marks[row.key]?.length ?? 0) > 0);
   const rest = rows.filter((row) => (marks[row.key]?.length ?? 0) === 0);
   return [...related, ...rest];
+}
+
+/** The few words a tile has room for, for each kind of relation. */
+export function relationLabel(mark: Mark): string {
+  if (mark.kind === "movesWith") return "moves with it";
+  if (mark.kind === "itsMarket") return "its market";
+  return "Value tab's rate";
+}
+
+/**
+ * The past-occurrence line in the few words a calendar row has room for. The
+ * whole sentence, with the medians, is on the Today view and in the tooltip.
+ */
+export function historyShort(row: {
+  name: string; available: boolean; events?: number; above?: number; p?: number;
+}): string | null {
+  if (!row.available || row.events == null || row.above == null) return null;
+  return `${row.name}: bigger than a median day on ${row.above} of the last ${row.events}`
+    + ` (half expected)${row.p != null && row.p > 0.05 ? ", within chance" : ""}`;
 }

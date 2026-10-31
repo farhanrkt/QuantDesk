@@ -30,6 +30,16 @@ const csp = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // News thumbnails are fetched by Next's optimizer from these hosts and served
+  // from our own origin, so `img-src 'self'` above stays as it is and the reader's
+  // browser never contacts them. Must equal NEWS_IMAGE_HOSTS in
+  // api/_lib/market_data.py.
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "media.zenfs.com" },
+      { protocol: "https", hostname: "s.yimg.com" },
+    ],
+  },
   // In development the Python app runs separately on :8000 (npm run dev:api).
   // In production Vercel routes /api/* to the serverless function via vercel.json,
   // so this rewrite is a no-op there.
