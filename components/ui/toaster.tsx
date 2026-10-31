@@ -66,8 +66,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       <div className="sr-only" role="status" aria-live="polite">{polite}</div>
       <div className="sr-only" role="alert" aria-live="assertive">{assertive}</div>
+      {/* md:bottom-14 clears the market bar at the foot of every page. */}
       <div aria-hidden={toasts.length === 0}
-           className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center
+           className="pointer-events-none fixed inset-x-0 bottom-4 z-50 md:bottom-14 flex flex-col items-center
                       gap-2 px-4 print:hidden">
         {toasts.map((t) => <ToastView key={t.id} toast={t} onDismiss={dismiss} />)}
       </div>

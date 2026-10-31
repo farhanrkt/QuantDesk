@@ -18,6 +18,8 @@ import { SynthesisPanel } from "@/components/SynthesisPanel";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { ThesisPanel } from "@/components/ThesisPanel";
 import { TickerBar } from "@/components/TickerBar";
+import { MarketStrip } from "@/components/markets/MarketStrip";
+import { useBoardFocus } from "@/components/shell/marketboard";
 import { ManualRescue } from "@/components/ValuationControls";
 import { ValuationPanel } from "@/components/ValuationPanel";
 import { VerdictPanel } from "@/components/VerdictPanel";
@@ -128,6 +130,17 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
   // --- data ---------------------------------------------------------------
   const engines = useEngines(symbol);
   const { anomaly, technical, valuation, quality, news, company, synthesis, preTrade } = engines;
+
+  // The market board marks what this stock is related to. Only the stock's
+  // market and the exposure the Trend tab MEASURED cross over, and only into
+  // this browser: the board's request names nothing.
+  useBoardFocus({
+    symbol,
+    market,
+    factors: technical.status === "ready"
+      ? (technical.data.exposure?.factors ?? []).map((f) => ({ key: f.key, label: f.label, weeks: f.weeks }))
+      : null,
+  });
   const { state: eventStudy, validate } = useEventStudy(symbol);
   const { state: peers, compare: comparePeers } = usePeers(symbol);
   const { state: portfolio, compare: comparePortfolio } = usePortfolio(symbol);
@@ -253,6 +266,9 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
         <TickerBar opts={draft} onChange={setDraft} onRun={submit} busy={busy} />
         <RunStatus symbol={symbol} busy={busy} failed={failed} at={engines.at} />
       </div>
+
+      {/* Phones only: a wider screen has the market bar at the foot of the page. */}
+      <MarketStrip className="md:hidden" />
 
       <ConfluenceRail
         ticker={resolvedTicker} anomaly={anomaly} technical={technical}

@@ -1955,3 +1955,85 @@ export interface ValuationSensitivity {
   refusals: Record<string, string>;
   reading: string;
 }
+
+// --------------------------------------------------------------------------- //
+// What moved the markets — /api/markets/today and /api/markets/headlines
+// --------------------------------------------------------------------------- //
+
+/**
+ * One instrument on the board. `tone` is always "neutral": a day's move has no
+ * good or bad, so nothing here is ever coloured by sign (api/_lib/marketboard.py).
+ */
+export interface BoardRow {
+  key: string;
+  name: string;
+  symbol: string;
+  group: string;
+  /** How a move is measured: % for prices, basis points for yields, points for the VIX. */
+  change: "pct" | "bp" | "points";
+  unit: string;
+  markets: Market[];
+  note: string | null;
+  /** The exposure reference this quote stands for, when there is one. */
+  exposureKey: string | null;
+  topic: string;
+  digits: number;
+  /** What the compact strip calls it. */
+  short: string;
+  weekends: boolean;
+  tone: "neutral";
+  available: boolean;
+  reason?: string;
+  asOf?: string;
+  last?: number | null;
+  previous?: number | null;
+  move?: number | null;
+  direction?: "up" | "down" | "flat";
+  /** Where the latest move sits among its own past year's moves, by size. Null when too little history. */
+  percentile?: number | null;
+  unusual?: boolean | null;
+  yearSessions?: number;
+  largestSince?: string | null;
+  largestInHistory?: boolean;
+  historyFrom?: string;
+  spark?: number[];
+  sparkFrom?: string;
+}
+
+export interface BoardMarket {
+  strip: string[];
+  unusual: string[];
+  unavailable: string[];
+  baseRate: { share: number; days: number; flaggedDays: number; instruments: number;
+              from: string; to: string } | null;
+}
+
+export interface MarketBoard {
+  /** Declaration order, never move order. */
+  groups: { key: string; label: string }[];
+  rows: BoardRow[];
+  missing: { key: string; name: string; markets: Market[]; reason: string }[];
+  markets: Record<Market, BoardMarket>;
+  unusualAt: number;
+  minHistory: number;
+  fetchedAt: string | null;
+  source: string;
+  delay: string;
+  explain: {
+    rows: Record<string, { reading: string; moveText: string | null;
+                           percentile: Explanation | null }>;
+    markets: Record<Market, { summary: string; baseRate: string | null }>;
+  };
+}
+
+export interface HeadlineFeed {
+  topic: string;
+  market: Market;
+  query: string;
+  /** False when the feed could not be read — which is not the same as no news. */
+  available: boolean;
+  items: NewsItem[];
+  reason: string | null;
+}
+
+export interface MarketHeadlines { market: Market; topics: HeadlineFeed[] }

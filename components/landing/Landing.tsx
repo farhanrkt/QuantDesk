@@ -14,6 +14,7 @@ import { useScan, type RunOptions } from "@/lib/api";
 import { palette } from "@/lib/palette";
 import { marketOf, resolveSymbol } from "@/lib/symbols";
 import { RUN_DEFAULTS, compareHref, marketsHref, stockHref } from "@/lib/url";
+import { MarketsToday } from "@/components/landing/MarketsToday";
 import { WatchlistRank } from "@/components/landing/WatchlistRank";
 
 /**
@@ -102,6 +103,9 @@ export function Landing() {
           and type its name.
         </p>
       </section>
+
+      {/* ------------------------------------------------------ markets today */}
+      <MarketsToday />
 
       {/* ---------------------------------------------------------- your desk */}
       {(watchlist.length > 0 || recent.length > 0) && (

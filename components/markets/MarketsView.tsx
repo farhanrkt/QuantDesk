@@ -6,6 +6,7 @@ import { ExposurePanel } from "@/components/ExposurePanel";
 import { RankingPanel } from "@/components/RankingPanel";
 import { ScanPanel } from "@/components/ScanPanel";
 import { ScreenerPanel } from "@/components/ScreenerPanel";
+import { TodayView } from "@/components/markets/TodayView";
 import { useRegisterCommands } from "@/components/palette/registry";
 import { Section } from "@/components/ui/card";
 import { Select } from "@/components/ui/input";
@@ -30,6 +31,8 @@ import { marketsHref, parseMarketView, stockHref, type MarketView } from "@/lib/
  * opening a row's stock page and coming back finds the ranking where it was.
  */
 const VIEWS: (Tab & { id: MarketView })[] = [
+  // Neutral, like the company tab: the board is orientation, not a model.
+  { id: "today", label: "Today", accent: palette.company },
   { id: "rank", label: "Rank a universe", accent: palette.trend },
   { id: "screener", label: "Unusual activity", accent: palette.flow },
   { id: "exposure", label: "What it moves with", accent: palette.drivers },
@@ -65,8 +68,9 @@ export function MarketsView() {
       <header className="space-y-2">
         <h1>Markets</h1>
         <p className="prose-col text-ash">
-          Tools that read a whole list of companies at once. Each one produces a shortlist to
-          open in the four lenses — not a verdict on any name in it.
+          What moved today, and tools that read a whole list of companies at once. The board is
+          context; each tool produces a shortlist to open in the four lenses — not a verdict on
+          any name in it.
         </p>
       </header>
 
@@ -74,6 +78,13 @@ export function MarketsView() {
                       sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <Tabs tabs={VIEWS} active={view} onChange={setView} idPrefix="markets" label="Market tools" />
       </div>
+
+      <TabPanel id="today" active={view} idPrefix="markets">
+        <Section title="What moved the markets"
+                 question="Which of today's moves were unusual for the thing that made them?">
+          <TodayView />
+        </Section>
+      </TabPanel>
 
       <TabPanel id="rank" active={view} idPrefix="markets">
         <Section title="Rank a universe"

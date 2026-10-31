@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { DockSpacer, MarketDock } from "@/components/markets/MarketDock";
 import { CommandPalette } from "@/components/palette/CommandPalette";
+import { MarketBoardProvider } from "@/components/shell/marketboard";
 import { PreferencesProvider } from "@/components/shell/preferences";
 import { ShortcutLayer } from "@/components/shell/ShortcutLayer";
 import { TopBar } from "@/components/shell/TopBar";
@@ -10,8 +12,9 @@ import { ToastProvider } from "@/components/ui/toaster";
 
 /**
  * Everything that is the same on every page: the reader's stated preferences,
- * their watchlist and recent tickers, confirmations, the top bar, the command
- * palette, the keyboard layer, and the line that says what this is not.
+ * their watchlist and recent tickers, the board of what moved the markets,
+ * confirmations, the top bar, the command palette, the keyboard layer, and the
+ * line that says what this is not.
  *
  * Client-only state, all of it kept in this browser. Nothing the shell holds is
  * sent anywhere; the request layer cannot import it (check_frontend.mjs).
@@ -24,6 +27,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <PreferencesProvider>
       <WorkspaceProvider>
+        <MarketBoardProvider>
         <ToastProvider>
           <a href="#main"
              className="sr-only z-50 rounded-lg bg-tech px-4 py-2 font-semibold text-ink
@@ -44,9 +48,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </p>
             </div>
           </footer>
+          <DockSpacer />
+          <MarketDock />
           <CommandPalette open={paletteOpen} onClose={closePalette} />
           <ShortcutLayer onPalette={openPalette} paletteOpen={paletteOpen} />
         </ToastProvider>
+        </MarketBoardProvider>
       </WorkspaceProvider>
     </PreferencesProvider>
   );
