@@ -137,9 +137,69 @@ def test_an_expensive_company_is_not_mistaken_for_a_units_error():
 
 
 def test_no_revenue_line_is_stated_not_guessed():
-    out = F.revenue_of({"income": pd.DataFrame(), "currency": "USD"})
+    # A statement that arrived without a top line is not rescued by the summary:
+    # the stand-in is for listings with no statements at all.
+    filed = pd.DataFrame({pd.Timestamp("2025-12-31"): {"Net Income": 40.0}})
+    out = F.revenue_of({"income": filed, "currency": "USD", "revenue_ttm": 900.0})
     assert out["usable"] is False
     assert "no revenue line" in out["reason"]
+
+
+def test_no_statements_and_no_summary_figure_says_both():
+    out = F.revenue_of({"income": pd.DataFrame(), "currency": "USD"})
+    assert out["usable"] is False and out["source"] is None
+    assert "no statements came back" in out["reason"]
+    assert "summary carries no revenue" in out["reason"]
+
+
+# --------------------------------------------------------------------------- #
+# revenue: the summary's trailing year, where the provider files nothing
+#
+# 215 of 770 cached Indonesian records carried no statements at all and a
+# trailing year's revenue in the summary. CCSI.JK, a cable maker filed beside
+# KETR.JK, is one: unranked until now, which is what made KETR "the only one
+# that could be measured" rather than the largest of three.
+# --------------------------------------------------------------------------- #
+def test_a_listing_with_no_statements_is_ranked_on_the_summary():
+    out = F.revenue_of({"income": pd.DataFrame(), "currency": "IDR",
+                        "financial_currency": "IDR", "market_cap": 312e9,
+                        "revenue_ttm": 309.5e9, "revenue_ttm_through": "2026-06-30"})
+    assert out["usable"] is True
+    assert out["value"] == 309.5e9
+    assert out["source"] == "summary"
+    assert out["asOf"] == "2026-06-30"
+    assert out["trailing"] == 309.5e9
+
+
+def test_a_filed_year_is_never_replaced_by_the_summary():
+    """KETR.JK's shape: 750bn filed for 2025, 624bn on the summary to June.
+
+    The stand-in is for listings with nothing filed. A fresher summary does not
+    displace a filed year, so the 555 names already measured stay measured the
+    way they were; the summary figure rides along for re-making a comparison.
+    """
+    out = F.revenue_of(record(750.2e9, cap=1.3e12, revenue_ttm=623.6e9))
+    assert out["value"] == 750.2e9
+    assert out["source"] == "statement"
+    assert out["trailing"] == 623.6e9
+
+
+def test_an_unconverted_summary_in_another_currency_is_refused():
+    out = F.revenue_of({"income": pd.DataFrame(), "currency": "IDR",
+                        "financial_currency": "USD", "fx_rate": None,
+                        "market_cap": 3.4e11, "revenue_ttm": 16_065_026.0})
+    assert out["usable"] is False and out["source"] == "summary"
+    assert "summary figures are written in USD" in out["reason"]
+
+
+def test_a_mis_scaled_summary_is_refused_like_a_mis_scaled_statement():
+    # The RIGS.JK case on the summary: rupiah figures labelled USD and scaled.
+    out = F.revenue_of({"income": pd.DataFrame(), "currency": "IDR",
+                        "financial_currency": "USD", "fx_rate": 16_300.0,
+                        "market_cap": 423e9, "revenue_ttm": 291e9 * 16_300})
+    assert out["usable"] is False
+    assert "summary figures are labelled USD" in out["reason"]
+    assert out["value"] is None
 
 
 # --------------------------------------------------------------------------- #
@@ -163,7 +223,10 @@ def test_a_field_too_thin_to_rank_names_nobody():
     out = F.standings(entries(("A", 100.0), ("B", 1.0)))
     assert out["fields"]["Thermal Coal"]["leader"] is None
     assert out["positions"]["A"]["leads"] is False
-    assert "not a position" in out["positions"]["A"]["reading"]
+    # A hundred times the other is still not a lead over a field of two; the
+    # reading says how far ahead it is without naming it a leader.
+    assert "too few to name a leader" in out["positions"]["A"]["reading"]
+    assert "not a position" in out["positions"]["B"]["reading"]
 
 
 def test_a_narrow_lead_names_nobody():
@@ -246,6 +309,94 @@ def test_standings_of_nothing_is_empty_rather_than_an_error():
     out = F.standings([])
     assert out["fields"] == {} and out["positions"] == {}
     assert out["measured"] == 0 and out["unplaced"] == 0
+
+
+# --------------------------------------------------------------------------- #
+# standings across the two kinds of figure
+# --------------------------------------------------------------------------- #
+def kinds(*rows, industry="Communication Equipment"):
+    """(ticker, ranked figure, source, trailing figure)."""
+    return [{"ticker": t, "name": t, "industry": industry, "revenue": r,
+             "revenueSource": s, "revenueTrailing": tr} for t, r, s, tr in rows]
+
+
+def test_a_lead_that_holds_on_both_kinds_is_named_and_says_both():
+    """KETR.JK on the 21 September sweep, once its two rivals were placed."""
+    out = F.standings(kinds(("KETR", 750.2, "statement", 623.6),
+                            ("CCSI", 309.5, "summary", 309.5),
+                            ("IOTF", 72.8, "summary", 72.8)))
+    field = out["fields"]["Communication Equipment"]
+    assert field["leader"] == "KETR"
+    assert field["leaderMargin"] == pytest.approx(750.2 / 309.5)
+    assert field["leaderMarginTrailing"] == pytest.approx(623.6 / 309.5)
+    assert field["summaryFigures"] == 2
+    reading = out["positions"]["KETR"]["reading"]
+    assert "2.4x the revenue of the next one" in reading
+    assert "2.0x on both companies' trailing twelve months" in reading
+    assert "The other 2 figures here are the provider's trailing-twelve-month" in reading
+
+
+def test_a_lead_that_depends_on_the_kind_of_figure_is_not_named():
+    """DIVA.JK on the same sweep: 2.05x filed against trailing, 1.85x trailing
+    against trailing. A lead one choice of figure grants and the other takes
+    away is inside the range LEAD_MARGIN exists to refuse."""
+    out = F.standings(kinds(("DIVA", 3504.9, "statement", 3155.5),
+                            ("TOSK", 1708.0, "summary", 1708.0),
+                            ("IRSX", 410.1, "statement", 400.0),
+                            industry="Software - Application"))
+    assert out["fields"]["Software - Application"]["leader"] is None
+    place = out["positions"]["DIVA"]
+    assert place["leads"] is False
+    assert place["marginTrailing"] == pytest.approx(3155.5 / 1708.0)
+    assert "compares its filed year with the next one's trailing twelve months" in place["reading"]
+    assert "1.85x" in place["reading"] and "no leader is named" in place["reading"]
+
+
+def test_a_mixed_lead_that_cannot_be_re_made_is_not_named():
+    out = F.standings(kinds(("A", 900.0, "statement", None),
+                            ("B", 100.0, "summary", 100.0),
+                            ("C", 50.0, "statement", None)))
+    place = out["positions"]["A"]
+    assert place["leads"] is False and place["marginTrailing"] is None
+    assert "could not be re-made" in place["reading"]
+
+
+def test_a_summary_leader_over_a_filed_runner_up_is_re_made_the_same_way():
+    # INOV.JK over MHKI.JK in Waste Management: 3.3x as ranked, 3.6x trailing.
+    out = F.standings(kinds(("INOV", 700.2, "summary", 700.2),
+                            ("MHKI", 213.0, "statement", 193.7),
+                            ("OPMS", 6.6, "summary", 6.6),
+                            industry="Waste Management"))
+    assert out["fields"]["Waste Management"]["leader"] == "INOV"
+    assert "Its figure, like 1 other here, is the provider's" in \
+        out["positions"]["INOV"]["reading"]
+    # The runner-up is told it is behind, and that the comparison mixes kinds.
+    assert "INOV is the largest" in out["positions"]["MHKI"]["reading"]
+    assert "The other 2 figures here are" in out["positions"]["MHKI"]["reading"]
+
+
+def test_one_kind_of_figure_reads_exactly_as_before():
+    """A field ranked wholly on filed years, the state of every field until the
+    summary stand-in existed, says nothing about kinds of figure."""
+    old = F.standings(entries(("A", 100.0), ("B", 20.0), ("C", 10.0)))
+    new = F.standings(kinds(("A", 100.0, "statement", 90.0),
+                            ("B", 20.0, "statement", 25.0),
+                            ("C", 10.0, "statement", 12.0), industry="Thermal Coal"))
+    for ticker in "ABC":
+        assert new["positions"][ticker]["reading"] == old["positions"][ticker]["reading"]
+    assert new["fields"]["Thermal Coal"]["leaderMarginTrailing"] is None
+    assert new["fields"]["Thermal Coal"]["summaryFigures"] == 0
+
+
+def test_a_field_wholly_on_the_summary_says_so_once():
+    out = F.standings(kinds(("PEVE", 3699.0, "summary", 3699.0),
+                            ("IKPM", 400.2, "summary", 400.2),
+                            ("X", 100.0, "summary", 100.0),
+                            industry="Pharmaceutical Retailers"))
+    reading = out["positions"]["PEVE"]["reading"]
+    assert out["fields"]["Pharmaceutical Retailers"]["leader"] == "PEVE"
+    assert "Every figure here is the provider's trailing-twelve-month summary" in reading
+    assert "on both companies' trailing" not in reading, "nothing was mixed to re-make"
 
 
 # --------------------------------------------------------------------------- #
@@ -473,3 +624,48 @@ def test_a_name_with_no_description_is_not_assumed_to_be_a_fund():
         {"ticker": "C", "name": "C", "industry": "Gold", "revenue": 10.0},
     ])
     assert out["positions"]["A"]["leads"] is True
+
+
+# --------------------------------------------------------------------------- #
+# noCloseRival: what the specialist screen selects on, and why it is monotone
+# --------------------------------------------------------------------------- #
+def test_the_larger_of_two_by_the_margin_has_no_close_rival_but_leads_nothing():
+    """KETR.JK on 1 November: CCSI.JK measured at under half its size, IOTF.JK
+    at the 50-rupiah floor and out of the scan. Before `noCloseRival`, reading
+    one more rival correctly would have taken KETR off the shortlist."""
+    out = F.standings(kinds(("KETR", 750.2, "statement", 623.6),
+                            ("CCSI", 309.5, "summary", 309.5)))
+    place = out["positions"]["KETR"]
+    assert place["leads"] is False, "two names are still too few to name a leader"
+    assert place["noCloseRival"] is True
+    assert "too few to name a leader" in place["reading"]
+    assert "2.4x as much, 2.0x on both companies' trailing twelve months" in place["reading"]
+    assert out["positions"]["CCSI"]["noCloseRival"] is False
+
+
+def test_a_close_pair_has_a_close_rival():
+    out = F.standings(entries(("A", 100.0), ("B", 60.0)))
+    assert out["positions"]["A"]["noCloseRival"] is False
+    assert "not a position" in out["positions"]["A"]["reading"]
+
+
+def test_a_pair_that_clears_only_on_mixed_figures_has_a_close_rival():
+    # DIVA.JK's numbers in a field of two: 2.05x one way, 1.85x the other.
+    out = F.standings(kinds(("DIVA", 3504.9, "statement", 3155.5),
+                            ("TOSK", 1708.0, "summary", 1708.0)))
+    assert out["positions"]["DIVA"]["noCloseRival"] is False
+
+
+@pytest.mark.parametrize("rows,ticker,expected", [
+    ((("A", 100.0),), "A", True),                                # alone
+    ((("A", 100.0), ("B", 20.0), ("C", 10.0)), "A", True),       # named leader
+    ((("A", 100.0), ("B", 90.0), ("C", 10.0)), "A", False),      # narrow lead
+    ((("A", 100.0), ("B", 20.0), ("C", 10.0)), "B", False),      # not first
+])
+def test_no_close_rival_contains_both_flags_the_screen_used_before(rows, ticker, expected):
+    """`leads` and `onlyRanked` each imply it, so nothing the screen selected
+    before falls out; the only names it adds are larger-of-two by the margin."""
+    place = F.standings(entries(*rows))["positions"][ticker]
+    assert place["noCloseRival"] is expected
+    if place["leads"] or place["onlyRanked"]:
+        assert place["noCloseRival"] is True

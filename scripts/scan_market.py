@@ -341,7 +341,13 @@ def _place_in_field(verdicts: list[dict], say) -> dict:
         {"ticker": v["ticker"], "name": v.get("name"),
          "industry": v.get("industry"),
          "summary": (v.get("profile") or {}).get("summary"),
-         "revenue": (v.get("revenue") or {}).get("value")}
+         "revenue": (v.get("revenue") or {}).get("value"),
+         # A filed year or the provider's trailing twelve months; the reading
+         # says which wherever a field compares the two. See `field.revenue_of`.
+         "revenueSource": (v.get("revenue") or {}).get("source"),
+         # Every name's summary figure, filed or not, so a lead between the two
+         # kinds is re-made on one kind before it is named.
+         "revenueTrailing": (v.get("revenue") or {}).get("trailing")}
         for v in verdicts])
 
     positions = standing["positions"]
@@ -382,10 +388,16 @@ def _specialists_summary(verdicts: list[dict]) -> dict:
     useless alone and each of which reports its own base rate on THIS scan
     rather than a remembered one:
 
-      SPECIALIST — either the largest of the scanned names sharing its industry
-      label, or the only one carrying it. The second is not a weaker version of
-      the first: a company with no listed rival is the signature of a niche, and
-      it is the state the name this was built for actually occupies.
+      SPECIALIST — no measured rival within `field.LEAD_MARGIN` of it: the
+      named leader of three or more scanned names sharing its industry label,
+      the larger of two by that margin, or the only one whose revenue could be
+      read. The last is not a weaker version of the first: a company with no
+      listed rival is the signature of a niche, and it is the state the name
+      this was built for occupied. The middle one closes a gap that made the
+      screen drop a company for having a rival measured at under half its size
+      — see `noCloseRival` in `field.standings`. On the 21 September sweep it
+      adds nobody: the 13 larger-of-two names there are none of them
+      compounding.
 
       COMPOUNDING — profitable in every year the filings cover, with positive
       operating cash flow, growing revenue at or above the market's top
@@ -396,10 +408,16 @@ def _specialists_summary(verdicts: list[dict]) -> dict:
 
     MEASURED, ON 729 CACHED INDONESIAN RECORDS, BEFORE IT WAS BUILT: the three
     conditions hold together on 5. The top of that list by growth was KETR.JK —
-    the company the owner named — at 28.6% a year on an 18.5% net margin, the
-    only listed name carrying its industry label. That is not evidence the
-    screen predicts anything. It is evidence it finds the thing it was
-    described.
+    the company the owner named — at 28.6% a year on an 18.5% net margin, then
+    the only name in its industry label whose revenue could be read. That is not
+    evidence the screen predicts anything. It is evidence it finds the thing it
+    was described.
+
+    A FIELD MISSING ITS LARGEST MEMBER PUT ONE NAME ON THIS LIST. Once listings
+    with no statements were ranked on the provider's trailing year (`field.py`),
+    the 21 September sweep's seven became six: KETR.JK now leads its two rivals
+    at 2.4x, and MHKI.JK left, because INOV.JK — filed under the same label,
+    and unreadable until then — has 3.3x its revenue.
 
     NO PREDICTIVE CLAIM AND NO BACKTEST. Same wall as `neglect.py`: industry
     labels and the share register arrive as a current snapshot with no history,
@@ -412,7 +430,8 @@ def _specialists_summary(verdicts: list[dict]) -> dict:
         # returned no filings is still the specialist; what is weakened is the
         # CLAIM about rivals, not the company. The row carries both flags and
         # the unmeasured count so the qualification travels with it.
-        return bool(place.get("leads") or place.get("onlyRanked"))
+        return bool(place.get("leads") or place.get("onlyRanked")
+                    or place.get("noCloseRival"))
 
     def compounding(entry: dict) -> bool:
         record = entry.get("trackRecord") or {}
@@ -605,7 +624,9 @@ def cache_path(symbol: str, day: str) -> Path:
 #     changes `netCash`/`netDebt` on any name whose sheet did not arrive.
 # 5 — `trackrecord.read` takes the market: off the IDX it no longer quotes
 #     Indonesian base rates, and the payload gains `baseRatesNote`.
-PROFILE_LEG_VERSION = 5
+# 6 — `field.revenue_of` falls back to the provider's trailing twelve months
+#     where it carries no statements, and the reading gains `source`.
+PROFILE_LEG_VERSION = 6
 
 
 def read_profile(symbol: str) -> dict:

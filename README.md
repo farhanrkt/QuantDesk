@@ -824,10 +824,26 @@ and nothing more.
 
 It is **not market share**, and the caveat ships inside the payload as `basis` so a client
 cannot render a rank without it — design rule 10 fails the build on one that tries. Private
-companies, foreign listings and names whose filings never arrived are all missing from the
-denominator, and the third of those is not small: 201 of 722 cached Indonesian records
-carry no income statement at all. A field missing its largest member crowns the runner-up
-and looks no different from a correct one, so `unplaced` is reported beside every count.
+companies, foreign listings and names whose revenue could not be read are all missing from
+the denominator. A field missing its largest member crowns the runner-up and looks no
+different from a correct one, so `unplaced` is reported beside every count.
+
+*A quarter of the exchange files nothing the provider carries.* 215 of 770 cached
+Indonesian records have no statements at all. This was put down to throttling until it was
+measured: re-asked unhurried six weeks later, 47 of 47 came back empty again while four
+large listings asked in between came back complete. The provider's summary does carry a
+trailing year's revenue for all 215, and agrees with the filed year where both exist
+(median ratio 1.04 on 104 names), so a listing with no statements is now ranked on it — never
+in place of a filed year, and with the reading saying so wherever a field compares the two.
+Re-ranking the September sweep places 725 names instead of 526. KETR.JK's two unmeasured
+rivals turn out to be smaller (it leads them at 2.4×), MHKI.JK leaves the specialist
+shortlist to a recycler on 3.3× its revenue that could not be read before, and one lead that
+held only on mixed kinds of figure (DIVA.JK, 2.05× one way and 1.85× the other) is no longer
+named. Measuring more also exposed a hole in the specialist screen: it could select a
+company with no measured rival or the named leader of three, but never the larger of two,
+so reading one small rival was enough to remove a company. It now selects any company with
+no measured rival within twice its revenue — nothing that qualified before falls out.
+RESEARCH_ROADMAP §18.9 has the measurement.
 
 *A wrong currency label manufactures a champion.* The first run of the standings crowned
 RIGS.JK with 99.4% of Indonesian marine shipping and 456 times the runner-up. It is a small

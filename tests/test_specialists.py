@@ -229,3 +229,45 @@ def test_the_field_placement_passes_the_summary_through(scan):
     assert by["TRUST"]["fieldPosition"] is None, "a fund must not be ranked in a field"
     assert by["MGR"]["fieldPosition"]["rank"] == 1
     assert by["MGR"]["fieldPosition"]["unranked"] == 1
+
+
+def test_the_field_placement_passes_the_kind_of_figure_through(scan):
+    """The same wiring, for the summary's trailing year.
+
+    `standings` re-makes a lead between a filed year and a trailing year on both
+    companies' trailing years, and names no leader it cannot re-make. Without
+    `source` and `trailing` in the entries every figure reads as filed, the rule
+    never fires, and DIVA.JK keeps a lead its own trailing year takes away —
+    while `test_field.py` passes, because it hands `standings` both keys itself.
+    """
+    def named(ticker, revenue, source, trailing):
+        return {"ticker": ticker, "name": ticker, "industry": "Software - Application",
+                "profile": {"summary": f"{ticker} sells software to banks."},
+                "revenue": {"usable": True, "value": revenue, "source": source,
+                            "trailing": trailing},
+                "trackRecord": {}, "neglect": {}}
+
+    verdicts = [named("DIVA", 3504.9, "statement", 3155.5),
+                named("TOSK", 1708.0, "summary", 1708.0),
+                named("IRSX", 410.1, "statement", 400.0)]
+    scan._place_in_field(verdicts, lambda *a: None)
+    lead = verdicts[0]["fieldPosition"]
+    assert lead["rank"] == 1
+    assert lead["leads"] is False, "a lead one kind of figure takes away is not a lead"
+    assert lead["marginTrailing"] == pytest.approx(3155.5 / 1708.0)
+    assert verdicts[1]["fieldPosition"]["revenueSource"] == "summary"
+
+
+def test_a_measured_rival_under_half_its_size_does_not_disqualify(scan):
+    """The screen was not monotone. KETR.JK qualified while its two rivals could
+    not be read; once one could (CCSI.JK, under half its size) and the other
+    fell to the exchange's price floor, a field of two named no leader and the
+    company the screen was built for would have left it — for being measured
+    against a smaller rival. `noCloseRival` is what it selects on now."""
+    pair = verdict("KETR.JK", peers=2)
+    pair["fieldPosition"]["noCloseRival"] = True
+    close = verdict("X.JK", peers=2)
+    close["fieldPosition"]["noCloseRival"] = False
+    out = scan._specialists_summary([pair, close])
+    assert out["selected"] == 1
+    assert [r["ticker"] for r in out["gated"] + out["tradeable"]] == ["KETR.JK"]

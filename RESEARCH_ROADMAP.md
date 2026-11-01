@@ -1640,9 +1640,10 @@ not broken, not that the ranking predicts anything.
 ### 18.3 It is not market share, and the caveat is enforced
 
 Four things are missing from the denominator: private companies, companies listed elsewhere,
-divisions of larger groups, and **companies whose filings did not arrive** — 201 of 722
-cached Indonesian records carry no income statement at all. A field missing its largest
-member crowns the runner-up and looks no different from a correct one.
+divisions of larger groups, and **companies whose revenue could not be read** — which until
+November was a quarter of the Indonesian exchange, and was wrongly put down to throttling
+(§18.9). A field missing its largest member crowns the runner-up and looks no different from
+a correct one.
 
 So `basis` ships *inside* the payload and design rule 10 fails the build on any component
 that renders a rank without it, and `unplaced` is reported beside every count.
@@ -1651,7 +1652,8 @@ that renders a rank without it, and `unplaced` is reported beside every count.
 it is a field of one, and that conflates two statements. Of the 28 Indonesian fields holding
 exactly one *ranked* name, only 13 have no same-label listing that failed to return revenue —
 so the strong reading was wrong on more than half. KETR.JK is one of the wrong ones: two
-other Indonesian listings carry its label and filed nothing usable.
+other Indonesian listings carry its label and filed nothing usable. (§18.9 measures them, and
+KETR leads both.)
 
 Tightening the flag alone would have **dropped the one company the feature was built to
 find**, which is its own kind of wrong — two tiny peers filing nothing does not stop a
@@ -1803,6 +1805,84 @@ the share register arrive as a current snapshot with no history, so the screen c
 backtested even in principle — the same wall `neglect.py` publishes. `scanlog.py` records
 what each screen selected on the day it selected it, which it had been cited for doing in
 two docstrings without actually doing.
+
+### 18.9 A quarter of the exchange files nothing the provider carries
+
+215 of the 770 cached Indonesian records carry no income statement, balance sheet or cash
+flow statement at all, and every one of them has a sector — so the summary scrape arrived.
+§18.3, `field.py` and the README all called this a throttled fetch. **Measured on 1 November,
+it is not one.**
+
+| Re-asked, unhurried, six weeks after the sweep | Came back with statements |
+|---|---|
+| 47 of the 215, annual and quarterly | **0** |
+| BBCA, TLKM, ASII, UNVR, asked in between | 4 of 4, complete |
+
+The provider carries no statements for these listings, and no refetch changes that. They are
+small: a median market value of about 300 billion rupiah.
+
+**Its summary does carry a trailing year's revenue for all 215**, to June or September 2026
+for 209. Where a listing has both, the two agree:
+
+| Trailing ÷ filed, 104 names with both (100 at random) | |
+|---|---|
+| Median | 1.04 |
+| Within ±25% | 90 |
+| Within a factor of 1.5 | 100 |
+| Currency label disagrees | 0 |
+
+The outliers are what a trailing year does to a filed one — SFAN.JK, whose latest filing is
+2024, and a broker's volatile income at PADI.JK — not units errors. Six of the 215 report in
+dollars; each converts to a plausible price-to-sales ratio, and `market_data._apply_fx` now
+reads the summary figure as its yardstick where no statement exists, so a mislabel there is
+declined as RIGS.JK's was.
+
+So `field.revenue_of` ranks a listing with no statements on the summary, and **never prefers
+it to a filed year** — the 555 names already measured stay measured as they were. Re-ranking
+the 21 September sweep:
+
+| | As scanned | With the summary |
+|---|---|---|
+| Placed in a field | 526 | **725** |
+| Unplaced | 244 | 45, all with no industry label |
+| Named leaders | 32 | **38** — 7 gained, 1 lost |
+| Fields of one that are a sole listing | 14 of 29 | **20 of 20** |
+| Specialist shortlist | 7 | **6** (MHKI out) |
+
+**KETR.JK's two unmeasured rivals are CCSI.JK, a cable maker, and IOTF.JK.** KETR leads them
+on 2.4× the runner-up, so the name the screen was built for moves from "the only one that
+could be measured" to the largest of three. **MHKI.JK leaves the shortlist**: INOV.JK, a
+recycler filed under the same Waste Management label, has 3.3× its revenue, and MHKI had
+held the field only because INOV could not be read. That is §18.3's warning, observed — a
+field missing its largest member crowned the runner-up, and nothing about it looked wrong.
+
+**A lead can depend on which kind of figure is used, and one did.** A filed year (usually to
+December 2025) and a trailing twelve months (to June or September 2026) end on different
+dates, and 67 fields mix them. DIVA.JK led TOSK.JK by 2.05× on DIVA's filed year against
+TOSK's trailing one, and by **1.85×** on both companies' trailing years. So where the top two
+are of different kinds the lead is re-made on both trailing years, and a leader is named only
+if it clears `LEAD_MARGIN` both ways, and not at all if it cannot be re-made. DIVA loses the
+title; KETR keeps it narrowly, at 2.0× re-made. Every reading that compares the two kinds says
+so.
+
+**Measuring more exposed a hole in the screen.** By 1 November IOTF.JK traded at the
+exchange's 50-rupiah floor, so a fresh scan drops it before deepening and KETR's field holds
+two measured names. The screen selected `leads`, which needs three, or `onlyRanked`, which
+needs one — so the larger of two could never qualify, however far ahead, and reading CCSI
+correctly would have taken KETR off the shortlist for having a rival measured at under half
+its size. It now selects `noCloseRival`: alone among the measured, or ahead of the runner-up
+by `LEAD_MARGIN`, re-made where the kinds differ. That contains both earlier flags, so nothing
+that qualified before falls out. On the September sweep it adds nobody — 13 names are the
+larger of two by that margin and none of them compounds — and on a live 12-name scan of
+the three fields above, KETR is selected as the larger of two at 2.4×. `leads` still needs
+three names, and the reading of a pair says it is too few to name a leader while stating the
+gap.
+
+**What the summary cannot give these 215 is a history.** One trailing year shows no run of
+profits, no compounding and no borrowings, so `trackrecord` has nothing to read, the
+accounting screens in `quality.py` still refuse, and none of them can be a specialist itself. They can only
+now be measured against one. Curating IDX filings (`NEXT_SESSION_PROMPT.md`, item b) remains
+the only route to the rest, and is no less motivated for this.
 
 ---
 
