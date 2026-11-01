@@ -114,9 +114,10 @@ NOT DONE IN THE OVERHAUL, AND WORTH DOING
   portfolio to it means per-symbol returns AND re-running
   measure_correlation_stability.py and measure_exposure_stability.py. See the
   RESEARCH_ROADMAP open row.
-- THE SCANNER'S FORWARD LOG counts rows, not names: 74 Indonesian buy calls
-  are 23 names logged on six dates in twelve days. Fix the counting in
-  _lib/scanlog.py before its first calls resolve in early December, and
+- THE SCANNER'S FORWARD LOG now counts names, not rows (scanlog.observations:
+  a name once per 63-session window), and its December read is pre-registered
+  in RESEARCH_ROADMAP section 21: run review_scanlog.py for ID and US on or
+  after 22 December 2026, and read it by that section's nulls. Still to do:
   restart the weekly scans (none since 21 September).
 - RankingPanel (~770 lines), ScanPanel (~930) and VerdictPanel (~730) were not
   split into subcomponents. Their state was lifted into lib/session.ts, which
@@ -192,6 +193,17 @@ So: the battery does not cover the page. Open it. The browser pane works.
 
 WHAT THE LAST SESSIONS DID
 ==========================
+THE NOVEMBER 2026 AUDIT (RESEARCH_ROADMAP §23), on branch claude/full-audit,
+which merges every finished branch (the market board and calendar widgets,
+§18.9's summary revenue, §21's forward log, §22's per-holding sessions). Every
+API route was called with real tickers and the main calculations recomputed
+outside the app: indicators, the DCF, beta, the accounting scores, the board,
+the event-day tests, correlations, long-term returns and the track record all
+matched. Six things were wrong and are fixed: a throttled bank valued as an
+ordinary company, a throttled lookup cached all day, coins and funds told
+their data was missing, the DCF ignoring short-term investments, an invisible
+negative MACD histogram, and a misleading one-year-change reading.
+
 Written up in RESEARCH_ROADMAP.md §7-§15 and DESIGN.md — read those rather than
 re-deriving the reasoning.
 
@@ -349,10 +361,18 @@ WHAT I MIGHT WANT NEXT — pick with me before building
 =====================================================
   0) OPEN AND UNFINISHED, in order:
 
-     - `market_data._apply_fx` trusts the provider's `financialCurrency`
-       unconditionally and is wrong on RIGS.JK and YPF, scaling their statements
-       by 16,300x and 1/1000. The detector is already written and tested in
-       `field.revenue_of`. Left alone because it moves every valuation.
+     - THE NEXT IDX SCAN RE-RANKS THE FIELDS (1 November, RESEARCH_ROADMAP
+       §18.9). 215 of 770 Indonesian listings have no statements at the
+       provider — measured, not a throttle — and are now ranked on its
+       trailing-year summary. On the September sweep that moves KETR.JK from
+       "only one measurable" to leading three at 2.4x, takes MHKI.JK off the
+       shortlist, and un-names DIVA.JK. Records cached before 1 November lack
+       `revenue_ttm`, so a `--fundamentals-days` replay of old records will NOT
+       place those 215: it needs fresh company records. Look at the specialist
+       card and the field readings on the first scan that has them. Expect
+       KETR as "largest of 2": IOTF.JK now sits at the 50-rupiah floor and is
+       dropped before deepening, and the screen selects `noCloseRival`, which
+       admits the larger of two by 2x (a live 12-name scan confirmed it).
      - THE SPECIALIST SCREEN IS A FRONTIER-MARKET TOOL AND THE US PROVES IT.
        On 2,136 US names the three conditions select NOTHING, because only 4%
        are uncovered against 79% on the IDX and the median US name is 85%
@@ -371,12 +391,9 @@ WHAT I MIGHT WANT NEXT — pick with me before building
        729, KETR.JK at the top) but the card rendering it was verified only on
        an IDX scan. Look at it on a US scan.
 
-  a) The sensitivity grid (growth x discount rate) for the valuation. Open since
-     §5. Note the roadmap's old claim was imprecise: pv_of_growing_stream is
-     vectorised over DRAWS, with growth, rate and terminal broadcast row-wise,
-     so a grid means flattening a meshgrid into that axis rather than an outer
-     product it already supports. Still cheap. Watch principle 1: a grid of fair
-     values against price, coloured, is a buy/sell heat map.
+  a) (Done in the overhaul: the sensitivity grid is on the Value tab, uncoloured
+     — RESEARCH_ROADMAP §19.1. So is the currency-label guard in
+     `market_data._apply_fx`, since 21 September — §18.4.)
 
   b) IDX fundamentals curation — the durable moat and the largest single effort.
      Blocked on an architecture decision first: a curated overlay is a second
@@ -384,10 +401,13 @@ WHAT I MIGHT WANT NEXT — pick with me before building
      module. Where curated figures live, how they are dated, and how a reader
      tells them from fetched ones is a session on its own.
 
-     THIS IS NOW BETTER MOTIVATED THAN IT WAS. 201 of 722 cached IDX records
-     carry no income statement at all, so a quarter of the exchange cannot be
-     placed in a field or given a track record, and a field missing its largest
-     member crowns the runner-up while looking no different.
+     THIS IS NOW BETTER MOTIVATED THAN IT WAS, AND BETTER MEASURED. 215 of 770
+     cached IDX records carry no statements at all, and it is not a throttle:
+     re-asked unhurried, 47 of 47 came back empty again (§18.9). The provider's
+     trailing-year summary now places them in a field, but nothing gives them a
+     track record, a quality score or a filed valuation — a quarter of the
+     exchange, including two of KETR.JK's three listed rivals, can be ranked
+     by size and read no further. Only curation reaches that.
 
   c) A real screen-reader pass. The keyboard walkthrough is clean (64
      focusables, zero unnamed, zero without a focus style, zero dangling

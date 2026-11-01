@@ -12,11 +12,14 @@ is a sentence a reader will act on.
 
 from __future__ import annotations
 
+import datetime as dt
 import pathlib
 
 import numpy as np
 import pandas as pd
 import pytest
+
+from helpers import _Stub, mixed_calendars
 
 from _lib import explain as E
 from _lib import exposure
@@ -183,6 +186,37 @@ def test_weekly_aggregation_is_exact_not_approximate():
     assert len(shared) > 50
     assert weekly.loc[shared, "X"].to_numpy() == pytest.approx(
         direct.loc[shared].to_numpy(), abs=1e-12)
+
+
+def test_a_week_is_the_names_own_move_whatever_else_was_in_the_batch(monkeypatch):
+    """Each name's week is its own Friday-to-Friday move, however the rest of
+    the batch traded, and a week its market was shut throughout is a gap.
+
+    A zero adds nothing to a week, so the shared calendar got every other week
+    right. The shut week it did not: measured 1 November 2026, the IDX's Idul
+    Fitri weeks of 2022, 2024 and 2025 sat in `scan`'s window as 0.00% weeks.
+    """
+    frames = mixed_calendars()
+    monkeypatch.setattr(exposure.market_data.yf, "download", _Stub(frames))
+    fetched = exposure.market_data.ohlcv_batch(list(frames), dt.date(2024, 1, 1),
+                                               dt.date.today(), own_sessions=True)
+    weekly = exposure.to_weekly(exposure.log_returns(fetched))
+
+    for symbol, frame in frames.items():
+        last = frame["Close"].resample("W-FRI").last()
+        direct = np.log(last / last.ffill().shift(1)).dropna()
+        assert weekly.loc[direct.index, symbol].to_numpy() == pytest.approx(
+            direct.to_numpy(), abs=1e-12), symbol
+
+    # Inside the name's own span: the coin's weekend opens a week nobody else
+    # has traded yet, which is not a closure.
+    sessions = frames["BBB.JK"].index
+    shut = [week for week in weekly.index
+            if week <= sessions[-1] and sessions[(sessions > week - pd.Timedelta(days=7))
+                                                & (sessions <= week)].empty]
+    assert len(shut) == 1
+    assert weekly.loc[shut, "BBB.JK"].isna().all(), "a gap, not a quiet week"
+    assert weekly.loc[shut, "AAA"].notna().all(), "the US traded that week"
 
 
 def test_the_component_sign_is_fixed_so_it_cannot_flip_between_requests():
@@ -443,6 +477,23 @@ def test_every_factor_is_offered_now_that_none_is_gated(monkeypatch):
     assert {f["key"] for f in result["factors"]} == {"gold", "oil", "copper", "dollar"}
     assert result["refused"] == []
     assert result["persistence"]["measured"] is True, "reported, not used to filter"
+
+
+def test_the_scan_counts_only_the_weeks_a_name_traded(monkeypatch):
+    """`scan` fetches each symbol on its own sessions and sums `log_returns`, so
+    an Indonesian name's weeks are the weeks it traded. On the shared calendar a
+    week shut throughout counted as a 0.00% week: in the IDX30 scan of
+    1 November 2026 each Indonesian name had 260 weeks, and 257 once the three
+    Idul Fitri weeks became gaps."""
+    frames = mixed_calendars()
+    monkeypatch.setattr(exposure.market_data.yf, "download", _Stub(frames))
+    monkeypatch.setattr(exposure, "load_stability", lambda *a, **k: None)
+    result = exposure.scan(["AAA", "BBB.JK", "DDD.JK"], "ID")
+    weeks = {row["ticker"]: row["weeks"] for row in result["rows"]}
+
+    for symbol in ("AAA", "BBB.JK", "DDD.JK"):
+        traded = pd.Series(1, index=frames[symbol].index[1:]).resample("W-FRI").sum()
+        assert weeks[symbol] == int((traded > 0).sum()), symbol
 
 
 def test_a_name_with_no_history_is_reported_missing_not_dropped(monkeypatch):

@@ -389,7 +389,8 @@ decision behind a choice.
   point-in-time filings, so a historical value or quality reading would use numbers
   published years later. That half is now measured **prospectively** instead, by
   `_lib/scanlog.py`, which records what the scanner said on the day it said it and
-  refuses to quote a rate under thirty resolved calls. It will say nothing useful for
+  refuses to quote a rate under thirty resolved observations, counting a name once per
+  63-session window however often it is called inside one. It will say nothing useful for
   months, which is the nature of the instrument rather than a fault in it.
 - What a round trip actually costs. The scanner reports one per name and the blend
   backtest reports a breakeven, but the estimator resolves a spread for only about one

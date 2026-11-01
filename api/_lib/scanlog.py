@@ -21,6 +21,29 @@ refuses to compute a hit rate under `MIN_CLOSED` observations, because the first
 ten resolved calls of any strategy are noise and reading them is how a strategy
 gets abandoned or trusted for no reason.
 
+A CALL IS NOT AN OBSERVATION
+-----------------------------
+A call is one row: what the scanner said about one name on one scan date. A name
+it calls a buy on six scans in a fortnight is measured six times over nearly the
+same 63 sessions, and the six outcomes are one outcome counted six times. The
+first Indonesian log has exactly that shape: 74 buy calls on 23 names, every one
+made between 9 and 21 September 2026. Counted as rows, five companies called on
+every scan would have met `MIN_CLOSED` on their own.
+
+So `observations` counts a name once per horizon window. The call that opens a
+window is the observation, scored on its own action and its own outcome. A later
+call on the same name before that window resolves is the same observation,
+whatever it says; a call on or after the session it resolved on opens the next
+one. Every count `summarise` and `summarise_screens` gate on is a count of these,
+and the rows behind it are reported beside it (calls, distinct names, scan
+dates), so the gap between the two stays visible.
+
+Counting each name once does not make the names independent of each other. Calls
+made inside one window share one market path: the same quarter's sector moves
+land on all of them at once, and an excess over the index removes the index's
+level, not what moved inside it. When every observation was opened inside one
+window the reading says so in as many words: one draw of the market, not many.
+
 WHAT IS RECORDED, AND WHAT IS DELIBERATELY NOT
 -----------------------------------------------
 One row per name per scan: the ticker, the date, the action, the score, the
@@ -53,10 +76,10 @@ from typing import Optional, Sequence
 
 import numpy as np
 
-# Below this many resolved calls, a hit rate is noise wearing a percentage sign.
-# Thirty is the floor `pretrade`, `calibrate_tape` and `calibrate_patterns` all
-# use, and the argument is identical: a rate quoted from twenty observations
-# describes the twenty.
+# Below this many resolved observations, a hit rate is noise wearing a percentage
+# sign. Thirty is the floor `pretrade`, `calibrate_tape` and `calibrate_patterns`
+# all use, and the argument is identical: a rate quoted from twenty observations
+# describes the twenty. It counts observations, not calls; see `observations`.
 MIN_CLOSED = 30
 
 # How long a call is given before it is resolved. A quarter, matching the
@@ -66,7 +89,9 @@ HORIZON_DAYS = 63
 # Actions worth measuring. HOLD is excluded deliberately — it is what the
 # scanner says when it has nothing to say, so scoring it would measure the
 # market rather than the scanner.
-DIRECTIONAL = {"STRONG_BUY", "BUY", "REDUCE", "AVOID"}
+BUYS = frozenset({"STRONG_BUY", "BUY"})
+SELLS = frozenset({"REDUCE", "AVOID"})
+DIRECTIONAL = BUYS | SELLS
 
 
 def path_for(directory: Path, market: str) -> Path:
@@ -265,7 +290,133 @@ def resolve(rows: Sequence[dict], prices: dict, benchmark=None,
     return out
 
 
-def summarise_screens(resolved: Sequence[dict]) -> dict:
+def _resolved(row: dict) -> bool:
+    return not row.get("open") and row.get("excess") is not None
+
+
+def _inside(row: dict, window: dict) -> bool:
+    """Whether a call falls inside the window an earlier call opened.
+
+    The window runs from the opening call's scan date up to the session it
+    resolved on, and stops short of that session: a call made on it starts from
+    the close the earlier one ended on, so the two outcomes share no day. A
+    window with no `resolvedOn` has not ended.
+    """
+    start, day = window.get("scannedOn") or "", row.get("scannedOn") or ""
+    end = window.get("resolvedOn")
+    return start <= day and (end is None or day < end)
+
+
+def observations(calls: Sequence[dict]) -> list[dict]:
+    """One entry per name per horizon window, which is what the log observed.
+
+    `calls` are rows from `resolve`, already narrowed to what is being measured:
+    the directional actions, or one screen's selections. Each entry is the call
+    that opened its window, carrying `calls`, every call that fell inside it,
+    the opening one first. The module docstring says why a call is not an
+    observation.
+
+    RESOLVED CALLS ARE GROUPED FIRST, AMONG THEMSELVES. Their windows are exact:
+    `resolvedOn` is the session the outcome was read on, counted in the name's
+    own sessions, so a suspension lengthens the window instead of passing for
+    time. A call that could not be priced is placed afterwards, and can never
+    hide one that could.
+
+    WHAT HAS NOT RESOLVED ADDS AT MOST ONE OBSERVATION PER NAME. A call still
+    inside its horizon has a window that has not ended, so every later call on
+    the name falls inside it. A call inside a resolved window belongs to that
+    window whatever it said: a buy revised to a reduce nine days later is one
+    observation, scored on the buy.
+    """
+    by_name: dict = {}
+    for row in sorted(calls, key=lambda r: r.get("scannedOn") or ""):
+        by_name.setdefault(row.get("ticker"), []).append(row)
+
+    out = []
+    for rows in by_name.values():
+        windows: list[dict] = []
+        for row in rows:
+            if not _resolved(row):
+                continue
+            if windows and _inside(row, windows[-1]):
+                windows[-1]["calls"].append(row)
+            else:
+                windows.append({**row, "calls": [row]})
+
+        pending = []
+        for row in rows:
+            if _resolved(row):
+                continue
+            home = next((window for window in windows if _inside(row, window)), None)
+            (home["calls"] if home is not None else pending).append(row)
+        if pending:
+            windows.append({**pending[0], "calls": pending})
+
+        for window in windows:
+            window["calls"].sort(key=lambda r: r.get("scannedOn") or "")
+        out.extend(windows)
+    out.sort(key=lambda o: (o.get("scannedOn") or "", o.get("ticker") or ""))
+    return out
+
+
+def _dates(rows: Sequence[dict]) -> list[str]:
+    return sorted({row["scannedOn"] for row in rows if row.get("scannedOn")})
+
+
+def _s(count: int) -> str:
+    return "" if count == 1 else "s"
+
+
+def _one_quarter(dates, horizon: int = HORIZON_DAYS) -> bool:
+    """Whether several observations were all opened inside one horizon window.
+
+    `dates` holds one entry per observation, repeats included; a single
+    observation is not "many" sharing a path, so it is never called one.
+
+    Counted in weekdays, because this is a statement about scan dates and must
+    not depend on a price fetch having worked. A weekday count is never smaller
+    than a session count, so a span shorter than the horizon in weekdays is
+    certainly inside one window. A span a holiday or two longer may be too, and
+    is not called one.
+    """
+    days = sorted(day for day in dates if day)
+    if len(days) < 2:
+        return False
+    # The weekdays after the first date, up to and including the last.
+    after_first = np.datetime64(days[0], "D") + 1
+    through_last = np.datetime64(days[-1], "D") + 1
+    return int(np.busday_count(after_first, through_last)) < horizon
+
+
+def _behind(rows: Sequence[dict], noun: str, verb: str, horizon: int) -> str:
+    """The rows behind a count of observations, so the gap between them shows."""
+    if not rows:
+        return ""
+    names = len({row.get("ticker") for row in rows})
+    dates = _dates(rows)
+    where = ""
+    if dates:
+        span = dates[0] if len(dates) == 1 else f"{dates[0]} to {dates[-1]}"
+        where = f" across {len(dates)} scan{_s(len(dates))} ({span})"
+    return (f"They come from {len(rows)} {noun}{_s(len(rows))} on {names} "
+            f"name{_s(names)}{where}; a name counts once per {horizon}-session "
+            f"window, however often it was {verb} inside one. ")
+
+
+def _one_draw(one_quarter: bool, resolved: bool, horizon: int) -> str:
+    """The sentence that stops a count of names reading as a count of draws."""
+    if not one_quarter:
+        return ""
+    if resolved:
+        return (f"Every resolved observation was opened inside a single "
+                f"{horizon}-session window, so this is one quarter of one market "
+                f"path: one draw of the market, not many. ")
+    return (f"Every one of them was opened inside a single {horizon}-session window, "
+            f"so even once all of them have resolved they are one quarter of one "
+            f"market path: one draw of the market, not many. ")
+
+
+def summarise_screens(resolved: Sequence[dict], horizon: int = HORIZON_DAYS) -> dict:
     """What each screen's selections did, or a refusal to say, per screen.
 
     THE OTHER HALF OF RECORDING THEM. `record` writes down which names each
@@ -280,6 +431,11 @@ def summarise_screens(resolved: Sequence[dict]) -> dict:
     calls long after the blended score does, and pooling them to reach the
     threshold sooner would measure neither.
 
+    A NAME COUNTS ONCE PER WINDOW HERE TOO. A screen that picks the same company
+    on two scans a day apart has picked it once. `closed` and `open` count
+    `observations`; `selected`, `names` and `scanDates` report the rows behind
+    them.
+
     A SCREEN WITH NO RECORDED DAYS IS NOT A SCREEN THAT SELECTED NOBODY. Rows
     written before a flag existed do not carry it, so `selected_on` reports
     those days as unrecorded and they are excluded here rather than counted as
@@ -289,13 +445,20 @@ def summarise_screens(resolved: Sequence[dict]) -> dict:
     for flag in SCREEN_FLAGS:
         picked = [row for row in resolved if row.get(flag)]
         recorded = [row for row in resolved if flag in row]
-        closed = [row for row in picked if not row.get("open")
-                  and row.get("excess") is not None]
-        open_calls = [row for row in picked if row.get("open")]
+        observed = observations(picked)
+        closed = [o for o in observed if _resolved(o)]
+        open_obs = [o for o in observed if not _resolved(o)]
+        counts = {
+            "selected": len(picked),
+            "names": len({row.get("ticker") for row in picked}),
+            "scanDates": _dates(picked),
+            "closed": len(closed),
+            "open": len(open_obs),
+        }
 
         if not recorded:
             out[flag] = {
-                "available": False, "selected": 0, "closed": 0, "open": 0,
+                "available": False, **counts, "oneQuarter": False,
                 "reading": (f"No scan in this log recorded the {flag} screen. The "
                             f"rows predate it, which is not the same as the screen "
                             f"having selected nobody."),
@@ -303,80 +466,112 @@ def summarise_screens(resolved: Sequence[dict]) -> dict:
             continue
 
         if len(closed) < MIN_CLOSED:
+            one_quarter = _one_quarter((o.get("scannedOn") for o in observed), horizon)
             out[flag] = {
                 "available": False,
-                "selected": len(picked),
-                "closed": len(closed),
-                "open": len(open_calls),
+                **counts,
                 "needed": MIN_CLOSED,
+                "oneQuarter": one_quarter,
                 "reading": (
-                    f"{len(picked)} selection{'' if len(picked) == 1 else 's'} "
-                    f"recorded, {len(closed)} resolved against the {MIN_CLOSED} "
-                    f"needed before a rate means anything, {len(open_calls)} still "
-                    f"open. This screen makes no predictive claim and cannot be "
-                    f"backtested; this is the only measurement it will ever get, "
-                    f"and it is not ready."),
+                    f"{len(closed)} resolved observation{_s(len(closed))} against the "
+                    f"{MIN_CLOSED} needed before a rate means anything, "
+                    f"{len(open_obs)} still open. "
+                    + _behind(picked, "selection", "picked", horizon)
+                    + _one_draw(one_quarter, False, horizon)
+                    + "This screen makes no predictive claim and cannot be "
+                      "backtested; this is the only measurement it will ever get, "
+                      "and it is not ready."),
             }
             continue
 
-        values = np.array([row["excess"] for row in closed], dtype="float64")
+        one_quarter = _one_quarter((o.get("scannedOn") for o in closed), horizon)
+        values = np.array([o["excess"] for o in closed], dtype="float64")
         out[flag] = {
             "available": True,
-            "selected": len(picked),
-            "closed": len(closed),
-            "open": len(open_calls),
+            **counts,
+            "oneQuarter": one_quarter,
             "meanExcess": float(values.mean()),
             "medianExcess": float(np.median(values)),
             "positive": int((values > 0).sum()),
             "reading": (
-                f"{len(closed)} resolved selections, mean excess "
-                f"{values.mean() * 100:+.1f}%, median "
-                f"{np.median(values) * 100:+.1f}%, {int((values > 0).sum())} of "
-                f"{len(closed)} positive. No significance test is quoted: this is "
-                f"one screen on one market with no control group, and the number "
-                f"is a record of what happened rather than evidence it will "
-                f"happen again."),
+                f"{len(closed)} resolved observations, {len(open_obs)} still open. "
+                + _behind(picked, "selection", "picked", horizon)
+                + f"The resolved ones: mean excess {values.mean() * 100:+.1f}%, "
+                  f"median {np.median(values) * 100:+.1f}%, "
+                  f"{int((values > 0).sum())} of {len(closed)} positive. "
+                + _one_draw(one_quarter, True, horizon)
+                + "No significance test is quoted: this is one screen on one market "
+                  "with no control group, and the number is a record of what "
+                  "happened rather than evidence it will happen again."),
         }
     return out
 
 
-def summarise(resolved: Sequence[dict]) -> dict:
-    """What the closed calls add up to, or a refusal to say.
+def summarise(resolved: Sequence[dict], horizon: int = HORIZON_DAYS) -> dict:
+    """What the resolved observations add up to, or a refusal to say.
 
-    NO HIT RATE UNDER `MIN_CLOSED`. The first ten resolved calls of anything are
-    noise, and a percentage printed over them is how a method gets abandoned or
-    trusted for no reason. The refusal names the count so the reader knows how
-    far off it is rather than being told nothing.
+    NO HIT RATE UNDER `MIN_CLOSED`, AND THE FLOOR COUNTS OBSERVATIONS. The first
+    ten resolved calls of anything are noise, and a percentage printed over them
+    is how a method gets abandoned or trusted for no reason. The refusal names
+    the count so the reader knows how far off it is rather than being told
+    nothing. Both floors, `MIN_CLOSED` overall and a third of it per side, count
+    `observations`: a name once per window, not once per scan that named it.
+
+    THE ROWS ARE REPORTED BESIDE THE COUNT. `calls`, `names` and `scanDates`
+    describe every directional call logged, resolved or not, so 74 calls on 23
+    names sit next to the 23 that count. `oneQuarter` says whether the
+    observations the reading is about (the resolved ones once a rate is quoted,
+    all of them before that) were opened inside one window, and the reading says
+    what that means. `open` counts observations too, and only directional ones:
+    a HOLD still waiting on its horizon is not a call that is coming.
+
+    `horizon` must be the one `resolve` was given. The windows come from each
+    call's own `resolvedOn` and do not depend on it; the reading quotes it, and
+    one quarter is measured in it.
     """
-    closed = [row for row in resolved if not row.get("open")
-              and row.get("excess") is not None
-              and row.get("action") in DIRECTIONAL]
-    open_calls = [row for row in resolved if row.get("open")]
+    calls = [row for row in resolved if row.get("action") in DIRECTIONAL]
+    observed = observations(calls)
+    closed = [o for o in observed if _resolved(o)]
+    open_obs = [o for o in observed if not _resolved(o)]
+    logged = {
+        "calls": len(calls),
+        "names": len({row.get("ticker") for row in calls}),
+        "scanDates": _dates(calls),
+    }
 
     if len(closed) < MIN_CLOSED:
+        one_quarter = _one_quarter((o.get("scannedOn") for o in observed), horizon)
         return {
             "available": False,
             "closed": len(closed),
-            "open": len(open_calls),
+            "open": len(open_obs),
             "needed": MIN_CLOSED,
+            **logged,
+            "oneQuarter": one_quarter,
             "reading": (
-                f"{len(closed)} resolved call{'' if len(closed) == 1 else 's'} against "
-                f"the {MIN_CLOSED} needed before a rate means anything, and "
-                f"{len(open_calls)} still open. This is a slow instrument: it is the "
-                f"only honest way to measure the components that cannot be "
-                f"reconstructed historically, and it produces nothing until it has "
-                f"waited."),
+                f"{len(closed)} resolved observation{_s(len(closed))} against the "
+                f"{MIN_CLOSED} needed before a rate means anything, and "
+                f"{len(open_obs)} still open. "
+                + _behind(calls, "call", "called", horizon)
+                + _one_draw(one_quarter, False, horizon)
+                + "This is a slow instrument: it is the only honest way to measure "
+                  "the components that cannot be reconstructed historically, and it "
+                  "produces nothing until it has waited."),
         }
 
-    buys = [row for row in closed if row["action"] in ("BUY", "STRONG_BUY")]
-    sells = [row for row in closed if row["action"] in ("REDUCE", "AVOID")]
+    buys = [o for o in closed if o["action"] in BUYS]
+    sells = [o for o in closed if o["action"] in SELLS]
 
-    def side(rows: list[dict], expect: int) -> Optional[dict]:
-        if len(rows) < MIN_CLOSED // 3:
+    def side(group: list[dict], expect: int) -> Optional[dict]:
+        if len(group) < MIN_CLOSED // 3:
             return None
-        values = np.array([row["excess"] for row in rows], dtype="float64")
+        values = np.array([o["excess"] for o in group], dtype="float64")
         return {
-            "calls": len(rows),
+            # What every figure below is computed over: one per name per window.
+            # `calls` is every call inside those windows, whatever it said.
+            "observations": len(group),
+            "names": len({o.get("ticker") for o in group}),
+            "calls": sum(len(o["calls"]) for o in group),
             "meanExcess": float(values.mean()),
             "medianExcess": float(np.median(values)),
             # "Right" means the excess went the way the call implied. For a buy
@@ -386,38 +581,95 @@ def summarise(resolved: Sequence[dict]) -> dict:
         }
 
     buy_side, sell_side = side(buys, 1), side(sells, -1)
-    spread = None
+    spread, leave_one_out = None, None
     if buy_side and sell_side:
         spread = buy_side["meanExcess"] - sell_side["meanExcess"]
+        leave_one_out = _leave_one_out(buys, sells, spread)
+    one_quarter = _one_quarter((o.get("scannedOn") for o in closed), horizon)
 
     return {
         "available": True,
         "closed": len(closed),
-        "open": len(open_calls),
-        "horizonDays": HORIZON_DAYS,
+        "open": len(open_obs),
+        **logged,
+        "oneQuarter": one_quarter,
+        "horizonDays": horizon,
         "buys": buy_side,
         "sells": sell_side,
         "spread": spread,
-        "reading": _reading(len(closed), len(open_calls), buy_side, sell_side, spread),
+        "spreadLeaveOneOut": leave_one_out,
+        "reading": _reading(closed, open_obs, calls, buy_side, sell_side, spread,
+                            leave_one_out, one_quarter, horizon),
     }
 
 
-def _reading(closed: int, open_calls: int, buy_side: Optional[dict],
-             sell_side: Optional[dict], spread: Optional[float]) -> str:
-    text = (f"{closed} calls resolved at {HORIZON_DAYS} sessions, {open_calls} still "
-            f"open. ")
+def _leave_one_out(buys: list[dict], sells: list[dict],
+                   spread: float) -> Optional[dict]:
+    """The spread again with each name dropped in turn, and whether its sign held.
+
+    The test §21 of the research roadmap fixed before the first read: a spread
+    one company can reverse is that company, not an ordering. A name goes with
+    every observation it has, on whichever side.
+    """
+    by_name: dict = {}
+    for key, group in (("buys", buys), ("sells", sells)):
+        for o in group:
+            by_name.setdefault(o.get("ticker"), {"buys": [], "sells": []})[key].append(
+                o["excess"])
+    buy_total = sum(o["excess"] for o in buys)
+    sell_total = sum(o["excess"] for o in sells)
+
+    spreads = []
+    for own in by_name.values():
+        kept_buys, kept_sells = len(buys) - len(own["buys"]), len(sells) - len(own["sells"])
+        if not kept_buys or not kept_sells:
+            continue
+        spreads.append((buy_total - sum(own["buys"])) / kept_buys
+                       - (sell_total - sum(own["sells"])) / kept_sells)
+    if not spreads:
+        return None
+    return {
+        "lowest": float(min(spreads)),
+        "highest": float(max(spreads)),
+        "signHolds": bool(spread != 0
+                          and all(np.sign(value) == np.sign(spread) for value in spreads)),
+    }
+
+
+def _across(side: dict) -> str:
+    if side["observations"] == side["names"]:
+        return f"{side['names']} name{_s(side['names'])}"
+    return f"{side['observations']} observations on {side['names']} names"
+
+
+def _reading(closed: list[dict], open_obs: list[dict], calls: list[dict],
+             buy_side: Optional[dict], sell_side: Optional[dict],
+             spread: Optional[float], leave_one_out: Optional[dict],
+             one_quarter: bool, horizon: int) -> str:
+    text = (f"{len(closed)} independent observations resolved at {horizon} sessions, "
+            f"{len(open_obs)} still open. ")
+    text += _behind(calls, "call", "called", horizon)
     if buy_side:
         text += (f"Buys averaged {buy_side['meanExcess'] * 100:+.1f}% against the market "
-                 f"across {buy_side['calls']}, right {buy_side['hitRate'] * 100:.0f}% of "
+                 f"across {_across(buy_side)}, right {buy_side['hitRate'] * 100:.0f}% of "
                  f"the time. ")
     if sell_side:
         text += (f"Reduce and avoid averaged {sell_side['meanExcess'] * 100:+.1f}% across "
-                 f"{sell_side['calls']}. ")
+                 f"{_across(sell_side)}. ")
     if spread is not None:
-        text += (f"The gap between the two sides is {spread * 100:+.1f} points"
-                 + (", which is the number that says whether the ordering meant "
-                    "anything." if abs(spread) > 0 else "."))
-    text += (" No significance is claimed here: these are overlapping windows on "
-             "correlated names, and the count is what it is. It is a record, not a "
+        text += f"The gap between the two sides is {spread * 100:+.1f} points"
+        if abs(spread) > 0:
+            text += ", which is the number that says whether the ordering meant anything"
+        if leave_one_out:
+            text += (f"; dropping any one name moves it between "
+                     f"{leave_one_out['lowest'] * 100:+.1f} and "
+                     f"{leave_one_out['highest'] * 100:+.1f}")
+            if not leave_one_out["signHolds"]:
+                text += ", so its sign rests on a single name"
+        text += ". "
+    text += _one_draw(one_quarter, True, horizon)
+    text += ("No significance is claimed here: the windows of different names overlap "
+             "and the names are correlated, so a name counted once is still not an "
+             "independent draw, and the count is what it is. It is a record, not a "
              "study.")
     return text

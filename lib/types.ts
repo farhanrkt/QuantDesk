@@ -256,7 +256,8 @@ export interface QualityResponse {
    * wants to know what the lender does.
    *
    * `summaryState` is `described`, `none published`, `not returned` (nothing
-   * descriptive came back at all — a throttle signature) or `not fetched`.
+   * descriptive came back at all — a throttle signature), `not fetched`, or
+   * `not a company` (a coin, fund or index, which has no business to describe).
    */
   business?: {
     sector: string | null; industry: string | null;
@@ -285,7 +286,7 @@ export interface QualityResponse {
   /** Where the three numbers came from. Absent when the lens refused to score. */
   domains?: ValidationDomains;
   /** Machine-readable reason the lens declined, when it did. */
-  cause?: "financial" | "no-statements" | "unknown-sector";
+  cause?: "financial" | "no-statements" | "unknown-sector" | "not-a-company";
   explain?: ExplainMap;
 }
 
@@ -1759,9 +1760,11 @@ export interface ScanResponse {
    *
    * `basis` IS NOT OPTIONAL COPY. A rank of 1 rendered without it reads as
    * market share, which nothing in this app measures: private companies,
-   * companies listed elsewhere and names whose filings did not arrive are all
+   * companies listed elsewhere and names whose revenue could not be read are all
    * missing from the denominator. `unplaced` says how many of the last kind
-   * there were.
+   * there were. Where the provider carries no statements, its trailing twelve
+   * months stands in for a filed year; the readings say so wherever a field
+   * compares the two (`api/_lib/field.py`).
    */
   fields?: {
     measured: number; unplaced: number; count: number;

@@ -454,11 +454,13 @@ sixth of the money and half the risk is the portfolio wearing a smaller name.
 **This is the only place in the app where a measurement informs position size, and it was
 earned.** Using a correlation to size something is a claim that last year's correlation says
 something about next year's, so that was measured first: across four index universes, one
-year's pairwise correlations rank-correlate **0.50 to 0.65** with the next year's, at
-t-statistics near or above ten. The composite ranking's information coefficient, by contrast,
-was indistinguishable from zero. The same measurement found the limit and the panel carries it:
-correlations run about **0.06 higher in the worst quarters**, so an ordinary year's reading is a
-floor on how correlated these will be when it matters.
+year's pairwise correlations rank-correlate **0.48 to 0.68** with the next year's, at
+t-statistics from +8.5 to +14.2 (re-measured 1 November 2026). The composite ranking's
+information coefficient, by contrast, was indistinguishable from zero. The same measurement
+found the limit and the panel carries it: correlations run **higher in the worst quarters** —
++0.14 when last measured, a figure that moves between +0.01 and +0.23 with where the quarters
+are cut — so an ordinary year's reading is a floor on how correlated these will be when it
+matters.
 
 Holdings live in your browser, never on a server — this app still has no database. They are sent
 to answer that one question and forgotten, and they never reach the analytics event.
@@ -824,10 +826,26 @@ and nothing more.
 
 It is **not market share**, and the caveat ships inside the payload as `basis` so a client
 cannot render a rank without it — design rule 10 fails the build on one that tries. Private
-companies, foreign listings and names whose filings never arrived are all missing from the
-denominator, and the third of those is not small: 201 of 722 cached Indonesian records
-carry no income statement at all. A field missing its largest member crowns the runner-up
-and looks no different from a correct one, so `unplaced` is reported beside every count.
+companies, foreign listings and names whose revenue could not be read are all missing from
+the denominator. A field missing its largest member crowns the runner-up and looks no
+different from a correct one, so `unplaced` is reported beside every count.
+
+*A quarter of the exchange files nothing the provider carries.* 215 of 770 cached
+Indonesian records have no statements at all. This was put down to throttling until it was
+measured: re-asked unhurried six weeks later, 47 of 47 came back empty again while four
+large listings asked in between came back complete. The provider's summary does carry a
+trailing year's revenue for all 215, and agrees with the filed year where both exist
+(median ratio 1.04 on 104 names), so a listing with no statements is now ranked on it — never
+in place of a filed year, and with the reading saying so wherever a field compares the two.
+Re-ranking the September sweep places 725 names instead of 526. KETR.JK's two unmeasured
+rivals turn out to be smaller (it leads them at 2.4×), MHKI.JK leaves the specialist
+shortlist to a recycler on 3.3× its revenue that could not be read before, and one lead that
+held only on mixed kinds of figure (DIVA.JK, 2.05× one way and 1.85× the other) is no longer
+named. Measuring more also exposed a hole in the specialist screen: it could select a
+company with no measured rival or the named leader of three, but never the larger of two,
+so reading one small rival was enough to remove a company. It now selects any company with
+no measured rival within twice its revenue — nothing that qualified before falls out.
+RESEARCH_ROADMAP §18.9 has the measurement.
 
 *A wrong currency label manufactures a champion.* The first run of the standings crowned
 RIGS.JK with 99.4% of Indonesian marine shipping and 456 times the runner-up. It is a small
@@ -1003,10 +1021,13 @@ is more useful than a confident deduction from eleven names.
 **And the half that cannot be backtested at all** is written down instead. Every scan
 appends what it said — ticker, action, score, conviction, the price on the day — to a
 local, gitignored log. `scanlog.summarise` refuses to compute a hit rate under thirty
-resolved calls, because the first ten resolved calls of anything are noise and reading
-them is how a method gets abandoned or trusted for no reason. It is a slow instrument and
-produces nothing for months; it is also the only honest way the value and quality
-components will ever be measured.
+resolved observations, because the first ten resolved calls of anything are noise and
+reading them is how a method gets abandoned or trusted for no reason. An observation is a
+name over one 63-session window, not a row: the scanner names the same company scan after
+scan, and the first Indonesian log's 74 buy calls are 23 companies. What its first read in
+December will report, and what will count as a null, were fixed before any call resolved;
+see RESEARCH_ROADMAP §21. It is a slow instrument and produces nothing for months; it is
+also the only honest way the value and quality components will ever be measured.
 
 **Then it is shrunk toward 50 by how much evidence there actually was.** Families that
 disagree, a family that never read, components that were missing — each pulls the result
@@ -1058,7 +1079,7 @@ where a constant was invented, it got replaced by an estimator.
 | `returns[returns < 0].std()` for Sortino | **The published root-mean-square shortfall** | They are different statistics. The old one ran 0.85x on ordinary returns, 1.44x where losses are rare and large, and exactly zero when every loss is the same size — where Sortino came back as 4.7e14. See RESEARCH_ROADMAP §13 |
 | A journal that tells you whether you were right | **One that shows what you wrote, and what has moved** | Grading its own entries would be a backtest of one, on a self-selected sample, with no control for the theses never written down. Movement is reported as movement |
 | Asserting that four lenses are two independent readings | **Cohen's κ between the families' actual verdicts** | Two lenses with skewed habits agree most of the time while sharing nothing: one that calls 70% of companies cheap and one that calls 70% sound land on the same label 58% of the time by construction. Chance-corrected, the price record and the filings come out at κ = +0.03 across 168 names — so the cross-check is earned. The same run found the pair the app declares REDUNDANT agrees no more than that |
-| Sizing on a correlation because it seems reasonable | **Measuring whether correlations persist first** | One year's pairwise correlations rank-correlate 0.50-0.65 with the next year's across four universes, where the ranking's information coefficient was indistinguishable from zero. That gap is the whole licence for the portfolio panel, and a test fails if a re-measurement removes it |
+| Sizing on a correlation because it seems reasonable | **Measuring whether correlations persist first** | One year's pairwise correlations rank-correlate 0.48-0.68 with the next year's across four universes, where the ranking's information coefficient was indistinguishable from zero. That gap is the whole licence for the portfolio panel, and a test fails if a re-measurement removes it |
 | A bare screen flag | **Bayes on the screen's published error rates** | A screen that catches most manipulators on a population where manipulation is rare still produces mostly false alarms. The prevalence decides the answer and nobody can measure it, so it is a control — and the conclusion holds across every value the literature supports |
 | An accounting score with no provenance | **The published sample, on the axes that can be checked** | Piotroski was fitted on US value stocks in 1976-1996, Altman on 1960s manufacturers, Beneish on 1980s SEC cases. Every use today is outside all three, which is provenance rather than a defect — so it is stated, never coloured, and never counted into a fit score |
 | A pre-trade flag on its own | **The flag plus its measured firing rate** | "Altman says distress" is unreadable without knowing how often Altman says distress. Measured across four index universes: the conditions that turned out to fire on most of the market are demoted to base conditions rather than presented as findings, and an uncalibrated check is withheld |

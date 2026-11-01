@@ -344,3 +344,118 @@ def test_an_uncorrectable_dividend_is_refused(dps):
             "dividend_rate": np.nan, "fx_rate": np.nan,
             "trailing_dividend_yield_raw": np.nan, "dividend_yield_raw": np.nan}
     assert not np.isfinite(V.resolve_dividend(data, 100.0)[0])
+
+
+# --------------------------------------------------------------------------- #
+# The November 2026 audit: what the engine does when it cannot tell what the
+# listing is, and what it counts as cash
+# --------------------------------------------------------------------------- #
+def _offline(monkeypatch, record):
+    monkeypatch.setattr(V, "fetch_company", lambda ticker: dict(record))
+    monkeypatch.setattr(V, "fetch_risk_free_rate", lambda *a, **k: (0.045, "test"))
+    monkeypatch.setattr(V.riskmodel, "estimate_beta_for_symbol",
+                        lambda *a, **k: V.riskmodel.BetaEstimate(
+                            raw=1.0, adjusted=1.0, stderr=0.1, r_squared=0.4,
+                            observations=400, method="vasicek", index_symbol="^GSPC",
+                            prior_weight=0.04))
+
+
+def _company(**overrides):
+    years = [pd.Timestamp(f"{2025 - i}-12-31") for i in range(4)]
+    record = {
+        "ok": True, "name": "Planted Corp", "sector": "Technology",
+        "industry": "Software - Infrastructure", "quote_type": "EQUITY",
+        "price": 50.0, "shares": 10.0, "beta": 1.0, "currency": "USD",
+        "financial_currency": "USD", "market_cap": 500.0, "fx_rate": None,
+        "income": pd.DataFrame({y: {"Total Revenue": 400.0, "Net Income": 40.0,
+                                    "Pretax Income": 50.0, "Tax Provision": 10.0}
+                                for y in years}),
+        "balance": pd.DataFrame({y: {"Cash And Cash Equivalents": 30.0, "Total Debt": 40.0,
+                                     "Stockholders Equity": 200.0} for y in years}),
+        "cashflow": pd.DataFrame({y: {"Operating Cash Flow": 60.0,
+                                      "Capital Expenditure": -10.0} for y in years}),
+        "dividend_history": pd.DataFrame(), "ttm_dividend": np.nan,
+        "dividend_rate": np.nan, "trailing_dividend_rate": np.nan,
+        "dividend_yield_raw": np.nan, "trailing_dividend_yield_raw": np.nan,
+        "payout_ratio": np.nan, "roe_info": np.nan, "net_income_info": 40.0,
+        "price_source": "test", "price_as_of": "2026-10-30",
+    }
+    record.update(overrides)
+    return record
+
+
+def test_a_company_whose_sector_did_not_arrive_is_refused_not_valued_as_ordinary(monkeypatch):
+    """JPM in the November audit: one throttled lookup, no sector, and the
+    engine routed a bank to the DCF — refused there for negative free cash flow
+    and offered a form to type one in. A bank whose cash flow happened to be
+    positive would have been handed a fair value instead."""
+    _offline(monkeypatch, _company(sector="", industry="", name="JPM"))
+    with pytest.raises(V.ValuationError) as caught:
+        V.analyze("JPM")
+    detail = caught.value.as_detail()
+    assert detail["cause"] == "unknown-sector"
+    assert detail["manualRequired"] is False, "no figure typed into a form supplies a sector"
+    assert "bank" in detail["message"] and "again" in detail["message"]
+
+
+def test_a_sectorless_company_whose_statements_rule_out_a_bank_is_still_valued(monkeypatch):
+    """ITMG.JK, a coal miner, throttled in the same audit a few minutes later.
+    No bank in the local cache reports a cost of revenue (0 of 296), so a
+    statement that does is not a bank's, and the notice says so."""
+    years = [pd.Timestamp(f"{2025 - i}-12-31") for i in range(4)]
+    income = pd.DataFrame({y: {"Total Revenue": 400.0, "Cost Of Revenue": 250.0,
+                               "Net Income": 40.0, "Pretax Income": 50.0,
+                               "Tax Provision": 10.0} for y in years})
+    _offline(monkeypatch, _company(sector="", industry="", income=income))
+    result = V.analyze("ITMG.JK", market_code="ID")
+    assert result["engine"] == "DCF" and result["baseCase"]["impliedPrice"] > 0
+    assert "cost of revenue" in result["routeReason"]
+    assert any("No sector or industry came back" in n["text"] for n in result["notices"])
+
+
+def test_choosing_the_engine_by_hand_still_values_it(monkeypatch):
+    _offline(monkeypatch, _company(sector="", industry=""))
+    result = V.analyze("PLNT", engine_choice="dcf")
+    assert result["engine"] == "DCF" and result["baseCase"]["impliedPrice"] > 0
+
+
+@pytest.mark.parametrize(("quote_type", "symbol", "kind"), [
+    ("CRYPTOCURRENCY", "BTC-USD", "a cryptocurrency"),
+    ("ETF", "SPY", "an exchange-traded fund"),
+    ("", "ETH-USD", "a cryptocurrency"),     # the lookup did not say; the pair does
+])
+def test_a_coin_or_a_fund_is_not_valued_as_a_company(monkeypatch, quote_type, symbol, kind):
+    """BTC-USD and SPY were refused for "no usable cash-flow statement" and
+    advised to type a free cash flow in."""
+    _offline(monkeypatch, _company(sector="", industry="", quote_type=quote_type,
+                                   income=pd.DataFrame(), cashflow=pd.DataFrame()))
+    with pytest.raises(V.ValuationError) as caught:
+        V.analyze(symbol)
+    detail = caught.value.as_detail()
+    assert detail["cause"] == "not-a-company"
+    assert kind in detail["message"]
+    assert "free cash flow" not in detail["message"] and detail["manualRequired"] is False
+
+
+def test_short_term_investments_join_cash_in_the_bridge():
+    """Cash parked in treasury bills is still the shareholders' cash. Measured in
+    the November audit: leaving it out understated at least 5% of market value
+    for 15% of non-financial records."""
+    day = pd.Timestamp("2025-12-31")
+    both = pd.DataFrame({day: {"Cash And Cash Equivalents": 30.0,
+                               "Cash Cash Equivalents And Short Term Investments": 75.0,
+                               "Total Debt": 40.0}})
+    assert V.extract_balance_items(both) == (75.0, 40.0, "Cash & short-term investments")
+    alone = pd.DataFrame({day: {"Cash And Cash Equivalents": 30.0, "Total Debt": 40.0}})
+    assert V.extract_balance_items(alone) == (30.0, 40.0, "Cash & equivalents")
+
+
+def test_the_bridge_names_the_cash_it_added(monkeypatch):
+    day = pd.Timestamp("2025-12-31")
+    balance = pd.DataFrame({day: {"Cash And Cash Equivalents": 30.0,
+                                  "Cash Cash Equivalents And Short Term Investments": 75.0,
+                                  "Total Debt": 40.0, "Stockholders Equity": 200.0}})
+    _offline(monkeypatch, _company(balance=balance))
+    bridge = {row["component"]: row["amount"] for row in V.analyze("PLNT")["bridge"]}
+    assert "+ Cash & short-term investments" in bridge
+    assert "+ Cash & equivalents" not in bridge

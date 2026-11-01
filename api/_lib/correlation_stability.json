@@ -1,5 +1,5 @@
 {
-  "measuredOn": "2026-08-28",
+  "measuredOn": "2026-11-01",
   "years": 8,
   "windows": [
     63,
@@ -11,217 +11,217 @@
       "universe": "Dow Jones Industrial Average",
       "market": "US",
       "names": 30,
-      "days": 2009,
+      "days": 2008,
       "windows": {
         "63": {
           "usable": true,
           "windowDays": 63,
           "periods": 30,
-          "meanRankCorrelation": 0.4748450076318962,
-          "stdev": 0.11640461080722747,
-          "tStat": 22.343042959820107,
-          "min": 0.2251784055970155,
-          "max": 0.7071365154525854,
-          "meanPairwiseCorrelation": 0.30757674679184205
+          "meanRankCorrelation": 0.4844414428730336,
+          "stdev": 0.10090890023551471,
+          "tStat": 26.29495569098721,
+          "min": 0.32237319170711015,
+          "max": 0.7018358828872039,
+          "meanPairwiseCorrelation": 0.294340602311734
         },
         "126": {
           "usable": true,
           "windowDays": 126,
           "periods": 14,
-          "meanRankCorrelation": 0.5248414629498461,
-          "stdev": 0.09984860057053209,
-          "tStat": 19.667545919627994,
-          "min": 0.2823135360827598,
-          "max": 0.6577271673637666,
-          "meanPairwiseCorrelation": 0.32488519998642845
+          "meanRankCorrelation": 0.5669364887529239,
+          "stdev": 0.11904733120983031,
+          "tStat": 17.818812731174397,
+          "min": 0.350361913703445,
+          "max": 0.7779148813958133,
+          "meanPairwiseCorrelation": 0.3189208240523417
         },
         "252": {
           "usable": true,
           "windowDays": 252,
           "periods": 6,
-          "meanRankCorrelation": 0.5401749237417819,
-          "stdev": 0.12962510070407038,
-          "tStat": 10.207536409440426,
-          "min": 0.36623028062343915,
-          "max": 0.670892370582138,
-          "meanPairwiseCorrelation": 0.36125571343837387
+          "meanRankCorrelation": 0.5392824705475867,
+          "stdev": 0.15617989574285965,
+          "tStat": 8.457982852312654,
+          "min": 0.3014795819441144,
+          "max": 0.7215544576251172,
+          "meanPairwiseCorrelation": 0.3437010991989461
         }
       },
       "stress": {
         "usable": true,
         "windowDays": 63,
         "windows": 31,
-        "allWindows": 0.3075767467918421,
-        "worstQuartile": 0.3623777397520671,
-        "restOfWindows": 0.2915931238451097,
-        "rise": 0.0707846159069574,
-        "worstWindowReturn": -0.060654711599797836
+        "allWindows": 0.29434060231173403,
+        "worstQuartile": 0.39910224037667036,
+        "restOfWindows": 0.26378512454279424,
+        "rise": 0.13531711583387612,
+        "worstWindowReturn": -0.16706316638574042
       }
     },
     "nasdaq100": {
       "universe": "Nasdaq-100",
       "market": "US",
-      "names": 98,
-      "days": 2009,
+      "names": 97,
+      "days": 2008,
       "windows": {
         "63": {
           "usable": true,
           "windowDays": 63,
           "periods": 30,
-          "meanRankCorrelation": 0.514508193759948,
-          "stdev": 0.0926280204488055,
-          "tStat": 30.423595622375885,
-          "min": 0.374153491226462,
-          "max": 0.7356242868333569,
-          "meanPairwiseCorrelation": 0.31156390450496785
+          "meanRankCorrelation": 0.5119945110552866,
+          "stdev": 0.07275313544627461,
+          "tStat": 38.54554739168542,
+          "min": 0.373904386329861,
+          "max": 0.7434467341029745,
+          "meanPairwiseCorrelation": 0.30266747290871626
         },
         "126": {
           "usable": true,
           "windowDays": 126,
           "periods": 14,
-          "meanRankCorrelation": 0.6196503601197106,
-          "stdev": 0.07109549565954876,
-          "tStat": 32.611339518070444,
-          "min": 0.5370367409229488,
-          "max": 0.7411829637612305,
-          "meanPairwiseCorrelation": 0.3296892816871485
+          "meanRankCorrelation": 0.6227668545996062,
+          "stdev": 0.08856325963460969,
+          "tStat": 26.31091280249104,
+          "min": 0.45146560892382276,
+          "max": 0.7818054285986124,
+          "meanPairwiseCorrelation": 0.3238149373379956
         },
         "252": {
           "usable": true,
           "windowDays": 252,
           "periods": 6,
-          "meanRankCorrelation": 0.6539238702914426,
-          "stdev": 0.10172403707341979,
-          "tStat": 15.746325636721181,
-          "min": 0.4736542877037513,
-          "max": 0.7645441523973066,
-          "meanPairwiseCorrelation": 0.3625132694267191
+          "meanRankCorrelation": 0.6770903867954492,
+          "stdev": 0.11673685596759673,
+          "tStat": 14.20738929145833,
+          "min": 0.4857511012350487,
+          "max": 0.7958178719581626,
+          "meanPairwiseCorrelation": 0.3478985349068252
         }
       },
       "stress": {
         "usable": true,
         "windowDays": 63,
         "windows": 31,
-        "allWindows": 0.31220662541643357,
-        "worstQuartile": 0.31817219136827324,
-        "restOfWindows": 0.3104666686804803,
-        "rise": 0.007705522687792954,
-        "worstWindowReturn": -0.1206262779751507
+        "allWindows": 0.30345860145683584,
+        "worstQuartile": 0.4258826500068976,
+        "restOfWindows": 0.26775158729640114,
+        "rise": 0.15813106271049648,
+        "worstWindowReturn": -0.12988954317231563
       }
     },
     "idx30": {
       "universe": "IDX30",
       "market": "ID",
       "names": 30,
-      "days": 1951,
+      "days": 1945,
       "windows": {
         "63": {
           "usable": true,
           "windowDays": 63,
           "periods": 29,
-          "meanRankCorrelation": 0.35759209851616375,
-          "stdev": 0.138003764423692,
-          "tStat": 13.953911998563013,
-          "min": 0.14722780663530324,
-          "max": 0.6131511307564441,
-          "meanPairwiseCorrelation": 0.1885216507421873
+          "meanRankCorrelation": 0.32536707626208605,
+          "stdev": 0.14695510557088934,
+          "tStat": 11.923065358498999,
+          "min": 0.03295127686653439,
+          "max": 0.5698500793578585,
+          "meanPairwiseCorrelation": 0.19128605490468426
         },
         "126": {
           "usable": true,
           "windowDays": 126,
           "periods": 14,
-          "meanRankCorrelation": 0.47210835156516184,
-          "stdev": 0.14923353964337274,
-          "tStat": 11.836934949159755,
-          "min": 0.25985447643150905,
-          "max": 0.7438648049147549,
-          "meanPairwiseCorrelation": 0.19375678137891106
+          "meanRankCorrelation": 0.4409887612784164,
+          "stdev": 0.14645822527700011,
+          "tStat": 11.266208183261378,
+          "min": 0.2474066860367643,
+          "max": 0.6384721032159846,
+          "meanPairwiseCorrelation": 0.20097077039915595
         },
         "252": {
           "usable": true,
           "windowDays": 252,
           "periods": 6,
-          "meanRankCorrelation": 0.589356623115499,
-          "stdev": 0.15203503720219533,
-          "tStat": 9.495331008751846,
-          "min": 0.4449490259309528,
-          "max": 0.7899078044651696,
-          "meanPairwiseCorrelation": 0.20578659915650857
+          "meanRankCorrelation": 0.552928561134275,
+          "stdev": 0.154427972169948,
+          "tStat": 8.77038544221612,
+          "min": 0.36188396310448334,
+          "max": 0.7749796175781073,
+          "meanPairwiseCorrelation": 0.19803339380306667
         }
       },
       "stress": {
         "usable": true,
         "windowDays": 63,
         "windows": 30,
-        "allWindows": 0.1907081829929981,
-        "worstQuartile": 0.2206863934697676,
-        "restOfWindows": 0.18158437980441614,
-        "rise": 0.03910201366535146,
-        "worstWindowReturn": -0.22963431535388246
+        "allWindows": 0.19394901105396795,
+        "worstQuartile": 0.2893639051364101,
+        "restOfWindows": 0.16490969546365952,
+        "rise": 0.12445420967275056,
+        "worstWindowReturn": -0.34334842358210227
       }
     },
     "lq45": {
       "universe": "IDX LQ45",
       "market": "ID",
       "names": 45,
-      "days": 1951,
+      "days": 1945,
       "windows": {
         "63": {
           "usable": true,
           "windowDays": 63,
           "periods": 29,
-          "meanRankCorrelation": 0.2992091469589281,
-          "stdev": 0.0937611845891401,
-          "tStat": 17.18504917825647,
-          "min": 0.14519987112000776,
-          "max": 0.4698301629052349,
-          "meanPairwiseCorrelation": 0.18848852820967651
+          "meanRankCorrelation": 0.2707942679465972,
+          "stdev": 0.09681908388433126,
+          "tStat": 15.06182152541278,
+          "min": 0.10221979740018225,
+          "max": 0.4357171857780871,
+          "meanPairwiseCorrelation": 0.18936387287348846
         },
         "126": {
           "usable": true,
           "windowDays": 126,
           "periods": 14,
-          "meanRankCorrelation": 0.3987647021454581,
-          "stdev": 0.109969889726416,
-          "tStat": 13.567722010808373,
-          "min": 0.25528051325179985,
-          "max": 0.6127411283348421,
-          "meanPairwiseCorrelation": 0.1934426107668682
+          "meanRankCorrelation": 0.36939147713953036,
+          "stdev": 0.11179867495561904,
+          "tStat": 12.36272567272493,
+          "min": 0.22099883107046672,
+          "max": 0.5586367327848567,
+          "meanPairwiseCorrelation": 0.19922811153341646
         },
         "252": {
           "usable": true,
           "windowDays": 252,
           "periods": 6,
-          "meanRankCorrelation": 0.5035728012024508,
-          "stdev": 0.11943476646991853,
-          "tStat": 10.327783506828982,
-          "min": 0.3710965438339918,
-          "max": 0.6629671864038044,
-          "meanPairwiseCorrelation": 0.2041514900473876
+          "meanRankCorrelation": 0.4778482518938554,
+          "stdev": 0.10477916875396773,
+          "tStat": 11.17096466349422,
+          "min": 0.34032145528287966,
+          "max": 0.6007656168435705,
+          "meanPairwiseCorrelation": 0.1964489087886538
         }
       },
       "stress": {
         "usable": true,
         "windowDays": 63,
         "windows": 30,
-        "allWindows": 0.18996812685136505,
-        "worstQuartile": 0.2788397505092106,
-        "restOfWindows": 0.16292024139028166,
-        "rise": 0.11591950911892895,
-        "worstWindowReturn": -0.23337695647251577
+        "allWindows": 0.19147173441676466,
+        "worstQuartile": 0.2871349065021201,
+        "restOfWindows": 0.1623568559560043,
+        "rise": 0.12477805054611579,
+        "worstWindowReturn": -0.35400696191815734
       }
     }
   },
-  "headline": "Pairwise correlations persist: over a one-year window the pairs that moved together in one year are largely the pairs that move together in the next, with rank correlations of 0.50 to 0.65 across four index universes. That is far more stable than anything this app has measured about returns, which is why a correlation may inform position size where a return forecast may not. In the worst quarter of quarters for these markets the mean pairwise correlation is +0.06 higher than in the rest, so the diversification a correlation implies is smallest exactly when it matters most.",
+  "headline": "Pairwise correlations persist: over a one-year window the pairs that moved together in one year are largely the pairs that move together in the next, with rank correlations of 0.48 to 0.68 across four index universes. That is far more stable than anything this app has measured about returns, which is why a correlation may inform position size where a return forecast may not. In the worst quarter of quarters for these markets the mean pairwise correlation is +0.14 higher than in the rest, so the diversification a correlation implies is smallest exactly when it matters most.",
   "yearlyPersistence": {
-    "mean": 0.5717570545877936,
-    "min": 0.5035728012024508,
-    "max": 0.6539238702914426
+    "mean": 0.5617874175927916,
+    "min": 0.4778482518938554,
+    "max": 0.6770903867954492
   },
   "stressRise": {
-    "mean": 0.05837791534475769,
-    "min": 0.007705522687792954,
-    "max": 0.11591950911892895
+    "mean": 0.13567010969080973,
+    "min": 0.12445420967275056,
+    "max": 0.15813106271049648
   },
   "caveats": [
     "Today's index constituents, so every name measured is one that survived.",
