@@ -49,6 +49,7 @@ this field exists to prevent.
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Callable, Optional, Sequence
 
 import numpy as np
@@ -740,7 +741,13 @@ def _roc252(value, **_):
     label = "One-year price change"
     what = "How much the price has moved over the last twelve months, as a percentage."
     if not _known(value):
-        return unavailable(label, what, "needs a year of history")
+        # NOT "NEEDS A YEAR OF HISTORY", which it said of Apple in the November
+        # audit: the one-year view holds about 250 sessions and this needs 253,
+        # so the missing year was the range on screen, not the company's.
+        return unavailable(label, what,
+                           "it needs 253 trading days of the range on screen, and a one-year "
+                           "range holds about 250 — choose two years or more, unless the "
+                           "listing itself is younger than a year")
     return make(label, what,
                 f"{value:+.1f}% over the past year. That is the whole twelve months including "
                 f"the most recent weeks, so it is a plainer number than the 12-1 momentum "
@@ -3719,8 +3726,8 @@ def _check_firing_rate(value, check_label=None, universe_label=None, **_):
 # information coefficient is indistinguishable from zero, the event study
 # returns nulls, and the pre-trade panel deals only in present-tense facts.
 # Correlations are different, and the difference was measured before this
-# shipped — one year's pairwise correlations rank-correlate 0.50 to 0.65 with
-# the next year's across four index universes.
+# shipped — one year's pairwise correlations rank-correlate 0.48 to 0.68 with
+# the next year's across four index universes (re-measured 1 November 2026).
 #
 # THE READINGS ARE COLOURED, WHICH THE LAST TWO FEATURES WERE NOT. A candidate
 # correlating 0.9 with something already held is genuinely unfavourable for the
@@ -3989,7 +3996,7 @@ def _shared_driver(value, matches=None, tested=None, ambiguous=False,
 # and deliberate. Every other metric here describes the present; this one is
 # printed because a study said it survives the year, and the number that licensed
 # it belongs in the same sentence rather than two clicks away. It is also the
-# number that shrinks the claim: 0.42 is real and is well short of the 0.50-0.65
+# number that shrinks the claim: 0.42 is real and is well short of the 0.48-0.68
 # at which correlations persist.
 # ============================================================================ #
 @metric("factorBreadth")
@@ -4477,3 +4484,210 @@ def for_company(record: dict, market: str) -> dict:
                                            fcf_pos / fcf_of if fcf_of else None,
                                            positive=fcf_pos, of=fcf_of)
     return {k: v for k, v in out.items() if v}
+
+
+# ============================================================================ #
+# What moved the markets — `marketboard.build`
+#
+# EVERY SENTENCE HERE IS ABOUT SIZE, NEVER ABOUT DIRECTION'S MERIT. A fall in
+# crude is good news for one reader and bad news for the next, so a move is
+# described by how large it was for that instrument and nothing else, and every
+# explanation is in the neutral `context` band.
+# ============================================================================ #
+@metric("dailyMove")
+def _daily_move(value, **_):
+    label = "How unusual a day's move was"
+    what = ("Where the latest session's move sits among the same instrument's daily moves "
+            "over the past year, by size alone: 97 means it was larger than 97% of them. A "
+            "rise and a fall of the same size read the same, and neither is good or bad on "
+            "its own. Each instrument is compared only with itself, on its own trading days.")
+    if not _known(value):
+        return unavailable(label, what, "fewer than 120 sessions of history in the past year")
+    reading = _size_phrase(value).capitalize()
+    reading += (", which is unusual for it." if value >= 95 else
+                ", an ordinary size for it." if value < 80 else ".")
+    return make(label, what, reading, CONTEXT_NOT_TRIGGER, "context", "none",
+                value_text=f"{_num(value, 0)}th percentile")
+
+
+def _size_phrase(percentile: float) -> str:
+    """Where a move sits in its own year, said from whichever end is nearer.
+
+    "Larger than 0% of its daily moves" is true of a flat day and reads as a
+    misprint, so a small move is described from the other end.
+    """
+    if percentile >= 50:
+        return f"larger than {percentile:.0f}% of its daily moves in the past year"
+    if 100 - percentile >= 99.5:
+        return "smaller than almost all of its daily moves in the past year"
+    return f"smaller than {100 - percentile:.0f}% of its daily moves in the past year"
+
+
+@metric("eventDayMove")
+def _event_day_move(value, events=None, p=None, **_):
+    label = "How past event days compare"
+    what = ("On the days a given event happened — an FOMC decision, a CPI release — how often "
+            "an instrument moved more than on its median day. On any day, half do, and how far "
+            "from one half a share must be before it means anything depends on how many event "
+            "days there were.")
+    if not _known(value):
+        return unavailable(label, what, "too few of these events in the history held")
+    count = f" of {int(events)} event days" if _known(events) else ""
+    reading = f"Moved more than on its median day on {_pct(value, 0)}{count}; on any day, half do."
+    # Worded by the binomial test the history line uses, never by how far the
+    # share sits from one half: 15 of 22 is 68%, and still within chance.
+    if _known(p):
+        reading += (" A gap this size is within what chance produces." if p > 0.05 else
+                    " A gap this size is more than chance alone usually produces.")
+    return make(label, what, reading, CONTEXT_NOT_TRIGGER, "context", "none",
+                value_text=_pct(value, 0))
+
+
+# The event and the instrument as a sentence says them.
+_EVENT_DAYS = {"fomc": "FOMC decision days", "cpi": "CPI release days",
+               "jobs": "jobs-report days", "bi-rate": "Bank Indonesia decision days"}
+_HISTORY_NAMES = {"sp500": "the S&P 500", "t10y": "the 10-year yield",
+                  "dollar": "the dollar index", "jkse": "IHSG", "usdidr": "the rupiah"}
+
+
+def _size_text(value: float, change: str) -> str:
+    if change == "bp":
+        return f"{value:,.1f} bp"
+    if change == "points":
+        return f"{value:,.2f} points"
+    return f"{value * 100:,.2f}%"
+
+
+def history_reading(kind: str, row: dict) -> str:
+    """One past-occurrence line, worded as history and never as a forecast."""
+    if not row.get("available"):
+        return row.get("reason") or "No history to compare."
+    name = _HISTORY_NAMES.get(row["key"], row.get("name", "it"))
+    days = _EVENT_DAYS.get(kind, "event days")
+    text = (f"On {row['above']} of the last {row['events']} {days}, {name} moved more than on "
+            f"its median day; on any day, half do.")
+    if row["p"] > 0.05:
+        text += " A gap this size is within what chance produces over that many days."
+    else:
+        # A gap, not "more often": the test is two-sided, and the count already says which way.
+        text += f" A gap this size is more than chance alone usually produces over {row['events']} days."
+    text += (f" Its median move on those days was {_size_text(row['eventMedian'], row['change'])}, "
+             f"against {_size_text(row['allMedian'], row['change'])} on all days.")
+    return text
+
+
+def _board_date(iso: Optional[str], with_year: bool = False) -> str:
+    try:
+        day = dt.date.fromisoformat(iso) if iso else None
+    except ValueError:
+        day = None
+    if day is None:
+        return "an unknown date"
+    text = f"{day.day} {day.strftime('%b')}"
+    return f"{text} {day.year}" if with_year else text
+
+
+def board_move_text(row: dict) -> str:
+    """A move in the unit its own market quotes it in: %, basis points or points."""
+    move = row.get("move")
+    if not _known(move):
+        return "n/a"
+    sign = "+" if move > 0 else "-" if move < 0 else ""
+    if row.get("change") == "bp":
+        return f"{sign}{abs(move):,.0f} bp"
+    if row.get("change") == "points":
+        return f"{sign}{abs(move):,.2f} points"
+    # Two decimals, because a currency or a broad index often moves a few
+    # hundredths of a percent, and "-0.0%" says nothing.
+    return f"{sign}{abs(move) * 100:,.2f}%"
+
+
+def _board_reading(row: dict) -> str:
+    if not row.get("available"):
+        return row.get("reason") or "No recent price."
+    verb = {"up": "Rose", "down": "Fell"}.get(row.get("direction"), "Was unchanged")
+    session = _board_date(row.get("asOf"))
+    if verb == "Was unchanged":
+        return f"Was unchanged in the session of {session}."
+    text = f"{verb} {board_move_text(row).lstrip('+-')} in the session of {session}"
+    percentile = row.get("percentile")
+    if not _known(percentile):
+        return (f"{text}. Too little history in the past year to say whether that is "
+                f"unusual for it.")
+    text += f", {_size_phrase(percentile)}"
+    if row.get("unusual"):
+        word = "rise" if row.get("direction") == "up" else "fall"
+        since = row.get("largestSince")
+        if since:
+            return f"{text} — its largest {word} since {_board_date(since, with_year=True)}."
+        if row.get("largestInHistory"):
+            return (f"{text} — its largest {word} in the history fetched, since "
+                    f"{_board_date(row.get('historyFrom'), with_year=True)}.")
+        return f"{text}, which is unusual for it."
+    return f"{text}."
+
+
+def _board_summary(rows: list[dict], code: str, unusual: list[str],
+                   unavailable_keys: list[str]) -> str:
+    by_key = {row["key"]: row for row in rows}
+    if unusual:
+        parts = []
+        for key in unusual:
+            row = by_key[key]
+            part = f"{row['name']} {board_move_text(row)}"
+            since = row.get("largestSince")
+            if since:
+                word = "rise" if row.get("direction") == "up" else "fall"
+                part += f" (its largest {word} since {_board_date(since, with_year=True)})"
+            parts.append(part)
+        text = ("Unusual for the instrument that made it: " + "; ".join(parts) + ". Each is "
+                "measured against its own past year, not against the others.")
+    else:
+        text = ("Nothing here moved more than it ordinarily does: every latest move was "
+                "smaller than 95% of that instrument's own days in the past year.")
+    if unavailable_keys:
+        names = [by_key[key]["name"] for key in unavailable_keys]
+        count = len(names)
+        text += (f" {', '.join(names)} had no recent price and "
+                 f"{'is' if count == 1 else 'are'} left blank.")
+    return text
+
+
+def _board_base_rate(rate: Optional[dict]) -> Optional[str]:
+    if not rate:
+        return None
+    return (f"For scale: on {_pct(rate['share'], 0)} of the past year's weekdays, at least "
+            f"one of these {rate['instruments']} instruments moved this much. A move this "
+            f"size somewhere on the board is common; one in a particular instrument is not.")
+
+
+def for_market_board(board: dict) -> dict:
+    """Per-row readings and per-market summaries for `marketboard.build`.
+
+    The summary names only the moves that were unusual for the instrument that
+    made them, in the board's declared order, never ranked by size — see
+    `marketboard`'s docstring for why the board is not a leaderboard.
+    """
+    rows = board.get("rows") or []
+    out_rows = {}
+    for row in rows:
+        out_rows[row["key"]] = {
+            "reading": _board_reading(row),
+            "moveText": board_move_text(row) if row.get("available") else None,
+            "percentile": (explain("dailyMove", row.get("percentile"))
+                           if row.get("available") else None),
+        }
+    markets = {}
+    for code, entry in (board.get("markets") or {}).items():
+        markets[code] = {
+            "summary": _board_summary(rows, code, entry.get("unusual") or [],
+                                      entry.get("unavailable") or []),
+            "baseRate": _board_base_rate(entry.get("baseRate")),
+        }
+    history = {kind: {row["key"]: {"reading": history_reading(kind, row),
+                                   "share": (explain("eventDayMove", row.get("share"),
+                                                     events=row.get("events"), p=row.get("p"))
+                                             if row.get("available") else None)}
+                      for row in rows_}
+               for kind, rows_ in (board.get("eventHistory") or {}).items()}
+    return {"rows": out_rows, "markets": markets, "eventHistory": history}

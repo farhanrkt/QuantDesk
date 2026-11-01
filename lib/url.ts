@@ -61,7 +61,8 @@ export type StockTab = (typeof STOCK_TABS)[number];
  */
 export const DEFAULT_TAB: StockTab = "trend";
 
-export const MARKET_VIEWS = ["rank", "screener", "scan", "exposure"] as const;
+// "today" first: the board of what moved the markets is what /markets opens on.
+export const MARKET_VIEWS = ["today", "rank", "screener", "scan", "exposure"] as const;
 export type MarketView = (typeof MARKET_VIEWS)[number];
 
 export const MAX_COMPARE = 4;
@@ -149,10 +150,10 @@ export function compareHref(symbols: string[]): string {
   return list.length ? `/compare?symbols=${list.map(encodeURIComponent).join(",")}` : "/compare";
 }
 
-export function marketsHref(view: MarketView = "rank"): string {
-  return view === "rank" ? "/markets" : `/markets?view=${view}`;
+export function marketsHref(view: MarketView = "today"): string {
+  return view === "today" ? "/markets" : `/markets?view=${view}`;
 }
 
 export function parseMarketView(raw: string | null): MarketView {
-  return (MARKET_VIEWS as readonly string[]).includes(raw ?? "") ? (raw as MarketView) : "rank";
+  return (MARKET_VIEWS as readonly string[]).includes(raw ?? "") ? (raw as MarketView) : "today";
 }

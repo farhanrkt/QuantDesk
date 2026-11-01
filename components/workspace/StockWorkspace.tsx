@@ -18,6 +18,7 @@ import { SynthesisPanel } from "@/components/SynthesisPanel";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
 import { ThesisPanel } from "@/components/ThesisPanel";
 import { TickerBar } from "@/components/TickerBar";
+import { useBoardFocus } from "@/components/shell/marketboard";
 import { ManualRescue } from "@/components/ValuationControls";
 import { ValuationPanel } from "@/components/ValuationPanel";
 import { VerdictPanel } from "@/components/VerdictPanel";
@@ -128,6 +129,19 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
   // --- data ---------------------------------------------------------------
   const engines = useEngines(symbol);
   const { anomaly, technical, valuation, quality, news, company, synthesis, preTrade } = engines;
+
+  // The market board marks what this stock is related to. Only the stock's
+  // market and the exposure the Trend tab MEASURED cross over, and only into
+  // this browser: the board's request names nothing.
+  useBoardFocus({
+    symbol,
+    market,
+    factors: technical.status === "ready"
+      ? (technical.data.exposure?.factors ?? []).map((f) => ({ key: f.key, label: f.label, weeks: f.weeks }))
+      : null,
+    // The provider's next report date, for the panel's calendar.
+    earnings: company.status === "ready" ? company.data.nextEarnings?.date ?? null : null,
+  });
   const { state: eventStudy, validate } = useEventStudy(symbol);
   const { state: peers, compare: comparePeers } = usePeers(symbol);
   const { state: portfolio, compare: comparePortfolio } = usePortfolio(symbol);

@@ -256,7 +256,8 @@ export interface QualityResponse {
    * wants to know what the lender does.
    *
    * `summaryState` is `described`, `none published`, `not returned` (nothing
-   * descriptive came back at all — a throttle signature) or `not fetched`.
+   * descriptive came back at all — a throttle signature), `not fetched`, or
+   * `not a company` (a coin, fund or index, which has no business to describe).
    */
   business?: {
     sector: string | null; industry: string | null;
@@ -285,7 +286,7 @@ export interface QualityResponse {
   /** Where the three numbers came from. Absent when the lens refused to score. */
   domains?: ValidationDomains;
   /** Machine-readable reason the lens declined, when it did. */
-  cause?: "financial" | "no-statements" | "unknown-sector";
+  cause?: "financial" | "no-statements" | "unknown-sector" | "not-a-company";
   explain?: ExplainMap;
 }
 
@@ -390,6 +391,8 @@ export interface UniversesResponse {
 
 export interface NewsItem {
   title: string; source: string; link: string; published: string;
+  /** A thumbnail on an allowlisted host, served through Next's image optimizer. */
+  image?: { url: string; width: number; height: number } | null;
 }
 export interface NewsResponse { ticker: string; items: NewsItem[] }
 
@@ -1757,9 +1760,11 @@ export interface ScanResponse {
    *
    * `basis` IS NOT OPTIONAL COPY. A rank of 1 rendered without it reads as
    * market share, which nothing in this app measures: private companies,
-   * companies listed elsewhere and names whose filings did not arrive are all
+   * companies listed elsewhere and names whose revenue could not be read are all
    * missing from the denominator. `unplaced` says how many of the last kind
-   * there were.
+   * there were. Where the provider carries no statements, its trailing twelve
+   * months stands in for a filed year; the readings say so wherever a field
+   * compares the two (`api/_lib/field.py`).
    */
   fields?: {
     measured: number; unplaced: number; count: number;
@@ -1954,4 +1959,165 @@ export interface ValuationSensitivity {
   impliedRowReason: string | null;
   refusals: Record<string, string>;
   reading: string;
+}
+
+// --------------------------------------------------------------------------- //
+// What moved the markets — /api/markets/today and /api/markets/headlines
+// --------------------------------------------------------------------------- //
+
+/**
+ * One instrument on the board. `tone` is always "neutral": a day's move has no
+ * good or bad, so nothing here is ever coloured by sign (api/_lib/marketboard.py).
+ */
+export interface BoardRow {
+  key: string;
+  name: string;
+  symbol: string;
+  group: string;
+  /** How a move is measured: % for prices, basis points for yields, points for the VIX. */
+  change: "pct" | "bp" | "points";
+  unit: string;
+  markets: Market[];
+  note: string | null;
+  /** The exposure reference this quote stands for, when there is one. */
+  exposureKey: string | null;
+  topic: string;
+  digits: number;
+  /** What the compact strip calls it. */
+  short: string;
+  weekends: boolean;
+  tone: "neutral";
+  available: boolean;
+  reason?: string;
+  asOf?: string;
+  last?: number | null;
+  previous?: number | null;
+  move?: number | null;
+  direction?: "up" | "down" | "flat";
+  /** Where the latest move sits among its own past year's moves, by size. Null when too little history. */
+  percentile?: number | null;
+  unusual?: boolean | null;
+  yearSessions?: number;
+  largestSince?: string | null;
+  largestInHistory?: boolean;
+  historyFrom?: string;
+  spark?: number[];
+  sparkFrom?: string;
+}
+
+export interface BoardMarket {
+  strip: string[];
+  unusual: string[];
+  unavailable: string[];
+  baseRate: { share: number; days: number; flaggedDays: number; instruments: number;
+              from: string; to: string } | null;
+}
+
+/** On how many past event days an instrument moved more than on its median day. */
+export interface EventHistoryRow {
+  key: string;
+  name: string;
+  change: "pct" | "bp" | "points";
+  available: boolean;
+  reason?: string;
+  events?: number;
+  above?: number;
+  share?: number;
+  eventMedian?: number;
+  allMedian?: number;
+  /** Two-sided exact binomial against a fair coin. */
+  p?: number;
+  since?: string;
+}
+
+export interface MarketBoard {
+  /** Declaration order, never move order. */
+  groups: { key: string; label: string }[];
+  /** Keyed by event kind: fomc, cpi, jobs, bi-rate. */
+  eventHistory: Record<string, EventHistoryRow[]>;
+  rows: BoardRow[];
+  missing: { key: string; name: string; markets: Market[]; reason: string }[];
+  markets: Record<Market, BoardMarket>;
+  unusualAt: number;
+  minHistory: number;
+  fetchedAt: string | null;
+  source: string;
+  delay: string;
+  explain: {
+    rows: Record<string, { reading: string; moveText: string | null;
+                           percentile: Explanation | null }>;
+    markets: Record<Market, { summary: string; baseRate: string | null }>;
+    eventHistory: Record<string, Record<string, { reading: string; share: Explanation | null }>>;
+  };
+}
+
+export interface HeadlineFeed {
+  topic: string;
+  market: Market;
+  query: string;
+  /** False when the feed could not be read — which is not the same as no news. */
+  available: boolean;
+  items: NewsItem[];
+  /** "Yahoo Finance" (with images) or "Google News". */
+  source: string;
+  reason: string | null;
+}
+
+export interface MarketHeadlines { market: Market; topics: HeadlineFeed[] }
+
+// --------------------------------------------------------------------------- //
+// The calendar — /api/markets/calendar and /api/markets/earnings
+// --------------------------------------------------------------------------- //
+
+export type CalendarKind =
+  | "fomc" | "cpi" | "jobs" | "pce" | "gdp" | "bi-rate" | "holiday" | "early-close" | "earnings";
+
+export interface CalendarEvent {
+  kind: CalendarKind;
+  /** The event's own local date. */
+  date: string;
+  time?: string | null;
+  tz: string;
+  market: Market;
+  source: string;
+  title: string;
+  detail?: string | null;
+  /** The moment in UTC, or null for an all-day date. */
+  utc: string | null;
+  allDay: boolean;
+  label: string;
+  projections?: boolean;
+  tentative?: boolean;
+  /** A published schedule rather than a decision already taken. */
+  scheduled?: boolean;
+  /** For earnings: whose report it is, and whether it is the stock on screen or the watchlist. */
+  ticker?: string;
+  origin?: "stock" | "watchlist";
+}
+
+export interface ExchangeInfo {
+  name: string;
+  tz: string;
+  /** Regular sessions by weekday group, in the exchange's own time. */
+  sessions: { "mon-thu": [string, string][]; fri: [string, string][] };
+  source: string;
+  closures: { date: string; kind: "holiday" | "early-close"; time: string | null; detail: string | null }[];
+}
+
+export interface MarketCalendar {
+  verifiedOn: string;
+  /** From the day before this month began, so a month view is whole, to 90 days ahead. */
+  events: CalendarEvent[];
+  /** The dates `events` covers. A day outside it is not loaded, which is not the same as empty. */
+  window?: { from: string; through: string };
+  kinds: Record<string, { label: string; about: string }>;
+  exchanges: Record<Market, ExchangeInfo>;
+  coverage: Record<string, string>;
+  pending: { kind: string; note: string }[];
+  sources: Record<string, { name: string; url: string }>;
+}
+
+export interface WatchlistEarnings {
+  items: { ticker: string; next: string | null; available: boolean }[];
+  note: string;
 }

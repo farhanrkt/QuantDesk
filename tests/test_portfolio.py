@@ -22,13 +22,24 @@ WHAT THESE TESTS PROTECT
 5. The measured stability travels with the numbers. This is the one place in the
    app where a measurement informs position size, and it is only allowed to
    because the persistence was measured first — so the panel carries it.
+
+6. Each holding is read on its own sessions. A batch of names on different
+   calendars comes back on the union of their dates, so a day a name did not
+   trade has to stay a gap rather than become a 0.00% day, its move has to land
+   on the day it traded again, and a name on another calendar must not change
+   two others' correlation. Planted through `_Stub`, which reproduces that
+   union alignment rather than assuming it away.
 """
 
 from __future__ import annotations
 
+import datetime as dt
+
 import numpy as np
 import pandas as pd
 import pytest
+
+from helpers import _Stub, mixed_calendars
 
 from _lib import exposure
 from _lib import explain as E
@@ -277,6 +288,112 @@ def test_the_stress_caveat_is_carried_because_it_limits_the_feature():
     assert any("Forbes" in c for c in stability["caveats"]), (
         "conditioning on returns biases any correlation measured inside the "
         "condition, and the file has to say so")
+
+
+# --------------------------------------------------------------------------- #
+# 6. Each holding on its own sessions
+# --------------------------------------------------------------------------- #
+def _through_the_stub(monkeypatch, frames, candidate, holdings, market="US"):
+    """`analyse` through the real `ohlcv_batch`, with `_Stub` standing in for
+    yfinance, so the batch arrives on the union of its dates as it does live."""
+    monkeypatch.setattr(P.market_data.yf, "download", _Stub(frames))
+    return P.analyse(candidate, list(holdings), market_code=market)
+
+
+def _pair(result, ticker):
+    return next(p for p in result["pairs"] if p["ticker"] == ticker)
+
+
+def test_a_name_on_another_calendar_does_not_move_two_others_correlation(monkeypatch):
+    """Measured 1 November 2026: AAPL against MSFT read 0.155 beside BTC-USD and
+    0.112 in an all-US book. 252 rows of a calendar that includes weekends are
+    252 days, so beside bitcoin a stock's year was 175 sessions. Two names on
+    one calendar have one correlation, whatever else is held."""
+    frames = mixed_calendars()
+    alone = _pair(_through_the_stub(monkeypatch, frames, "AAA", ["CCC", "EEE"]), "CCC")
+    for other in ("COIN", "BBB.JK"):
+        beside = _pair(_through_the_stub(monkeypatch, frames, "AAA", ["CCC", "EEE", other]),
+                       "CCC")
+        assert beside["correlation"] == pytest.approx(alone["correlation"], abs=1e-12), other
+        assert beside["overlapDays"] == alone["overlapDays"] == P.WINDOW_DAYS
+
+
+def test_the_futures_riding_along_leave_no_calendar_behind(monkeypatch):
+    """Measured 1 November 2026: an all-Indonesian book carried 18 non-trading
+    days per holding in its window, put there by the US futures fetched beside
+    it for the driver. Whether a reference arrived must not move a holding."""
+    frames = mixed_calendars()
+    book = ("BBB.JK", ["DDD.JK", "FFF.JK"])
+    with_future = _through_the_stub(monkeypatch, frames, *book, market="ID")
+    without = _through_the_stub(monkeypatch, {s: f for s, f in frames.items() if s != "CL=F"},
+                                *book, market="ID")
+    assert with_future["pairs"] == without["pairs"]
+    assert with_future["independence"] == without["independence"]
+
+
+def test_the_other_markets_holidays_are_gaps_not_zero_days(monkeypatch):
+    """A US name and an IDX name share the days both traded and no others. On
+    the shared calendar every pair read the whole window, because a holiday
+    arrived as a forward-filled 0.00% day and counted as an observation."""
+    frames = mixed_calendars()
+    result = _through_the_stub(monkeypatch, frames, "AAA", ["CCC", "BBB.JK"])
+
+    us_year = frames["AAA"].index[1:][-P.WINDOW_DAYS:]
+    idx_year = frames["BBB.JK"].index[1:][-P.WINDOW_DAYS:]
+    shared = len(us_year.intersection(idx_year))
+    assert _pair(result, "BBB.JK")["overlapDays"] == shared < P.WINDOW_DAYS
+    assert _pair(result, "CCC")["overlapDays"] == P.WINDOW_DAYS
+
+    fetched = P.market_data.ohlcv_batch(["AAA", "BBB.JK"], dt.date(2024, 1, 1),
+                                        dt.date.today(), own_sessions=True)
+    returns = P.daily_returns(fetched)
+    holidays = frames["AAA"].index.difference(frames["BBB.JK"].index)
+    holidays = holidays[holidays >= idx_year[0]]
+    assert len(holidays) > 0
+    assert returns.loc[holidays, "BBB.JK"].isna().all(), "a holiday is a gap, not a zero"
+
+
+def test_the_return_across_a_holiday_lands_on_the_first_day_back(monkeypatch):
+    """`closes / closes.shift(1)` on a frame aligned across calendars loses the
+    return across every gap, because the first day back has a NaN above it. So
+    each name is differenced on its own sessions, and its returns must add up
+    to its whole move. That holds across a row `normalise` drops as well: crude
+    settled below zero on 20 April 2020, and the aligned frame lost the crash."""
+    frames = mixed_calendars()
+    crude = frames["CL=F"].copy()
+    crude.iloc[300, crude.columns.get_loc("Close")] = -37.63
+    frames["CL=F"] = crude
+    monkeypatch.setattr(P.market_data.yf, "download", _Stub(frames))
+    fetched = P.market_data.ohlcv_batch(list(frames), dt.date(2024, 1, 1), dt.date.today(),
+                                        own_sessions=True)
+    returns = P.daily_returns(fetched, window=10 ** 6)
+    assert len(fetched["CL=F"]) == len(crude) - 1, "the negative print is dropped"
+
+    close = fetched["BBB.JK"]["Close"]
+    holidays = frames["AAA"].index.difference(close.index)
+    holiday = holidays[holidays < close.index[-1]][-1]
+    before = close.index[close.index < holiday][-1]
+    back = close.index[close.index > holiday][0]
+    assert returns.loc[back, "BBB.JK"] == pytest.approx(np.log(close[back] / close[before]),
+                                                        abs=1e-12)
+
+    for symbol, frame in fetched.items():
+        whole = np.log(frame["Close"].iloc[-1] / frame["Close"].iloc[0])
+        assert returns[symbol].sum() == pytest.approx(whole, abs=1e-9), symbol
+
+
+def test_a_market_open_every_day_is_annualised_on_its_own_calendar():
+    """The same daily moves seven days a week are a riskier year than five.
+    Measured 1 November 2026: with one sqrt(252) for every name, BTC-USD's share
+    of the risk beside AAPL, MSFT and NVDA read 0.28 where its own calendar
+    gives 0.33."""
+    moves = np.random.default_rng(5).normal(0.0, 0.02, 600)
+    returns = pd.DataFrame({
+        "STOCK": pd.Series(moves, index=pd.bdate_range(end="2026-10-30", periods=600)),
+        "COIN": pd.Series(moves, index=pd.date_range(end="2026-10-30", periods=600, freq="D")),
+    })
+    volatility = P.annualised_volatility(returns)
+    assert volatility["COIN"] / volatility["STOCK"] == pytest.approx(np.sqrt(7 / 5), rel=0.01)
 
 
 # --------------------------------------------------------------------------- #

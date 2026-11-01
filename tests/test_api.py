@@ -74,6 +74,12 @@ def offline_company(monkeypatch):
         "available": True, "dates": [], "past": ["2026-07-30"], "next": "2026-10-30",
         "asOf": "2026-10-25"})
 
+    # The US headlines ask Yahoo's search first. Offline it fails, so every test
+    # exercises the Google path unless it plants Yahoo results itself.
+    def no_yahoo(query, count=8):
+        raise OSError("offline")
+    monkeypatch.setattr(index.market_data, "news_search", no_yahoo)
+
 
 # --------------------------------------------------------------------------- #
 # C4 — ticker validation
@@ -329,6 +335,144 @@ def test_the_feed_read_is_bounded():
     assert "raw = response.read()" not in source, "an unbounded read must not return"
 
 
+def planted_board(available: bool = True) -> dict:
+    """A board built offline: every instrument on a quiet two-year walk."""
+    import numpy as np
+    import pandas as pd
+
+    from _lib import marketboard
+
+    if not available:
+        return marketboard.build({})
+    index_ = pd.bdate_range(end="2026-10-30", periods=500)
+    frames = {}
+    for n, instrument in enumerate(marketboard.INSTRUMENTS):
+        closes = 100 * np.exp(np.cumsum(np.random.default_rng(n).normal(0, 0.01, 500)))
+        frames[instrument.symbol] = pd.DataFrame(
+            {"Open": closes, "High": closes, "Low": closes, "Close": closes,
+             "Volume": np.full(500, 1.0)}, index=index_)
+    return marketboard.build(frames, fetched_at="2026-11-01T09:00+00:00")
+
+
+def test_the_market_board_takes_no_parameters_and_is_cached_five_minutes(client, monkeypatch):
+    """One cache entry for every reader, and no ticker anywhere in the request."""
+    monkeypatch.setattr(index.marketboard, "fetch", lambda: planted_board())
+    response = client.get("/api/markets/today")
+    assert response.status_code == 200
+    assert "s-maxage=300" in response.headers["Cache-Control"]
+    assert "max-age=0" in response.headers["Cache-Control"]
+    assert "stale-while-revalidate=600" in response.headers["CDN-Cache-Control"]
+    body = response.json()
+    assert [row["key"] for row in body["rows"]] == [i.key for i in index.marketboard.INSTRUMENTS]
+    assert set(body["explain"]["markets"]) == {"US", "ID"}
+    assert all(row["tone"] == "neutral" for row in body["rows"])
+
+
+def test_a_board_with_no_prices_at_all_is_an_error_not_an_empty_board(client, monkeypatch):
+    monkeypatch.setattr(index.marketboard, "fetch", lambda: planted_board(available=False))
+    assert client.get("/api/markets/today").status_code == 502
+
+
+def test_headline_topics_come_from_a_declared_list(client, monkeypatch):
+    """A request picks a topic; it can never write the query."""
+    from _lib import news
+    monkeypatch.setattr(news, "_fetch_feed", lambda url: b"<rss><channel></channel></rss>")
+    assert client.get("/api/markets/headlines", params={"topics": "market,oil"}).status_code == 200
+    assert client.get("/api/markets/headlines", params={"topics": "market,evil"}).status_code == 422
+    assert client.get("/api/markets/headlines",
+                      params={"topics": "market,oil,gold,copper,rates"}).status_code == 422
+    assert client.get("/api/markets/headlines",
+                      params={"topics": "stock market"}).status_code == 422
+
+
+def test_a_headline_feed_that_failed_is_not_reported_as_no_news(client, monkeypatch):
+    from _lib import news
+
+    def broken(url):
+        raise OSError("timed out")
+
+    monkeypatch.setattr(news, "_fetch_feed", broken)
+    feed = client.get("/api/markets/headlines",
+                      params={"market": "ID", "topics": "oil"}).json()["topics"][0]
+    assert feed["available"] is False and feed["items"] == [] and feed["reason"]
+
+    monkeypatch.setattr(news, "_fetch_feed", lambda url: b"<rss><channel></channel></rss>")
+    feed = client.get("/api/markets/headlines",
+                      params={"market": "ID", "topics": "oil"}).json()["topics"][0]
+    assert feed["available"] is True and feed["items"] == []
+    assert feed["query"] == "harga minyak", "Indonesian readers get the Indonesian query"
+
+
+def test_market_headlines_are_newest_first_and_ask_for_the_past_day(monkeypatch):
+    from _lib import news
+    monkeypatch.setattr(news.market_data, "news_search", lambda q, count=8: [])
+    seen = {}
+    feed = (b"<rss><channel>"
+            b"<item><title>Older story - Wire</title><source>Wire</source>"
+            b"<pubDate>Fri, 30 Oct 2026 08:00:00 GMT</pubDate></item>"
+            b"<item><title>Newer story - Desk</title><source>Desk</source>"
+            b"<pubDate>Sat, 31 Oct 2026 16:00:00 GMT</pubDate></item>"
+            b"</channel></rss>")
+
+    def fetch(url):
+        seen["url"] = url
+        return feed
+
+    monkeypatch.setattr(news, "_fetch_feed", fetch)
+    out = news.fetch_headlines("oil", "US")
+    assert [item["title"] for item in out["items"]] == ["Newer story", "Older story"]
+    assert "when%3A1d" in seen["url"]
+
+
+def test_us_headlines_prefer_yahoo_with_images_and_fall_back_to_google(monkeypatch):
+    import datetime as dt
+    import email.utils
+
+    from _lib import news
+    stamp = email.utils.format_datetime(dt.datetime.now(dt.timezone.utc))
+    monkeypatch.setattr(news.market_data, "news_search", lambda q, count=8: [
+        {"title": "Oil rallies", "source": "Wire", "link": "https://finance.yahoo.com/a",
+         "published": stamp, "image": {"url": "https://media.zenfs.com/a.jpg",
+                                       "width": 1920, "height": 1080}}])
+    out = news.fetch_headlines("oil", "US")
+    assert out["source"] == "Yahoo Finance" and out["items"][0]["image"]
+
+    monkeypatch.setattr(news.market_data, "news_search", lambda q, count=8: [])
+    monkeypatch.setattr(news, "_fetch_feed", lambda url: b"<rss><channel></channel></rss>")
+    out = news.fetch_headlines("oil", "US")
+    assert out["source"] == "Google News", "nothing recent from Yahoo falls back, not to empty"
+
+
+def test_a_thumbnail_from_any_other_host_is_dropped():
+    from _lib import market_data
+    keep = market_data._news_image({"resolutions": [
+        {"url": "https://media.zenfs.com/big.jpg", "width": 1920, "height": 1080},
+        {"url": "https://evil.example/huge.jpg", "width": 9999, "height": 9999},
+        {"url": "http://s.yimg.com/plain.jpg", "width": 4000, "height": 4000}]})
+    assert keep["url"] == "https://media.zenfs.com/big.jpg", "https on an allowed host only"
+    assert market_data._news_image({"resolutions": [
+        {"url": "https://evil.example/a.jpg", "width": 10, "height": 10}]}) is None
+
+
+def test_the_calendar_takes_nothing_and_is_cached_an_hour(client):
+    response = client.get("/api/markets/calendar")
+    assert response.status_code == 200
+    assert "s-maxage=3600" in response.headers["Cache-Control"]
+    body = response.json()
+    assert {"events", "kinds", "exchanges", "coverage", "pending", "sources"} <= set(body)
+    assert body["pending"], "what is not published yet is stated"
+
+
+def test_watchlist_report_dates_travel_in_a_body_and_are_never_stored(client):
+    response = client.post("/api/markets/earnings", json={"tickers": ["AAPL", "BBCA.JK"]})
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert [item["ticker"] for item in response.json()["items"]] == ["AAPL", "BBCA.JK"]
+    too_many = client.post("/api/markets/earnings", json={"tickers": [f"T{i}" for i in range(21)]})
+    assert too_many.status_code == 422
+    assert client.get("/api/markets/earnings").status_code == 405
+
+
 def test_the_rate_limiter_reads_the_routed_path_not_the_reconstructed_url(client):
     """A FORGED HOST HEADER USED TO TURN THE CAP OFF ENTIRELY.
 
@@ -506,7 +650,9 @@ def test_an_idx_holding_keeps_its_suffix_under_a_us_market(client, monkeypatch):
 # reason — a list somebody keeps is a fact about them and URLs are logged by every
 # hop — and each answers `no-store`. A third entry here should come with that
 # argument made again, not by analogy.
-PERSONAL_POST_ROUTES = {"/api/portfolio", "/api/rank/list"}
+# The watchlist's report dates joined these on 1 November 2026: the same kind of
+# input, a list a reader keeps, so the same treatment.
+PERSONAL_POST_ROUTES = {"/api/portfolio", "/api/rank/list", "/api/markets/earnings"}
 
 
 def test_post_is_permitted_for_personal_input_and_nothing_else(client):

@@ -448,7 +448,12 @@ export function TechnicalPanel({
                          payload: ChartPoint;
                        };
                        const positive = (payload.macdHist ?? 0) >= 0;
-                       return <rect x={x} y={y} width={width} height={height}
+                       // A BAR BELOW ZERO ARRIVES WITH A NEGATIVE HEIGHT, which an
+                       // SVG <rect> refuses: every negative histogram bar was
+                       // dropped and logged as an error, so the chart showed only
+                       // the positive half. Found in the November 2026 audit.
+                       return <rect x={x} y={height < 0 ? y + height : y} width={width}
+                                    height={Math.abs(height)}
                                     fill={positive ? UP : DOWN} opacity={0.5} />;
                      }} />
                 <Line dataKey="macd" stroke={TECH} strokeWidth={1.3} dot={false} connectNulls

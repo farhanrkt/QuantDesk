@@ -36,12 +36,16 @@ now allowed and listed here, so a reader of the old layout can find everything:
   **/journal**.
 - **The detection and look-back controls** are unchanged, and the tab, ticker and any
   non-default tuning now live in the URL.
+- *1 November 2026:* **/markets opens on Today**, the board of what moved the markets.
+  Ranking a universe is one tab along, at `/markets?view=rank`, with nothing removed.
 
 ## Product Purpose
 
 Read one listed company through four models that use **different data** — order flow,
 price trend, intrinsic value, accounting quality — and show where they agree, where they
-disagree, and what none of them can tell you. Covers US and Indonesian (IDX) listings.
+disagree, and what none of them can tell you. Covers US and Indonesian (IDX) listings, with
+the day's market context — indices, rates, the dollar and the rupiah, commodities — beside
+them.
 
 Success is a reader who finishes with a defensible view of what is and is not known about
 a company, including the gaps. It is explicitly **not** a reader who has been told what to
@@ -136,6 +140,26 @@ These are durable product facts. Future work preserves them; none is a style pre
    *Confirmed boundary for the sensitivity grid (25 Oct 2026):* values only. No fill, no
    tone and no comparison with the price inside the grid — the price is printed beside it.
    Rule 13 enforces it.
+
+   *Confirmed boundary for the market board (1 Nov 2026):* the board of what moved the
+   markets is context, never a lens and never a call.
+   - **No mood or risk-on score.** It carries no composite reading of the day.
+   - **No leaderboard.** Rows stay in declared order, never sorted by size of move.
+   - **No colour from direction.** Every tone is neutral; a move is emphasised only when
+     it was unusual for its own instrument, measured against that instrument's past year.
+   - **Headlines are not causes.** They are shown as mentioning a market, never as
+     explaining a move.
+   - **Relation only where measured.** It marks what a stock is related to only from its
+     own index, its valuation's discount rate and the exposure the Trend tab measured, and
+     its requests never carry a ticker.
+   - **Event history is history.** The calendar's line on how past FOMC, CPI, jobs and Bank
+     Indonesia days went is a count against the half any day shows, with its sample size.
+     It says when the result is within chance, as all nine measured pairs are, and is never
+     worded as a forecast.
+   - **The watchlist stays personal.** Its report dates are asked for in a POST body,
+     `no-store`, like holdings and a reader's own ranking list.
+
+   Rule 19 and a structural check in `scripts/check_frontend.mjs` enforce it.
 
 2. **No predictive claim that isn't measured.** If a feature implies something predicts
    returns, it is measured offline and published including nulls, or it does not ship.
@@ -324,7 +348,7 @@ Audited and fixed 29 Aug 2026. What the audit found and what happened to it:
 
 Verified by walking the real tab order: 64 focusables, none unnamed, none without a
 visible focus style, no positive `tabindex`. These rules and the ones added since are
-enforced by `npm run check:frontend` (eighteen design rules, plus the privacy, analytics and
+enforced by `npm run check:frontend` (nineteen design rules, plus the privacy, analytics and
 drift checks) so they cannot come back.
 
 *Overhaul, 25 Oct 2026:* the command palette is a native `<dialog>` with the ARIA combobox
@@ -365,7 +389,8 @@ decision behind a choice.
   point-in-time filings, so a historical value or quality reading would use numbers
   published years later. That half is now measured **prospectively** instead, by
   `_lib/scanlog.py`, which records what the scanner said on the day it said it and
-  refuses to quote a rate under thirty resolved calls. It will say nothing useful for
+  refuses to quote a rate under thirty resolved observations, counting a name once per
+  63-session window however often it is called inside one. It will say nothing useful for
   months, which is the nature of the instrument rather than a fault in it.
 - What a round trip actually costs. The scanner reports one per name and the blend
   backtest reports a breakeven, but the estimator resolves a spread for only about one

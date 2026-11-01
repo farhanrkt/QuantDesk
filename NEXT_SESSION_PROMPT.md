@@ -13,11 +13,13 @@ STATE
 =====
 Branch: claude/codebase-app-overhaul-e51579 — feature/personal-verdict-scanner
 plus main's IC-bar commit and the fix-ci advisory commit (merged, not
-cherry-picked), plus the October 2026 overhaul. Nothing pushed; nothing was
-asked to be. The overhaul's commits each state what they changed and why.
+cherry-picked), plus the October 2026 overhaul. It is open for review as PR
+farhanrkt/QuantDesk#5. The market board (November 2026) is on
+claude/markets-today, stacked on that branch so #5 stays reviewable: merge #5
+first. Each commit states what it changed and why.
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
-single Vercel Python function on the back. ~1,690 offline pytest tests, 60
-frontend assertions, 18 enforced design rules plus structural checks. US and
+single Vercel Python function on the back. ~1,740 offline pytest tests, 78
+frontend assertions, 19 enforced design rules plus structural checks. US and
 Indonesian (IDX) listings. lxml is now a runtime dependency (see below).
 
 The full battery, all green as of the last commit:
@@ -35,7 +37,7 @@ running dev server: stop it, delete `.next`, start it again.
 THE OCTOBER 2026 OVERHAUL — WHAT EXISTS NOW
 -------------------------------------------
 Routes: / (landing), /stock/[symbol] (?tab=, non-default tuning), /markets
-(?view=rank|screener|exposure|scan), /compare?symbols=, /journal. A shell
+(opens on Today; ?view=rank|screener|exposure|scan), /compare?symbols=, /journal. A shell
 (components/shell/) with a top bar, phone menu, command palette (⌘K, backed by
 GET /api/symbols over the committed listing files), shortcuts ([ ] w ?),
 toasts, a watchlist and recent tickers (localStorage only), print styles.
@@ -44,6 +46,22 @@ New on the stock page: a "What it is" tab first in the order (Trend still the
 default) fed by a `company` leg in /api/confluence — description only, never
 read by the synthesis or pre-trade checks — and a sensitivity grid on the
 Value tab. New page: Compare, which never sorts, sums or highlights.
+
+THE MARKET BOARD (1 November 2026). Markets -> Today, and a markets panel in
+its own column beside every page from 1280px (a band of the same tiles above
+the page below that). 22 instruments, each move set against that instrument's
+own past year (api/_lib/marketboard.py). A calendar of FOMC, CPI, jobs, PCE,
+GDP, Bank Indonesia and exchange closures (api/_lib/econcalendar.py, a
+committed file; scripts/refresh_calendar.py re-checks it) — shown as a list,
+as a month grid in the panel and on Today, and as a seven-day strip in the
+band (components/markets/CalendarWidgets.tsx) — with each event's
+past occurrences counted against the half any day shows — all nine pairs are
+within chance. US headlines from Yahoo with thumbnails through next/image; the
+Indonesian press from Google News as text. Tone-neutral, declared order, no
+ticker in any GET, the watchlist's report dates only in a POST body — rule 19
+and structural checks hold those. Read RESEARCH_ROADMAP §20 before touching
+it. THE CALENDAR GOES STALE: its coverage and pending notes are on the page;
+Bank Indonesia's 2027 meetings and BPS's inflation dates still need adding.
 
 lib/palette.ts is the only place a colour is written; lib/session.ts keeps
 results per symbol for the tab; lib/cache.ts shares confluence payloads across
@@ -88,6 +106,19 @@ bank refusal for any unscorable company.
 
 NOT DONE IN THE OVERHAUL, AND WORTH DOING
 -----------------------------------------
+- PORTFOLIO CORRELATIONS RUN ON ONE SHARED CALENDAR. Found building the
+  board: market_data.ohlcv_batch forward-fills a symbol across days another
+  symbol in the batch traded, so a book mixing US and IDX names (or holding
+  bitcoin) gets 0.00% days that pull its correlations toward zero, against
+  portfolio.daily_returns' own docstring. `own_sessions=True` exists; switching
+  portfolio to it means per-symbol returns AND re-running
+  measure_correlation_stability.py and measure_exposure_stability.py. See the
+  RESEARCH_ROADMAP open row.
+- THE SCANNER'S FORWARD LOG now counts names, not rows (scanlog.observations:
+  a name once per 63-session window), and its December read is pre-registered
+  in RESEARCH_ROADMAP section 21: run review_scanlog.py for ID and US on or
+  after 22 December 2026, and read it by that section's nulls. Still to do:
+  restart the weekly scans (none since 21 September).
 - RankingPanel (~770 lines), ScanPanel (~930) and VerdictPanel (~730) were not
   split into subcomponents. Their state was lifted into lib/session.ts, which
   was the functional half; the split is maintainability only.
@@ -162,6 +193,17 @@ So: the battery does not cover the page. Open it. The browser pane works.
 
 WHAT THE LAST SESSIONS DID
 ==========================
+THE NOVEMBER 2026 AUDIT (RESEARCH_ROADMAP §23), on branch claude/full-audit,
+which merges every finished branch (the market board and calendar widgets,
+§18.9's summary revenue, §21's forward log, §22's per-holding sessions). Every
+API route was called with real tickers and the main calculations recomputed
+outside the app: indicators, the DCF, beta, the accounting scores, the board,
+the event-day tests, correlations, long-term returns and the track record all
+matched. Six things were wrong and are fixed: a throttled bank valued as an
+ordinary company, a throttled lookup cached all day, coins and funds told
+their data was missing, the DCF ignoring short-term investments, an invisible
+negative MACD histogram, and a misleading one-year-change reading.
+
 Written up in RESEARCH_ROADMAP.md §7-§15 and DESIGN.md — read those rather than
 re-deriving the reasoning.
 
@@ -319,10 +361,18 @@ WHAT I MIGHT WANT NEXT — pick with me before building
 =====================================================
   0) OPEN AND UNFINISHED, in order:
 
-     - `market_data._apply_fx` trusts the provider's `financialCurrency`
-       unconditionally and is wrong on RIGS.JK and YPF, scaling their statements
-       by 16,300x and 1/1000. The detector is already written and tested in
-       `field.revenue_of`. Left alone because it moves every valuation.
+     - THE NEXT IDX SCAN RE-RANKS THE FIELDS (1 November, RESEARCH_ROADMAP
+       §18.9). 215 of 770 Indonesian listings have no statements at the
+       provider — measured, not a throttle — and are now ranked on its
+       trailing-year summary. On the September sweep that moves KETR.JK from
+       "only one measurable" to leading three at 2.4x, takes MHKI.JK off the
+       shortlist, and un-names DIVA.JK. Records cached before 1 November lack
+       `revenue_ttm`, so a `--fundamentals-days` replay of old records will NOT
+       place those 215: it needs fresh company records. Look at the specialist
+       card and the field readings on the first scan that has them. Expect
+       KETR as "largest of 2": IOTF.JK now sits at the 50-rupiah floor and is
+       dropped before deepening, and the screen selects `noCloseRival`, which
+       admits the larger of two by 2x (a live 12-name scan confirmed it).
      - THE SPECIALIST SCREEN IS A FRONTIER-MARKET TOOL AND THE US PROVES IT.
        On 2,136 US names the three conditions select NOTHING, because only 4%
        are uncovered against 79% on the IDX and the median US name is 85%
@@ -341,12 +391,9 @@ WHAT I MIGHT WANT NEXT — pick with me before building
        729, KETR.JK at the top) but the card rendering it was verified only on
        an IDX scan. Look at it on a US scan.
 
-  a) The sensitivity grid (growth x discount rate) for the valuation. Open since
-     §5. Note the roadmap's old claim was imprecise: pv_of_growing_stream is
-     vectorised over DRAWS, with growth, rate and terminal broadcast row-wise,
-     so a grid means flattening a meshgrid into that axis rather than an outer
-     product it already supports. Still cheap. Watch principle 1: a grid of fair
-     values against price, coloured, is a buy/sell heat map.
+  a) (Done in the overhaul: the sensitivity grid is on the Value tab, uncoloured
+     — RESEARCH_ROADMAP §19.1. So is the currency-label guard in
+     `market_data._apply_fx`, since 21 September — §18.4.)
 
   b) IDX fundamentals curation — the durable moat and the largest single effort.
      Blocked on an architecture decision first: a curated overlay is a second
@@ -354,10 +401,13 @@ WHAT I MIGHT WANT NEXT — pick with me before building
      module. Where curated figures live, how they are dated, and how a reader
      tells them from fetched ones is a session on its own.
 
-     THIS IS NOW BETTER MOTIVATED THAN IT WAS. 201 of 722 cached IDX records
-     carry no income statement at all, so a quarter of the exchange cannot be
-     placed in a field or given a track record, and a field missing its largest
-     member crowns the runner-up while looking no different.
+     THIS IS NOW BETTER MOTIVATED THAN IT WAS, AND BETTER MEASURED. 215 of 770
+     cached IDX records carry no statements at all, and it is not a throttle:
+     re-asked unhurried, 47 of 47 came back empty again (§18.9). The provider's
+     trailing-year summary now places them in a field, but nothing gives them a
+     track record, a quality score or a filed valuation — a quarter of the
+     exchange, including two of KETR.JK's three listed rivals, can be ranked
+     by size and read no further. Only curation reaches that.
 
   c) A real screen-reader pass. The keyboard walkthrough is clean (64
      focusables, zero unnamed, zero without a focus style, zero dangling

@@ -133,6 +133,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     list.push(
       { id: "go:home", group: "Go to", label: "Home", keywords: "landing start",
         run: () => go("/") },
+      { id: "go:today", group: "Go to", label: "Markets: what moved today",
+        keywords: "oil gold copper yields treasury dollar rupiah vix bitcoin commodities news",
+        run: () => go(marketsHref("today")) },
       { id: "go:rank", group: "Go to", label: "Markets: rank a universe",
         keywords: "scan ranking dow nasdaq idx30 lq45", run: () => go(marketsHref("rank")) },
       { id: "go:screener", group: "Go to", label: "Markets: anomaly screener",

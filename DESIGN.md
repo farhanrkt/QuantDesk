@@ -220,16 +220,19 @@ so a dense table row still reads as a table row.
 ## The shell
 
 Routes replaced the single page: `/` (landing), `/stock/[symbol]` (one company, `?tab=` and
-any non-default tuning in the query), `/markets` (`?view=rank|screener|exposure|scan`),
+any non-default tuning in the query), `/markets` (opens on Today; `?view=rank|screener|exposure|scan`),
 `/compare?symbols=` and `/journal`. A top bar is on every page — brand link, Markets /
 Compare / Journal, search, Guided/Full, field manual; on a phone the links move into a native
 `<dialog>` menu. Every route owns exactly one `h1`: on a stock page it is the ticker, still
 the largest thing on the page.
 
-**The landing shows no numbers.** One question (which company?), answered three ways — type
-it, pick a preset, or open one from your desk — then the app in three lines and the market
-tools as named destinations. A number on that page would be a number nobody asked about,
-presented without the four lenses this app exists to put around every figure.
+**The landing shows no company's numbers.** One question (which company?), answered three
+ways — type it, pick a preset, or open one from your desk — then the app in three lines and
+the market tools as named destinations. A company's figure on that page would be one nobody
+asked about, presented without the four lenses this app exists to put around every figure.
+*Since 1 November 2026* it also carries the market board's one sentence and the market's
+headlines. They are about markets, not about any company, and every move in that sentence
+is already set against its own year, so nothing on the landing is an unexplained figure.
 
 **Lens tabs are one row.** They used to wrap, which on a phone made three sticky rows
 covering a third of the screen; they scroll sideways now, stick under the top bar, and keep
@@ -252,6 +255,87 @@ than inside it. A grid of fair values coloured against price is a buy/sell heat 
 
 **Compare** lines up two to four companies in the reader's order, same widths, no
 highlight, no totals, and says when the currencies differ.
+
+## The market board
+
+**Where it lives.**
+- **Markets → Today** is the whole board, and the view `/markets` opens on: the table, 60
+  days of the calendar with filters and a month beside them, what past event days were like,
+  and the headlines with thumbnails.
+- **The markets panel** is a 352px column beside every other page, from 1280px. It scrolls
+  on its own, can be hidden (remembered in this browser), steps aside on Today, and is never
+  printed. The page keeps its own 1280px measure inside its column, so hiding the panel
+  widens nothing.
+- **Below 1280px**, the panel becomes a band at the top of the page: the same tiles in one
+  row that scrolls sideways, the exchanges' status, the measured relation in words, and the
+  next seven days as a strip.
+- **Why the side.** The first version was a 44px bar of 13px chips fixed to the foot of the
+  page, and the owner's verdict was that it was too small to read. The side was the owner's
+  choice. A column holds large tiles, a fortnight of dates and the news one above the other,
+  and it leaves the stock page's sticky lens tabs where they were.
+
+**Tiles are large.** The level is set at the lead size, with the move and a 64px sparkline
+under it, two to a row in the panel and 160px wide in the band.
+
+**The calendar is on the reader's clock.**
+- **Times:** UTC instants are computed on the server with `zoneinfo` and formatted in the
+  browser, so a 14:00 FOMC statement is 02:00 the next day in Jakarta and sits under that
+  day.
+- **Badges:** each event carries plain badges (US or IDX, "with projections", "scheduled",
+  "your watchlist"), a "What is this?" disclosure, and an add-to-calendar button that builds
+  the `.ics` in the browser.
+- **Exchange status:** computed from the hours and closures every half minute. It shows a
+  filled dot for open and a hollow one otherwise, a state rather than a colour.
+- **The month and the strip** (`CalendarWidgets.tsx`) write each event's short name into its
+  day — FOMC, CPI, Jobs, BI, Closed, a ticker for a report. Monday first. Today is a filled
+  disc, a chosen day a tech-tinted hairline. Only a day with something on it is a button, so a
+  keyboard walks a month in a handful of stops, and its name carries the date, how far off it
+  is, and every event. Every event day looks the same: the history says event days were mostly
+  ordinary, so nothing is drawn as bigger. A closure reads in `ash` because the market is
+  shut, a state rather than a weight. A day past the 90 days loaded is drawn dashed and says
+  "not loaded yet", never as an empty day, and the server sends the whole current month so
+  its first weeks are not blank either.
+
+**Thumbnails come through our own origin.** `next/image` fetches them from the two hosts
+`next.config.mjs` allows, so the CSP stays `img-src 'self'`. Their `alt` is empty, because
+the headline beside them is the content. `check_frontend.mjs` fails the build if those hosts
+drift from the Python allowlist.
+
+**Calibration, not colour.** Every row's tone is neutral and nothing is coloured by sign: a
+day's move has no good or bad. What carries weight is whether a move was **unusual for its
+own instrument**, at the 95th percentile of its past year's daily moves. An unusual row
+gets:
+- a semibold name and move;
+- an "unusual" pill drawn in hairline and chalk;
+- a faint `raised` wash.
+
+The percentile is a position bar in `ash` with a chalk tick at 95, like the peers bar: a
+position, not a score. Sparklines are one `ash` line with a chalk end point, never green
+for up.
+
+**Order.**
+- Rows sit in fixed groups in the server's declared order, and the summary sentence names
+  unusual moves in that order. Nothing is sorted by size: a leaderboard of moves invites
+  reading its first line as the day's story.
+- On a stock page, the quotes related to the stock lead the bar. That is a partition by a
+  measured relation, each part still in declared order, so the related quotes are not the
+  ones scrolled out of sight.
+
+**Relation, marked only from facts.** A link icon, a hairline ring and the full sentence in
+the accessible name and tooltip mark three things only:
+- the stock's own index;
+- for a US listing, the 10-year yield its valuation discounts from;
+- a reference the Trend tab measured it moving with.
+
+On a narrower screen the band says the measured relation in words.
+
+**Absence is named.** Instruments the source cannot supply are listed with the reason, a
+quote that did not come back says "no price", and a headline feed that failed says so
+instead of showing an empty list.
+
+**Focus survives the panel.** Hiding the panel moves focus to the "Show the markets panel"
+button that replaces it, and showing it moves focus back to "Hide", so a keyboard reader is
+not dropped to the top of the page.
 
 ## Print
 
@@ -385,7 +469,7 @@ it *sounds* is still untested — an automated pass is a floor, not a substitute
 
 ## The rules are enforced, not just written
 
-`npm run check:frontend` enforces eighteen of them, and each describes a bug
+`npm run check:frontend` enforces nineteen of them, and each describes a bug
 that was really in this codebase. It walks `components/` and `app/`
 recursively — the first version listed three directories by hand, so a file in
 any new subfolder was exempt from every rule without anyone deciding so.
@@ -435,6 +519,11 @@ any new subfolder was exempt from every rule without anyone deciding so.
     accessibility tree between them.
 18. A text token or a ground used on screen and not named in the print block,
     or a print text token below AA on white.
+19. A sort, or a tone class, `TONE_` map or `.tone` read, in any market board file
+    (`lib/marketboard.ts`, the Today view, the panel, the band, the tiles, the calendar and
+    news lists, the exchange status, the landing section). The board keeps its declared
+    order and colours nothing by direction; the calendar's time order lives in
+    `lib/calendar.ts`, outside the rule.
 
 Rule 4 now covers every text and tone token, not only `chalk` and `ash`; eight
 `text-warn/90`-style sites had walked past it. Rule 7's budget is eight hits in
@@ -446,7 +535,10 @@ Beside the design rules the same script holds three structural checks:
 `lib/api.ts` may not import the journal or watchlist stores or touch browser
 storage; every analytics `track(` carries only `market` and `lenses`;
 `lib/symbols.ts` must resolve tickers with the same pattern and suffix map as
-the Python; and `cn()` must know every font size the config defines.
+the Python; `cn()` must know every font size the config defines; the market board's
+requests carry no ticker: the board and the calendar take no parameters at all, the
+headlines take a market and declared topic keys, and the watchlist's report dates go only in
+a POST body; and the news image hosts in `next.config.mjs` equal the Python allowlist.
 
 Comments are stripped before the greps — rule 7 fired on its own explanation the
 first time it ran, because `LongTermPanel`'s docstring quotes the expression it
