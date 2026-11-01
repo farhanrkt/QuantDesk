@@ -20,8 +20,9 @@ the null is published either way.
 THE PRECEDENT IS `measure_correlation_stability.py` AND THIS MIRRORS IT
 -----------------------------------------------------------------------
 That script established that pairwise correlations persist — rank correlation
-0.50 to 0.65 year over year at t-statistics from +9.5 to +15.7 — which is what
-licensed the portfolio panel to inform position size. The shape is copied
+0.50 to 0.65 year over year at t-statistics from +9.5 to +15.7, and 0.48 to 0.68
+when re-measured on 1 November 2026 — which is what licensed the portfolio
+panel to inform position size. The shape is copied
 deliberately, so the two numbers can be read against each other:
 
   * returns cut into consecutive NON-OVERLAPPING blocks, because overlapping
@@ -85,6 +86,41 @@ And it measures PERSISTENCE, not accuracy. A beta that reliably predicts next
 year's beta is still a description of a relationship, not a forecast of a
 return, and nothing here licenses the second.
 
+EACH SYMBOL ON ITS OWN SESSIONS, AND WHAT RE-RUNNING ON THEM FOUND
+-------------------------------------------------------------------
+Since 1 November 2026 every fetch here uses `own_sessions=True` and every
+return comes from `exposure.log_returns`, which is what `exposure.scan` reads.
+The fetches mix US and IDX names in each chunk, so the shared calendar padded
+every name with the other market's sessions. Run both ways that day on the same
+recorded data:
+
+  * WEEKLY SUMS AGREED TO 1e-12 in all 77,442 name-weeks both runs had. What
+    differed: 154 IDX name-weeks that the shared calendar filled with 0.00%
+    while the exchange was shut all week (the weeks ending 6 May 2022,
+    12 April 2024 and 4 April 2025, and MBMA.JK's first week in April 2023);
+    the same weeks on the Jakarta Composite, plus 15 June 2018 and 7 June 2019;
+    and one week of crude.
+  * THAT WEEK OF CRUDE WAS THE OIL CRASH. WTI settled below zero on 20 April
+    2020; `market_data.normalise` drops non-positive closes, and differencing
+    the aligned frame lost the return across the hole. The week to 24 April
+    2020 read +52.6% rather than -7.6%. The oil figures moved the most:
+    all-names persistence went from +0.238 to +0.250, the US tier from +0.125
+    to +0.144, and the median weekly |beta| from 0.071 to 0.086.
+  * Elsewhere all-names persistence moved by at most 0.017 (gold +0.100 to
+    +0.095, copper +0.146 to +0.129, the dollar +0.060 to +0.054).
+  * THE HEADLINE HELD. Among names that load, persistence still cannot be
+    measured: no factor has more than one transition with ten loaded names.
+
+NOT FIXED BY THIS: in June 2018 and June 2019 the source itself publishes a flat
+bar with no volume for IDX stocks on every day the exchange was shut. Those rows
+are the symbol's own, so `own_sessions` keeps them, and those weeks read 0.00%
+either way. Only the Jakarta Composite has a gap there.
+
+The figures also moved from the 1 September stamp, for other reasons:
+all-names persistence then read gold +0.066, oil +0.198, copper +0.130 and the
+dollar +0.077. The first figure of each pair above is the old calendar's, run
+on 1 November.
+
 USAGE
     python scripts/measure_exposure_stability.py
     python scripts/measure_exposure_stability.py --dry-run
@@ -113,6 +149,7 @@ sys.path.insert(0, str(ROOT / "api"))
 
 from _lib import exposure  # noqa: E402
 from _lib import market_data  # noqa: E402
+from _lib import portfolio  # noqa: E402
 from _lib import universes  # noqa: E402
 
 OUTPUT = ROOT / "api" / "_lib" / "exposure_stability.json"
@@ -160,11 +197,10 @@ def _weekly(frames: dict) -> pd.DataFrame:
 
     Summed from daily rather than re-differenced from Friday closes, because log
     returns add and summing keeps a week whose market shut for a holiday instead
-    of dropping it.
+    of dropping it. The daily returns are `exposure.log_returns`, each symbol on
+    its own sessions, which is what `exposure.scan` reads.
     """
-    closes = pd.DataFrame({s: f["Close"].astype("float64") for s, f in frames.items()})
-    daily = np.log(closes.sort_index() / closes.sort_index().shift(1))
-    return exposure.to_weekly(daily)
+    return exposure.to_weekly(exposure.log_returns(frames))
 
 
 def _blocks(returns: pd.DataFrame, size: int = BLOCK_WEEKS) -> list:
@@ -481,7 +517,7 @@ def _fetch(symbols: list, start: dt.date, end: dt.date) -> dict:
     for i in range(0, len(symbols), CHUNK):
         chunk = symbols[i:i + CHUNK]
         with contextlib.redirect_stdout(noise), contextlib.redirect_stderr(noise):
-            frames.update(market_data.ohlcv_batch(chunk, start, end))
+            frames.update(market_data.ohlcv_batch(chunk, start, end, own_sessions=True))
         print(f"    fetched {min(i + CHUNK, len(symbols))}/{len(symbols)} "
               f"({len(frames)} usable)")
         if i + CHUNK < len(symbols):
@@ -556,10 +592,17 @@ def _headline(results: dict, kill_at: float) -> str:
     low, high = min(means), max(means)
     strongest = max(usable, key=lambda row: row[1]["meanRankCorrelation"])
 
-    # Every branch is quoted against the correlation study's 0.50 floor, because
-    # a number with no scale beside it invites the reader to supply their own.
+    # Every branch is quoted against the correlation study's stamped range,
+    # because a number with no scale beside it invites the reader to supply
+    # their own. Read from the stamp: a copy written here still said 0.50 to
+    # 0.65 after the 1 November 2026 re-run stamped 0.48 to 0.68.
+    yearly = (portfolio.load_stability() or {}).get("yearlyPersistence") or {}
     scale = ("For scale, the pairwise correlations that licensed the portfolio panel "
-             "to inform position size persist at 0.50 to 0.65.")
+             f"to inform position size persist at {yearly['min']:.2f} to "
+             f"{yearly['max']:.2f}." if yearly.get("min") is not None
+             and yearly.get("max") is not None else
+             "The correlation persistence that licensed the portfolio panel has not "
+             "been measured, so there is no scale to quote.")
     if high < kill_at:
         return (f"Factor betas do not persist: among the names that actually load on a "
                 f"factor, rank correlations run {low:.2f} to {high:.2f} year over year, "
@@ -634,11 +677,8 @@ def main() -> int:
             joined, {c: market for c in factor_weekly_raw.columns}, indices)
         for market in ("US", "ID")
     }
-    closes = pd.DataFrame({s: f["Close"].astype("float64") for s, f in frames.items()})
-    daily = np.log(closes.sort_index() / closes.sort_index().shift(1))
-    factor_closes = pd.DataFrame({s: f["Close"].astype("float64")
-                                  for s, f in factor_frames.items()})
-    factor_daily = np.log(factor_closes.sort_index() / factor_closes.sort_index().shift(1))
+    daily = exposure.log_returns(frames)
+    factor_daily = exposure.log_returns(factor_frames)
 
     blocks = _blocks(weekly)
     print(f"\n  {len(weekly)} weeks, {len(blocks)} whole {BLOCK_WEEKS}-week blocks, "
@@ -701,8 +741,10 @@ def main() -> int:
         # RAW, deliberately: this compares SAMPLING intervals, and removing the
         # market from a daily and a weekly series alike would change both halves
         # of the comparison without changing what it answers.
+        # The factor's own sessions, so `frequency`'s one-session lag is the
+        # factor's previous session rather than a holiday hole.
         block["frequency"] = frequency(
-            daily, factor_daily[symbol], weekly_raw, factor_weekly_raw[symbol],
+            daily, factor_daily[symbol].dropna(), weekly_raw, factor_weekly_raw[symbol],
             tiers["all"])
         if block["stress"]["usable"]:
             s = block["stress"]

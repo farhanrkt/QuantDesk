@@ -413,11 +413,13 @@ sixth of the money and half the risk is the portfolio wearing a smaller name.
 **This is the only place in the app where a measurement informs position size, and it was
 earned.** Using a correlation to size something is a claim that last year's correlation says
 something about next year's, so that was measured first: across four index universes, one
-year's pairwise correlations rank-correlate **0.50 to 0.65** with the next year's, at
-t-statistics near or above ten. The composite ranking's information coefficient, by contrast,
-was indistinguishable from zero. The same measurement found the limit and the panel carries it:
-correlations run about **0.06 higher in the worst quarters**, so an ordinary year's reading is a
-floor on how correlated these will be when it matters.
+year's pairwise correlations rank-correlate **0.48 to 0.68** with the next year's, at
+t-statistics from +8.5 to +14.2 (re-measured 1 November 2026). The composite ranking's
+information coefficient, by contrast, was indistinguishable from zero. The same measurement
+found the limit and the panel carries it: correlations run **higher in the worst quarters** —
++0.14 when last measured, a figure that moves between +0.01 and +0.23 with where the quarters
+are cut — so an ordinary year's reading is a floor on how correlated these will be when it
+matters.
 
 Holdings live in your browser, never on a server — this app still has no database. They are sent
 to answer that one question and forgotten, and they never reach the analytics event.
@@ -1017,7 +1019,7 @@ where a constant was invented, it got replaced by an estimator.
 | `returns[returns < 0].std()` for Sortino | **The published root-mean-square shortfall** | They are different statistics. The old one ran 0.85x on ordinary returns, 1.44x where losses are rare and large, and exactly zero when every loss is the same size — where Sortino came back as 4.7e14. See RESEARCH_ROADMAP §13 |
 | A journal that tells you whether you were right | **One that shows what you wrote, and what has moved** | Grading its own entries would be a backtest of one, on a self-selected sample, with no control for the theses never written down. Movement is reported as movement |
 | Asserting that four lenses are two independent readings | **Cohen's κ between the families' actual verdicts** | Two lenses with skewed habits agree most of the time while sharing nothing: one that calls 70% of companies cheap and one that calls 70% sound land on the same label 58% of the time by construction. Chance-corrected, the price record and the filings come out at κ = +0.03 across 168 names — so the cross-check is earned. The same run found the pair the app declares REDUNDANT agrees no more than that |
-| Sizing on a correlation because it seems reasonable | **Measuring whether correlations persist first** | One year's pairwise correlations rank-correlate 0.50-0.65 with the next year's across four universes, where the ranking's information coefficient was indistinguishable from zero. That gap is the whole licence for the portfolio panel, and a test fails if a re-measurement removes it |
+| Sizing on a correlation because it seems reasonable | **Measuring whether correlations persist first** | One year's pairwise correlations rank-correlate 0.48-0.68 with the next year's across four universes, where the ranking's information coefficient was indistinguishable from zero. That gap is the whole licence for the portfolio panel, and a test fails if a re-measurement removes it |
 | A bare screen flag | **Bayes on the screen's published error rates** | A screen that catches most manipulators on a population where manipulation is rare still produces mostly false alarms. The prevalence decides the answer and nobody can measure it, so it is a control — and the conclusion holds across every value the literature supports |
 | An accounting score with no provenance | **The published sample, on the axes that can be checked** | Piotroski was fitted on US value stocks in 1976-1996, Altman on 1960s manufacturers, Beneish on 1980s SEC cases. Every use today is outside all three, which is provenance rather than a defect — so it is stated, never coloured, and never counted into a fit score |
 | A pre-trade flag on its own | **The flag plus its measured firing rate** | "Altman says distress" is unreadable without knowing how often Altman says distress. Measured across four index universes: the conditions that turned out to fire on most of the market are demoted to base conditions rather than presented as findings, and an uncalibrated check is withheld |

@@ -1500,11 +1500,11 @@ def portfolio_context(body: PortfolioRequest):
     It informs position size, which every other measured thing in this app
     refuses to do, and it is allowed to because the underlying claim was
     measured first: pairwise correlations persist year to year at rank
-    correlations of 0.50-0.65 across four universes, where the composite
+    correlations of 0.48-0.68 across four universes, where the composite
     ranking's information coefficient was indistinguishable from zero. See
     `scripts/measure_correlation_stability.py` and the caveat it also found —
-    correlations run about 0.06 higher in the worst quarters, so an ordinary
-    year's reading is a floor.
+    correlations run higher in the worst quarters, so an ordinary year's
+    reading is a floor.
 
     A POST, alone in this app, because the input is a fact about the reader
     rather than about a company and URLs are logged by every hop that handles

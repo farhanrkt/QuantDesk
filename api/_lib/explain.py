@@ -3720,8 +3720,8 @@ def _check_firing_rate(value, check_label=None, universe_label=None, **_):
 # information coefficient is indistinguishable from zero, the event study
 # returns nulls, and the pre-trade panel deals only in present-tense facts.
 # Correlations are different, and the difference was measured before this
-# shipped — one year's pairwise correlations rank-correlate 0.50 to 0.65 with
-# the next year's across four index universes.
+# shipped — one year's pairwise correlations rank-correlate 0.48 to 0.68 with
+# the next year's across four index universes (re-measured 1 November 2026).
 #
 # THE READINGS ARE COLOURED, WHICH THE LAST TWO FEATURES WERE NOT. A candidate
 # correlating 0.9 with something already held is genuinely unfavourable for the
@@ -3990,7 +3990,7 @@ def _shared_driver(value, matches=None, tested=None, ambiguous=False,
 # and deliberate. Every other metric here describes the present; this one is
 # printed because a study said it survives the year, and the number that licensed
 # it belongs in the same sentence rather than two clicks away. It is also the
-# number that shrinks the claim: 0.42 is real and is well short of the 0.50-0.65
+# number that shrinks the claim: 0.42 is real and is well short of the 0.48-0.68
 # at which correlations persist.
 # ============================================================================ #
 @metric("factorBreadth")
