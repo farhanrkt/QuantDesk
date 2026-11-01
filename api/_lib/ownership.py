@@ -171,14 +171,21 @@ def _share_series(records) -> Optional[pd.Series]:
 SPLIT_WINDOW_DAYS = 30
 # How many counts beyond the window stand for the level on that side.
 SPLIT_REFERENCE_POINTS = 5
+# NOT EVERY "SPLIT" THE PROVIDER FILES IS ONE. It files spin-offs as splits too,
+# with the price-adjustment factor as the ratio: Honeywell's series carries
+# 1.061 on 30 October 2025 and 0.9535 on 29 June 2026, and its share count does
+# not move across either (635m either side of the first, 317m either side of
+# the second). A split exchanges whole shares, p for q, so only a ratio that is
+# one — both terms at most this — restates anything.
+SPLIT_MAX_TERM = 100
 
 
 def _split_events(splits) -> list[tuple[pd.Timestamp, float]]:
     """(ex-date, ratio) pairs from the boundary's dated records, oldest first.
 
     The ratio is new shares per old: 10 for a 10-for-1 split, 0.1 for a
-    1-for-10 consolidation. Anything unreadable, non-positive or exactly 1 is
-    dropped rather than guessed at.
+    1-for-10 consolidation. Anything unreadable, non-positive, exactly 1 or not
+    a whole-share exchange is dropped rather than guessed at.
     """
     if not isinstance(splits, list):
         return []
@@ -192,6 +199,10 @@ def _split_events(splits) -> list[tuple[pd.Timestamp, float]]:
         except (TypeError, ValueError):
             continue
         if pd.isna(when) or not np.isfinite(ratio) or ratio <= 0 or ratio == 1.0:
+            continue
+        share = Fraction(ratio).limit_denominator(SPLIT_MAX_TERM)
+        if (share.numerator > SPLIT_MAX_TERM
+                or abs(ratio - share.numerator / share.denominator) > 1e-9 * ratio):
             continue
         events.append((when, ratio))
     return sorted(events)
@@ -249,7 +260,7 @@ def split_adjusted(series: pd.Series, splits) -> tuple[pd.Series, list[dict]]:
 
 def _split_name(ratio: float) -> str:
     """"10-for-1 split", "3-for-2 split", "1-for-10 consolidation"."""
-    share = Fraction(ratio).limit_denominator(100)
+    share = Fraction(ratio).limit_denominator(SPLIT_MAX_TERM)
     return (f"{share.numerator}-for-{share.denominator} "
             f"{'split' if ratio > 1 else 'consolidation'}")
 

@@ -2358,6 +2358,102 @@ recomputed independently from raw provider data, and every page and tab driven i
 
 ---
 
+## 24. A split is not an issue
+
+Found on 1 November 2026 on the deployed app. NVDA's Score it tab fired the heavy-issuance
+gate: "Shares outstanding have grown 121% a year over 2.9 years. The largest single step was
++900% around 2024-06-08." That step is NVIDIA's 10-for-1 split.
+
+### 24.1 What the provider sends
+
+The share-count series (`get_shares_full`) is not restated for splits. Where its step lands,
+against each split's ex-date:
+
+| Name | Split | Ex-date | The provider's step | Both units on one day |
+|---|---|---|---|---|
+| NVDA | 10-for-1 | 2024-06-10 | 2024-06-08, two days before | yes: 2.46bn and 24.6bn on 8 June |
+| AVGO | 10-for-1 | 2024-07-15 | 2024-07-13, two days before | no |
+| CMG | 50-for-1 | 2024-06-26 | 2024-06-25, one day before | yes: 27.5m and 1.37bn on 25 June |
+| WMT | 3-for-1 | 2024-02-26 | 2024-02-27, one day after | no |
+
+So a date cannot say which unit a count near a split is in.
+
+The provider also files spin-offs as splits, with the price-adjustment factor as the ratio.
+Honeywell's list carries 1.0053, 1.011, 1.032, 1.061 (30 October 2025) and 0.9535 (29 June
+2026). Its share count does not move across the two inside the window: 635m either side of
+the first, 317m either side of the second.
+
+### 24.2 The restatement
+
+`market_data` now carries the splits beside the counts, as dated records.
+`ownership.split_adjusted` restates every count in today's shares before `issuance` reads a
+trend from it.
+
+- **Beyond 30 days of an ex-date, the date decides** which side of the split a count is on.
+  Inside them, its size does: each count joins whichever side's level it is nearer, where a
+  level is the median of the five counts beyond the window.
+- **A split the series does not show is left alone.** If the level after it is not nearer
+  the level before times the ratio, nothing is multiplied, so a history the provider already
+  restated is never restated twice.
+- **Only a whole-share exchange is a split:** p-for-q, both terms at most 100. Honeywell's
+  factors restate nothing.
+
+The reading names the splits it restated across ("Counts from before the 10-for-1 split of
+2024-06-10 are restated in today's shares."), so a reader holding a raw share count can see
+where the two part company.
+
+### 24.3 What it changed
+
+`scripts/measure_split_restatement.py`, run against the provider on 1 November 2026 over the
+four index universes (Dow 30, Nasdaq-100, IDX30 and LQ45): 168 names, every one with a
+readable share-count trend, 17 with a split inside the three-year window. **Unrestated, 13
+met the heavy-issuance gate's condition (a 25% annual rise or more). Restated, none do.**
+
+| Name | Split | A year, unrestated | Restated | Largest step, unrestated → restated |
+|---|---|---|---|---|
+| BKNG | 25-for-1, 2026-04-06 | +177.0% | −6.7% | 2,400% → 5% |
+| ORLY | 15-for-1, 2025-06-10 | +138.2% | −3.5% | 1,400% → 5% |
+| AVGO | 10-for-1, 2024-07-15 | +126.3% | +5.0% | 900% → 26% |
+| NVDA | 10-for-1, 2024-06-10 | +120.5% | −0.8% | 900% → 10% |
+| NFLX | 10-for-1, 2025-11-17 | +115.6% | −2.1% | 897% → 4% |
+| LRCX | 10-for-1, 2024-10-03 | +113.2% | −1.7% | 900% → 11% |
+| KLAC | 10-for-1, 2026-06-12 | +112.8% | −1.4% | 900% → 11% |
+| ISAT.JK | 4-for-1, 2024-10-14 | +66.2% | 0.0% | 300% → 18% |
+| CRWD | 4-for-1, 2026-07-02 | +62.8% | +2.4% | 300% → 11% |
+| CTAS | 4-for-1, 2024-09-12 | +57.4% | −0.9% | 300% → 3% |
+| WMT | 3-for-1, 2024-02-26 | +43.5% | −0.6% | 199% → 4% |
+| PANW | 2-for-1, 2024-12-16 | +38.2% | +9.6% | 99% → 16% |
+| FAST | 2-for-1, 2025-05-22 | +26.2% | +0.1% | 100% → 5% |
+| ODFL | 2-for-1, 2024-03-28 | +24.1% | −1.8% | 100% → 12% |
+| MNST | 2-for-1, 2026-08-11 | +23.5% | −2.2% | 100% → 8% |
+| AZN | 1-for-2, 2026-02-02 | −20.6% | 0.0% | 9% → 9% |
+| BBNI.JK | 2-for-1, 2023-10-06 | +0.2% | +0.2% | 8% → 8% |
+
+Notes on the table:
+
+- **The steps that remain are the provider's own.** Each is in the unrestated series too, and
+  none sits near a split:
+  - AVGO's 26% is the shares issued for VMware, 0.413bn to 0.522bn on 24 November 2023;
+  - ISAT.JK's 18% is two counts alternating on the same days in February 2025;
+  - PANW's 16% is in February 2026, which leaves it material at +9.6% a year.
+- **AZN's ratio of 0.5 had read as a buyback,** a count falling 21% a year. Restated, it is flat.
+- **BBNI.JK's split falls before its window opens,** so restating it changes nothing there.
+
+### 24.4 What it does not settle
+
+- **The blend backtest was measured on unrestated counts.** Issuance is one of the four
+  components `scripts/backtest_verdict.py` can reconstruct, and it now passes the splits
+  through. Re-stamping `verdict_backtest.json` needs a sweep's registers fetched after this
+  change: a register cached before it carries no splits, so a `--fundamentals-days` replay
+  restates nothing.
+- **A change the provider does not file as a split cannot be restated.** Honeywell's count
+  falls from 634m on 14 April 2026 to 317m on 26 June 2026, with nothing between, and no
+  split is listed that would explain it. This change cannot tell whether that is an
+  unfiled consolidation or an error in the series, so it reads the count as it arrives: a
+  share count falling 22% a year.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
@@ -2371,6 +2467,7 @@ recomputed independently from raw provider data, and every page and tab driven i
 | The worst-quarter rise, as a number | §22.4: where the quarters are cut moves it between +0.01 and +0.23, and the panel prints it in its headline. Averaging the study over offsets would give a figure that does not depend on the start date. That changes what the stamp reports, so it is a re-measurement, not an edit |
 | Cross-market correlation persistence | §22.5: every universe the study measures is one market, so a US–IDX pair, or a stock against bitcoin, has no persistence figure of its own. Measuring one needs a universe spanning two calendars, with enough names for a cross-section in every block |
 | Fundamental exposure — revenue against commodity prices | **Rejected on feasibility, not deferred.** `market_data` fetches annual statements only, five columns, and yfinance's quarterlies for these names return five or six with gaps — ADRO and PTBA are both missing 2025-09-30. Five irregular observations is not a weak estimate, it is not an estimate. Consequence: the reverse DCF's implied growth cannot be restated as an implied commodity path |
+| The blend backtest on restated share counts | §24.4: `verdict_backtest.json` was measured before splits were restated. Re-stamping it needs a sweep's registers fetched since, because a register cached before the change carries no splits |
 
 **Corrected while writing this:** README quoted the price-implied growth rate moving across
 "24% to 42%" over a range of discount rates, in a sentence that read as something the app

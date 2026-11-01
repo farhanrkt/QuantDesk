@@ -352,6 +352,26 @@ def test_a_series_already_restated_is_left_alone():
     assert result["latestCount"] == pytest.approx(24.6e9)
 
 
+@pytest.mark.parametrize("ratio", [1.061, 0.9535, 1.032])
+def test_a_spin_off_filed_as_a_split_restates_nothing(ratio):
+    """The provider files spin-offs as splits, with the price-adjustment factor
+    as the ratio (Honeywell: 1.061 on 30 October 2025, 0.9535 on 29 June 2026),
+    and a spin-off changes no share count. Not a whole-share exchange, not a split."""
+    flat = split_records(ratio=1.0)
+    result = O.issuance({"ok": True, "shares": flat,
+                         "splits": [{"date": SPLIT_DAY.isoformat(), "ratio": ratio}]})
+    assert result["splitsRestated"] == []
+    assert result["latestCount"] == pytest.approx(2.46e9)
+
+
+@pytest.mark.parametrize("ratio,name", [(1.5, "3-for-2 split"), (1 / 15, "1-for-15 consolidation"),
+                                        (50.0, "50-for-1 split")])
+def test_whole_share_exchanges_are_splits_and_are_named_as_written(ratio, name):
+    result = O.issuance(with_split(split_records(ratio=ratio), ratio=ratio))
+    assert result["band"] == "flat"
+    assert name in result["reading"]
+
+
 def test_junk_split_records_restate_nothing():
     register = with_split(split_records())
     register["splits"] = [{"date": "nope", "ratio": 10.0}, {"date": "2024-06-10", "ratio": None},

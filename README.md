@@ -616,7 +616,9 @@ does not catch it because a thin float still prints respectable volume on its ex
 Share issuance is the other half — rights issues are routine on IDX, and nothing else in this
 app would notice a company that doubled its share count in three years. Both are gates as
 well as components: under 8% free float, or over 25% a year of issuance, caps the action at
-hold whatever the score.
+hold whatever the score. The counts are restated for splits before any trend is read: the
+provider's series is not, so NVDA's 10-for-1 of June 2024 used to read as a 900% issue and
+fire that gate (RESEARCH_ROADMAP §24).
 
 The independence claim for this third family is deliberately narrower than for the first two
 — the share count *is* printed in the filings, and what is true is only that no filings lens
