@@ -193,6 +193,17 @@ So: the battery does not cover the page. Open it. The browser pane works.
 
 WHAT THE LAST SESSIONS DID
 ==========================
+THE NOVEMBER 2026 AUDIT (RESEARCH_ROADMAP §23), on branch claude/full-audit,
+which merges every finished branch (the market board and calendar widgets,
+§18.9's summary revenue, §21's forward log, §22's per-holding sessions). Every
+API route was called with real tickers and the main calculations recomputed
+outside the app: indicators, the DCF, beta, the accounting scores, the board,
+the event-day tests, correlations, long-term returns and the track record all
+matched. Six things were wrong and are fixed: a throttled bank valued as an
+ordinary company, a throttled lookup cached all day, coins and funds told
+their data was missing, the DCF ignoring short-term investments, an invisible
+negative MACD histogram, and a misleading one-year-change reading.
+
 Written up in RESEARCH_ROADMAP.md §7-§15 and DESIGN.md — read those rather than
 re-deriving the reasoning.
 

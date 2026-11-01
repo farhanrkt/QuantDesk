@@ -2290,6 +2290,74 @@ panel reads. Both artifacts were re-stamped on 1 November 2026.
 
 ---
 
+## 23. The November 2026 audit — every number recomputed outside the app
+
+On 1 November 2026, with every finished branch merged (the market board, the calendar
+widgets, §18.9's summary revenue, §21's forward log and §22's per-holding sessions), the app
+was audited end to end: every API route called with real tickers, the main calculations
+recomputed independently from raw provider data, and every page and tab driven in a browser.
+
+### 23.1 What was recomputed, and matched
+
+| Area | How it was checked | Result |
+|---|---|---|
+| 132 API calls, 14 tickers, both markets, crypto, an ETF, two fake symbols | Every answer scanned for NaN, infinity, leaked `None`, unfilled templates | 125 answered, 7 deliberate refusals, nothing broken |
+| 22 technical indicators on AAPL, BBCA.JK, ITMG.JK, BTC-USD | Textbook formulas on raw prices | Exact, given four documented choices: Bollinger on sample deviation, slow stochastic, Chaikin's 21 days, a 252-day Donchian channel |
+| The DCF bridge on AAPL | By hand: CAPM, WACC, five discounted years, terminal value, per-share | Exact to the cent |
+| Beta on KO and AAPL | Ordinary regression on 500 aligned days | Exact. KO's -0.05 (R² 0.2%) is the data, flagged by the app and floored at 0.40 |
+| Piotroski, Altman Z'', Beneish M on AAPL, TLKM.JK, ITMG.JK | Formulas from the papers on raw statements | Exact, including each Beneish index; a missing index is neutral 1.0 |
+| The 22-row market board | Last close, move in its own unit, percentile in its own year | 21 exact; bitcoin moved between the two fetches |
+| The nine event-day tests | `scipy.stats.binomtest` | Exact |
+| Portfolio correlations, IDX and mixed books | Log returns, each name's own last 252 sessions | Exact, 6 of 6 |
+| Rolling 1-3 year returns, drawdown, CAGR, volatility, calendar years on AAPL | From the app's own five-year series | Exact |
+| Track record (years, profitability, revenue CAGR, margin) | Raw statements | Exact |
+| Upcoming calendar dates | The Fed, BLS, Bank Indonesia and IDX schedules as published | FOMC 8–9 Dec and 26–27 Jan, CPI 10 Nov and 10 Dec, BI 15–16 Dec, IDX 5 Jan (Isra Mi'raj) confirmed |
+
+### 23.2 What was wrong, and is fixed
+
+- **A bank whose `.info` was throttled was valued as an ordinary company.** JPM came back
+  with no sector during the sweep; `detect_engine` read that as "non-financial" and ran a DCF
+  on a bank. It was refused for negative free cash flow, with a form inviting a figure to be
+  typed in; a bank with positive free cash flow would have been given a fair value. The
+  engine now declines a company with no sector unless its income statement rules a bank out:
+  **0 of 296 banks in the local cache report a cost of revenue or gross profit line**,
+  against 3,042 of 3,257 non-financial companies, and 4 of 102 insurers do. ITMG.JK,
+  throttled minutes later, is valued with a notice saying why. The scanner retries the
+  decline as the throttle it is, as it already did for the quality lens.
+- **The throttled record was kept for the rest of the day.** The disk cache has refused to
+  store one since September; the in-memory cache kept it until midnight. It now keeps a
+  record whose `.info` did not arrive for two minutes.
+- **A coin, a fund or an index was told its data was missing.** BTC-USD and SPY were advised
+  to type in a free cash flow (valuation) or to refetch a sector (quality, and the "What it
+  is" tab). The provider's `quoteType` is now kept, and each says plainly that the listing
+  is a cryptocurrency or an exchange-traded fund, not a company.
+- **The DCF counted cash but not short-term investments.** The bridge read "Cash And Cash
+  Equivalents" alone. Across 2,844 non-financial records with matching currencies, the
+  short-term investments it left out were nothing for the median company but at least 5% of
+  market value for 420 (15%) and at least 10% for 280. It now adds "Cash, Cash Equivalents
+  And Short Term Investments" where reported, and the bridge names which it used. AAPL's
+  base case moved from $111.35 to $112.64. The track record's net cash still counts cash
+  alone, because its published base rates were measured that way.
+- **Every negative bar of the MACD histogram was invisible.** The custom bar drew a raw
+  `<rect>` with the negative height Recharts passes for a bar below zero; the browser
+  refused all 614 of them on AAPL and logged an error for each. It now draws them down from
+  the zero line.
+- **"One-year price change: needs a year of history"** was said of Apple: the one-year range
+  holds about 250 sessions and the change needs 253. It now says so.
+
+### 23.3 Checked and left alone
+
+- **Portfolio pairs against bitcoin use about eight months.** Each name keeps its own last
+  252 sessions, so a stock against a coin overlaps on about 175 days; `portfolio.py` states
+  it, and the persistence was measured on that window.
+- **A company searched by its common name may not be found.** The listing files carry the
+  provider's legal names: Telkom Indonesia is "Perusahaan Perseroan (Persero) PT
+  Telekomunikasi Indonesia", found by "telekomunikasi" or "TLKM" but not "telkom".
+- **Headlines are requested twice per page load in development.** React's StrictMode mounts
+  twice and the first request is aborted; production makes one.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
