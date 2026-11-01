@@ -4,6 +4,7 @@ import { BookOpen, Columns3, LayoutGrid, Menu, NotebookPen, Search, X } from "lu
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { useMarketBoard } from "@/components/shell/marketboard";
 import { usePreferences } from "@/components/shell/preferences";
 import { DetailToggle } from "@/components/ui/explain";
 import { Kbd } from "@/components/ui/kbd";
@@ -34,6 +35,7 @@ const NAV = [
 export function TopBar({ onSearch }: { onSearch: () => void }) {
   const pathname = usePathname() ?? "/";
   const { detail, setDetail } = usePreferences();
+  const { railOpen, fullBoard } = useMarketBoard();
   const menu = useRef<HTMLDialogElement>(null);
 
   // A route change closes the phone menu; leaving it open over the page the
@@ -58,9 +60,16 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-rule bg-ink/90 backdrop-blur
+    <header className="sticky top-0 z-40 flex border-b border-rule bg-ink/90 backdrop-blur
                        supports-[backdrop-filter]:bg-ink/75 print:hidden">
-      <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
+      {/* THE BAR KEEPS THE PAGE'S MEASURE. From 1280px the page shares the
+          window with the markets panel and its column starts at the window's
+          left edge, so a bar centred on the whole window put the brand 160px in
+          from the page it heads at 1600px. The bar is laid out like the page
+          beneath it instead: padding outside the same 1280px column, beside a
+          space as wide as the panel, or as its strip when the panel is hidden. */}
+      <div className="mx-auto box-content flex h-14 min-w-0 max-w-7xl flex-1 items-center gap-3
+                      px-4 sm:px-6 lg:px-8">
         <Link href="/" aria-label="QuantDesk home"
               className="mr-1 rounded font-mono text-meta font-semibold tracking-[0.16em] text-chalk
                          focus:outline-none focus-visible:ring-2 focus-visible:ring-tech">
@@ -100,6 +109,9 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
           </button>
         </div>
       </div>
+      {!fullBoard && (
+        <div aria-hidden className={cn("hidden shrink-0 xl:block", railOpen ? "w-[22rem]" : "w-12")} />
+      )}
 
       {/* A native dialog: focus is trapped and returned, Escape closes it, and
           the page behind is inert — all for free, which a hand-rolled drawer
