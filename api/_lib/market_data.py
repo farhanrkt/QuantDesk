@@ -716,6 +716,17 @@ def _safe_float(value, default=np.nan) -> float:
     return out if np.isfinite(out) else default
 
 
+def _epoch_date(value) -> Optional[str]:
+    """An epoch-seconds stamp from the provider's summary as an ISO date, or None."""
+    stamp = _safe_float(value)
+    if not np.isfinite(stamp) or stamp <= 0:
+        return None
+    try:
+        return dt.datetime.fromtimestamp(stamp, tz=dt.timezone.utc).date().isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
 # Rows on a financial statement that are COUNTS rather than money. Scaling a
 # share count by an exchange rate would be meaningless; every consumer uses them
 # only in ratios, where uniform scaling is harmless, but excluding them keeps the
@@ -726,12 +737,13 @@ _COUNT_ROW_HINTS = ("shares", "share issued", "share number", "number")
 def _convert_statements(data: dict, rate: float) -> None:
     """Scale money on the three statements into the trading currency, in place.
 
-    ONLY THE STATEMENTS AND THE INFO FIGURE DERIVED FROM THEM. Verified against
+    ONLY THE STATEMENTS AND THE INFO FIGURES DERIVED FROM THEM. Verified against
     ITMG.JK, which reports in USD and trades in IDR: the income, balance and cash
-    flow statements and `netIncomeToCommon` are all on the USD scale, while
-    `price`, `market_cap`, `shares` and the dividend-per-share figures come from
-    the quote feed already denominated in rupiah. Scaling the second group would
-    replace one currency error with another.
+    flow statements, `netIncomeToCommon` and `totalRevenue` are all on the USD
+    scale (its summary read 1.96bn against 1.88bn filed for 2025, on 1 November
+    2026), while `price`, `market_cap`, `shares` and the dividend-per-share
+    figures come from the quote feed already denominated in rupiah. Scaling the
+    second group would replace one currency error with another.
     """
     for key in ("income", "balance", "cashflow"):
         frame = data.get(key)
@@ -745,8 +757,12 @@ def _convert_statements(data: dict, rate: float) -> None:
             scaled.loc[label] = pd.to_numeric(scaled.loc[label], errors="coerce") * rate
         data[key] = scaled
 
-    if np.isfinite(data.get("net_income_info", np.nan)):
-        data["net_income_info"] = data["net_income_info"] * rate
+    # The summary figures are in the reporting currency too. `revenue_ttm` is
+    # absent from records cached before it existed, hence the safe read.
+    for key in ("net_income_info", "revenue_ttm"):
+        value = _safe_float(data.get(key))
+        if np.isfinite(value):
+            data[key] = value * rate
 
 
 def company(ticker: str) -> dict:
@@ -1000,6 +1016,16 @@ def _company_uncached(ticker: str, convert: bool = True) -> dict:
         "payout_ratio": _safe_float(info.get("payoutRatio")),
         "roe_info": _safe_float(info.get("returnOnEquity")),
         "net_income_info": _safe_float(info.get("netIncomeToCommon")),
+        # THE TRAILING YEAR'S TOP LINE FROM THE PROVIDER'S SUMMARY, kept beside
+        # the statements because for a quarter of the Indonesian exchange it is
+        # the only top line there is. See `field.revenue_of`, the one reader: it
+        # is a stand-in for a filed year where no statement exists, never a
+        # replacement for one. In the reporting currency, like the statements,
+        # and converted with them.
+        "revenue_ttm": _safe_float(info.get("totalRevenue")),
+        # The quarter that trailing year ends on, so a figure years old cannot
+        # stand beside this year's filings unnoticed.
+        "revenue_ttm_through": _epoch_date(info.get("mostRecentQuarter")),
         "ttm_dividend": ttm_dividend,
         "dividend_history": div_history,
         "price_source": price_source,
@@ -1071,13 +1097,20 @@ def _conversion_looks_wrong(out: dict, rate: float) -> bool:
     cap = _safe_float(out.get("market_cap"))
     if not np.isfinite(cap) or cap <= 0:
         return False
-    series = _get_row(out.get("income"), "revenue")
-    if series is None:
-        return False
-    clean = pd.Series(series).dropna()
-    if not len(clean):
-        return False
-    revenue = _safe_float(clean.iloc[0])
+    income = out.get("income")
+    if isinstance(income, pd.DataFrame) and not income.empty:
+        series = _get_row(income, "revenue")
+        if series is None:
+            return False
+        clean = pd.Series(series).dropna()
+        if not len(clean):
+            return False
+        revenue = _safe_float(clean.iloc[0])
+    else:
+        # NO STATEMENTS AT ALL, so the summary's trailing top line is the one
+        # figure a conversion would scale and `field.revenue_of` would rank. It
+        # gets the same yardstick; see `revenue_ttm`.
+        revenue = _safe_float(out.get("revenue_ttm"))
     if not np.isfinite(revenue) or revenue <= 0:
         return False
 

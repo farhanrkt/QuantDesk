@@ -929,6 +929,97 @@ def test_without_a_yardstick_the_conversion_proceeds(monkeypatch, record):
 
 
 # --------------------------------------------------------------------------- #
+# The summary's trailing top line, for listings the provider files nothing for
+#
+# 215 of 770 cached Indonesian records carried no statements at all, and it is
+# not a throttle: re-asked unhurried on 1 November, 47 of 47 came back empty
+# again while four large listings asked between them returned complete
+# statements. The summary carried a trailing year's revenue for all 215, and
+# `field.revenue_of`
+# ranks on it where nothing was filed — so it has to arrive on the same scale
+# as the filed years it is compared with.
+# --------------------------------------------------------------------------- #
+def test_the_record_keeps_the_summary_top_line_and_the_quarter_it_runs_to(monkeypatch):
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.fast_info = _FakeFastInfo()
+            self.info = {"sector": "Industrials", "totalRevenue": 309_528_952_832,
+                         "mostRecentQuarter": 1_782_777_600}      # 30 June 2026
+            self.dividends = None
+
+        def __getattr__(self, name):
+            return pd.DataFrame()
+
+    monkeypatch.setattr(MD.yf, "Ticker", FakeTicker)
+    data = MD._company_uncached("TEST")
+
+    assert data["revenue_ttm"] == 309_528_952_832.0
+    assert data["revenue_ttm_through"] == "2026-06-30"
+    assert data["income"].empty, "a stand-in, not a statement"
+
+
+@pytest.mark.parametrize("stamp", [None, 0, -5, "soon", float("nan"), 1e30])
+def test_an_unreadable_quarter_stamp_is_absent_rather_than_invented(stamp):
+    assert MD._epoch_date(stamp) is None
+
+
+def test_the_summary_top_line_is_converted_with_the_statements(monkeypatch):
+    """BOAT.JK's shape: dollar figures, rupiah shares, and no statements at all.
+
+    Six of the 215 report in dollars. Left unconverted, the summary figure
+    would be ranked against rupiah filings at 1/16,600th of its size.
+    """
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_600.0)
+    record = {"currency": "IDR", "financial_currency": "USD",
+              "market_cap": 343_164_649_472.0, "income": pd.DataFrame(),
+              "revenue_ttm": 16_065_026.0, "net_income_info": 1_821_033.0}
+
+    out = MD._apply_fx(record)
+    assert out["fx_rate"] == 16_600.0
+    assert out["revenue_ttm"] == pytest.approx(16_065_026.0 * 16_600.0)
+    assert out["net_income_info"] == pytest.approx(1_821_033.0 * 16_600.0)
+
+
+def test_a_mislabelled_summary_is_declined_like_a_mislabelled_statement(monkeypatch):
+    """With no statements, the summary figure is the one a conversion would
+    scale, so it is the one the yardstick reads. Rupiah labelled USD, as on
+    RIGS.JK, would otherwise rank a small listing at 16,300 times its size."""
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    record = {"currency": "IDR", "financial_currency": "USD",
+              "market_cap": 423_000_000_000.0, "income": pd.DataFrame(),
+              "revenue_ttm": 291_131_752_448.0}
+
+    out = MD._apply_fx(record)
+    assert out.get("fx_rate") is None
+    assert out["fx_skipped"]["rateRefused"] == 16_300.0
+    assert out["revenue_ttm"] == 291_131_752_448.0
+
+
+def test_the_summary_never_overrules_a_filed_top_line_in_the_yardstick(monkeypatch):
+    """Where an income statement arrived, it alone decides the units question.
+
+    The planted summary would condemn the conversion; the filed figure passes
+    it, and the filed figure is what the valuation and the ranking read.
+    """
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    record = {"currency": "IDR", "financial_currency": "USD", "market_cap": 1e12,
+              "revenue_ttm": 9e11, **_statements(5e7)}
+
+    out = MD._apply_fx(record)
+    assert out["fx_rate"] == 16_300.0 and "fx_skipped" not in out
+
+
+def test_a_record_cached_before_the_summary_figure_existed_still_converts(monkeypatch):
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    record = {"currency": "IDR", "financial_currency": "USD", "market_cap": 1e12,
+              **_statements(5e7)}
+
+    out = MD._apply_fx(record)
+    assert out["fx_rate"] == 16_300.0
+    assert "revenue_ttm" not in out, "a key the record never had is not invented"
+
+
+# --------------------------------------------------------------------------- #
 # Earnings calendar: one fetch a day, shared by the event study and the company view
 # --------------------------------------------------------------------------- #
 def test_earnings_calendar_splits_past_from_next_and_caches_for_the_day(monkeypatch):

@@ -1759,9 +1759,11 @@ export interface ScanResponse {
    *
    * `basis` IS NOT OPTIONAL COPY. A rank of 1 rendered without it reads as
    * market share, which nothing in this app measures: private companies,
-   * companies listed elsewhere and names whose filings did not arrive are all
+   * companies listed elsewhere and names whose revenue could not be read are all
    * missing from the denominator. `unplaced` says how many of the last kind
-   * there were.
+   * there were. Where the provider carries no statements, its trailing twelve
+   * months stands in for a filed year; the readings say so wherever a field
+   * compares the two (`api/_lib/field.py`).
    */
   fields?: {
     measured: number; unplaced: number; count: number;

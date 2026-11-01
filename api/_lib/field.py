@@ -64,11 +64,14 @@ market share, and it is not that, on four counts:
   * Only companies in THIS market. The US sweep places Apple first in consumer
     electronics on three measured peers, because Samsung and Sony are not US
     common stock. The figure is right and the impression it gives is wrong.
-  * Only companies whose statements ARRIVED. 201 of the 722 cached Indonesian
-    records carry no income statement at all — a throttled fetch, not a company
-    without revenue — so a field's true leader can simply be missing and the
-    runner-up inherits the crown. `standings()` therefore reports `unplaced`,
-    and a reader who sees a large one should distrust every thin field in it.
+  * Only companies whose top line could be READ. For most of this module's
+    life that excluded a quarter of the Indonesian exchange — 215 of 770 cached
+    records carry no statements at all — and this paragraph called it a
+    throttled fetch. It is not one; see "A QUARTER OF THE EXCHANGE FILES
+    NOTHING THE PROVIDER CARRIES" below, and the summary figure that now stands
+    in. Whatever is still missing is reported as `unplaced`, and a reader who
+    sees a large one should distrust every thin field in it: a field's true
+    leader can simply be absent, and the runner-up inherits the crown.
   * Only companies the provider gave the SAME LABEL. These labels are coarse and
     occasionally wrong. "Conglomerates" is not a field anyone competes in.
 
@@ -105,14 +108,14 @@ broken one. See `revenue_of`.
 "NO LISTED RIVAL" AND "NOTHING ELSE WE COULD MEASURE" ARE DIFFERENT CLAIMS
 ---------------------------------------------------------------------------
 A field holding one ranked name looks like a monopoly and is very often a thin
-measurement: 201 of the 722 cached Indonesian records carry no income statement,
-so a company's listed rivals can all be present on the exchange and absent from
-the ranking. Of the 28 Indonesian fields with exactly one ranked name, only 13
-have no same-label listing that failed to return revenue.
+measurement, because a company's listed rivals can all be on the exchange and
+absent from the ranking. On the 21 September Indonesian sweep as first ranked,
+only 14 of the 29 fields with exactly one ranked name had no same-label listing
+that failed to return revenue.
 
-KETR.JK is the case that forced the distinction. It is the only Indonesian
+KETR.JK is the case that forced the distinction. It was the only Indonesian
 listing under "Communication Equipment" whose revenue could be read, and TWO
-others carry the label and filed nothing usable. Tightening the flag alone would
+others carried the label and filed nothing usable. Tightening the flag alone would
 have dropped the one company this module was built to find; rendering the weak
 state as the strong one would have told a reader it has no competition. So:
 
@@ -124,9 +127,67 @@ state as the strong one would have told a reader it has no competition. So:
   `unranked`     how many same-label listings returned nothing, carried PER
                  FIELD as well as in the global `unplaced` total, because the
                  global figure cannot say whether THIS field is the thin one.
+  `noCloseRival` no measured rival within LEAD_MARGIN of it: alone among the
+                 measured, or that far ahead of the runner-up. What the
+                 specialist screen selects on. It contains `onlyRanked` and
+                 `leads` and adds one case, the larger of two by the margin,
+                 which the screen could otherwise never select however far
+                 ahead — so measuring a rival under half a company's size was
+                 enough to remove it. See `standings`.
 
 A named leader carries it too: its lead is over the measured group only, and the
 reading says so whenever something in its field went unmeasured.
+
+A QUARTER OF THE EXCHANGE FILES NOTHING THE PROVIDER CARRIES
+--------------------------------------------------------------
+215 of the 770 cached Indonesian records carry no income statement, balance
+sheet or cash flow statement at all, and every one of them has a sector, so the
+summary scrape did arrive. This module called that a throttled fetch for most of
+its life. MEASURED ON 1 NOVEMBER, IT IS NOT ONE: re-asked unhurried, six weeks
+after the sweep that cached them, 47 of 47 came back empty again, annual and
+quarterly alike, while BBCA.JK, TLKM.JK, ASII.JK and UNVR.JK, asked in between,
+returned complete statements. The provider carries none for these listings. They
+are small — a median market value of about 300 billion rupiah — and no refetch
+changes it.
+
+The provider's SUMMARY does carry a trailing year's revenue for all 215, running
+to June or September 2026 for 209 of them. Where both exist it agrees with the
+filed year: on 104 Indonesian names that have both, 100 of them drawn at random,
+trailing over filed is 1.04 at the median, within a quarter either way on 90 and within a half on 100, and
+the two never disagree about the currency. The outliers are what a trailing year
+does to a filed one — a stale filing (SFAN.JK's latest is 2024) and a broker's
+volatile income (PADI.JK) — not units errors.
+
+So `revenue_of` ranks a listing with no statements on the summary figure, and
+never prefers it to a filed year. Re-ranking the 21 September sweep that way
+places 725 names rather than 526, leaves unplaced only the 45 with no industry
+label, and names 38 leaders rather than 32:
+
+  gained  KETR.JK over CCSI.JK, a cable maker, and IOTF.JK — the two rivals it
+          could not be measured against — and AKRA, PWON, ASSA, MPIX, PEVE, and
+          INOV.JK in Waste Management, a recycler on 3.3x the revenue of
+          MHKI.JK, which leaves the specialist shortlist it held only because
+          INOV could not be read;
+  lost    DIVA.JK in Software - Application, on the rule below.
+
+Every field of one is now a sole listing: 20 of 20, where it was 14 of 29.
+
+What the summary does NOT give these 215 is a history. One trailing year shows
+no run of profits, no compounding and no borrowings, so `trackrecord` still has
+nothing to read, and none of them can be a specialist itself. They can only now
+be measured against one.
+
+TWO KINDS OF FIGURE IN ONE FIELD, AND A LEAD THAT DEPENDS ON WHICH
+-------------------------------------------------------------------
+A filed year (here, usually to December 2025) and a trailing twelve months (to
+June or September 2026) are both a year of sales, ending on different dates.
+67 fields on that sweep mix the two, and every reading comparing them says so.
+The one place it changes an answer is the lead: DIVA.JK led TOSK.JK by 2.05x on
+DIVA's filed year against TOSK's trailing year, and by 1.85x on both companies'
+trailing years. So where the top two are ranked on different kinds, the lead is
+re-made on both trailing years, and a leader is named only if it clears
+LEAD_MARGIN both ways — and not at all if one of them has no trailing figure to
+re-make it with. KETR.JK passes, narrowly: 2.4x as ranked, 2.0x re-made.
 
 A CLOSED-END FUND IS NOT A COMPANY, AND NOTHING HERE CAN TELL
 --------------------------------------------------------------
@@ -229,9 +290,10 @@ SUMMARY_CHARS = 320
 # about market share that nothing here measured. See the module docstring.
 BASIS = ("Ranked among the scanned listings carrying the same industry label. "
          "Private companies, companies listed elsewhere and divisions of larger "
-         "groups are not in it, and names whose filings did not arrive are "
+         "groups are not in it, and names whose revenue could not be read are "
          "missing from it, so this is a standing among measured peers and not a "
-         "market share.")
+         "market share. Each figure is the latest filed year, or the provider's "
+         "trailing twelve months where it carries no statements.")
 
 
 def _finite(value) -> Optional[float]:
@@ -338,29 +400,58 @@ def _profile_reading(industry: str, sector: str, summary: str, state: str) -> st
 def revenue_of(company: Optional[dict]) -> dict:
     """The most recent annual top line, in the currency the shares trade in.
 
+    The latest FILED year where an income statement arrived, and the provider's
+    trailing twelve months only where no statement exists at all — `source`
+    says which, and `trailing` carries the summary figure for every name that
+    has one, so `standings` can re-make a lead between the two kinds on one. See
+    the module docstring on the 215 Indonesian listings this is for.
+
     Returns a reading with `usable` false and a reason rather than a number it
     cannot stand behind, because the consumer is a ranking: a figure in the
     wrong units does not look wrong there, it looks like a market leader. See
     the docstring on RIGS.JK.
     """
     record = company if isinstance(company, dict) else {}
-    series = _get_row(record.get("income"), "revenue")
+    income = record.get("income")
+    filed = isinstance(income, pd.DataFrame) and not income.empty
     value = None
     as_of = None
-    if series is not None:
-        clean = pd.Series(series).dropna()
-        if len(clean):
-            value = _finite(clean.iloc[0])
-            label = clean.index[0]
-            as_of = str(getattr(label, "date", lambda: label)())
+    source = "statement"
+    if filed:
+        series = _get_row(income, "revenue")
+        if series is not None:
+            clean = pd.Series(series).dropna()
+            if len(clean):
+                value = _finite(clean.iloc[0])
+                label = clean.index[0]
+                as_of = str(getattr(label, "date", lambda: label)())
+    else:
+        # NO STATEMENTS AT ALL, WHICH ON THIS EXCHANGE IS NOT A THROTTLE. See the
+        # module docstring: the provider carries none for these listings, and
+        # its summary carries a trailing year's revenue for them. A STAND-IN,
+        # NEVER A PREFERENCE — a record with an income statement is ranked on
+        # its filed year even when the summary is fresher, so the names already
+        # measured stay measured the way they were.
+        value = _finite(record.get("revenue_ttm"))
+        as_of = record.get("revenue_ttm_through")
+        source = "summary"
 
     currency = (record.get("currency") or "").upper() or None
     reporting = (record.get("financial_currency") or "").upper() or None
     converted = _finite(record.get("fx_rate")) is not None
+    figures = "statements" if source == "statement" else "summary figures"
+    # The summary's trailing year for EVERY name that has one, filed or not, so a
+    # comparison between the two kinds can be re-made on one kind. See
+    # `standings` on DIVA.JK. Converted with the statements by `market_data`.
+    trailing = _finite(record.get("revenue_ttm"))
+    trailing = trailing if trailing is not None and trailing > 0 else None
 
     if value is None or value <= 0:
         return {"usable": False, "value": None, "currency": currency, "asOf": as_of,
-                "reason": "no revenue line came back on the income statement"}
+                "source": None,
+                "reason": ("no revenue line came back on the income statement" if filed
+                           else "no statements came back, and the provider's summary "
+                                "carries no revenue figure either")}
 
     # A CONVERSION DELIBERATELY DECLINED IS NOT A CONVERSION MISSING.
     # `market_data._apply_fx` refuses to scale statements whose currency label
@@ -376,7 +467,8 @@ def revenue_of(company: Optional[dict]) -> dict:
     if (reporting and currency and reporting != currency
             and not converted and not skipped):
         return {"usable": False, "value": None, "currency": currency, "asOf": as_of,
-                "reason": (f"the statements are written in {reporting} and the shares "
+                "source": source,
+                "reason": (f"the {figures} are written in {reporting} and the shares "
                            f"trade in {currency}, and no exchange rate was applied, so "
                            f"this figure is not on the same scale as its peers")}
 
@@ -411,7 +503,8 @@ def revenue_of(company: Optional[dict]) -> dict:
         before = (value / rate) / cap
         if not (low <= after <= high) and low <= before <= high:
             return {"usable": False, "value": None, "currency": currency, "asOf": as_of,
-                    "reason": (f"the statements are labelled {reporting} and were "
+                    "source": source,
+                    "reason": (f"the {figures} are labelled {reporting} and were "
                                f"converted at {rate:,.4g}, which puts revenue at "
                                f"{value:,.0f} against a market value of {cap:,.0f} — a "
                                f"price-to-sales ratio of {after:,.4g}, where the "
@@ -420,6 +513,11 @@ def revenue_of(company: Optional[dict]) -> dict:
                                f"comparable with its peers")}
 
     return {"usable": True, "value": value, "currency": currency, "asOf": as_of,
+            # "statement" for a filed year, "summary" for the provider's trailing
+            # twelve months where it carries no statements. `standings` says so
+            # in the reading wherever the two sit in one field.
+            "source": source,
+            "trailing": trailing,
             "converted": converted,
             "reportingCurrency": reporting if converted else None,
             # Carried so a reader can see that the app overrode the source's own
@@ -637,7 +735,11 @@ def standings(entries: list[dict]) -> dict:
                 unranked.setdefault(industry, []).append(entry.get("ticker"))
             continue
         usable.append({"ticker": entry.get("ticker"), "name": entry.get("name"),
-                       "industry": industry, "revenue": revenue})
+                       "industry": industry, "revenue": revenue,
+                       # Absent on callers that predate the summary stand-in,
+                       # which only ever passed filed years.
+                       "source": entry.get("revenueSource") or "statement",
+                       "trailing": _finite(entry.get("revenueTrailing"))})
 
     groups: dict[str, list[dict]] = {}
     for row in usable:
@@ -652,10 +754,26 @@ def standings(entries: list[dict]) -> dict:
         runner_up = members[1] if len(members) > 1 else None
         margin = (leader["revenue"] / runner_up["revenue"]
                   if runner_up and runner_up["revenue"] > 0 else None)
-        named = bool(len(members) >= MIN_PEERS and margin is not None
-                     and margin >= LEAD_MARGIN)
+        # A LEAD THAT DEPENDS ON WHICH KIND OF FIGURE WAS USED IS NOT A LEAD.
+        # Where the leader is ranked on a filed year and the runner-up on the
+        # summary's trailing twelve months, or the other way round, the margin
+        # is re-made on both companies' trailing twelve months, and a leader is
+        # named only if it clears LEAD_MARGIN both ways. Measured on the 21
+        # September Indonesian sweep: DIVA.JK led TOSK.JK by 2.05x on its filed
+        # year against TOSK's trailing year, and by 1.85x on both trailing
+        # years. Where the second figure is missing nothing can be re-made, and
+        # nothing is named on a comparison that could not be checked.
+        mixed = bool(runner_up and leader["source"] != runner_up["source"])
+        trailing_margin = None
+        if mixed and leader.get("trailing") and runner_up.get("trailing"):
+            trailing_margin = leader["trailing"] / runner_up["trailing"]
+        clears = bool(margin is not None and margin >= LEAD_MARGIN
+                      and (not mixed or (trailing_margin is not None
+                                         and trailing_margin >= LEAD_MARGIN)))
+        named = bool(len(members) >= MIN_PEERS and clears)
 
         missing = unranked.get(industry) or []
+        summary = sum(1 for r in members if r["source"] == "summary")
         fields[industry] = {
             "industry": industry,
             "peers": len(members),
@@ -666,8 +784,15 @@ def standings(entries: list[dict]) -> dict:
             "shareOfMarket": (pool / total) if total else None,
             "leader": leader["ticker"] if named else None,
             "leaderMargin": margin if named else None,
+            # The same lead on both companies' trailing twelve months, where the
+            # top two are ranked on different kinds of figure; None otherwise.
+            "leaderMarginTrailing": trailing_margin,
+            # How many of the members are ranked on the provider's trailing
+            # twelve months rather than a filed year. See `revenue_of`.
+            "summaryFigures": summary,
             "members": [{"ticker": r["ticker"], "name": r.get("name"),
-                         "revenue": r["revenue"]} for r in members],
+                         "revenue": r["revenue"], "source": r["source"]}
+                        for r in members],
         }
 
         for rank, row in enumerate(members, start=1):
@@ -676,12 +801,14 @@ def standings(entries: list[dict]) -> dict:
                 "rank": rank,
                 "peers": len(members),
                 "revenue": row["revenue"],
+                "revenueSource": row["source"],
                 "share": (row["revenue"] / pool) if pool else None,
                 "fieldShareOfMarket": (pool / total) if total else None,
                 # The leader's lead, on the leader's row only; everyone else
                 # gets how far behind the leader they are. Two different
                 # questions, and one number cannot answer both.
                 "margin": margin if rank == 1 else None,
+                "marginTrailing": trailing_margin if rank == 1 else None,
                 "behindLeader": (row["revenue"] / leader["revenue"]
                                  if rank > 1 and leader["revenue"] > 0 else None),
                 "leads": bool(named and rank == 1),
@@ -703,12 +830,26 @@ def standings(entries: list[dict]) -> dict:
                 # reader it has no competition. It gets kept and qualified.
                 "onlyRanked": len(members) == 1,
                 "soleListing": bool(len(members) == 1 and not missing),
+                # NO MEASURED RIVAL COMES WITHIN LEAD_MARGIN OF IT: alone among
+                # the measured, or ahead of the runner-up by the margin a named
+                # leader needs, re-made on one kind of figure where the top two
+                # differ. What the specialist screen selects on, because without
+                # it the screen was not monotone: a company with NO measured
+                # rival qualified, and the same company became ineligible the
+                # moment one rival could be read — however small. KETR.JK on 1
+                # November is the case: CCSI.JK measurable at under half its
+                # size, IOTF.JK at the exchange's 50-rupiah floor and out of the
+                # scan, and a field of two. `leads` is unchanged and still needs
+                # MIN_PEERS; this is a fact about the measurement, not a claim
+                # to lead anything.
+                "noCloseRival": bool(rank == 1 and (len(members) == 1 or clears)),
                 "leader": leader["ticker"],
                 "leaderName": leader.get("name"),
                 "basis": BASIS,
                 "reading": _position_reading(
                     industry, rank, len(members), row, leader, margin, named, pool,
-                    len(missing)),
+                    len(missing), mixed, trailing_margin, clears)
+                + _source_note(row, len(members), summary),
             }
 
     return {
@@ -724,9 +865,14 @@ def standings(entries: list[dict]) -> dict:
     }
 
 
+_KIND = {"statement": "filed year", "summary": "trailing twelve months"}
+
+
 def _position_reading(industry: str, rank: int, peers: int, row: dict, leader: dict,
                       margin: Optional[float], named: bool, pool: float,
-                      unranked: int = 0) -> str:
+                      unranked: int = 0, mixed: bool = False,
+                      trailing_margin: Optional[float] = None,
+                      clears: bool = False) -> str:
     share = (row["revenue"] / pool * 100) if pool else None
     if peers == 1 and unranked:
         return (f"The only scanned name in {industry} whose revenue could be read, but "
@@ -738,13 +884,22 @@ def _position_reading(industry: str, rank: int, peers: int, row: dict, leader: d
         return (f"The only scanned name carrying the {industry} label, so there is "
                 f"nothing here to be largest of. Whoever it competes with is private, "
                 f"listed elsewhere, or is not listed on this exchange.")
+    if peers < MIN_PEERS and rank == 1 and clears:
+        both = (f", {trailing_margin:.1f}x on both companies' trailing twelve months"
+                if mixed and trailing_margin is not None else "")
+        return (f"Only {peers} scanned names carry the {industry} label, too few to "
+                f"name a leader, but the other is under half its size: it sells "
+                f"{margin:.1f}x as much{both}. Private and overseas competitors are not "
+                f"counted.")
     if peers < MIN_PEERS:
         return (f"Only {peers} scanned names carry the {industry} label, which is too "
                 f"few for a rank in it to mean anything — being the largest of {peers} "
                 f"is not a position.")
     if rank == 1 and named:
+        both = (f" — {trailing_margin:.1f}x on both companies' trailing twelve months —"
+                if mixed and trailing_margin is not None else "")
         text = (f"The largest of the {peers} scanned names in {industry}, on "
-                f"{margin:.1f}x the revenue of the next one and "
+                f"{margin:.1f}x the revenue of the next one{both} and "
                 f"{share:.0f}% of what the group sells between them. "
                 f"Private and overseas competitors are not counted.")
         if unranked:
@@ -753,6 +908,16 @@ def _position_reading(industry: str, rank: int, peers: int, row: dict, leader: d
                      f"{'ies' if unranked == 1 else 'y'} this label and returned no "
                      f"usable revenue, so the lead is over the measured group only.")
         return text
+    if rank == 1 and mixed and margin is not None and margin >= LEAD_MARGIN:
+        mine = _KIND.get(leader.get("source"), "filed year")
+        theirs = _KIND["summary" if leader.get("source") == "statement" else "statement"]
+        remade = (f"on both companies' trailing twelve months it is "
+                  f"{trailing_margin:.2f}x" if trailing_margin is not None else
+                  "the comparison could not be re-made on one kind of figure for both")
+        return (f"Nominally the largest of the {peers} scanned names in {industry}, on "
+                f"{margin:.2f}x the next one, but that compares its {mine} with the "
+                f"next one's {theirs}, and {remade} — so no leader is named for this "
+                f"field.")
     if rank == 1:
         return (f"Nominally the largest of the {peers} scanned names in {industry}, "
                 f"but only {margin:.2f}x the next one — inside the range one "
@@ -761,6 +926,37 @@ def _position_reading(industry: str, rank: int, peers: int, row: dict, leader: d
     return (f"{_ordinal(rank)} of the {peers} scanned names in {industry}, on "
             f"{share:.0f}% of the group's revenue. {leader['ticker']} is the "
             f"largest.")
+
+
+def _source_note(row: dict, peers: int, summary: int) -> str:
+    """Which figures in this field are the provider's trailing year, if any.
+
+    A filed year and a trailing twelve months are both a year of sales, and they
+    end on different dates — on this exchange the filed year is usually the one
+    to December and the summary's the one to June or September. A lead of
+    LEAD_MARGIN survives that; a rank between two near neighbours may not, so a
+    reading comparing the two kinds says it is doing so. Nothing is said where
+    there is no comparison: a field of one compares nothing.
+    """
+    if peers < 2 or not summary:
+        return ""
+    own = row.get("source") == "summary"
+    if summary == peers:
+        return (" Every figure here is the provider's trailing-twelve-month summary, "
+                "because it carries no statements for any of these listings.")
+    if own:
+        others = summary - 1
+        like = (f", like {others} other{'' if others == 1 else 's'} here," if others
+                else "")
+        return (f" Its figure{like} is the provider's trailing-twelve-month summary, "
+                f"used because it carries no statements for this listing, so not "
+                f"every figure in the comparison covers the same twelve months.")
+    which = (f"The other {summary} figures here are" if summary == peers - 1 > 1 else
+             "The other figure here is" if summary == peers - 1 else
+             f"{summary} of the other figures here {'is' if summary == 1 else 'are'}")
+    return (f" {which} the provider's trailing-twelve-month summary, used where it "
+            f"carries no statements, so not every figure in the comparison covers the "
+            f"same twelve months.")
 
 
 _ORDINAL_SUFFIX = {1: "st", 2: "nd", 3: "rd"}
