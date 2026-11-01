@@ -343,11 +343,18 @@ def ohlcv_batch(symbols_list: Sequence[str], start: dt.date, end: dt.date,
     field at all before normalising, so each symbol keeps the sessions it
     actually traded; a row with partial data is still a gap and still filled.
 
-    The default stays the shared calendar because the measured artifacts were
-    taken on it — `portfolio` and `exposure` read these frames — and changing
-    what they see means re-running those measurements, not editing a default.
-    Within one market the difference is a handful of holiday rows; across
-    markets, or with anything that trades at weekends, it is not.
+    The default stays the shared calendar because measured artifacts were taken
+    on it, and changing what a caller sees means re-running its measurement, not
+    editing a default. `portfolio` and `exposure` left it on 1 November 2026,
+    after both their stability studies were re-run on their own sessions; every
+    other caller still reads the shared calendar. Within one market the
+    difference is a handful of holiday rows; across markets, or with anything
+    that trades at weekends, it is not.
+
+    LEAVING IT MEANS DIFFERENCING EACH SYMBOL BEFORE ALIGNING. These frames have
+    holes where a symbol did not trade, and `close / close.shift(1)` on an
+    aligned frame of them loses the return across every hole.
+    `exposure.log_returns` is the one place that does it.
     """
     frames: dict[str, pd.DataFrame] = {}
 

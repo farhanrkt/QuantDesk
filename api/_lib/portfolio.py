@@ -22,19 +22,61 @@ null result for precisely this reason.
 So it was measured first, by `scripts/measure_correlation_stability.py`, and the
 answer is the reason this feature exists in the shape it does: over a one-year
 window the rank correlation between one period's pairwise correlations and the
-next period's runs **0.50 to 0.65** across four index universes, at t-statistics
-between +9.5 and +15.7. That is a different world from the composite ranking,
-where the information coefficient was indistinguishable from zero. Correlations
-are among the few things about equities that are genuinely persistent, and that
-is what licenses them to inform size where a return forecast may not.
+next period's ran **0.50 to 0.65** across four index universes when this
+shipped, at t-statistics between +9.5 and +15.7, and **0.48 to 0.68** at +8.5 to
++14.2 when re-measured on 1 November 2026. That is a different world from the
+composite ranking, where the information coefficient was indistinguishable from
+zero. Correlations are among the few things about equities that are genuinely
+persistent, and that is what licenses them to inform size where a return
+forecast may not.
 
 THE SAME MEASUREMENT FOUND THE LIMIT, AND THE PANEL CARRIES IT
 ---------------------------------------------------------------
 In the worst quarter of quarters for those markets the mean pairwise correlation
-runs about **0.06 higher** than in the rest — up to 0.12 on the LQ45. So a
-correlation measured over an ordinary year is a FLOOR on how correlated these
-positions will be in the stretch a holder actually needs the diversification.
-Every number here is reported with that stated rather than as a precise input.
+runs higher than in the rest: **+0.06** when this shipped, **+0.14** on 1 November
+2026. The gap between those is smaller than what the method moves on its own:
+on one day's data, moving where the quarters are cut moves the figure between
++0.01 and +0.23 on the US indices and +0.02 and +0.14 on the IDX ones.
+It was positive at every cut, so a correlation measured over an ordinary year
+is a FLOOR on how correlated these positions will be in the stretch a holder
+actually needs the diversification. Every number here is reported with that
+stated rather than as a precise input.
+
+EACH HOLDING ON ITS OWN SESSIONS, SINCE 1 NOVEMBER 2026
+-------------------------------------------------------
+Until then one batch shared one calendar. yfinance aligns a batch onto the
+union of its symbols' dates and `market_data.normalise` fills the gaps, so a day
+one symbol traded and another did not reached `daily_returns` as a 0.00% day
+for the second. The reference series ride along in the same call, so even a
+book in one market was affected. Measured on real books, before and after on the
+same recorded data, in the 252-row window:
+
+  * BBCA.JK, BBRI.JK, BMRI.JK, TLKM.JK and ASII.JK carried 18 non-trading days
+    each, because the US futures trade on Indonesian holidays;
+  * AAPL, MSFT, BBCA.JK and TLKM.JK carried 6 on each US name and 18 on each
+    Indonesian one;
+  * every book holding BTC-USD carried 77 on each US stock and 87 on each
+    Indonesian one;
+  * an all-US book carried none, and none of its figures changed.
+
+A ZERO BOTH NAMES SHARE DOES NOT BIAS THEIR CORRELATION, and most of these were
+shared: on a day neither name traded, both read zero. On the same dates with
+the zeros removed, the Indonesian book's correlations moved by less than 0.001
+and US-IDX pairs by -0.001 to +0.005, since they had almost no correlation to
+pull toward zero. A correlated pair on different calendars was pulled: MSTR
+against BTC-USD went from 0.704 to 0.745.
+
+THE WINDOW WAS THE LARGER ERROR. 252 rows of the union were not a year of each
+name's trading. Beside the US futures an IDX name had 234 sessions in them, and
+beside bitcoin a stock had 175, about eight months. So holding bitcoin changed
+the correlation between two other holdings: AAPL against MSFT read 0.155 in a
+book with BTC-USD and 0.112 in an all-US one. Each name now keeps its own last
+252 sessions, the same window the persistence was measured on, and that pair
+reads 0.112 in both books. On the Indonesian book the longer window moved the
+candidate's correlations by up to 0.016, and the independent count from 1.96
+to 2.01 before the candidate and from 2.00 to 2.06 after it. `overlapDays`
+counts days both names traded: 234 for a US-IDX pair and 175 for a stock
+against bitcoin, where every pair used to read the whole window.
 
 WHAT IT COMPUTES, AND WHAT IT REFUSES TO
 ----------------------------------------
@@ -120,20 +162,49 @@ def _finite(value) -> Optional[float]:
 
 
 def daily_returns(frames: dict, window: int = WINDOW_DAYS) -> pd.DataFrame:
-    """Aligned daily log returns over the trailing window, one column per name.
+    """Daily log returns over each name's own last `window` sessions.
 
-    Aligned on the shared calendar, so a name that does not trade on a given day
-    contributes nothing to that day rather than carrying its neighbour's move.
-    That matters here more than elsewhere: a US holding and an IDX one share
-    perhaps half their sessions, and a naive join would manufacture correlation
-    out of the mismatch.
+    A name that does not trade on a given day contributes nothing to that day:
+    it is NaN there, and pairwise correlations skip it. That matters here more
+    than elsewhere, because a US holding and an IDX one do not share a holiday
+    calendar, and bitcoin trades at weekends.
+
+    THIS DOCSTRING PROMISED THAT BEFORE THE CODE DID IT. The batch shared one
+    calendar, so a day one symbol traded and another did not arrived as a
+    forward-filled 0.00% day for the second. Measured on 1 November 2026, over
+    a 252-row window: an all-Indonesian book carried 18 such days per holding,
+    because the US futures that ride along in the batch trade on Indonesian
+    holidays. A book holding BTC-USD carried 77 on every US stock. See the
+    module docstring for what removing them changed.
+
+    The trailing window is counted per name for the same reason: 252 rows of
+    the aligned frame are 252 calendar days once bitcoin is in it.
     """
-    closes = pd.DataFrame({
-        symbol: frame["Close"].astype("float64")
-        for symbol, frame in frames.items() if len(frame)
-    }).sort_index()
-    returns = np.log(closes / closes.shift(1))
-    return returns.tail(window)
+    return exposure.log_returns(frames, sessions=window)
+
+
+def annualised_volatility(returns: pd.DataFrame) -> pd.Series:
+    """Each name's annual volatility, scaled by its own sessions a year.
+
+    NOT `sqrt(252)` FOR EVERY NAME. Bitcoin trades 365 days a year and the IDX
+    about 242, so one constant understates a coin's volatility by about a sixth
+    beside stocks read correctly. The shared calendar hid that, because its zero
+    days understated the stocks by about as much. Measured on 1 November 2026,
+    with each name on its own sessions and one constant, BTC-USD's share of the
+    risk beside AAPL, MSFT and NVDA read 0.28 where its own rate gives 0.33.
+    The rate comes from the series itself: the returns between its first and
+    last date, over the calendar time between them.
+    """
+    out = {}
+    for name in returns.columns:
+        series = returns[name].dropna()
+        span = (series.index[-1] - series.index[0]).days if len(series) > 1 else 0
+        if span <= 0:
+            out[name] = np.nan
+            continue
+        per_year = (len(series) - 1) * 365.25 / span
+        out[name] = float(series.std(ddof=1) * np.sqrt(per_year))
+    return pd.Series(out, dtype="float64")
 
 
 def _correlation_matrix(returns: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
@@ -208,7 +279,10 @@ def analyse(candidate: str, holdings: Sequence[str],
     index and four futures to name what a book has in common; appending five
     symbols to a download already being made costs one chunk rather than a
     second round trip, and they are filtered back out before anything here
-    correlates holdings against each other.
+    correlates holdings against each other. They used to leave their calendar
+    behind when they went: in one batch, a future's session on an Indonesian
+    holiday became a 0.00% day for every IDX holding. `own_sessions=True` is why
+    they no longer do.
     """
     symbols = list(dict.fromkeys([candidate, *holdings]))
     references = exposure.reference_symbols(market_code)
@@ -216,7 +290,8 @@ def analyse(candidate: str, holdings: Sequence[str],
     # Calendar days, generously, so the window survives holidays and a market
     # that trades fewer sessions than the US one.
     start = end - dt.timedelta(days=int(window * 1.9) + 30)
-    frames = market_data.ohlcv_batch(symbols + references, start, end)
+    frames = market_data.ohlcv_batch(symbols + references, start, end,
+                                     own_sessions=True)
     reference_frames = {s: f for s, f in frames.items()
                         if s in references and s not in symbols}
     frames = {s: f for s, f in frames.items() if s in symbols}
@@ -243,7 +318,7 @@ def analyse(candidate: str, holdings: Sequence[str],
             "missing": missing,
         }
 
-    volatility = returns[usable].std(ddof=1) * np.sqrt(252)
+    volatility = annualised_volatility(returns[usable])
 
     # --- the candidate against each holding ------------------------------
     pairs = []
@@ -294,7 +369,11 @@ def analyse(candidate: str, holdings: Sequence[str],
         "missing": missing,
         "windowDays": window,
         "equalWeighted": equal_weight,
-        "observations": len(returns),
+        # Sessions, not rows. Each name keeps its own last `window` sessions, so
+        # the aligned frame of a book holding US and IDX names, or bitcoin, has
+        # more rows than any one name traded, and "trading days" means one
+        # name's count.
+        "observations": int(returns.count().max()),
         "pairs": pairs,
         "portfolioCorrelation": _finite(
             np.mean([p["correlation"] for p in pairs]) if pairs else None),

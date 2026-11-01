@@ -47,6 +47,28 @@ that.
 Survivorship applies here as everywhere in this repo: these are today's
 constituents, so every name measured is one that survived.
 
+Nor does it measure a pair from two markets. Each universe is one market, so a
+US-IDX pair, or a stock against bitcoin, is outside what was measured.
+
+EACH NAME ON ITS OWN SESSIONS, AND WHAT RE-RUNNING ON THEM FOUND
+-----------------------------------------------------------------
+Since 1 November 2026 this fetches with `own_sessions=True` and takes returns
+from `portfolio.daily_returns`, as the panel does. Run both ways that day on
+the same recorded data, no persistence or stress figure moved by more than
+0.0001: each universe is one market, so its shared calendar was already nearly
+every name's own. The figures did move from the 28 August stamp, for other
+reasons:
+
+  * yearly persistence was 0.50 to 0.65 then and is 0.48 to 0.68 now, at
+    t-statistics of +8.5 to +14.2 against +9.5 to +15.7;
+  * the stress rise was +0.06 then and is +0.14 now.
+
+THE STRESS RISE IS NOT PRECISE, and the move from +0.06 to +0.14 is the evidence.
+On the 1 November data alone, starting the quarters at 21 different offsets
+moves it between +0.01 and +0.23 on the US indices and +0.02 and +0.14 on the
+IDX ones. It was positive at every offset. Yearly persistence moved by 0.03 to
+0.06 per universe across 12 offsets.
+
 USAGE
     python scripts/measure_correlation_stability.py
     python scripts/measure_correlation_stability.py --dry-run
@@ -71,6 +93,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "api"))
 
 from _lib import market_data  # noqa: E402
+from _lib import portfolio  # noqa: E402
 from _lib import universes  # noqa: E402
 
 OUTPUT = ROOT / "api" / "_lib" / "correlation_stability.json"
@@ -87,10 +110,14 @@ MIN_NAMES = 10
 
 
 def _returns(frames: dict) -> pd.DataFrame:
-    """Aligned daily log returns, one column per symbol."""
-    closes = pd.DataFrame({s: f["Close"].astype("float64") for s, f in frames.items()})
-    closes = closes.sort_index()
-    return np.log(closes / closes.shift(1)).dropna(how="all")
+    """Daily log returns, one column per symbol, each on its own sessions.
+
+    The panel's own `portfolio.daily_returns`, so this measures the series the
+    panel correlates. A name that did not trade on a day is NaN there rather
+    than a forward-filled 0.00% day, and its return across the gap lands on the
+    day it traded again.
+    """
+    return portfolio.daily_returns(frames, window=10 ** 6).dropna(how="all")
 
 
 def _upper(matrix: pd.DataFrame) -> pd.Series:
@@ -229,7 +256,8 @@ def main() -> int:
         entry = universes.get(universe_id)
         print(f"\n{entry['name']} ({len(entry['tickers'])} names)")
         with contextlib.redirect_stdout(noise), contextlib.redirect_stderr(noise):
-            frames = market_data.ohlcv_batch(entry["tickers"], start, end)
+            frames = market_data.ohlcv_batch(entry["tickers"], start, end,
+                                             own_sessions=True)
         if len(frames) < MIN_NAMES:
             print("  too few frames")
             continue
