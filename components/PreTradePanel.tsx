@@ -5,6 +5,7 @@ import { AlertTriangle, ChevronRight, CircleSlash, HelpCircle, Layers } from "lu
 import type { PreTrade, PreTradeCheck } from "@/lib/types";
 import { ExplanationBody, TONE_HEX, TONE_TEXT, useDetail } from "@/components/ui/explain";
 import { cn } from "@/lib/utils";
+import { palette } from "@/lib/palette";
 
 /**
  * What would give a careful buyer pause.
@@ -45,7 +46,7 @@ import { cn } from "@/lib/utils";
  * different kinds of statement before a word of them is read.
  */
 
-const PRETRADE = "#F2A25C";
+const PRETRADE = palette.pretrade;
 
 /**
  * The base rate, given the weight of the claim it qualifies.
@@ -155,7 +156,7 @@ function Group({
   const head = (
     <>
       <Icon aria-hidden className="h-4 w-4 shrink-0"
-            style={{ color: tone ? TONE_HEX[tone] : "#8496A9" }} />
+            style={{ color: tone ? TONE_HEX[tone] : palette.ash }} />
       <span className={cn("text-meta font-semibold uppercase tracking-wider",
                           weight === "quiet" ? "text-ash" : "text-chalk")}>
         {title}

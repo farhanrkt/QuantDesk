@@ -89,6 +89,11 @@ _group("portfolio", "holdingCorrelation effectiveHoldings riskShare "
 _group("trend-ind", "factorExposure")
 # The cross-sectional tier, beside the other scan metrics.
 _group("rank", "factorBreadth")
+# The company view: what the filings say the business has done. Description
+# rather than a lens, so it gets its own chip rather than joining Quality.
+_group("company", "yearsProfitable revenueCagr netDebtToEbitda freeCashFlowYears")
+# The board of what moved the markets. Context rather than a lens, so its own chip.
+_group("markets", "dailyMove eventDayMove")
 
 # Values chosen to land inside SOME band of every ladder in the registry. An
 # interpreter is asked in turn until one returns a reading; the specific value

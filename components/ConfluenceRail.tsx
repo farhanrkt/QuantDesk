@@ -7,14 +7,15 @@ import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
 import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
+import { LENS_HUE, palette } from "@/lib/palette";
 
-const ACC = "#35C4A8";
-const DIST = "#FF6B6B";
-const TECH = "#5B8DEF";
-const DCF = "#E8B44C";
-const DDM = "#A78BFA";
-const QUAL = "#E8B44C";
-const ASH = "#7A8CA0";
+const ACC = palette.acc;
+const DIST = palette.dist;
+const TECH = palette.tech;
+const DCF = palette.dcf;
+const DDM = palette.ddm;
+const QUAL = palette.value;
+const ASH = palette.ash;
 
 /**
  * WHICH BODY OF DATA A LENS READS. This is the field the agreement count is
@@ -259,11 +260,18 @@ function readQuality(state: Engine<QualityResponse>): Reading {
   const question = "Are the numbers real?";
   if (state.status !== "ready") return blank("Quality", question, "filings", state.status);
   const d = state.data;
+  // THE REFUSAL SAYS WHICH REFUSAL. This printed the bank sentence for every
+  // `applicable: false`, so a throttled fetch that returned no sector for
+  // Microsoft read "built on non-financial firms ... do not transfer to banks"
+  // — a confident statement that Microsoft is a lender. The server sends the
+  // cause and a sentence for each; only the designed refusal gets the short one.
   if (!d.applicable)
     return {
       lens: "Quality", question, verdict: "n/a",
-      detail: "These three accounting models were built on non-financial firms and do not "
-        + "transfer to banks or insurers, so no score is reported.",
+      detail: d.cause === "financial" || (!d.cause && !d.reason)
+        ? "These three accounting models were built on non-financial firms and do not "
+          + "transfer to banks or insurers, so no score is reported."
+        : d.reason ?? "No score could be computed for this listing.",
       color: ASH, vote: 0, family: "filings",
     };
 
@@ -293,9 +301,7 @@ function readQuality(state: Engine<QualityResponse>): Reading {
  * were both teal, so a lens name and a conclusion rendered identically and
  * neither read as meaningful.
  */
-const LENS_HUE: Record<string, string> = {
-  Flow: "#2FBFA4", Trend: "#6B9BFF", Value: "#E8B44C", Quality: "#C9A227",
-};
+// The lens hues come from lib/palette.ts, shared with the tab bar.
 
 /** A vote is the SERVER's direction. This maps it to a tone and nothing else. */
 const voteTone = (r: Reading): string =>
@@ -325,7 +331,7 @@ function LensChips({ readings }: { readings: Reading[] }) {
     <ul className="grid grid-cols-2 gap-2 lg:grid-cols-4">
       {readings.map((r) => {
         const tone = voteTone(r);
-        const hue = LENS_HUE[r.lens] ?? "#8496A9";
+        const hue = LENS_HUE[r.lens] ?? palette.ash;
         return (
           <li key={r.lens}
               className="flex items-start gap-2.5 rounded-lg border border-rule bg-sunken px-3 py-2.5"
@@ -364,13 +370,17 @@ function LensChips({ readings }: { readings: Reading[] }) {
  * one of them alone, and §15 measured how much more.
  */
 export function ConfluenceRail({
-  ticker, anomaly, technical, valuation, quality,
+  ticker, anomaly, technical, valuation, quality, subtitle, actions,
 }: {
   ticker: string;
   anomaly: Engine<AnomalyResponse>;
   technical: Engine<TechnicalResponse>;
   valuation: Engine<ValuationResponse>;
   quality: Engine<QualityResponse>;
+  /** Who the ticker is — the company header, drawn under the symbol. */
+  subtitle?: React.ReactNode;
+  /** Watch, compare, share, print: things to do WITH this page, beside its name. */
+  actions?: React.ReactNode;
 }) {
   const readings = [readAnomaly(anomaly), readTechnical(technical),
                     readValuation(valuation), readQuality(quality)];
@@ -389,7 +399,11 @@ export function ConfluenceRail({
           fact the reader brought with them and every number below is about it. */}
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 px-5 pb-4 pt-5">
         <div className="min-w-0">
-          <h1 className="font-mono tracking-tight">{ticker}</h1>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <h1 className="font-mono tracking-tight">{ticker}</h1>
+            {actions}
+          </div>
+          {subtitle}
           <p className="mt-1 text-meta text-ash">
             {pending > 0
               ? `${readings.length - pending} of ${readings.length} lenses have answered`
@@ -445,7 +459,7 @@ export function ConfluenceRail({
                          "sm:grid-cols-2 sm:divide-x lg:grid lg:grid-cols-4 lg:divide-y-0",
                          showDetail ? "grid" : "hidden lg:grid")}>
         {readings.map((r) => {
-          const hue = LENS_HUE[r.lens] ?? "#8496A9";
+          const hue = LENS_HUE[r.lens] ?? palette.ash;
           const tone = voteTone(r);
           return (
             <div key={r.lens} className="px-5 py-4">
@@ -461,7 +475,7 @@ export function ConfluenceRail({
               <p className="mb-2.5 text-meta text-ash">{r.question}</p>
               <p className={cn("text-h3 font-semibold leading-tight",
                                r.pending && "animate-pulseline")}
-                 style={{ color: TONE_HEX[tone] ?? "#8496A9" }}>
+                 style={{ color: TONE_HEX[tone] ?? palette.ash }}>
                 {r.verdict}
               </p>
               <p className="mt-2 text-meta leading-relaxed text-body">{r.detail}</p>
@@ -472,3 +486,10 @@ export function ConfluenceRail({
     </section>
   );
 }
+
+// THE COMPARE VIEW READS EACH COMPANY THROUGH THE SAME FOUR SENTENCES. Exported
+// here, in one statement at the end, rather than by prefixing the functions:
+// the lens-family drift check in check_frontend.mjs splits this file on lines
+// that START with `function`, and an `export` in front would merge the blocks
+// it reads. `agreementOf` is deliberately not used there — see lib/compare.ts.
+export { readAnomaly, readQuality, readTechnical, readValuation, voteTone };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   CartesianGrid, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart,
   Tooltip, XAxis, YAxis,
@@ -10,6 +10,9 @@ import { Explain } from "@/components/ui/explain";
 import { Field, SelectField } from "@/components/ui/controls";
 import type { Engine, ExposureScanResponse, Market, UniversesResponse } from "@/lib/types";
 import { num, pct } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { StateCard } from "@/components/ui/state";
+import { useSessionState } from "@/lib/session";
 
 /**
  * What a whole universe moves with, as a cross-section.
@@ -37,9 +40,9 @@ import { num, pct } from "@/lib/utils";
  * Every point is the same hue; only position carries meaning.
  */
 
-const EXPOSURE = "#D4763A";
-const GRID = "#1E2A36";
-const AXIS = "#63748A";
+const EXPOSURE = palette.drivers;
+const GRID = palette.grid;
+const AXIS = palette.axis;
 
 interface Point {
   x: number; y: number; ticker: string; material: boolean;
@@ -119,7 +122,8 @@ function FactorChart({ factor, rows, materialAt, highlight, yMax }: {
         <span className="text-h3 font-semibold text-chalk">{factor.label}</span>
         <span className="font-mono text-micro text-faint">{factor.symbol}</span>
       </div>
-      <div className="h-64 w-full">
+      {/* Hidden from assistive tech: the sr-only sentence below states every named point; Recharts stamps role=img on each scatter symbol, which axe counted as 120 unlabelled images. */}
+      <div className="h-64 w-full" aria-hidden>
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 14, right: 22, bottom: 26, left: 4 }}>
             <CartesianGrid stroke={GRID} strokeDasharray="2 4" />
@@ -162,7 +166,7 @@ function FactorChart({ factor, rows, materialAt, highlight, yMax }: {
                           fillOpacity={payload.material ? 0.9 : 0.4} />
                   {payload.material && (
                     <text x={cx} y={cy - 9 - payload.level * 11} textAnchor="middle"
-                          fill="#C3CFDC" fontSize={10} fontFamily="monospace">
+                          fill={palette.body} fontSize={10} fontFamily="monospace">
                       {payload.ticker}
                     </text>
                   )}
@@ -219,7 +223,7 @@ export function ExposurePanel({
   highlight: string | null;
 }) {
   const catalogue = universeState.status === "ready" ? universeState.data.universes : [];
-  const [choice, setChoice] = useState<string>("idx30");
+  const [choice, setChoice] = useSessionState<string>("exposure:choice", "idx30");
 
   return (
     <div className="space-y-4 animate-rise">
@@ -258,11 +262,7 @@ export function ExposurePanel({
       </Card>
 
       {state.status === "error" && (
-        <Card className="border-dist/40 bg-dist/5">
-          <CardBody>
-            <p className="prose-col text-meta leading-relaxed">{state.failure.message}</p>
-          </CardBody>
-        </Card>
+        <StateCard kind="error" title="The scan could not run">{state.failure.message}</StateCard>
       )}
 
       {state.status === "ready" && !state.data.usable && (

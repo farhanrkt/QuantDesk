@@ -48,6 +48,28 @@ shipped a panel that cannot find energy in a book of energy companies.
 Weekly log returns are the exact sum of the daily ones, so this resamples the
 returns it is handed rather than asking the caller for a second frame.
 
+EACH SYMBOL ON ITS OWN SESSIONS, SINCE 1 NOVEMBER 2026
+------------------------------------------------------
+`scan` and the portfolio driver used to read their batch on one shared calendar,
+which turned a day one market traded and another did not into a 0.00% day for
+the second. A zero adds nothing to a week, so for every week in which a market
+traded at all the weekly figures are the same either way. Measured on the same
+recorded data both ways, they agree to 1e-12 in all 77,442 name-weeks of the
+stability study. Two things did differ, and `log_returns` fixes both:
+
+  * A WEEK THE MARKET WAS SHUT THROUGHOUT read as a 0.00% week. For the IDX that
+    is Idul Fitri in some years: the weeks ending 6 May 2022, 12 April 2024 and
+    4 April 2025 in `scan`'s five years. They are now gaps. On the IDX30 the
+    120 loadings moved by a median of 0.002 in beta and at most 0.03; on the
+    resources list the 60 moved by 0.004 and at most 0.04. Each Indonesian name
+    went from 260 weeks to 257, and no material flag changed. The Dow 30 did not
+    move at all.
+  * A ROW `market_data.normalise` DROPPED left a hole in the aligned frame, and
+    differencing that frame lost the return across it. Crude settled below zero
+    on 20 April 2020, `normalise` drops non-positive closes, and the study's oil
+    series lost the crash: the week to 24 April 2020 read +52.6% instead of
+    -7.6%. `scan`'s window does not reach 2020, so the panel never showed it.
+
 WHAT WAS TRIED AND DROPPED: PEER-EQUITY BASKETS
 -----------------------------------------------
 The obvious way to name "coal" is a basket of coal miners. Two versions were
@@ -239,6 +261,33 @@ def _finite(value) -> Optional[float]:
     return out if np.isfinite(out) else None
 
 
+def log_returns(frames: dict, sessions: Optional[int] = None) -> pd.DataFrame:
+    """Daily log returns, one column per symbol, each on ITS OWN sessions.
+
+    DIFFERENCED PER SYMBOL, THEN ALIGNED, and the order is the fix. A batch
+    fetched with `own_sessions=True` gives each symbol only the days it traded,
+    so the aligned frame has holes: an Indonesian holiday is a missing row for
+    BBCA.JK, not a 0.00% day. Differencing that aligned frame would lose the
+    return ACROSS the holiday as well, because the first day back has no close
+    beside it on the row above. Each close series is differenced on its own
+    index first, so the move across a closure lands on the day the market
+    reopened, and the aligned frame is NaN exactly where a name did not trade.
+
+    `sessions` keeps each symbol's last that-many returns, counted on its own
+    calendar. Counted on the aligned frame it would not be a year: beside
+    bitcoin, 252 rows are 252 calendar days, and a stock's year shrinks to about
+    175 sessions.
+    """
+    columns = {}
+    for symbol, frame in frames.items():
+        if frame is None or not len(frame):
+            continue
+        close = frame["Close"].astype("float64").sort_index()
+        returns = np.log(close / close.shift(1)).dropna()
+        columns[symbol] = returns.tail(sessions) if sessions else returns
+    return pd.DataFrame(columns).sort_index() if columns else pd.DataFrame()
+
+
 def to_weekly(daily_log_returns: pd.DataFrame) -> pd.DataFrame:
     """Daily log returns summed into weeks ending Friday.
 
@@ -250,7 +299,9 @@ def to_weekly(daily_log_returns: pd.DataFrame) -> pd.DataFrame:
     A week where a market was shut contributes whatever days it had rather than
     a gap, which is right for the cross-market comparisons here — the ASX and
     the IDX do not share a holiday calendar and demanding both be open every day
-    would throw away most of the sample.
+    would throw away most of the sample. A week it was shut THROUGHOUT is a gap.
+    On one shared calendar it read 0.00%, a quiet week the market never had; see
+    the module docstring.
     """
     if daily_log_returns is None or daily_log_returns.empty:
         return pd.DataFrame()
@@ -676,16 +727,16 @@ def scan(symbols: Sequence[str], market_code: str = "US",
     wanted = list(dict.fromkeys([*symbols, *(r.symbol for r in factors),
                                  LOCAL_INDEX.get(market, LOCAL_INDEX["US"])]))
     end = dt.date.today()
+    # Each symbol on its own sessions; see `log_returns` for why the returns
+    # are then taken per symbol rather than from one aligned frame.
     frames = market_data.ohlcv_batch(
-        wanted, end - dt.timedelta(days=int(weeks * 9)), end)
+        wanted, end - dt.timedelta(days=int(weeks * 9)), end, own_sessions=True)
     if not frames:
         return {"usable": False, "reason": "No price history came back for this list.",
                 "factors": [], "refused": refused, "rows": [],
                 "measuredOn": (stability or {}).get("measuredOn")}
 
-    closes = pd.DataFrame({s: f["Close"].astype("float64") for s, f in frames.items()})
-    weekly = to_weekly(np.log(closes.sort_index() / closes.sort_index().shift(1)))
-    weekly = weekly.tail(weeks)
+    weekly = to_weekly(log_returns(frames)).tail(weeks)
 
     index_symbol = LOCAL_INDEX.get(market, LOCAL_INDEX["US"])
     index_returns = weekly[index_symbol] if index_symbol in weekly.columns else None

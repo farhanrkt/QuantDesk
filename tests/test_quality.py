@@ -274,3 +274,27 @@ def test_quality_payload_is_json_safe(healthy):
     result = Q.analyze({"sector": "Industrials", "industry": "Machinery",
                         "income": income, "balance": balance, "cashflow": cashflow})
     json.dumps(clean(result), allow_nan=False)
+
+
+# --------------------------------------------------------------------------- #
+# A coin, a fund or an index is not a company with a missing sector
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(("quote_type", "symbol", "kind"), [
+    ("CRYPTOCURRENCY", "BTC-USD", "a cryptocurrency"),
+    ("ETF", "SPY", "an exchange-traded fund"),
+])
+def test_a_coin_or_fund_is_named_rather_than_sent_back_for_a_refetch(quote_type, symbol, kind):
+    """The November audit found BTC-USD and SPY told that "a repeat fetch will
+    usually resolve" a sector they will never have."""
+    out = Q.analyze({"sector": "", "industry": "", "quote_type": quote_type,
+                     "income": pd.DataFrame(), "balance": pd.DataFrame(),
+                     "cashflow": pd.DataFrame()}, symbol=symbol)
+    assert out["applicable"] is False and out["cause"] == "not-a-company"
+    assert kind in out["reason"] and "fetch" not in out["reason"]
+
+
+def test_a_company_with_a_missing_sector_is_still_a_gap():
+    out = Q.analyze({"sector": "", "industry": "", "quote_type": "EQUITY",
+                     "income": pd.DataFrame(), "balance": pd.DataFrame(),
+                     "cashflow": pd.DataFrame()}, symbol="JPM")
+    assert out["cause"] == "unknown-sector"

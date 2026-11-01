@@ -72,8 +72,15 @@ meaning into the numbers belongs in the engine that owns that meaning.
 from __future__ import annotations
 
 import datetime as dt
+import email.utils
+import os
+import pickle
+import re
 import threading
+import time
+from pathlib import Path
 from typing import Optional, Sequence
+from urllib.parse import urlparse
 
 import numpy as np
 import pandas as pd
@@ -249,6 +256,23 @@ def is_stale(frame: Optional[pd.DataFrame], asked_through: Optional[dt.date] = N
     return age > limit
 
 
+# ONE yf.download AT A TIME, PER PROCESS. yfinance's `download` keeps its results
+# in module-level globals — it sets `shared._DFS = {}` on entry and assembles its
+# return value from that dict on exit — so two downloads running at once in one
+# process can hand each caller the OTHER caller's frame. Found by putting four
+# companies side by side in the compare view: a made-up ticker came back with
+# 1,610 bars of real price history, which were Microsoft's, while the same
+# request's anomaly leg (a different fetch path) correctly said "no data".
+#
+# It was never only the compare view. /api/confluence runs its legs in threads,
+# and the technical leg and the valuation's beta estimate both download in the
+# same request; the local server, a warm serverless instance and the scanner all
+# overlap requests too. A plausible wrong answer with no error, which is the
+# shape of defect this codebase most often has. `Ticker(...).history` builds its
+# frame on its own instance and does not need this; every `yf.download` does.
+_DOWNLOAD_LOCK = threading.Lock()
+
+
 def ohlcv(symbol: str, *, period: Optional[str] = None,
           start: Optional[dt.date] = None, end: Optional[dt.date] = None,
           auto_adjust: bool = True,
@@ -276,12 +300,13 @@ def ohlcv(symbol: str, *, period: Optional[str] = None,
         if period:
             raw = yf.Ticker(ticker).history(period=period, auto_adjust=auto_adjust)
         else:
-            raw = yf.download(
-                ticker, start=start,
-                end=(end + dt.timedelta(days=1)) if end else None,
-                interval="1d", auto_adjust=auto_adjust, actions=False,
-                progress=False, threads=False,
-            )
+            with _DOWNLOAD_LOCK:
+                raw = yf.download(
+                    ticker, start=start,
+                    end=(end + dt.timedelta(days=1)) if end else None,
+                    interval="1d", auto_adjust=auto_adjust, actions=False,
+                    progress=False, threads=False,
+                )
     except Exception:
         return None
     frame = normalise(raw)
@@ -293,7 +318,8 @@ def ohlcv(symbol: str, *, period: Optional[str] = None,
 
 
 def ohlcv_batch(symbols_list: Sequence[str], start: dt.date, end: dt.date,
-                chunk_size: int = CHUNK_SIZE) -> dict[str, pd.DataFrame]:
+                chunk_size: int = CHUNK_SIZE, *,
+                own_sessions: bool = False) -> dict[str, pd.DataFrame]:
     """Daily history for many symbols in as few upstream calls as possible.
 
     THIS IS WHAT MAKES THE BREADTH TIER POSSIBLE. The per-symbol path costs one
@@ -307,18 +333,47 @@ def ohlcv_batch(symbols_list: Sequence[str], start: dt.date, end: dt.date,
     holding delisted six months ago still clears `portfolio.MIN_OVERLAP` inside a
     252-day window, so it was contributing a correlation computed against a
     price that had stopped moving.
+
+    A BATCH SHARES ONE CALENDAR, and `own_sessions` is how to leave it. yfinance
+    aligns every symbol in a call onto the union of their dates, so a day one
+    symbol traded and another did not arrives as an all-NaN row for the second
+    — and `normalise` fills interior gaps, which turns that row into a session
+    with the previous close and no move. Measured on 1 November 2026: in one
+    batch with BTC-USD, the S&P 500 came back with 208 weekend bars, every one
+    a 0.00% day. `own_sessions=True` drops a row on which the symbol has no
+    field at all before normalising, so each symbol keeps the sessions it
+    actually traded; a row with partial data is still a gap and still filled.
+
+    The default stays the shared calendar because measured artifacts were taken
+    on it, and changing what a caller sees means re-running its measurement, not
+    editing a default. `portfolio` and `exposure` left it on 1 November 2026,
+    after both their stability studies were re-run on their own sessions; every
+    other caller still reads the shared calendar. Within one market the
+    difference is a handful of holiday rows; across markets, or with anything
+    that trades at weekends, it is not.
+
+    LEAVING IT MEANS DIFFERENCING EACH SYMBOL BEFORE ALIGNING. These frames have
+    holes where a symbol did not trade, and `close / close.shift(1)` on an
+    aligned frame of them loses the return across every hole.
+    `exposure.log_returns` is the one place that does it.
     """
     frames: dict[str, pd.DataFrame] = {}
+
+    def own(frame: pd.DataFrame) -> pd.DataFrame:
+        return frame.dropna(how="all") if own_sessions else frame
     unique = list(dict.fromkeys(s.strip().upper() for s in symbols_list if s and s.strip()))
 
     for position in range(0, len(unique), chunk_size):
         chunk = unique[position:position + chunk_size]
         try:
-            raw = yf.download(
-                chunk, start=start, end=end + dt.timedelta(days=1), interval="1d",
-                auto_adjust=True, actions=False, progress=False,
-                group_by="ticker", threads=True,
-            )
+            # yfinance's own threads inside one call are fine; two CALLS at once
+            # share its globals — see _DOWNLOAD_LOCK.
+            with _DOWNLOAD_LOCK:
+                raw = yf.download(
+                    chunk, start=start, end=end + dt.timedelta(days=1), interval="1d",
+                    auto_adjust=True, actions=False, progress=False,
+                    group_by="ticker", threads=True,
+                )
         except Exception:
             continue
         if raw is None or raw.empty:
@@ -337,11 +392,11 @@ def ohlcv_batch(symbols_list: Sequence[str], start: dt.date, end: dt.date,
             for symbol in chunk:
                 if symbol not in present:
                     continue
-                cleaned = normalise(raw[symbol])
+                cleaned = normalise(own(raw[symbol]))
                 if cleaned is not None and not is_stale(cleaned, end):
                     frames[symbol] = cleaned
         elif len(chunk) == 1:
-            cleaned = normalise(raw)
+            cleaned = normalise(own(raw))
             if cleaned is not None and not is_stale(cleaned, end):
                 frames[chunk[0]] = cleaned
     return frames
@@ -382,17 +437,84 @@ def currency(symbol: str, default: str = "USD") -> str:
     return value.upper() if isinstance(value, str) and value else default
 
 
+_EARNINGS_CACHE: dict[tuple[str, str], dict] = {}
+_EARNINGS_GUARD = threading.Lock()
+
+
+def earnings_calendar(symbol: str) -> dict:
+    """Past and announced earnings dates, cached for the day.
+
+    ONE FETCH, TWO READERS. The event study tags anomalies that sit beside an
+    earnings print, and the company view shows when the next report is due.
+    Both want the same table, and it was fetched uncached on every event-study
+    request; a day cache keyed like the company record lets them share it.
+
+    NEVER AN ANALYST FIELD. The same provider object carries recommendation
+    counts and price targets; this reads the dates and nothing else, because the
+    published views refuse third-party composites for the same reason they
+    refuse their own.
+
+    `next` is the provider's date and is often an estimate until the company
+    confirms it; the payload that shows it says so.
+
+    THE TABLE NEEDS lxml, AND FOR ITS WHOLE LIFE IT DID NOT HAVE IT. yfinance
+    parses this page with pandas' HTML reader, which raises ImportError without
+    lxml; the bare `except` here swallowed it, so `earnings_dates` returned []
+    on every call and the event study's "this anomaly sat beside an earnings
+    print" tag never fired once. Nothing failed and no test noticed, because
+    "no earnings nearby" is a legitimate answer. lxml is now pinned; and the
+    calendar endpoint, which needs no parser, backs up the NEXT date alone when
+    the table is unavailable — its estimates fields are never read.
+    """
+    today = dt.date.today()
+    key = (symbol.upper(), today.isoformat())
+    with _EARNINGS_GUARD:
+        hit = _EARNINGS_CACHE.get(key)
+    if hit is not None:
+        return {**hit, "dates": list(hit["dates"])}
+    handle = None
+    try:
+        handle = yf.Ticker(symbol)
+        table = handle.earnings_dates
+        dates = list(table.index) if table is not None else []
+    except Exception:
+        dates = []
+    fallback_next = None
+    if not dates and handle is not None:
+        try:
+            calendar = handle.calendar or {}
+            announced = calendar.get("Earnings Date") if isinstance(calendar, dict) else None
+            if isinstance(announced, (list, tuple)) and announced:
+                fallback_next = min(pd.Timestamp(d).date() for d in announced)
+        except Exception:
+            fallback_next = None
+    days = sorted({pd.Timestamp(d).tz_localize(None).date() if pd.Timestamp(d).tzinfo
+                   else pd.Timestamp(d).date() for d in dates})
+    upcoming = [d for d in days if d >= today]
+    if not upcoming and fallback_next is not None and fallback_next >= today:
+        upcoming = [fallback_next]
+    out = {
+        "available": bool(days) or bool(upcoming),
+        "dates": dates,
+        "past": [d.isoformat() for d in days if d < today][-8:],
+        "next": upcoming[0].isoformat() if upcoming else None,
+        "asOf": today.isoformat(),
+    }
+    with _EARNINGS_GUARD:
+        if len(_EARNINGS_CACHE) > 256:
+            _EARNINGS_CACHE.clear()
+        _EARNINGS_CACHE[key] = out
+    return {**out, "dates": list(dates)}
+
+
 def earnings_dates(symbol: str) -> list:
     """Announced and historical earnings dates, or [] when unavailable.
 
     Used to tag an anomaly that sits beside an earnings print, where the drift
-    afterwards is a documented effect rather than anyone's footprint.
+    afterwards is a documented effect rather than anyone's footprint. Reads the
+    day-cached calendar, so the company view and the event study share a fetch.
     """
-    try:
-        table = yf.Ticker(symbol).earnings_dates
-        return list(table.index) if table is not None else []
-    except Exception:
-        return []
+    return earnings_calendar(symbol)["dates"]
 
 
 # --------------------------------------------------------------------------- #
@@ -426,6 +548,182 @@ def index_history(symbol: str, period: str = "2y") -> Optional[pd.DataFrame]:
 
 
 # --------------------------------------------------------------------------- #
+# Fundamentals, cached ACROSS days on disk
+#
+# WHY THIS EXISTS: A WHOLE-MARKET SWEEP IS A DAY'S WORK AND THE CACHE EXPIRED
+# OVERNIGHT
+# ---------------------------------------------------------------------------
+# `scan_market.py` caches its computed lens payloads keyed by calendar day, and
+# that is the right rule for them: four of the five legs are derived from price,
+# which moves every session. But underneath them sit four or five network calls
+# per name for STATEMENTS, which move on a filing cycle — quarterly — and those
+# were being refetched every single day along with everything else.
+#
+# For 837 Indonesian names that was merely wasteful. For the 9,997 US listings
+# it is disqualifying: at the rate the provider tolerates, one pass is about
+# twelve hours, so the sweep cannot finish inside a day and therefore cannot
+# finish at all — every run throws away the statements the last one paid for.
+#
+# WHAT IS AND IS NOT CACHED, WHICH IS THE WHOLE DESIGN
+# -----------------------------------------------------
+# Only what moves on a filing cycle: the statements, the sector and industry,
+# the dividend history, the share register. Two things are deliberately
+# RE-DERIVED on every hit, because caching them would be a correctness bug
+# rather than a staleness trade-off:
+#
+#   * THE PRICE. `company` prefers the last daily bar close, and a valuation is
+#     a comparison between that price and a model. Serving a week-old price
+#     against fresh statements would move every verdict in the report and
+#     nothing would say so.
+#
+#   * THE FX RATE. Thirteen of the forty-six names in the IDX30 and LQ45 report
+#     in dollars and trade in rupiah, so their statements are converted at the
+#     boundary. The rate moves daily. So the disk holds the UNCONVERTED
+#     statements and the conversion is applied fresh, which is why
+#     `_company_uncached` grew a `convert` flag rather than the cache storing
+#     its output directly.
+#
+# OFF BY DEFAULT. The deployed app is serverless and has no persistent disk, and
+# a cache that silently does nothing is worse than none. `scan_market.py` opts
+# in; everything else is unchanged.
+FUNDAMENTALS_DIR = Path(__file__).resolve().parents[2] / ".fundamentals_cache"
+
+# Days a cached statement set stays usable. A week: filings are quarterly, so a
+# week of staleness is small against the cycle, and it is long enough that a
+# multi-day sweep reuses its own work. Every record carries the date it was
+# fetched so a caller can say how old it is rather than having to assume.
+FUNDAMENTALS_TTL_DAYS = 7
+
+
+def fundamentals_ttl() -> int:
+    """Days to keep fundamentals on disk. 0 disables the cache entirely."""
+    raw = os.environ.get("QUANTDESK_FUNDAMENTALS_TTL_DAYS")
+    if raw is None:
+        return 0
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 0
+
+
+def _fundamentals_path(kind: str, ticker: str) -> Path:
+    safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in ticker.upper())
+    return FUNDAMENTALS_DIR / kind / f"{safe}.pickle"
+
+
+def _fundamentals_load(kind: str, ticker: str) -> Optional[dict]:
+    """A cached record still inside its TTL, or None.
+
+    PICKLE, BECAUSE THE PAYLOAD IS THREE DATAFRAMES. This is a private local
+    cache that this process wrote itself, never a wire format and never read
+    from anywhere else; JSON would need a bespoke frame encoder and would
+    round-trip dtypes badly. Any failure to read — a truncated write, a file
+    from an older layout — is treated as a miss, because the cost of a miss is
+    one refetch and the cost of trusting a bad record is a wrong valuation.
+    """
+    ttl = fundamentals_ttl()
+    if ttl <= 0:
+        return None
+    path = _fundamentals_path(kind, ticker)
+    try:
+        with path.open("rb") as handle:
+            record = pickle.load(handle)
+        fetched = dt.date.fromisoformat(record["fetchedOn"])
+    except Exception:
+        return None
+    if (dt.date.today() - fetched).days >= ttl:
+        return None
+    payload = record.get("payload")
+    return payload if isinstance(payload, dict) else None
+
+
+# WHAT A LISTING IS WHEN IT IS NOT A COMPANY, in the words a sentence needs.
+# A coin, a fund or an index has no sector, no statements and no business, and
+# that is what it IS — a lens that says "no sector came back, a refetch will
+# usually resolve it" about BTC-USD is reporting a fact as a gap. Found in the
+# November audit on BTC-USD and SPY, where every fundamental lens said so.
+NON_COMPANY = {
+    "CRYPTOCURRENCY": "a cryptocurrency",
+    "ETF": "an exchange-traded fund",
+    "MUTUALFUND": "a mutual fund",
+    "INDEX": "a market index",
+    "CURRENCY": "a currency pair",
+    "FUTURE": "a futures contract",
+}
+
+# A coin quoted against a currency, the form `symbols` tells readers to type.
+# Used only when `.info` did not say what the listing is.
+_COIN_PAIR = re.compile(r"^[A-Z0-9]{2,10}-(USD|USDT|USDC|EUR|GBP|JPY|IDR|BTC|ETH)$")
+
+
+def non_company(record: Optional[dict], symbol: Optional[str] = None) -> Optional[str]:
+    """"a cryptocurrency", "an exchange-traded fund" … — or None for a company.
+
+    None also when nothing says: an empty `quote_type` on an ordinary symbol is
+    a lookup that did not arrive, and is left to the lenses' own gap handling.
+    """
+    kind = ((record or {}).get("quote_type") or "").upper()
+    if kind in NON_COMPANY:
+        return NON_COMPANY[kind]
+    if not kind and symbol and _COIN_PAIR.match(symbol.strip().upper()):
+        return NON_COMPANY["CRYPTOCURRENCY"]
+    return None
+
+
+def _company_info_arrived(payload: dict, ticker: str) -> bool:
+    """Whether `.info` actually returned, as opposed to returning empty.
+
+    A THROTTLED FETCH MUST NEVER BE CACHED, AND THIS CACHE MADE THAT POSSIBLE
+    FOR THE FIRST TIME. `_company_uncached` swallows an `.info` failure and
+    carries on — deliberately, because the price and the statements come from
+    other endpoints and are worth having without it. The result is a record that
+    is `ok`, has real statements, and has no sector.
+
+    Before this cache that was a bad afternoon. With it, the bad record is
+    served for a WEEK, so a single throttled moment silently removes the quality
+    lens from a name for seven days — and a missing lens has its weight taken
+    out of the blend, which lifts exactly the names it would have marked down.
+
+    Measured: after a sustained US sweep, 1,180 of 3,367 records on disk had no
+    sector, no industry, no market capitalisation, and a name field that had
+    fallen back to the ticker. That combination is not a company with sparse
+    data; it is an empty dict.
+
+    THE TEST IS SIMPLY "IS THERE A SECTOR", and a looser first version was
+    wrong. It accepted any record carrying a name or a market capitalisation,
+    which kept 211 sector-less records out of 1,180 — and a record with no
+    sector disables `quality` for a week whatever else it contains, because the
+    sector is what decides whether Piotroski, Altman and Beneish apply at all.
+
+    A listing that genuinely has no sector is therefore refetched on every run.
+    That is a small bounded waste, against a week of a lens silently missing.
+    """
+    del ticker    # kept in the signature: the caller reads better naming it
+    return bool((payload.get("sector") or "").strip())
+
+
+def _fundamentals_store(kind: str, ticker: str, payload: dict) -> None:
+    if fundamentals_ttl() <= 0 or not isinstance(payload, dict):
+        return
+    if kind == "company" and not _company_info_arrived(payload, ticker):
+        return
+    path = _fundamentals_path(kind, ticker)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        # Written to a temporary name and moved into place, so an interrupted
+        # sweep leaves no half-written record for the next run to trust.
+        temporary = path.with_suffix(".tmp")
+        with temporary.open("wb") as handle:
+            pickle.dump({"fetchedOn": dt.date.today().isoformat(),
+                         "payload": payload}, handle)
+        temporary.replace(path)
+    except Exception:
+        # A cache that cannot write must never break the fetch it was
+        # accelerating. A full disk is not a reason to fail a scan.
+        pass
+
+
+# --------------------------------------------------------------------------- #
 # Fundamentals, cached for the day
 # --------------------------------------------------------------------------- #
 _COMPANY_CACHE: dict[tuple[str, str], dict] = {}
@@ -435,6 +733,21 @@ _COMPANY_CACHE: dict[tuple[str, str], dict] = {}
 # fetch would serialise unrelated symbols.
 _COMPANY_GUARD = threading.Lock()
 _COMPANY_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+
+# When a record cached without its `.info` stops being served. See `company`.
+_COMPANY_EXPIRES: dict[tuple[str, str], float] = {}
+COMPANY_GAP_TTL_SECONDS = 120
+
+
+def _cached_for(key: tuple[str, str]) -> Optional[dict]:
+    """The day's cached record, unless it was a gap whose few minutes are up."""
+    with _COMPANY_GUARD:
+        expires = _COMPANY_EXPIRES.get(key)
+        if expires is not None and time.monotonic() >= expires:
+            _COMPANY_CACHE.pop(key, None)
+            _COMPANY_EXPIRES.pop(key, None)
+            return None
+        return _COMPANY_CACHE.get(key)
 
 
 def _company_lock(key: tuple[str, str]) -> threading.Lock:
@@ -459,6 +772,17 @@ def _safe_float(value, default=np.nan) -> float:
     return out if np.isfinite(out) else default
 
 
+def _epoch_date(value) -> Optional[str]:
+    """An epoch-seconds stamp from the provider's summary as an ISO date, or None."""
+    stamp = _safe_float(value)
+    if not np.isfinite(stamp) or stamp <= 0:
+        return None
+    try:
+        return dt.datetime.fromtimestamp(stamp, tz=dt.timezone.utc).date().isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
 # Rows on a financial statement that are COUNTS rather than money. Scaling a
 # share count by an exchange rate would be meaningless; every consumer uses them
 # only in ratios, where uniform scaling is harmless, but excluding them keeps the
@@ -469,12 +793,13 @@ _COUNT_ROW_HINTS = ("shares", "share issued", "share number", "number")
 def _convert_statements(data: dict, rate: float) -> None:
     """Scale money on the three statements into the trading currency, in place.
 
-    ONLY THE STATEMENTS AND THE INFO FIGURE DERIVED FROM THEM. Verified against
+    ONLY THE STATEMENTS AND THE INFO FIGURES DERIVED FROM THEM. Verified against
     ITMG.JK, which reports in USD and trades in IDR: the income, balance and cash
-    flow statements and `netIncomeToCommon` are all on the USD scale, while
-    `price`, `market_cap`, `shares` and the dividend-per-share figures come from
-    the quote feed already denominated in rupiah. Scaling the second group would
-    replace one currency error with another.
+    flow statements, `netIncomeToCommon` and `totalRevenue` are all on the USD
+    scale (its summary read 1.96bn against 1.88bn filed for 2025, on 1 November
+    2026), while `price`, `market_cap`, `shares` and the dividend-per-share
+    figures come from the quote feed already denominated in rupiah. Scaling the
+    second group would replace one currency error with another.
     """
     for key in ("income", "balance", "cashflow"):
         frame = data.get(key)
@@ -488,8 +813,12 @@ def _convert_statements(data: dict, rate: float) -> None:
             scaled.loc[label] = pd.to_numeric(scaled.loc[label], errors="coerce") * rate
         data[key] = scaled
 
-    if np.isfinite(data.get("net_income_info", np.nan)):
-        data["net_income_info"] = data["net_income_info"] * rate
+    # The summary figures are in the reporting currency too. `revenue_ttm` is
+    # absent from records cached before it existed, hence the safe read.
+    for key in ("net_income_info", "revenue_ttm"):
+        value = _safe_float(data.get(key))
+        if np.isfinite(value):
+            data[key] = value * rate
 
 
 def company(ticker: str) -> dict:
@@ -522,26 +851,103 @@ def company(ticker: str) -> dict:
     """
     key = (ticker.upper(), dt.date.today().isoformat())
 
-    cached = _COMPANY_CACHE.get(key)
+    cached = _cached_for(key)
     if cached is not None:
         return dict(cached)
 
     with _company_lock(key):
         # Re-read: whoever held this lock before us has already filled it in.
-        cached = _COMPANY_CACHE.get(key)
+        cached = _cached_for(key)
         if cached is not None:
             return dict(cached)
 
-        result = _company_uncached(ticker)
+        stored = _fundamentals_load("company", ticker)
+        if stored is not None:
+            # A HIT REUSES THE FILINGS AND REFETCHES THE PRICE. Everything
+            # expensive here is quarterly; the price is one cheap call that is
+            # itself cached for the day, and serving a week-old price against
+            # fresh statements would move every valuation in the report with
+            # nothing saying so.
+            result = _apply_fx(_refresh_price(dict(stored), ticker))
+        else:
+            unconverted = _company_uncached(ticker, convert=False)
+            _fundamentals_store("company", ticker, unconverted)
+            result = _apply_fx(dict(unconverted))
+
         with _COMPANY_GUARD:
             if len(_COMPANY_CACHE) > 128:
                 _COMPANY_CACHE.clear()
+                _COMPANY_EXPIRES.clear()
             _COMPANY_CACHE[key] = result
+            # A RECORD WHOSE `.info` DID NOT ARRIVE IS KEPT FOR MINUTES, NOT THE
+            # DAY. The disk cache has refused to store one since September; this
+            # cache kept it for the rest of the day. Found in the November audit:
+            # one throttled lookup left JPM with no sector, so the valuation took
+            # it for an ordinary company until midnight. Minutes, not zero,
+            # because the legs of one request share the record, and refetching
+            # it for each of them is what gets a lookup throttled.
+            if _company_info_arrived(result, ticker):
+                _COMPANY_EXPIRES.pop(key, None)
+            else:
+                _COMPANY_EXPIRES[key] = time.monotonic() + COMPANY_GAP_TTL_SECONDS
 
     return dict(result)
 
 
-def _company_uncached(ticker: str) -> dict:
+def cached_company(ticker: str) -> Optional[dict]:
+    """The company record already in hand, or None. NEVER fetches statements.
+
+    A peek, for callers that want the DESCRIPTIVE half of a record — what the
+    company does, what it sold last year — and must not pay a network call for
+    it. `company()` above is the fetching path; this one returns only what
+    memory or the local cache already holds.
+
+    THE PRICE ON THE RETURNED RECORD MAY BE STALE, deliberately. `company()`
+    refetches it on every hit because a valuation is a comparison against it;
+    this function skips that, which is the whole saving. So nothing may be
+    VALUED off what comes back here. `market_cap` is used downstream only as an
+    order-of-magnitude units check, where a week of drift cannot change the
+    answer — the error it guards against is a factor of sixteen thousand.
+
+    The exchange rate IS applied, because the statements come off the disk
+    unconverted and a caller comparing one company's revenue against another's
+    needs them on one scale. `fx_rate` is cached per pair per day, so this costs
+    at most one call per currency pair for a whole sweep.
+    """
+    key = (ticker.upper(), dt.date.today().isoformat())
+    cached = _cached_for(key)
+    if cached is not None:
+        return dict(cached)
+    stored = _fundamentals_load("company", ticker)
+    if stored is None:
+        return None
+    return _apply_fx(dict(stored))
+
+
+def _refresh_price(out: dict, ticker: str) -> dict:
+    """Put today's price onto a record whose statements came off the disk.
+
+    `market_cap` is recomputed rather than carried, because Yahoo's own figure
+    was quoted against the price on the day the record was written and a stale
+    market capitalisation is the kind of number nobody re-checks.
+    """
+    bars = ohlcv(ticker, period="5d", allow_stale=True)
+    if bars is not None and len(bars):
+        close = _safe_float(bars["Close"].iloc[-1])
+        if np.isfinite(close) and close > 0:
+            out["price"] = close
+            out["price_source"] = "last daily close"
+            out["price_as_of"] = bars.index[-1].strftime("%Y-%m-%d")
+            shares = _safe_float(out.get("shares"))
+            if np.isfinite(shares) and shares > 0:
+                out["market_cap"] = float(close * shares)
+    return out
+
+
+def _company_uncached(ticker: str, convert: bool = True) -> dict:
+    """The full company fetch. `convert=False` leaves the statements in the
+    currency they were reported in, which is what the disk cache stores — see
+    the note above `FUNDAMENTALS_DIR` for why the FX rate may not be cached."""
     try:
         tk = yf.Ticker(ticker)
     except Exception:
@@ -644,6 +1050,26 @@ def _company_uncached(ticker: str) -> dict:
         "name": info.get("longName") or info.get("shortName") or ticker,
         "sector": info.get("sector") or "",
         "industry": info.get("industry") or "",
+        # WHAT THE COMPANY ACTUALLY SELLS, in the provider's own words. Free:
+        # `info` is already in hand, and none of these costs a further call.
+        #
+        # THE EMPTY STRING IS LOAD-BEARING. `field.profile` distinguishes a
+        # record whose key is missing — written before this app asked for a
+        # description, so a refetch will supply one — from a record whose key is
+        # present and empty, which means the provider has none and refetching
+        # cannot help. Defaulting to None here instead would collapse the two
+        # and send a reader to re-run a scan that cannot change the answer.
+        "business_summary": info.get("longBusinessSummary") or "",
+        "employees": _safe_float(info.get("fullTimeEmployees")),
+        "country": info.get("country") or "",
+        "website": info.get("website") or "",
+        # Where it lists, in the provider's words ("NasdaqGS", "Jakarta"). Optional
+        # for consumers: records cached before this key existed lack it.
+        "exchange": info.get("fullExchangeName") or info.get("exchange") or "",
+        # WHAT KIND OF LISTING THIS IS: EQUITY, ETF, CRYPTOCURRENCY, INDEX. Read by
+        # `non_company`, so a lens can say a fund or a coin is not a company
+        # instead of reporting a missing sector as a fetch to retry.
+        "quote_type": (info.get("quoteType") or "").upper(),
         "price": price,
         "shares": shares,
         "beta": _safe_float(info.get("beta")),
@@ -662,6 +1088,16 @@ def _company_uncached(ticker: str) -> dict:
         "payout_ratio": _safe_float(info.get("payoutRatio")),
         "roe_info": _safe_float(info.get("returnOnEquity")),
         "net_income_info": _safe_float(info.get("netIncomeToCommon")),
+        # THE TRAILING YEAR'S TOP LINE FROM THE PROVIDER'S SUMMARY, kept beside
+        # the statements because for a quarter of the Indonesian exchange it is
+        # the only top line there is. See `field.revenue_of`, the one reader: it
+        # is a stand-in for a filed year where no statement exists, never a
+        # replacement for one. In the reporting currency, like the statements,
+        # and converted with them.
+        "revenue_ttm": _safe_float(info.get("totalRevenue")),
+        # The quarter that trailing year ends on, so a figure years old cannot
+        # stand beside this year's filings unnoticed.
+        "revenue_ttm_through": _epoch_date(info.get("mostRecentQuarter")),
         "ttm_dividend": ttm_dividend,
         "dividend_history": div_history,
         "price_source": price_source,
@@ -681,13 +1117,186 @@ def _company_uncached(ticker: str) -> dict:
     # trade in rupiah. When no rate can be fetched the statements are left alone
     # and `fx_rate` stays None, which is the signal for the valuation engine to
     # refuse rather than quietly mix the two.
+    if convert:
+        _apply_fx(out)
+
+    return out
+
+
+# The price-to-sales band a converted figure is sanity-checked against.
+# Deliberately enormous — real ratios live between about 0.1 and 30 — because
+# this is a UNITS test, not a valuation screen, and the error it catches is a
+# factor of sixteen thousand. See `_conversion_looks_wrong`.
+_PLAUSIBLE_PS = (0.01, 100.0)
+
+
+def _conversion_looks_wrong(out: dict, rate: float) -> bool:
+    """Whether converting at `rate` makes this company's numbers impossible.
+
+    THE PROVIDER'S CURRENCY LABEL IS OCCASIONALLY WRONG, AND IT IS NOT A
+    HARMLESS KIND OF WRONG. RIGS.JK — a small Indonesian tug and barge operator
+    — reports revenue of 366 billion rupiah and is served with
+    `financialCurrency: USD`, so converting multiplies its whole income,
+    balance and cash-flow statement by about 16,300. Every valuation and every
+    accounting screen for that company was then computed on statements four
+    orders of magnitude too large, and nothing anywhere said so. The same thing
+    happens to YPF with the rate inverted: it reports in dollars and is labelled
+    pesos, so conversion DIVIDES by about a thousand.
+
+    The test is a comparison, not a threshold. Market capitalisation comes from
+    the quote feed and is always in the trading currency, so it is an
+    independent yardstick: if the UNCONVERTED revenue implies a sane
+    price-to-sales ratio against it and the CONVERTED one does not, the label is
+    what is wrong.
+
+    MEASURED ACROSS EVERY MISMATCHED RECORD IN THE LOCAL CACHE — 388 of them,
+    both markets — this fires on exactly two, RIGS.JK and YPF, and passes 100
+    that are correctly labelled. On the remaining 283 the rate is near 1
+    (EUR, CAD, GBP, CHF, AUD against USD) and the test cannot discriminate; it
+    does not try, and a mislabel there is off by less than a factor of two
+    rather than by four orders of magnitude.
+
+    It is deliberately ONE-SIDED. It never converts something that was not going
+    to be converted; it only declines a conversion that turns a plausible
+    company into an impossible one.
+    """
+    # Imported here rather than at module scope because `valuation` imports this
+    # module — the alias table is the single place that knows how the provider
+    # names a statement line, and forking it to avoid a cycle would be worse
+    # than a local import.
+    from .valuation import _get_row
+
+    cap = _safe_float(out.get("market_cap"))
+    if not np.isfinite(cap) or cap <= 0:
+        return False
+    income = out.get("income")
+    if isinstance(income, pd.DataFrame) and not income.empty:
+        series = _get_row(income, "revenue")
+        if series is None:
+            return False
+        clean = pd.Series(series).dropna()
+        if not len(clean):
+            return False
+        revenue = _safe_float(clean.iloc[0])
+    else:
+        # NO STATEMENTS AT ALL, so the summary's trailing top line is the one
+        # figure a conversion would scale and `field.revenue_of` would rank. It
+        # gets the same yardstick; see `revenue_ttm`.
+        revenue = _safe_float(out.get("revenue_ttm"))
+    if not np.isfinite(revenue) or revenue <= 0:
+        return False
+
+    low, high = _PLAUSIBLE_PS
+    before = revenue / cap
+    after = revenue * rate / cap
+    return bool(not (low <= after <= high) and low <= before <= high)
+
+
+def _apply_fx(out: dict) -> dict:
+    """Convert the statements into the trading currency, at today's rate.
+
+    Split out of `_company_uncached` so the disk cache can store the
+    UNCONVERTED statements and re-apply a fresh rate on every hit. Caching the
+    converted figures would freeze an exchange rate for a week against
+    statements that are meant to be read in rupiah today.
+
+    A CONVERSION THAT MAKES THE COMPANY IMPOSSIBLE IS DECLINED, and the refusal
+    is recorded on the record rather than applied silently — `fx_skipped` says
+    which currencies disagreed, what rate was refused and why, so a reader is
+    never shown a number whose provenance the app quietly overrode. See
+    `_conversion_looks_wrong`.
+    """
+    financial_ccy = out.get("financial_currency")
+    trading_ccy = (out.get("currency") or "").upper() or None
     if financial_ccy and trading_ccy and financial_ccy != trading_ccy:
         rate = fx_rate(financial_ccy, trading_ccy)
         if rate:
+            if _conversion_looks_wrong(out, rate):
+                out["fx_skipped"] = {
+                    "reportingCurrency": financial_ccy,
+                    "tradingCurrency": trading_ccy,
+                    "rateRefused": float(rate),
+                    "reason": (
+                        f"The data source labels these statements {financial_ccy} "
+                        f"while the shares trade in {trading_ccy}, but converting at "
+                        f"{rate:,.4g} would put revenue far out of line with the "
+                        f"company's own market value, and the unconverted figures are "
+                        f"in line with it. The statements appear to be in "
+                        f"{trading_ccy} already, so they are left alone. This is a "
+                        f"wrong label at the source, not a missing rate."),
+                }
+                return out
             _convert_statements(out, rate)
             out["fx_rate"] = rate
-
     return out
+
+
+# --------------------------------------------------------------------------- #
+# News search, for the market board's headlines
+# --------------------------------------------------------------------------- #
+# THE ONLY IMAGE HOSTS A THUMBNAIL MAY COME FROM. The browser never fetches these
+# itself — Next's image optimizer does, from our own origin, so the page's CSP
+# stays `img-src 'self'` — and `next.config.mjs` must allow exactly these hosts;
+# `scripts/check_frontend.mjs` fails the build if the two lists drift.
+NEWS_IMAGE_HOSTS = ("media.zenfs.com", "s.yimg.com")
+NEWS_TTL_SECONDS = 600
+_NEWS_CACHE: dict[tuple[str, int], tuple[float, list[dict]]] = {}
+_NEWS_GUARD = threading.Lock()
+
+
+def _news_image(thumbnail) -> Optional[dict]:
+    """The largest thumbnail on an allowed https host, or None."""
+    best = None
+    for item in (thumbnail or {}).get("resolutions") or []:
+        url = item.get("url") or ""
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or parsed.hostname not in NEWS_IMAGE_HOSTS:
+            continue
+        width, height = item.get("width") or 0, item.get("height") or 0
+        if best is None or width * height > best["width"] * best["height"]:
+            best = {"url": url, "width": int(width), "height": int(height)}
+    return best if best and best["width"] and best["height"] else None
+
+
+def news_search(query: str, count: int = 8) -> list[dict]:
+    """Recent articles matching a query, from Yahoo Finance's search, with thumbnails.
+
+    WHY SEARCH AND NOT A TICKER'S NEWS. `Ticker(...).news` comes back empty for
+    indices and futures (measured 1 November 2026 on ^GSPC, ^JKSE and CL=F),
+    while the search endpoint returns the day's stories for "oil prices". It has
+    nothing for "IHSG", so Indonesian headlines stay on Google News (`news.py`).
+
+    Raises on failure: the caller decides whether a failed fetch means falling
+    back to another source or saying the feed could not be read. Held for ten
+    minutes per query, because every reader of the board asks the same ones.
+    """
+    key = (query, count)
+    now = time.monotonic()
+    with _NEWS_GUARD:
+        held = _NEWS_CACHE.get(key)
+        if held and now - held[0] < NEWS_TTL_SECONDS:
+            return [dict(item) for item in held[1]]
+    result = yf.Search(query, max_results=1, news_count=count, lists_count=0,
+                       include_cb=False, recommended=0)
+    items = []
+    for raw in result.news or []:
+        title, link = (raw.get("title") or "").strip(), (raw.get("link") or "").strip()
+        stamp = raw.get("providerPublishTime")
+        if not title or not link.startswith("https://") or not isinstance(stamp, (int, float)):
+            continue
+        published = dt.datetime.fromtimestamp(stamp, tz=dt.timezone.utc)
+        items.append({
+            "title": title,
+            "source": (raw.get("publisher") or "Yahoo Finance").strip(),
+            "link": link,
+            "published": email.utils.format_datetime(published),
+            "image": _news_image(raw.get("thumbnail")),
+        })
+    with _NEWS_GUARD:
+        if len(_NEWS_CACHE) > 64:
+            _NEWS_CACHE.clear()
+        _NEWS_CACHE[key] = (now, items)
+    return [dict(item) for item in items]
 
 
 def last_close(symbol: str, period: str = "5d") -> Optional[float]:
@@ -793,3 +1402,338 @@ def risk_free_rate(market_code: str, fallback: float) -> tuple[float, str]:
 def base_symbol(symbol: str) -> str:
     """Re-exported so callers need not import `symbols` for this alone."""
     return symbols.base_code(symbol)
+
+
+# --------------------------------------------------------------------------- #
+# The listed universe — who is actually on the exchange today
+#
+# WHY THIS LIVES HERE AND NOT IN A HARDCODED LIST.
+#
+# `universes.py` refuses to ship an S&P 500 constituent list from memory, and
+# the argument it makes is exactly right: 500 symbols is past the length where
+# recitation stays correct, and a wrong ticker is not inert — it produces a
+# plausible ranking row for a company nobody asked about. The Indonesia Stock
+# Exchange has around 840 listings. Reciting that from memory would be the same
+# error at nearly twice the length, and it would be the FIRST list in this
+# codebase whose errors nobody could check.
+#
+# So the whole-market universe is FETCHED from a source that maintains one, the
+# way that file says a universe should arrive. Yahoo's equity screener is that
+# source: it is the same provider every other number in this app comes from, so
+# a name it lists is a name the rest of the pipeline can actually fetch — which
+# a scrape of the exchange's own site would not guarantee.
+#
+# WHAT IT IS NOT. It is not the exchange's official register, it carries no
+# board classification, and it will include names that have stopped trading
+# until the provider notices. It is a snapshot with a date on it, and every
+# caller is required to carry that date — same contract as `universes.AS_OF`.
+# --------------------------------------------------------------------------- #
+
+# Yahoo's screener region codes, by this app's market code. Only the two markets
+# the rest of the app resolves symbols for; anything else is a caller error
+# rather than a silent empty scan.
+SCREENER_REGION = {"US": "us", "ID": "id"}
+
+# One screener page. 250 is the provider's own ceiling per request — asking for
+# more returns 250 anyway, so paging is not optional at IDX's ~840 names.
+SCREENER_PAGE = 250
+
+# A stop on the paging loop that does not depend on the provider's `total` being
+# honest. At 250 a page this allows 10,000 names, which is an order of magnitude
+# past any market this app resolves symbols for, and it means a `total` that
+# never decrements cannot spin here forever.
+SCREENER_MAX_PAGES = 40
+
+
+def listed_equities(market_code: str = "ID") -> list[dict]:
+    """Every common equity the provider currently lists for one market.
+
+    Ordered by market capitalisation, largest first, because that is the order
+    in which a truncated scan loses the least: stopping at 300 names drops the
+    small end, which is the end a personal account cannot trade anyway.
+
+    Each row carries only what a universe needs — symbol, name, capitalisation,
+    currency, exchange. The screener returns eighty-odd fields per name and
+    almost all of them are quote data this app fetches properly elsewhere;
+    keeping them would create a second, staler source for prices that
+    `ohlcv` already owns, which is the precise failure this module exists to
+    prevent.
+
+    `quoteType` is filtered to EQUITY. The screener's region filter alone also
+    returns rights, warrants and the occasional fund, and those fetch happily —
+    a warrant has a full OHLCV history — so nothing downstream would notice
+    them. They would simply appear in a ranking of companies.
+
+    Raises `MarketDataError` when the provider returns nothing at all, because a
+    zero-length universe and a failed request look identical to the caller and
+    only one of them should be scanned.
+    """
+    region = SCREENER_REGION.get((market_code or "").strip().upper())
+    if region is None:
+        raise MarketDataError(
+            f"No listed-equity source for market '{market_code}'. "
+            f"Known markets: {', '.join(sorted(SCREENER_REGION))}.")
+
+    query = yf.EquityQuery("eq", ["region", region])
+    rows: dict[str, dict] = {}
+    failures = 0
+
+    for page in range(SCREENER_MAX_PAGES):
+        offset = page * SCREENER_PAGE
+        try:
+            response = yf.screen(query, offset=offset, size=SCREENER_PAGE,
+                                 sortField="intradaymarketcap", sortAsc=False)
+        except Exception:
+            # ONE BAD PAGE IS NOT A BAD SCAN, but a run of them is. A single
+            # transient failure loses 250 names silently, which is worse than
+            # the truncation it hides, so the loop stops after two rather than
+            # limping to the end of the market with a hole in the middle.
+            failures += 1
+            if failures >= 2:
+                break
+            continue
+
+        quotes = (response or {}).get("quotes") or []
+        if not quotes:
+            break
+
+        for quote in quotes:
+            symbol = (quote.get("symbol") or "").strip().upper()
+            if not symbol or quote.get("quoteType") != "EQUITY":
+                continue
+            # First writer wins. Pages can overlap when the provider re-sorts
+            # between requests, and a duplicate must not become two rows in a
+            # universe whose length is reported to the reader.
+            rows.setdefault(symbol, {
+                "symbol": symbol,
+                "name": quote.get("longName") or quote.get("shortName") or symbol,
+                "marketCap": _safe_float(quote.get("marketCap"), default=None),
+                "currency": quote.get("currency") or None,
+                "exchange": quote.get("fullExchangeName") or quote.get("exchange") or None,
+            })
+
+        if len(quotes) < SCREENER_PAGE:
+            break
+
+    if not rows:
+        raise MarketDataError(
+            f"The listed-equity screener returned nothing for market "
+            f"'{market_code}'. That is a failed request, not an empty market.")
+
+    return sorted(rows.values(),
+                  key=lambda r: (r["marketCap"] is None, -(r["marketCap"] or 0.0)))
+
+
+# --------------------------------------------------------------------------- #
+# The share register — who holds it, and how many shares there are
+#
+# WHY THIS IS A SEPARATE FETCH FROM `company()`.
+#
+# `company()` returns the three financial statements plus a price, and every
+# caller of it wants all of that. The register is wanted by one component and is
+# four more endpoints, so folding it in would slow the confluence run for every
+# reader who never asks about ownership. Same cache shape, same locking, its own
+# key.
+#
+# WHAT IT IS FOR, AND THE HONEST NAME FOR IT.
+#
+# The Indonesian practice of `bandarmology` reads the exchange's BROKER SUMMARY:
+# which broker codes net-bought a stock today, and how much of that was foreign.
+# That file is what defines the method, and it is not obtainable here — the
+# exchange publishes it behind a bot check, and no provider this app can reach
+# redistributes it. Nothing in this module is broker summary data and nothing
+# downstream may imply that it is.
+#
+# What the register DOES give is the structural precondition the method looks
+# for. A stock cannot be walked by one operator unless the free float is small
+# enough to walk, and Yahoo reports the insider-held share for essentially every
+# IDX listing. Ownership concentration and the change in share count are also
+# genuinely absent from every existing lens: no price signal sees them, and none
+# of Piotroski, Altman, Beneish or the DCF reads a share count trend.
+# --------------------------------------------------------------------------- #
+_REGISTER_CACHE: dict[tuple[str, str], dict] = {}
+_REGISTER_GUARD = threading.Lock()
+_REGISTER_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+
+# How far back the share-count series is pulled. Four years covers three or four
+# annual reporting points on a listing that files them, which is the minimum for
+# "is this diluting" to be a trend rather than one observation.
+REGISTER_HISTORY_DAYS = 1460
+
+
+def _register_lock(key: tuple[str, str]) -> threading.Lock:
+    with _REGISTER_GUARD:
+        if len(_REGISTER_LOCKS) > 256 and key not in _REGISTER_LOCKS:
+            _REGISTER_LOCKS.clear()
+        return _REGISTER_LOCKS.setdefault(key, threading.Lock())
+
+
+def share_register(ticker: str) -> dict:
+    """Ownership, share count history and analyst counts, cached for the day.
+
+    EVERY FIELD IS INDEPENDENTLY OPTIONAL, and the four sub-fetches are wrapped
+    separately for that reason. Coverage differs sharply by market and by size:
+    the insider-held share is present for essentially every IDX listing, the
+    share-count series for most, and analyst counts for well under half. A
+    single try/except around all four would let the thinnest one erase the
+    others — which is the shape of failure this app spends most of its error
+    handling avoiding.
+
+    `ok` says whether ANYTHING came back. It is never used to mean the data is
+    complete; each consumer checks the field it needs.
+    """
+    key = (ticker.upper(), dt.date.today().isoformat())
+
+    cached = _REGISTER_CACHE.get(key)
+    if cached is not None:
+        return dict(cached)
+
+    with _register_lock(key):
+        cached = _REGISTER_CACHE.get(key)
+        if cached is not None:
+            return dict(cached)
+        result = _fundamentals_load("register", ticker)
+        if result is None:
+            result = _register_uncached(ticker)
+            _fundamentals_store("register", ticker, result)
+        # No price lives in here — ownership, share counts and analyst counts
+        # all move on a filing cycle — so a hit needs no refreshing.
+        with _REGISTER_GUARD:
+            if len(_REGISTER_CACHE) > 128:
+                _REGISTER_CACHE.clear()
+            _REGISTER_CACHE[key] = result
+
+    return dict(result)
+
+
+def _holder_value(frame, label: str) -> Optional[float]:
+    """One row out of `major_holders`, which arrives as a labelled column.
+
+    The frame is indexed by a `Breakdown` label with a single `Value` column, and
+    yfinance has changed that shape before. Reading it positionally would break
+    silently into a wrong number rather than loudly into a missing one, so this
+    goes by label and returns None when the label is absent.
+    """
+    try:
+        if frame is None or label not in frame.index:
+            return None
+        return _safe_float(frame.loc[label].iloc[0], default=None)
+    except (KeyError, IndexError, AttributeError, TypeError):
+        return None
+
+
+def _register_uncached(ticker: str) -> dict:
+    out: dict = {
+        "ok": False,
+        "symbol": ticker.upper(),
+        "insidersPercentHeld": None,
+        "institutionsPercentHeld": None,
+        "institutionsFloatPercentHeld": None,
+        "institutionsCount": None,
+        "shares": None,
+        "recommendations": None,
+        "earningsSurprises": None,
+        "nextEarnings": None,
+    }
+    try:
+        handle = yf.Ticker(ticker)
+    except Exception:
+        return out
+
+    try:
+        holders = handle.major_holders
+        out["insidersPercentHeld"] = _holder_value(holders, "insidersPercentHeld")
+        out["institutionsPercentHeld"] = _holder_value(holders, "institutionsPercentHeld")
+        out["institutionsFloatPercentHeld"] = _holder_value(
+            holders, "institutionsFloatPercentHeld")
+        out["institutionsCount"] = _holder_value(holders, "institutionsCount")
+    except Exception:
+        pass
+
+    # The share-count series, as DATED RECORDS rather than a pandas Series.
+    #
+    # Everything else this module returns is either a frame the engines consume
+    # in-process or a scalar. This one is neither: the scanner caches the whole
+    # register payload to disk as JSON between runs, and the API route sends it
+    # over the wire, so a Series here would have to be special-cased in two
+    # places and would arrive back as something else in a third. Records survive
+    # the round trip unchanged, and `ownership.issuance` rebuilds the index it
+    # needs from the dates.
+    #
+    # The points are irregular — filing dates, not a calendar — and are NOT
+    # resampled. Resampling at the boundary would invent share counts on days
+    # nobody reported one.
+    try:
+        start = dt.date.today() - dt.timedelta(days=REGISTER_HISTORY_DAYS)
+        series = handle.get_shares_full(start=start)
+        if series is not None and len(series) > 0:
+            cleaned = pd.to_numeric(pd.Series(series), errors="coerce").dropna()
+            cleaned = cleaned[cleaned > 0].sort_index()
+            records = []
+            for stamp, count in cleaned.items():
+                try:
+                    date = pd.Timestamp(stamp).date().isoformat()
+                except (TypeError, ValueError):
+                    continue
+                records.append({"date": date, "count": float(count)})
+            if records:
+                out["shares"] = records
+    except Exception:
+        pass
+
+    # Analyst counts by period, as records for the same round-trip reason as the
+    # share series above. `period` is the provider's own relative label — "0m"
+    # for now, "-1m" a month ago — so a revision is read by comparing rows
+    # rather than by parsing a date this feed does not supply.
+    try:
+        rows = handle.recommendations
+        if rows is not None and len(rows):
+            out["recommendations"] = [
+                {key: (int(value) if key != "period" and pd.notna(value) else value)
+                 for key, value in record.items()}
+                for record in rows.to_dict("records")
+            ]
+    except Exception:
+        pass
+
+    # Earnings surprises. `earnings_dates` mixes future scheduled dates, which
+    # carry no actual, with past ones; the surprise column only means anything
+    # where a figure was reported.
+    # ONE FETCH, TWO ANSWERS. `earnings_dates` carries both the past results and
+    # the scheduled future ones, so the next reporting date costs nothing on top
+    # of the surprise history — which matters because "is this company reporting
+    # next week" is a real reason to wait, and paying a second round trip per
+    # name for it across a whole market would not be worth it.
+    try:
+        rows = handle.earnings_dates
+        if rows is not None and len(rows):
+            if "Surprise(%)" in rows.columns:
+                surprises = pd.to_numeric(rows["Surprise(%)"], errors="coerce").dropna()
+                records = []
+                for stamp, value in surprises.sort_index().items():
+                    try:
+                        date = pd.Timestamp(stamp).date().isoformat()
+                    except (TypeError, ValueError):
+                        continue
+                    records.append({"date": date, "surprisePct": float(value)})
+                if records:
+                    out["earningsSurprises"] = records
+
+            today = pd.Timestamp(dt.date.today())
+            upcoming = []
+            for stamp in rows.index:
+                try:
+                    when = pd.Timestamp(stamp).tz_localize(None)
+                except (TypeError, ValueError, AttributeError):
+                    continue
+                if pd.notna(when) and when >= today:
+                    upcoming.append(when)
+            if upcoming:
+                out["nextEarnings"] = min(upcoming).date().isoformat()
+    except Exception:
+        pass
+
+    out["ok"] = any(out[field] is not None for field in (
+        "insidersPercentHeld", "institutionsPercentHeld", "shares",
+        "recommendations", "earningsSurprises", "nextEarnings"))
+    return out

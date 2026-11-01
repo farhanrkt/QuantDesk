@@ -1,4 +1,5 @@
 "use client";
+import { palette } from "@/lib/palette";
 
 /**
  * Last-resort boundary: an error thrown by the root layout itself, which
@@ -14,7 +15,7 @@ export default function GlobalError({
       <body
         style={{
           margin: 0, minHeight: "100vh", display: "flex", alignItems: "center",
-          justifyContent: "center", background: "#080C10", color: "#E7EEF5",
+          justifyContent: "center", background: palette.ink, color: palette.chalk,
           fontFamily: "ui-monospace, monospace", padding: "1rem",
         }}
       >
@@ -26,7 +27,7 @@ export default function GlobalError({
         >
           <div style={{
             fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.18em",
-            color: "#FF6B6B", marginBottom: "0.75rem",
+            color: palette.dist, marginBottom: "0.75rem",
           }}>
             QuantDesk failed to start
           </div>
@@ -35,7 +36,7 @@ export default function GlobalError({
             between sessions.
           </p>
           {error.digest && (
-            <p style={{ fontSize: "0.7rem", color: "#7A8CA0", marginTop: "0.75rem" }}>
+            <p style={{ fontSize: "0.7rem", color: palette.ash, marginTop: "0.75rem" }}>
               Reference: {error.digest}
             </p>
           )}
@@ -45,7 +46,7 @@ export default function GlobalError({
             style={{
               marginTop: "1.25rem", height: "2.25rem", padding: "0 1rem", borderRadius: 4,
               border: "1px solid rgba(91,141,239,0.5)", background: "rgba(91,141,239,0.1)",
-              color: "#E7EEF5", font: "inherit", fontSize: "0.65rem",
+              color: palette.chalk, font: "inherit", fontSize: "0.65rem",
               textTransform: "uppercase", letterSpacing: "0.14em", cursor: "pointer",
             }}
           >

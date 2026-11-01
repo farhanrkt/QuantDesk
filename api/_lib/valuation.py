@@ -66,7 +66,7 @@ class ValuationError(Exception):
 
     def __init__(self, message: str, manual_required: bool = False,
                  missing=(), suggested: Optional[dict] = None,
-                 engine: Optional[str] = None):
+                 engine: Optional[str] = None, cause: Optional[str] = None):
         super().__init__(message)
         self.message = message
         self.manual_required = bool(manual_required)
@@ -82,6 +82,10 @@ class ValuationError(Exception):
         # number, from guessing identity out of a dict's keys — the same mistake
         # `_lib/symbols.py` exists to prevent.
         self.engine = engine
+        # WHICH REFUSAL, as a value, for the two a caller acts on: "not-a-company"
+        # is final, "unknown-sector" is a throttle a sweep retries. Prose is
+        # reworded; a caller sniffing it for a keyword breaks when it is.
+        self.cause = cause
 
     def as_detail(self) -> dict:
         return {
@@ -90,6 +94,7 @@ class ValuationError(Exception):
             "missing": self.missing,
             "suggested": self.suggested,
             "engine": self.engine,
+            "cause": self.cause,
         }
 
 
@@ -151,6 +156,9 @@ ROW_ALIASES = {
         "Purchase Of PPE", "Net PPE Purchase And Sale",
     ],
     "fcf": ["Free Cash Flow"],
+    # Cash with the short-term investments it is usually parked in. Read first
+    # by `extract_balance_items`; see there for the measurement.
+    "cash_and_short_term": ["Cash Cash Equivalents And Short Term Investments"],
     "cash": [
         "Cash And Cash Equivalents",
         "Cash Cash Equivalents And Short Term Investments",
@@ -181,6 +189,10 @@ ROW_ALIASES = {
     "current_liabilities": ["Current Liabilities", "Total Current Liabilities"],
     "retained_earnings": ["Retained Earnings"],
     "ebit": ["EBIT", "Operating Income", "Earnings Before Interest And Taxes"],
+    # OPERATING INCOME FIRST, which `ebit` is not: its first alias is EBIT, and
+    # the two differ by non-operating items. The company view charts the line
+    # the business earns from operations, so it asks for that line by name.
+    "operating_income": ["Operating Income", "Total Operating Income As Reported"],
     "total_liabilities": [
         "Total Liabilities Net Minority Interest", "Total Liabilities",
     ],
@@ -299,13 +311,31 @@ def build_fcf_history(cashflow, years: int = 4) -> pd.DataFrame:
 
 
 def extract_balance_items(balance):
-    cash = _first_valid(_get_row(balance, "cash"), 0.0)
+    """Cash, total debt, and what the cash figure is, for the equity bridge.
+
+    CASH AND SHORT-TERM INVESTMENTS, WHERE THE BALANCE SHEET REPORTS THEM. The
+    bridge from enterprise to equity value adds what the business holds and
+    does not need to operate, and a treasury bill bought with spare cash is as
+    much the shareholders' as the cash was. This read "Cash And Cash
+    Equivalents" alone until the November 2026 audit. Measured then across
+    2,844 non-financial records in the local cache whose statements and shares
+    share a currency: the short-term investments it left out were nothing for
+    the median company, but at least 5% of market value for 420 (15%) and at
+    least 10% for 280 — cash-rich technology and biotechnology, mostly. Longer
+    holdings are still left out: a stake listed as a long-term investment is
+    not always spare cash, and nothing here can tell which.
+    """
+    liquid = _first_valid(_get_row(balance, "cash_and_short_term"), np.nan)
+    if np.isfinite(liquid):
+        cash, label = liquid, "Cash & short-term investments"
+    else:
+        cash, label = _first_valid(_get_row(balance, "cash"), 0.0), "Cash & equivalents"
     total_debt = _first_valid(_get_row(balance, "total_debt"), np.nan)
     if not np.isfinite(total_debt):
         st_debt = _first_valid(_get_row(balance, "short_term_debt"), 0.0)
         lt_debt = _first_valid(_get_row(balance, "long_term_debt"), 0.0)
         total_debt = (st_debt or 0.0) + (lt_debt or 0.0)
-    return float(cash or 0.0), float(total_debt or 0.0)
+    return float(cash or 0.0), float(total_debt or 0.0), label
 
 
 def effective_tax_rate(income, default: float) -> float:
@@ -314,6 +344,17 @@ def effective_tax_rate(income, default: float) -> float:
     if np.isfinite(tax) and np.isfinite(pretax) and pretax > 0:
         return float(np.clip(tax / pretax, 0.05, 0.40))
     return default
+
+
+def _reports_cost_of_revenue(income) -> bool:
+    """Whether the income statement carries a cost of revenue or gross profit line.
+
+    No bank's does — see the unknown-sector branch of `analyze` for the count.
+    """
+    if not isinstance(income, pd.DataFrame) or income.empty:
+        return False
+    labels = {str(label).strip().lower() for label in income.index}
+    return bool(labels & {"cost of revenue", "reconciled cost of revenue", "gross profit"})
 
 
 def clip_beta(beta) -> float:
@@ -584,6 +625,145 @@ def implied_growth(engine, price, base, rate, terminal_growth,
         return None
 
 
+# =============================================================================
+# 5a. SENSITIVITY: the same model across a grid of its two biggest inputs
+# =============================================================================
+# Growth moves in two-point steps, the discount rate in one-point steps: a
+# point of discount rate moves a DCF roughly as much as two points of growth,
+# so the grid spans comparable distances in both directions.
+SENS_GROWTH_STEPS = (-0.06, -0.04, -0.02, 0.0, 0.02, 0.04, 0.06)
+SENS_RATE_STEPS = (-0.02, -0.01, 0.0, 0.01, 0.02)
+# The same bounds the /api/intrinsic-value route accepts for these inputs, so
+# the grid never shows a cell nobody could type into the assumption fields.
+SENS_GROWTH_BOUNDS = (-0.50, 1.00)
+SENS_RATE_BOUNDS = (0.005, 0.50)
+
+SPREAD_REFUSAL = ("Within 1.5 points of perpetual growth the terminal value diverges, so "
+                  "no value is shown here rather than the clamped number the model would "
+                  "otherwise produce.")
+RI_IMPLIED_REASON = ("Residual income values book value plus excess returns rather than a "
+                     "growing stream, so no single growth rate is the lever a price implies.")
+
+
+def _axis(centre: float, steps, bounds) -> tuple[list[float], int]:
+    """Centre plus each step, clipped to bounds, de-duplicated, centre kept exact."""
+    low, high = bounds
+    values: list[float] = []
+    for step in steps:
+        value = float(centre) if step == 0 else float(np.clip(centre + step, low, high))
+        if not any(abs(value - v) < 1e-9 for v in values):
+            values.append(value)
+    values.sort()
+    return values, next(i for i, v in enumerate(values) if abs(v - centre) < 1e-9)
+
+
+def sensitivity_grid(engine, base, growth, rate, terminal_growth, *, cash=0.0, debt=0.0,
+                     shares=1.0, payout=0.0, price=None, fmt=None,
+                     growth_steps=SENS_GROWTH_STEPS, rate_steps=SENS_RATE_STEPS) -> dict:
+    """The base-case value per share across a grid of growth and discount rate.
+
+    WHY A GRID AND NOT ANOTHER NUMBER. The panel already says the answer moves
+    enormously with the growth and discount rate assumed, and tells the reader
+    to change an input and watch. A grid does that for them, in both directions
+    at once, so "how much does this rest on my 10%?" has an answer on the page.
+
+    THE DETERMINISTIC BASE CASE, NOT THE SIMULATION'S MEDIAN. The assumed cell
+    is the same calculation as `baseCase.impliedPrice`, so the grid and the
+    figure above it agree to the last digit. The Monte Carlo median differs from
+    it by construction (the model is non-linear in both inputs), and a panel
+    quoting two different "centres" is the kind of contradiction this codebase
+    keeps having to remove.
+
+    NOTHING IS COMPARED WITH THE PRICE HERE. The price travels beside the grid
+    so the reader can do that themselves; there is no count of cells above it,
+    no fill, no tone. A grid of fair values coloured against price is a buy/sell
+    heat map, which PRODUCT.md constraint 1 refuses.
+
+    A CELL TOO CLOSE TO PERPETUAL GROWTH IS REFUSED, NOT CLAMPED. The core
+    silently floors the spread at MIN_SPREAD, so computing such a cell would
+    print a number that is not the stated formula. It is None, and says why.
+
+    One vectorised call: the valid cells are flattened into the draw axis of the
+    same functions the simulation uses, and reshaped back.
+    """
+    fmt = fmt or (lambda v: f"{v:,.2f}")
+    if engine == "RI":
+        rows, row_at = _axis(growth, growth_steps, RI_ROE_BOUNDS)
+        row_axis = {"name": "roe", "label": "Return on equity", "values": rows, "assumedIndex": row_at}
+    else:
+        rows, row_at = _axis(growth, growth_steps, SENS_GROWTH_BOUNDS)
+        row_axis = {"name": "growth", "label": "Growth, years 1-5", "values": rows,
+                    "assumedIndex": row_at}
+    cols, col_at = _axis(rate, rate_steps, SENS_RATE_BOUNDS)
+    rate_label = "WACC" if engine == "DCF" else "Cost of equity"
+
+    g_grid, r_grid = np.meshgrid(np.array(rows), np.array(cols), indexing="ij")
+    if engine == "RI":
+        valid = np.ones_like(g_grid, dtype=bool)
+    else:
+        valid = (r_grid - terminal_growth) >= MIN_SPREAD - 1e-12
+    g_flat, r_flat = g_grid[valid], r_grid[valid]
+
+    values = np.full(g_grid.shape, np.nan)
+    if g_flat.size:
+        if engine == "DCF":
+            out = dcf_implied_price(base, g_flat, r_flat, np.full(g_flat.shape, terminal_growth),
+                                    cash, debt, shares)
+        elif engine == "DDM":
+            out = ddm_implied_price(base, g_flat, r_flat, np.full(g_flat.shape, terminal_growth))
+        else:
+            out, _, _, _ = residual_income_value(np.full(g_flat.shape, base), g_flat, r_flat,
+                                                 np.full(g_flat.shape, payout))
+        values[valid] = np.asarray(out, dtype=float).ravel()
+
+    cells = []
+    for i in range(len(rows)):
+        line = []
+        for j in range(len(cols)):
+            v = values[i, j]
+            if not valid[i, j]:
+                line.append({"value": None, "label": None, "refused": "spread"})
+            elif not np.isfinite(v):
+                line.append({"value": None, "label": None, "refused": "undefined"})
+            else:
+                line.append({"value": float(v), "label": fmt(float(v)), "refused": None})
+        cells.append(line)
+
+    implied_row = None
+    if engine in ("DCF", "DDM"):
+        implied_row = []
+        for r in cols:
+            if r - terminal_growth < MIN_SPREAD - 1e-12:
+                implied_row.append({"rate": r, "impliedGrowth": None, "reason": "spread"})
+                continue
+            g = implied_growth(engine, price, base, r, terminal_growth,
+                               cash=cash, debt=debt, shares=shares)
+            implied_row.append({"rate": r, "impliedGrowth": g,
+                                "reason": None if g is not None else "unreachable"})
+
+    price_f = _safe_float(price)
+    return {
+        "engine": engine,
+        "rowAxis": row_axis,
+        "colAxis": {"name": "rate", "label": rate_label, "values": cols, "assumedIndex": col_at},
+        "cells": cells,
+        "assumed": {"row": row_at, "col": col_at},
+        "terminalGrowth": float(terminal_growth),
+        "price": float(price_f) if np.isfinite(price_f) else None,
+        "priceLabel": fmt(float(price_f)) if np.isfinite(price_f) else None,
+        "impliedRow": implied_row,
+        "impliedRowReason": RI_IMPLIED_REASON if engine == "RI" else None,
+        "refusals": {"spread": SPREAD_REFUSAL,
+                     "unreachable": ("Today's price lies outside what any growth rate between "
+                                     "-60% and +60% a year can produce at this discount rate.")},
+        "reading": ("Each cell is the model's base-case value per share at that "
+                    f"{'return on equity' if engine == 'RI' else 'growth rate'} and "
+                    f"{rate_label if rate_label.isupper() else rate_label.lower()}, with every "
+                    "other input as assumed. It is not a "
+                    "forecast, and the market price sits beside the grid rather than inside it."),
+    }
+
+
 def base_case_schedule(engine, base, growth, rate, terminal_growth,
                        cash=0.0, debt=0.0, shares=1.0):
     projected, pv_explicit, pv_terminal, terminal_value = pv_of_growing_stream(
@@ -820,8 +1000,48 @@ def analyze(
     data = fetch_company(symbol)
     rf_rate, rf_source = fetch_risk_free_rate(market["code"], market["risk_free_default"])
 
-    auto_engine, route_reason = detect_engine(data.get("sector"), data.get("industry"))
     choice = (engine_choice or "auto").lower()
+
+    # A FUND, A COIN OR AN INDEX HAS NO BUSINESS TO VALUE. Each used to reach
+    # the DCF and be refused for a missing cash-flow statement, with advice to
+    # type one in — for BTC-USD and SPY alike. What the listing is decides it.
+    kind = market_data.non_company(data, symbol)
+    if kind and choice == "auto":
+        raise ValuationError(
+            f"{symbol} is {kind}, not a company. A valuation discounts a business's "
+            f"cash flows or dividends, and {kind} has no business of its own to "
+            f"value, so this lens does not apply. That is what the listing is, not "
+            f"a gap in the data.", cause="not-a-company")
+
+    # AN UNKNOWN SECTOR IS NOT A NON-FINANCIAL SECTOR — the rule `quality.py`
+    # has followed since an IDX bank was scored as a manufacturer. This engine
+    # did not: an empty sector routed to the DCF, so a bank whose `.info` was
+    # throttled was valued as an ordinary company. Found in the November audit
+    # on JPM, refused for "negative free cash flow" and offered a form to type
+    # one in; a bank with positive free cash flow would have been given a fair
+    # value instead.
+    #
+    # THE STATEMENTS CAN STILL SAY IT IS NOT A BANK. Refusing every name with no
+    # sector was too blunt — the same audit throttled ITMG.JK, a coal miner, a
+    # few minutes later. A bank's income statement has no cost of revenue. In
+    # the local cache, 0 of 296 banks (regional and diversified) report a cost
+    # of revenue or gross profit line, against 3,042 of 3,257 non-financial
+    # companies; 4 of 102 insurers do (TRUP, PRCH, APIC.JK, ABX), the residue
+    # this leaves. So a company that reports one is valued as an ordinary
+    # company and the notice says why; one that does not is refused.
+    sectorless = (choice == "auto" and not (data.get("sector") or "").strip()
+                  and not (data.get("industry") or "").strip())
+    if sectorless and not _reports_cost_of_revenue(data.get("income")):
+        raise ValuationError(
+            f"No sector or industry came back for {symbol}, so there is no way to "
+            f"tell whether it is a bank, and a bank cannot be valued on free cash "
+            f"flow. This is the signature of a throttled fetch rather than a "
+            f"company with no sector, and running the lenses again in a couple of "
+            f"minutes will usually resolve it.", cause="unknown-sector")
+
+    auto_engine, route_reason = detect_engine(data.get("sector"), data.get("industry"))
+    if sectorless:
+        route_reason = "no sector came back; its income statement reports a cost of revenue, which no bank's does"
     if choice == "dcf":
         engine, route_reason = "DCF", "manual override"
     elif choice == "ddm":
@@ -920,6 +1140,7 @@ def analyze(
             f"move in the exchange rate moves this valuation with it.")})
 
     cash_used = debt_used = 0.0
+    cash_label = "Cash & equivalents"
     diagnostics_rows = []
     history_table = []
     bank = None
@@ -950,6 +1171,12 @@ def analyze(
                                 "income (book value plus discounted excess returns) rather "
                                 "than on dividends. Ohlson (1995)."})
 
+    if sectorless:
+        notices.append({"tone": "warn", "text":
+                        "No sector or industry came back for this listing — usually a throttled "
+                        "fetch. It is valued as an ordinary company because its income statement "
+                        "reports a cost of revenue, which a bank's does not; if it is a financial "
+                        "firm after all, this model does not describe it."})
     if auto_engine == "DDM" and engine == "DDM":
         notices.append({"tone": "info", "text":
                         "Financial institution detected. Routed from DCF to Dividend Discount Model."})
@@ -970,7 +1197,7 @@ def analyze(
     # ---------------- ENGINE 1 — DCF ----------------
     if engine == "DCF":
         fcf_history = build_fcf_history(data["cashflow"])
-        cash_auto, debt_auto = extract_balance_items(data["balance"])
+        cash_auto, debt_auto, cash_label = extract_balance_items(data["balance"])
         interest_expense = _first_valid(_get_row(data["income"], "interest_expense"), np.nan)
 
         vals = (fcf_history["Free Cash Flow"].astype(float).values
@@ -1350,6 +1577,15 @@ def analyze(
             shares=shares if engine == "DCF" else 1.0,
         )
 
+    # The same model across a grid of its two biggest inputs. Computed from the
+    # inputs actually used above, so its assumed cell IS the base case.
+    sensitivity = sensitivity_grid(
+        engine, base_value, growth_input, discount_rate, terminal_growth,
+        cash=cash_used, debt=debt_used, shares=shares if engine == "DCF" else 1.0,
+        payout=payout_used if engine == "RI" else 0.0, price=price,
+        fmt=lambda v: fmt_price(v, market),
+    )
+
     sims = run_monte_carlo(
         engine, base_value, growth_input, discount_rate, terminal_growth,
         n_sims=n_sims, sd_growth=sd_g, sd_rate=sd_r, sd_terminal=sd_t,
@@ -1466,7 +1702,7 @@ def analyze(
             ("PV of Year 1-5 FCF", fmt_big(summary["pv_explicit"], market)),
             ("PV of terminal value", fmt_big(summary["pv_terminal"], market)),
             ("Enterprise value", fmt_big(summary["gross"], market)),
-            ("+ Cash & equivalents", fmt_big(cash_used, market)),
+            (f"+ {cash_label}", fmt_big(cash_used, market)),
             ("- Total debt", fmt_big(debt_used, market)),
             ("Equity value", fmt_big(summary["equity_value"], market)),
             ("/ Shares outstanding", f"{shares:,.0f}"),
@@ -1510,6 +1746,13 @@ def analyze(
         # Currency provenance. Null unless the accounts and the shares disagree.
         "reportingCurrency": reporting if reporting and reporting != trading else None,
         "fxRate": _nullable(data.get("fx_rate")),
+        # THE APP OVERRODE THE SOURCE'S CURRENCY LABEL ON THIS NAME. Present
+        # only when `market_data._apply_fx` could show that converting would put
+        # the company's revenue far out of line with its own market value while
+        # the unconverted figures are in line with it. It is a rare and loud
+        # thing to do, so it is said rather than done quietly — a reader must
+        # not meet it as an unexplained difference from the filing.
+        "fxLabelOverride": data.get("fx_skipped"),
         "priceSource": ("manual entry" if np.isfinite(manual_price_f) and manual_price_f > 0
                         else data.get("price_source")),
         "priceAsOf": (None if np.isfinite(manual_price_f) and manual_price_f > 0
@@ -1561,6 +1804,7 @@ def analyze(
             "histogram": histogram,
         },
         "verdict": verdict,
+        "sensitivity": sensitivity,
         "schedule": schedule_rows,
         "streamLabel": stream_label,
         "bridge": [{"component": k, "amount": v} for k, v in bridge],

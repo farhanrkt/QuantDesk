@@ -8,6 +8,11 @@ __pycache__
 # --- build output ---
 .next
 out
+# A build-time copy of docs/field-manual.html; docs/ is the one source.
+public/docs/
+# The accessibility audit's engine, copied in for a run and deleted after
+# (DESIGN.md). 580 KB of tooling must never ship as an asset.
+public/axe.min.js
 *.tsbuildinfo
 # Next regenerates this on every build; it is in create-next-app's ignore list too.
 next-env.d.ts
@@ -41,3 +46,17 @@ Thumbs.db
 # --- logs ---
 *.log
 npm-debug.log*
+
+# --- the market scanner's private output ---
+# Both are outputs of `scripts/scan_market.py` and both are deliberately
+# untracked. `reports/` holds one buy/sell ranking per run — the most personal
+# thing this repository can produce and the one file in it that is about the
+# owner rather than about a company, which is the same argument that keeps the
+# thesis journal in the browser. `.scan_cache/` is a per-day copy of provider
+# data, regenerable and large.
+.scan_cache/
+reports/
+
+# Fundamentals cached across days so a multi-day whole-market sweep can reuse
+# the statements it already paid for. Local, regenerable, and large.
+.fundamentals_cache/

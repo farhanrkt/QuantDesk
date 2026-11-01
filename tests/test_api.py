@@ -29,6 +29,58 @@ def client():
     return TestClient(index.app)
 
 
+def planted_company(**overrides) -> dict:
+    """A company record shaped like `market_data.company`, with no network behind it."""
+    import pandas as pd
+    years = [pd.Timestamp(f"{2025 - i}-12-31") for i in range(4)]
+    income = pd.DataFrame({y: {"Total Revenue": r, "Net Income": n, "Operating Income": o}
+                           for y, r, n, o in zip(years, [400.0, 360.0, 330.0, 300.0],
+                                                 [40.0, 36.0, 30.0, 25.0],
+                                                 [60.0, 55.0, 48.0, 40.0], strict=True)})
+    cashflow = pd.DataFrame({y: {"Operating Cash Flow": c, "Free Cash Flow": f}
+                             for y, c, f in zip(years, [50.0, 45.0, 40.0, 30.0],
+                                                [20.0, -5.0, 10.0, 8.0], strict=True)})
+    balance = pd.DataFrame({y: {"Stockholders Equity": 200.0, "Cash And Cash Equivalents": 30.0,
+                                "Total Debt": 90.0, "Long Term Debt": 90.0} for y in years})
+    record = {
+        "ok": True, "name": "Planted Corp", "sector": "Technology",
+        "industry": "Software - Infrastructure", "business_summary": "Planted Corp sells planted things.",
+        "employees": 1200.0, "country": "United States", "website": "https://example.com",
+        "exchange": "NasdaqGS", "price": 50.0, "shares": 10.0, "beta": 1.0, "currency": "USD",
+        "financial_currency": "USD", "market_cap": 500.0, "price_as_of": "2026-10-23",
+        "price_source": "last daily close", "ttm_dividend": 1.0,
+        "dividend_history": pd.DataFrame({"Year": ["2026", "2025", "2024"],
+                                          "Dividend / Share": [0.5, 1.0, 0.9]}),
+        "income": income, "cashflow": cashflow, "balance": balance, "fx_rate": None,
+    }
+    record.update(overrides)
+    return record
+
+
+@pytest.fixture(autouse=True)
+def offline_company(monkeypatch):
+    """Every route test gets a planted company record and earnings calendar.
+
+    THE QUALITY LEG OF /api/confluence WAS REACHING THE NETWORK. The confluence
+    tests stubbed the anomaly, technical, valuation and news engines but not the
+    company fetch the quality leg makes, so each of them called yfinance and
+    passed on whatever came back — which is the test that gets skipped the day
+    the upstream is down. The company leg reads the same record plus the
+    earnings calendar, so both are planted here for every test; a test that
+    needs a different record patches over this one.
+    """
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda symbol: planted_company())
+    monkeypatch.setattr(index.market_data, "earnings_calendar", lambda symbol: {
+        "available": True, "dates": [], "past": ["2026-07-30"], "next": "2026-10-30",
+        "asOf": "2026-10-25"})
+
+    # The US headlines ask Yahoo's search first. Offline it fails, so every test
+    # exercises the Google path unless it plants Yahoo results itself.
+    def no_yahoo(query, count=8):
+        raise OSError("offline")
+    monkeypatch.setattr(index.market_data, "news_search", no_yahoo)
+
+
 # --------------------------------------------------------------------------- #
 # C4 — ticker validation
 # --------------------------------------------------------------------------- #
@@ -54,7 +106,7 @@ def test_ticker_pattern_rejects_hostile_input(bad):
 @pytest.mark.parametrize("bad", ["../../etc/passwd", 'AAPL"x', "A" * 21])
 def test_routes_reject_bad_tickers_with_422(client, bad):
     for path in ("/api/isolation-forest", "/api/technical-analysis",
-                 "/api/intrinsic-value", "/api/news", "/api/confluence"):
+                 "/api/intrinsic-value", "/api/news", "/api/confluence", "/api/company"):
         response = client.get(path, params={"ticker": bad})
         assert response.status_code == 422, f"{path} accepted {bad!r}"
 
@@ -283,6 +335,144 @@ def test_the_feed_read_is_bounded():
     assert "raw = response.read()" not in source, "an unbounded read must not return"
 
 
+def planted_board(available: bool = True) -> dict:
+    """A board built offline: every instrument on a quiet two-year walk."""
+    import numpy as np
+    import pandas as pd
+
+    from _lib import marketboard
+
+    if not available:
+        return marketboard.build({})
+    index_ = pd.bdate_range(end="2026-10-30", periods=500)
+    frames = {}
+    for n, instrument in enumerate(marketboard.INSTRUMENTS):
+        closes = 100 * np.exp(np.cumsum(np.random.default_rng(n).normal(0, 0.01, 500)))
+        frames[instrument.symbol] = pd.DataFrame(
+            {"Open": closes, "High": closes, "Low": closes, "Close": closes,
+             "Volume": np.full(500, 1.0)}, index=index_)
+    return marketboard.build(frames, fetched_at="2026-11-01T09:00+00:00")
+
+
+def test_the_market_board_takes_no_parameters_and_is_cached_five_minutes(client, monkeypatch):
+    """One cache entry for every reader, and no ticker anywhere in the request."""
+    monkeypatch.setattr(index.marketboard, "fetch", lambda: planted_board())
+    response = client.get("/api/markets/today")
+    assert response.status_code == 200
+    assert "s-maxage=300" in response.headers["Cache-Control"]
+    assert "max-age=0" in response.headers["Cache-Control"]
+    assert "stale-while-revalidate=600" in response.headers["CDN-Cache-Control"]
+    body = response.json()
+    assert [row["key"] for row in body["rows"]] == [i.key for i in index.marketboard.INSTRUMENTS]
+    assert set(body["explain"]["markets"]) == {"US", "ID"}
+    assert all(row["tone"] == "neutral" for row in body["rows"])
+
+
+def test_a_board_with_no_prices_at_all_is_an_error_not_an_empty_board(client, monkeypatch):
+    monkeypatch.setattr(index.marketboard, "fetch", lambda: planted_board(available=False))
+    assert client.get("/api/markets/today").status_code == 502
+
+
+def test_headline_topics_come_from_a_declared_list(client, monkeypatch):
+    """A request picks a topic; it can never write the query."""
+    from _lib import news
+    monkeypatch.setattr(news, "_fetch_feed", lambda url: b"<rss><channel></channel></rss>")
+    assert client.get("/api/markets/headlines", params={"topics": "market,oil"}).status_code == 200
+    assert client.get("/api/markets/headlines", params={"topics": "market,evil"}).status_code == 422
+    assert client.get("/api/markets/headlines",
+                      params={"topics": "market,oil,gold,copper,rates"}).status_code == 422
+    assert client.get("/api/markets/headlines",
+                      params={"topics": "stock market"}).status_code == 422
+
+
+def test_a_headline_feed_that_failed_is_not_reported_as_no_news(client, monkeypatch):
+    from _lib import news
+
+    def broken(url):
+        raise OSError("timed out")
+
+    monkeypatch.setattr(news, "_fetch_feed", broken)
+    feed = client.get("/api/markets/headlines",
+                      params={"market": "ID", "topics": "oil"}).json()["topics"][0]
+    assert feed["available"] is False and feed["items"] == [] and feed["reason"]
+
+    monkeypatch.setattr(news, "_fetch_feed", lambda url: b"<rss><channel></channel></rss>")
+    feed = client.get("/api/markets/headlines",
+                      params={"market": "ID", "topics": "oil"}).json()["topics"][0]
+    assert feed["available"] is True and feed["items"] == []
+    assert feed["query"] == "harga minyak", "Indonesian readers get the Indonesian query"
+
+
+def test_market_headlines_are_newest_first_and_ask_for_the_past_day(monkeypatch):
+    from _lib import news
+    monkeypatch.setattr(news.market_data, "news_search", lambda q, count=8: [])
+    seen = {}
+    feed = (b"<rss><channel>"
+            b"<item><title>Older story - Wire</title><source>Wire</source>"
+            b"<pubDate>Fri, 30 Oct 2026 08:00:00 GMT</pubDate></item>"
+            b"<item><title>Newer story - Desk</title><source>Desk</source>"
+            b"<pubDate>Sat, 31 Oct 2026 16:00:00 GMT</pubDate></item>"
+            b"</channel></rss>")
+
+    def fetch(url):
+        seen["url"] = url
+        return feed
+
+    monkeypatch.setattr(news, "_fetch_feed", fetch)
+    out = news.fetch_headlines("oil", "US")
+    assert [item["title"] for item in out["items"]] == ["Newer story", "Older story"]
+    assert "when%3A1d" in seen["url"]
+
+
+def test_us_headlines_prefer_yahoo_with_images_and_fall_back_to_google(monkeypatch):
+    import datetime as dt
+    import email.utils
+
+    from _lib import news
+    stamp = email.utils.format_datetime(dt.datetime.now(dt.timezone.utc))
+    monkeypatch.setattr(news.market_data, "news_search", lambda q, count=8: [
+        {"title": "Oil rallies", "source": "Wire", "link": "https://finance.yahoo.com/a",
+         "published": stamp, "image": {"url": "https://media.zenfs.com/a.jpg",
+                                       "width": 1920, "height": 1080}}])
+    out = news.fetch_headlines("oil", "US")
+    assert out["source"] == "Yahoo Finance" and out["items"][0]["image"]
+
+    monkeypatch.setattr(news.market_data, "news_search", lambda q, count=8: [])
+    monkeypatch.setattr(news, "_fetch_feed", lambda url: b"<rss><channel></channel></rss>")
+    out = news.fetch_headlines("oil", "US")
+    assert out["source"] == "Google News", "nothing recent from Yahoo falls back, not to empty"
+
+
+def test_a_thumbnail_from_any_other_host_is_dropped():
+    from _lib import market_data
+    keep = market_data._news_image({"resolutions": [
+        {"url": "https://media.zenfs.com/big.jpg", "width": 1920, "height": 1080},
+        {"url": "https://evil.example/huge.jpg", "width": 9999, "height": 9999},
+        {"url": "http://s.yimg.com/plain.jpg", "width": 4000, "height": 4000}]})
+    assert keep["url"] == "https://media.zenfs.com/big.jpg", "https on an allowed host only"
+    assert market_data._news_image({"resolutions": [
+        {"url": "https://evil.example/a.jpg", "width": 10, "height": 10}]}) is None
+
+
+def test_the_calendar_takes_nothing_and_is_cached_an_hour(client):
+    response = client.get("/api/markets/calendar")
+    assert response.status_code == 200
+    assert "s-maxage=3600" in response.headers["Cache-Control"]
+    body = response.json()
+    assert {"events", "kinds", "exchanges", "coverage", "pending", "sources"} <= set(body)
+    assert body["pending"], "what is not published yet is stated"
+
+
+def test_watchlist_report_dates_travel_in_a_body_and_are_never_stored(client):
+    response = client.post("/api/markets/earnings", json={"tickers": ["AAPL", "BBCA.JK"]})
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert [item["ticker"] for item in response.json()["items"]] == ["AAPL", "BBCA.JK"]
+    too_many = client.post("/api/markets/earnings", json={"tickers": [f"T{i}" for i in range(21)]})
+    assert too_many.status_code == 422
+    assert client.get("/api/markets/earnings").status_code == 405
+
+
 def test_the_rate_limiter_reads_the_routed_path_not_the_reconstructed_url(client):
     """A FORGED HOST HEADER USED TO TURN THE CAP OFF ENTIRELY.
 
@@ -456,21 +646,66 @@ def test_an_idx_holding_keeps_its_suffix_under_a_us_market(client, monkeypatch):
     assert seen["holdings"] == ["BBCA.JK", "MSFT"]
 
 
-def test_post_is_permitted_for_this_route_and_no_other(client):
-    """The CORS allowlist gained POST for one route. Every other endpoint must
+# THE ROUTES WHOSE INPUT IS PERSONAL, AND NO OTHERS. Each is a POST for the same
+# reason — a list somebody keeps is a fact about them and URLs are logged by every
+# hop — and each answers `no-store`. A third entry here should come with that
+# argument made again, not by analogy.
+# The watchlist's report dates joined these on 1 November 2026: the same kind of
+# input, a list a reader keeps, so the same treatment.
+PERSONAL_POST_ROUTES = {"/api/portfolio", "/api/rank/list", "/api/markets/earnings"}
+
+
+def test_post_is_permitted_for_personal_input_and_nothing_else(client):
+    """POST exists for routes whose input is personal. Every other endpoint must
     still refuse it, so the relaxation stays as narrow as it was argued to be."""
-    for path in ("/api/confluence", "/api/rank", "/api/quality", "/api/technical-analysis"):
+    for path in ("/api/confluence", "/api/rank", "/api/quality", "/api/technical-analysis",
+                 "/api/symbols", "/api/peers"):
         assert client.post(path, json={}).status_code == 405, path
+    posts = {route.path for route in index.app.routes
+             if "POST" in getattr(route, "methods", set())}
+    assert posts == PERSONAL_POST_ROUTES
+
+
+def test_ranking_a_readers_own_list_is_never_cached(client, monkeypatch):
+    seen = {}
+
+    def fake_scan(symbols, market_code):
+        seen["symbols"], seen["market"] = symbols, market_code
+        return {"rows": [], "signals": [], "weights": {}, "correlation": {"available": False},
+                "requested": len(symbols), "fetched": 0, "ranked": 0, "missing": [],
+                "benchmark": None}
+    monkeypatch.setattr(index.ranking, "scan", fake_scan)
+    monkeypatch.setattr(index.ranking, "validation", lambda universe: {"available": False})
+    response = client.post("/api/rank/list", json={"tickers": ["bbca", "TLKM.JK"], "market": "ID"})
+    assert response.status_code == 200
+    assert "no-store" in response.headers["Cache-Control"]
+    assert seen == {"symbols": ["BBCA.JK", "TLKM.JK"], "market": "ID"}
+    assert response.json()["universe"]["name"] == "Your list"
+
+
+@pytest.mark.parametrize("body", [
+    {"tickers": []},
+    {"tickers": ["../etc/passwd"]},
+    {"tickers": ["AAPL"] * 251},
+    {"tickers": ["AAPL"], "market": "XX"},
+])
+def test_ranking_a_list_validates_like_the_query_did(client, body):
+    assert client.post("/api/rank/list", json=body).status_code in (400, 422)
 
 
 # --------------------------------------------------------------------------- #
 # Q5/Q8 — response headers and payload size
 # --------------------------------------------------------------------------- #
 def test_cache_header_serves_the_edge_and_revalidates_the_browser(client):
-    cache = client.get("/api/health").headers["Cache-Control"]
+    headers = client.get("/api/health").headers
+    cache = headers["Cache-Control"]
     assert "s-maxage=60" in cache      # edge caches for a minute
     assert "max-age=0" in cache        # browser always revalidates
     assert "no-store" not in cache     # ...which would suppress the edge cache
+    # Browsers honour stale-while-revalidate too, and with max-age=0 it let
+    # Chrome serve the previous answer for five minutes. Edge only, now.
+    assert "stale-while-revalidate" not in cache
+    assert "stale-while-revalidate=300" in headers["CDN-Cache-Control"]
 
 
 def test_thin_for_wire_never_drops_a_flagged_day():
@@ -587,6 +822,85 @@ def test_the_ranking_routes_are_rate_limited_more_tightly_than_the_default(clien
 
     default_limit, _window = RATE_LIMITS[None]
     assert RATE_LIMITS["/api/rank"][0] < default_limit
+    assert RATE_LIMITS["/api/rank/list"] == RATE_LIMITS["/api/rank"], (
+        "the same scan in a POST body costs the same and is capped the same"
+    )
     assert RATE_LIMITS["/api/rank/deepen"][0] < RATE_LIMITS["/api/rank"][0], (
         "deepening does not batch, so it must be capped harder than ranking"
     )
+
+
+# --------------------------------------------------------------------------- #
+# The company block: description, never a lens
+# --------------------------------------------------------------------------- #
+def _stub_lenses(monkeypatch):
+    monkeypatch.setattr(index, "whale_payload", lambda *a, **k: {"stub": "anomaly"})
+    monkeypatch.setattr(index.technical, "analyze", lambda *a, **k: {"stub": "technical"})
+    monkeypatch.setattr(index.valuation, "analyze", lambda *a, **k: {"stub": "valuation"})
+    monkeypatch.setattr(index.news, "fetch_news", lambda *a, **k: [])
+
+
+def test_confluence_carries_the_company_block(client, monkeypatch):
+    _stub_lenses(monkeypatch)
+    company = client.get("/api/confluence", params={"ticker": "FAKE"}).json()["company"]
+    assert company["ok"] is True
+    data = company["data"]
+    assert data["name"] == "Planted Corp"
+    assert data["listing"]["exchange"] == "NasdaqGS"
+    assert data["history"]["fiscalYears"] == ["FY2022", "FY2023", "FY2024", "FY2025"]
+    assert data["history"]["rows"]["revenue"] == [300.0, 330.0, 360.0, 400.0]
+    assert data["history"]["rows"]["operatingIncome"] == [40.0, 48.0, 55.0, 60.0]
+    assert data["nextEarnings"]["date"] == "2026-10-30"
+    assert "estimate" in data["nextEarnings"]["reading"]
+    assert data["profile"]["summary"].startswith("Planted Corp")
+    assert set(data["explain"]) >= {"yearsProfitable", "revenueCagr"}
+
+
+def test_the_company_block_never_changes_what_the_lenses_say(client, monkeypatch):
+    """The synthesis and the pre-trade checks read the lenses only. Their
+    output must be identical whether the company block arrived or failed."""
+    _stub_lenses(monkeypatch)
+    with_company = client.get("/api/confluence", params={"ticker": "FAKE"}).json()
+    index._RATE_HITS.clear()
+    monkeypatch.setattr(index, "company_payload",
+                        lambda symbol: (_ for _ in ()).throw(RuntimeError("no record")))
+    without = client.get("/api/confluence", params={"ticker": "FAKE"}).json()
+    assert without["company"]["ok"] is False
+    assert with_company["synthesis"] == without["synthesis"]
+    assert with_company["preTrade"] == without["preTrade"]
+
+
+def test_a_failed_company_block_sinks_nothing_else(client, monkeypatch):
+    _stub_lenses(monkeypatch)
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda symbol: {"ok": False})
+    body = client.get("/api/confluence", params={"ticker": "FAKE"}).json()
+    assert body["company"]["ok"] is False
+    assert body["anomaly"]["ok"] and body["technical"]["ok"] and body["valuation"]["ok"]
+
+
+def test_the_company_route_returns_the_same_block(client):
+    body = client.get("/api/company", params={"ticker": "fake"}).json()
+    assert body["ticker"] == "FAKE"
+    assert body["dividends"]["perShare"][-1] == {"year": "2026", "amount": 0.5, "partial": True}
+    assert body["dividends"]["available"] is True
+
+
+def test_a_dividend_record_off_by_an_exchange_rate_is_withheld(client, monkeypatch):
+    import pandas as pd
+    # A rupiah price with a dividend recorded in dollars: 0.016 against Rp 9,000
+    # is a 0.0002% "yield" — a units problem, not a dividend.
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda symbol: planted_company(
+        price=9000.0, currency="IDR",
+        dividend_history=pd.DataFrame({"Year": ["2025", "2024"], "Dividend / Share": [0.016, 0.015]})))
+    body = client.get("/api/company", params={"ticker": "FAKE.JK"}).json()
+    assert body["dividends"]["available"] is False
+    assert body["dividends"]["perShare"] == []
+    assert "units problem" in body["dividends"]["reading"]
+
+
+def test_statements_in_another_currency_say_they_were_converted(client, monkeypatch):
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda symbol: planted_company(
+        currency="IDR", financial_currency="USD", fx_rate=16000.0))
+    body = client.get("/api/company", params={"ticker": "FAKE.JK"}).json()
+    assert body["currency"]["note"] and "converted" in body["currency"]["note"]
+    assert body["history"]["currency"] == "IDR"

@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { Fragment, useMemo } from "react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import {
   ApplyButton, Field, SelectField,
@@ -18,23 +18,35 @@ import type {
 } from "@/lib/types";
 import { RankValidation } from "@/components/RankValidation";
 import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { Textarea } from "@/components/ui/input";
+import { StateCard } from "@/components/ui/state";
+import { useSessionState } from "@/lib/session";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 const CUSTOM = "__custom__";
+// A stable empty list: the session store returns its initial value by identity.
+const NO_PICKS: string[] = [];
 const DEFAULT_CUSTOM = "AAPL, NVDA, TSLA, JPM, KO, BBCA.JK, BBRI.JK, TLKM.JK";
 
-/** Percentiles get a heat colour, not a verdict colour — they are positions. */
+/**
+ * A percentile is a POSITION, so it gets weight and length — never a tone.
+ *
+ * This used to ramp from green through yellow to red, which is the server's
+ * good/caution/bad palette applied on the client to a number. A 15th
+ * percentile on "steadiness" is not bad news about the company; it is where the
+ * name sits in this scan on one measure, and the ranking's own explanation says
+ * so. Painting it `dist` re-litigated a judgement Python never made — the bug
+ * class §14 removed everywhere else — and gave the table the look of a heat map
+ * of verdicts. The bar already carries the magnitude; the text steps through
+ * the neutral ladder so the top of a column still stands out.
+ */
 function heat(percentile: number | null): string {
   if (percentile == null) return "text-faint";
-  if (percentile >= 80) return "text-acc";
-  if (percentile >= 60) return "text-acc/70";
-  if (percentile >= 40) return "text-body";
-  if (percentile >= 20) return "text-warn/80";
-  return "text-dist/80";
+  if (percentile >= 80) return "text-chalk";
+  if (percentile >= 20) return "text-body";
+  return "text-ash";
 }
-
-const HEAT_FILL = (percentile: number) =>
-  percentile >= 80 ? "#35C4A8" : percentile >= 60 ? "#35C4A899"
-    : percentile >= 40 ? "#7A8CA0" : percentile >= 20 ? "#F2C14E99" : "#FF6B6B99";
 
 /**
  * One percentile cell: the number, over a bar as long as the number.
@@ -55,9 +67,8 @@ function PercentileCell({ value }: { value: number | null }) {
           <span aria-hidden
                 className="absolute inset-y-[0.3rem] left-1 right-1 rounded-sm bg-rule/40" />
           <span aria-hidden
-                className="absolute inset-y-[0.3rem] left-1 rounded-sm opacity-30"
-                style={{ width: `calc((100% - 0.5rem) * ${Math.max(value, 1.5) / 100})`,
-                         background: HEAT_FILL(value) }} />
+                className="absolute inset-y-[0.3rem] left-1 rounded-sm bg-body opacity-20"
+                style={{ width: `calc((100% - 0.5rem) * ${Math.max(value, 1.5) / 100})` }} />
         </>
       )}
       <span className={cn("num relative font-medium", heat(value))}>
@@ -95,23 +106,25 @@ const EVIDENCE_DOT: Record<string, string> = {
  * reader is told that in the data rather than in a footnote.
  */
 export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void }) {
-  const { state: universeState, load } = useUniverses();
+  const { state: universeState } = useUniverses();
   const { state, scan } = useRanking();
   const { state: deepState, deepen, reset: resetDeepen } = useDeepen();
   const detail = useDetail();
   const simple = detail === "simple";
 
-  const [choice, setChoice] = useState<string>("dow30");
-  const [custom, setCustom] = useState(DEFAULT_CUSTOM);
-  const [customMarket, setCustomMarket] = useState<Market>("US");
-  const [sortKey, setSortKey] = useState<string>("composite");
-  const [ascending, setAscending] = useState(false);
-  const [filter, setFilter] = useState("");
-  const [minComposite, setMinComposite] = useState(0);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [picked, setPicked] = useState<string[]>([]);
+  // Everything the reader set up here is kept for the session — a six-second
+  // Nasdaq-100 scan, the sort, the filter and the shortlist used to vanish the
+  // moment they opened one of the rows to read it.
+  const [choice, setChoice] = useSessionState<string>("rank:choice", "dow30");
+  const [custom, setCustom] = useSessionState("rank:custom", DEFAULT_CUSTOM);
+  const [customMarket, setCustomMarket] = useSessionState<Market>("rank:customMarket", "US");
+  const [sortKey, setSortKey] = useSessionState<string>("rank:sortKey", "composite");
+  const [ascending, setAscending] = useSessionState("rank:ascending", false);
+  const [filter, setFilter] = useSessionState("rank:filter", "");
+  const [minComposite, setMinComposite] = useSessionState("rank:minComposite", 0);
+  const [expanded, setExpanded] = useSessionState<string | null>("rank:expanded", null);
+  const [picked, setPicked] = useSessionState<string[]>("rank:picked", NO_PICKS);
 
-  useEffect(() => { load(); }, [load]);
 
   const catalogue = universeState.status === "ready" ? universeState.data.universes : [];
   const maxDeepen = universeState.status === "ready" ? universeState.data.maxDeepen : 8;
@@ -196,7 +209,11 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
       composite: row.composite == null ? "" : row.composite.toFixed(1),
       close: row.latestClose,
       coverage: row.coverage,
-      ...Object.fromEntries(signals.map((s) => [
+      // EVERY signal, not the ones this reading mode shows. Guided trims the
+      // table to three columns for legibility; an export that changed shape
+      // with a display preference handed two readers different files for the
+      // same scan.
+      ...Object.fromEntries(allSignals.map((s) => [
         s.key, row.signals[s.key]?.percentile?.toFixed(0) ?? "",
       ])),
     }));
@@ -207,7 +224,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
         { key: "composite", label: "Composite (percentile)" },
         { key: "close", label: "Close" },
         { key: "coverage", label: "Signal coverage" },
-        ...signals.map((s) => ({ key: s.key, label: `${s.label} (percentile)` })),
+        ...allSignals.map((s) => ({ key: s.key, label: `${s.label} (percentile)` })),
       ])
     );
   };
@@ -263,22 +280,14 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
 
           {choice === CUSTOM && (
             <Field label="Your list" hint="Comma or newline separated.">
-              <textarea
-                value={custom}
-                onChange={(e) => setCustom(e.target.value)}
-                rows={3}
-                className={cn(
-                  "w-full rounded border border-rule bg-raised px-3 py-2",
-                  "font-mono text-meta text-chalk transition-colors focus:border-tech/60",
-                )}
-              />
+              <Textarea mono value={custom} onChange={(e) => setCustom(e.target.value)} rows={3} />
             </Field>
           )}
 
           {selected && (
             <p className="text-meta leading-relaxed text-ash">
               {selected.note}{" "}
-              <span className="text-warn/90">
+              <span className="text-warn">
                 This membership list was transcribed on {selected.asOf} and is not updated
                 automatically — index constituents change, and a name that has since been
                 dropped will still be scanned while a newly added one will be missing. There is
@@ -306,26 +315,18 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
       )}
 
       {state.status === "error" && (
-        <Card className="border-dist/40 bg-dist/5">
-          <div className="flex gap-3 p-5">
-            <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
-            <div>
-              <div className="eyebrow mb-1 text-dist">The scan could not run</div>
-              <p className="text-base leading-relaxed text-body">{state.failure.message}</p>
-            </div>
-          </div>
-        </Card>
+        <StateCard kind="error" title="The scan could not run">{state.failure.message}</StateCard>
       )}
 
       {data && (
         <>
           {/* ---------------- the honest overlap card ---------------- */}
           {data.correlation.available && (
-            <Card accent="#F2C14E">
+            <Card>
               <CardHeader>
                 <CardTitle>How independent are these signals?</CardTitle>
                 {data.correlation.effectiveSignals != null && (
-                  <span className="num text-meta font-semibold text-warn">
+                  <span className="num text-meta font-semibold text-chalk">
                     {num(data.correlation.effectiveSignals, 1)} of{" "}
                     {data.correlation.measuredSignals} independent
                   </span>
@@ -348,9 +349,12 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                             {labels(pair.a)} vs {labels(pair.b)}
                             <Explain explain={data.explain?.[key]} />
                           </span>
+                          {/* Toned by the server's reading of the pair
+                              (explain.signalOverlap), not by a threshold
+                              re-declared here. */}
                           <span className={cn("num font-semibold",
-                                              Math.abs(pair.correlation) > 0.7
-                                                ? "text-warn" : "text-body")}>
+                                              TONE_TEXT[data.explain?.[key]?.tone ?? ""]
+                                                ?? "text-body")}>
                             {pair.correlation >= 0 ? "+" : ""}{num(pair.correlation)}
                           </span>
                         </div>
@@ -411,11 +415,11 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               {/* The ticker column stays put while the signal columns scroll,
                   because a row of seven percentiles is unreadable once you can
                   no longer see which name it belongs to. */}
-              <div className="max-h-[36rem] overflow-auto">
+              <ScrollRegion vertical label="Ranked names" className="max-h-[36rem]">
                 <table className="w-full text-left text-meta">
                   <thead className="sticky top-0 z-20 bg-panel">
                     <tr className="eyebrow border-b border-rule [&>th]:px-3 [&>th]:py-2 [&>th]:font-normal [&>th]:align-bottom">
-                      <th scope="col" className="w-8 bg-panel" />
+                      <th scope="col" className="w-8 bg-panel"><span className="sr-only">How it ranked</span></th>
                       <th scope="col" className="w-10 bg-panel text-right">#</th>
                       <SortHeader label="Ticker" active={sortKey === "ticker"}
                                   ascending={ascending} onClick={() => toggleSort("ticker")}
@@ -509,11 +513,17 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                     })}
                   </tbody>
                 </table>
-              </div>
+              </ScrollRegion>
 
+              {/* Two different empties. A scan that ranked nobody is a fact about
+                  the list; a filter that hides everybody is a fact about the
+                  filter, and saying the latter about the former sent readers
+                  hunting for a filter that was not set. */}
               {rows.length === 0 && (
                 <p className="px-5 py-3 text-base text-ash">
-                  Nothing matches the filter.
+                  {data.rows.length === 0
+                    ? "No name in this list had enough price history to rank."
+                    : "Nothing matches the filter."}
                 </p>
               )}
 
@@ -554,7 +564,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
           <RankValidation data={data.validation} />
 
           {/* ---------------- the deepen step ---------------- */}
-          <Card accent={picked.length > 0 ? "#5B8DEF" : undefined}>
+          <Card accent={picked.length ? palette.tech : undefined}>
             <CardHeader>
               <CardTitle>Then look at the filings</CardTitle>
               <span className="font-mono text-micro text-ash">
@@ -600,7 +610,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               )}
 
               {deepState.status === "ready" && (
-                <div className="overflow-x-auto">
+                <ScrollRegion label="Quality and value for the shortlist">
                   <table className="w-full text-left text-meta">
                     <thead>
                       <tr className="eyebrow border-b border-rule [&>th]:px-3 [&>th]:py-2 [&>th]:font-normal">
@@ -620,7 +630,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                   <p className="pt-3 text-meta leading-relaxed text-ash">
                     {deepState.data.caveat}
                   </p>
-                </div>
+                </ScrollRegion>
               )}
             </CardBody>
           </Card>
@@ -653,7 +663,10 @@ function SortHeader({
                 title={`Sort by ${title ?? label}`}
                 className={cn("whitespace-nowrap py-0.5 transition-colors hover:text-chalk",
                               active ? "text-chalk" : "")}>
-          {label}{active && (ascending ? " ↑" : " ↓")}
+          {label}
+          {active && (ascending
+            ? <ArrowUp aria-hidden className="ml-0.5 inline h-3 w-3" />
+            : <ArrowDown aria-hidden className="ml-0.5 inline h-3 w-3" />)}
         </button>
         {hint && (
           <span aria-hidden

@@ -48,6 +48,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from . import market_data
 from . import posterior as posterior_lib
 from . import screendomain
 from .valuation import _get_row, _safe_float
@@ -400,6 +401,53 @@ def analyze(company: dict, symbol: Optional[str] = None,
     income = company.get("income")
     balance = company.get("balance")
     cashflow = company.get("cashflow")
+
+    # A COIN, A FUND OR AN INDEX IS NOT A COMPANY WITH A MISSING SECTOR. The
+    # branch below told a reader of BTC-USD and SPY that "a repeat fetch will
+    # usually resolve it", which no fetch ever will. Found in the November audit.
+    kind = market_data.non_company(company, symbol)
+    if kind:
+        return {
+            "applicable": False,
+            "cause": "not-a-company",
+            "reason": (f"This listing is {kind}, not a company, so there are no "
+                       f"financial statements for Piotroski, Altman or Beneish to "
+                       f"read. That is what the listing is, not a gap in the data."),
+            "sector": None, "industry": None,
+            "piotroski": None, "altman": None, "beneish": None,
+        }
+
+    # AN UNKNOWN SECTOR IS NOT A NON-FINANCIAL SECTOR, and the difference is a
+    # wrong answer rather than a missing one.
+    #
+    # Found on a whole-market IDX scan. Yahoo throttles the `.info` scrape long
+    # before it throttles the statement endpoints, so a fetch can return complete
+    # financial statements with an EMPTY sector and industry. `is_financial("",
+    # "")` is False, so the refusal below never fires, and the lens goes on to
+    # report a Piotroski F-score, an Altman band and a Beneish reading for a
+    # bank — the exact arithmetic-without-meaning this whole branch exists to
+    # decline. Observed on BBCA.JK, whose sector reads "Financial Services" on
+    # any unthrottled fetch.
+    #
+    # There is no way to tell that outcome from a genuine non-financial firm by
+    # looking at it, which is what makes it worth its own branch: the score looks
+    # ordinary, and it is a score for a company the models cannot describe. IDX
+    # is heavily weighted toward banks, so on this market it is not a rare case.
+    if not sector and not industry:
+        return {
+            "applicable": False,
+            "cause": "unknown-sector",
+            "reason": (
+                "No sector or industry came back for this listing, so there is no way "
+                "to tell whether Piotroski, Altman and Beneish apply to it. They were "
+                "built on non-financial firms and do not transfer to a bank or "
+                "insurer, and scoring first and asking afterwards is how a bank gets "
+                "an F-score. This is a refusal to guess, not a finding about the "
+                "company — a repeat fetch will usually resolve it."
+            ),
+            "sector": None, "industry": None,
+            "piotroski": None, "altman": None, "beneish": None,
+        }
 
     if is_financial(sector, industry):
         return {

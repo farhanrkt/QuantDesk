@@ -1,4 +1,8 @@
+"use client";
+
 import { ChevronRight } from "lucide-react";
+import { createContext, useContext } from "react";
+import { alpha, palette } from "@/lib/palette";
 import { cn } from "@/lib/utils";
 
 /**
@@ -39,25 +43,48 @@ export const TONE_BORDER: Record<string, string> = {
   none: "border-rule",
 };
 
+/**
+ * What a card tells its header. Read by `CardHeader` and `CardTitle` so a panel
+ * says `<Card accent={palette.value}>` once instead of threading the hue into
+ * every child.
+ *
+ * THIS WAS A NO-OP FOR ITS WHOLE LIFE. `Card` set a `--hue` custom property and
+ * nothing read it; `CardHeader` and `CardTitle` took a `hue` prop that no caller
+ * passed. Twenty-four cards declared a lens colour and rendered grey, while
+ * DESIGN.md and the layout's own direction comment described "four coloured
+ * lens fields" as the thing the app is recognisable by. Wiring it up exposed the
+ * second problem: a third of those accents were judgements — a drawdown card
+ * hard-coded red, a relative-strength card picking green or red from a boolean,
+ * a quality card colouring itself from the verdict string. Those now pass
+ * `tone` (the server's judgement, the only legal source of a tone colour), and
+ * `accent` is identity alone.
+ */
+const CardContext = createContext<{ accent?: string; tone?: string }>({});
+
+const TONE_WASH: Record<string, string> = {
+  good: palette.acc, bad: palette.dist, warn: palette.warn,
+};
+
 export function Card({
-  accent, surface = "panel", tone, className, children,
+  accent, surface = "panel", tone, className, children, id,
 }: {
-  /** A lens identity hex. Tints the header field, never the whole card. */
+  /** A lens IDENTITY hex from lib/palette. Tints the header field, never the card. */
   accent?: string;
   surface?: Surface;
   /** `explain.tone`. The only thing allowed to colour a card by judgement. */
   tone?: string;
   className?: string;
+  id?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className={cn("relative rounded-lg border", SURFACE[surface],
-                    tone && TONE_BORDER[tone], className)}
-      style={accent ? ({ "--hue": accent } as React.CSSProperties) : undefined}
-    >
-      {children}
-    </div>
+    <CardContext.Provider value={{ accent, tone }}>
+      <div id={id}
+           className={cn("relative rounded-lg border", SURFACE[surface],
+                         tone && TONE_BORDER[tone], className)}>
+        {children}
+      </div>
+    </CardContext.Provider>
   );
 }
 
@@ -67,11 +94,15 @@ export function Card({
  * v1 signalled identity with a 2px bar along the top edge, which is the
  * thinnest possible commitment to a colour and reads as trim. A tinted band
  * behind the title, with the title itself in the hue, gives the same
- * information at a glance without a heavy rule doing it.
+ * information at a glance without a heavy rule doing it. A card with a TONE
+ * gets the wash in the tone's colour and keeps its title in chalk: a heading in
+ * red would be shouting a judgement the reading beneath it already states.
  */
 export function CardHeader({
   className, hue, children,
 }: { className?: string; hue?: string; children: React.ReactNode }) {
+  const card = useContext(CardContext);
+  const wash = hue ?? (card.tone && TONE_WASH[card.tone]) ?? card.accent;
   return (
     <div
       className={cn(
@@ -79,7 +110,8 @@ export function CardHeader({
         "rounded-t-lg border-b border-rule px-5 py-3.5",
         className,
       )}
-      style={hue ? { background: `${hue}12`, borderBottomColor: `${hue}33` } : undefined}
+      style={wash ? { background: alpha(wash, 0.07), borderBottomColor: alpha(wash, 0.2) }
+                  : undefined}
     >
       {children}
     </div>
@@ -95,9 +127,12 @@ export function CardTitle({
   className?: string;
   children: React.ReactNode;
 }) {
+  const card = useContext(CardContext);
+  // Identity only. A toned card keeps a chalk title; see CardHeader.
+  const color = hue ?? (card.tone && TONE_WASH[card.tone] ? undefined : card.accent);
   return (
     <Tag className={cn("text-h3 font-semibold tracking-tight", className)}
-         style={hue ? { color: hue } : undefined}>
+         style={color ? { color } : undefined}>
       {children}
     </Tag>
   );

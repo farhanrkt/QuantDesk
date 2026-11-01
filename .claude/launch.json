@@ -4,15 +4,37 @@
     {
       "name": "quantdesk-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000
     },
     {
       "name": "quantdesk-api",
       "runtimeExecutable": ".venv/bin/python",
-      "runtimeArgs": ["-m", "uvicorn", "index:app", "--app-dir", "api",
-                      "--reload", "--port", "8000"],
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "index:app",
+        "--app-dir",
+        "api",
+        "--reload",
+        "--port",
+        "8000"
+      ],
       "port": 8000
+    },
+    {
+      "name": "quantdesk-web-prod",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "next",
+        "start",
+        "-p",
+        "3001"
+      ],
+      "port": 3001
     }
   ]
 }

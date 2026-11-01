@@ -1,12 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, Layers } from "lucide-react";
+import { Layers } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import { Explain, ExplainedRow, TONE_TEXT, useDetail } from "@/components/ui/explain";
 import { ApplyButton } from "@/components/ui/controls";
 import type { Engine, ExplainMap, PortfolioResponse } from "@/lib/types";
 import { cn, num, pct } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { Textarea } from "@/components/ui/input";
+import { StateCard } from "@/components/ui/state";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 /**
  * Where this candidate sits against what the reader already owns.
@@ -31,7 +35,7 @@ import { cn, num, pct } from "@/lib/utils";
  */
 
 const STORAGE_KEY = "quantdesk.holdings";
-const PORTFOLIO = "#6FD0C0";
+const PORTFOLIO = palette.portfolio;
 
 function useHoldings(): [string, (v: string) => void] {
   const [raw, setRaw] = useState("");
@@ -98,16 +102,14 @@ export function PortfolioPanel({
             held. Paste what you own — one symbol per line or comma separated, with{" "}
             <code className="font-mono text-body">TICKER:WEIGHT</code> if the sizes differ.
           </p>
-          <textarea
+          <Textarea
+            mono
             value={raw}
             onChange={(e) => setRaw(e.target.value)}
             rows={3}
             spellCheck={false}
             aria-label="Holdings"
             placeholder="AAPL, MSFT:2, BBCA.JK"
-            className="w-full rounded border border-rule bg-ink px-3 py-2 font-mono text-meta
-                       text-chalk placeholder:text-faint focus:border-tech/60
-                       focus:outline-none focus-visible:ring-1 focus-visible:ring-tech"
           />
           <div className="flex flex-wrap items-center gap-3">
             <ApplyButton onClick={() => onCompare(others, weights)}
@@ -129,14 +131,9 @@ export function PortfolioPanel({
       </Card>
 
       {state.status === "error" && (
-        <Card className="border-dist/40 bg-dist/5">
-          <CardBody>
-            <div className="flex gap-3">
-              <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
-              <p className="text-base leading-relaxed text-body">{state.failure.message}</p>
-            </div>
-          </CardBody>
-        </Card>
+        <StateCard kind="error" title="The comparison could not run">
+          {state.failure.message}
+        </StateCard>
       )}
 
       {state.status === "ready" && <Result data={state.data} guided={guided} />}
@@ -162,7 +159,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
 
   return (
     <>
-      <Card accent={TONE_HEXish(ex.effectiveHoldings?.tone)}>
+      <Card accent={PORTFOLIO} tone={ex.effectiveHoldings?.tone}>
         <CardHeader>
           <CardTitle>Is this a bet you already hold?</CardTitle>
           <span className="flex items-center gap-1.5 font-mono text-micro text-ash">
@@ -297,7 +294,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
             </span>
           </CardHeader>
           <CardBody className="px-0">
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Where the risk sits">
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -335,7 +332,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
                   })}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
             <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
               Compare the two columns. A holding with a tenth of the money and a quarter of the
               risk is not diversified by being one of ten — it is the whole portfolio under a
@@ -375,9 +372,4 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
       )}
     </>
   );
-}
-
-/** The accent for a card, from a tone that may be absent. */
-function TONE_HEXish(tone?: string): string {
-  return tone === "warn" ? "#F2C14E" : tone === "bad" ? "#FF6B6B" : PORTFOLIO;
 }

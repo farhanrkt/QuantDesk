@@ -20,7 +20,7 @@ export function Input({ className, ...props }: React.ComponentProps<"input">) {
         // is under 16px and does not zoom back out, so on a phone the whole
         // layout stays yanked sideways for the rest of the session.
         "text-[1rem] text-chalk placeholder:text-faint sm:text-base",
-        "transition-colors hover:border-rule focus:border-tech/60",
+        "transition-colors hover:border-ruleStrong focus:border-tech/60",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-tech",
         className,
       )}
@@ -42,5 +42,28 @@ export function Select({ className, children, ...props }: React.ComponentProps<"
     >
       {children}
     </select>
+  );
+}
+
+/**
+ * A multi-line field. There was no primitive, so five textareas were each
+ * written by hand on two different grounds (`bg-raised` in the ranking and
+ * screener lists, `bg-ink` in the portfolio and thesis forms). Same ground,
+ * border, focus and iOS rule as `Input`.
+ */
+export function Textarea({ className, mono, ...props }:
+  React.ComponentProps<"textarea"> & { mono?: boolean }) {
+  return (
+    <textarea
+      {...props}
+      className={cn(
+        "w-full rounded-lg border border-rule bg-sunken px-3.5 py-2.5",
+        "text-[1rem] leading-relaxed text-chalk placeholder:text-faint sm:text-base",
+        mono && "font-mono sm:text-meta",
+        "transition-colors hover:border-ruleStrong focus:border-tech/60",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-tech",
+        className,
+      )}
+    />
   );
 }

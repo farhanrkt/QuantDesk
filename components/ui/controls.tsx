@@ -1,6 +1,7 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { ChevronRight, Download } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -24,9 +25,13 @@ export function Field({
   );
 }
 
-const inputClass =
-  "h-9 w-full rounded border border-rule bg-raised px-2.5 font-mono text-meta text-chalk " +
-  "transition-colors hover:border-rule focus:border-tech/60 disabled:opacity-40";
+// ONE INPUT SYSTEM. These compact fields used `bg-raised` while the ticker box
+// and the selects used `bg-sunken`, so two inputs on one card looked like two
+// different kinds of control. Same ground, same border, same focus as
+// components/ui/input.tsx; only the height steps down for dense forms.
+export const inputClass =
+  "h-9 w-full rounded-lg border border-rule bg-sunken px-2.5 font-mono text-meta text-chalk " +
+  "transition-colors hover:border-ruleStrong focus:border-tech/60 disabled:opacity-40";
 
 export function NumberField({
   value, onChange, step = 1, min, max, placeholder, disabled, suffix,
@@ -169,6 +174,11 @@ export function Toggle({
   );
 }
 
+/**
+ * A secondary action: apply assumptions, run a study, rank a list. Built on
+ * `Button` so it matches every other action in the app; kept as a name because
+ * "busy" reads as "Running" here and nowhere else.
+ */
 export function ApplyButton({
   onClick, busy, disabled, children = "Apply",
 }: {
@@ -178,31 +188,20 @@ export function ApplyButton({
   children?: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={busy || disabled}
-      className={cn(
-        "h-9 shrink-0 rounded border border-tech/50 bg-tech/10 px-4",
-        "font-mono text-micro uppercase tracking-[0.14em] text-chalk",
-        "transition-colors hover:bg-tech/20 disabled:cursor-not-allowed disabled:opacity-40",
-      )}
-    >
-      {busy ? "Running" : children}
-    </button>
+    <Button variant="secondary" size="sm" onClick={onClick} disabled={busy || disabled}
+            aria-busy={busy || undefined}>
+      {busy ? "Running…" : children}
+    </Button>
   );
 }
 
 export function DownloadButton({
   onClick, href, children,
 }: { onClick?: () => void; href?: string; children: React.ReactNode }) {
-  const className =
-    "inline-flex h-8 items-center gap-1.5 rounded border border-rule px-2.5 " +
-    "font-mono text-micro uppercase tracking-[0.12em] text-ash " +
-    "transition-colors hover:border-tech/50 hover:text-chalk";
+  const className = buttonVariants({ variant: "quiet", size: "xs" });
   const content = (
     <>
-      <Download aria-hidden className="h-3 w-3" />
+      <Download aria-hidden className="h-3.5 w-3.5" />
       {children}
     </>
   );
@@ -219,8 +218,8 @@ export function Disclosure({
 }: { summary: string; defaultOpen?: boolean; children: React.ReactNode }) {
   return (
     <details open={defaultOpen} className="group">
-      <summary className="eyebrow cursor-pointer list-none select-none py-1 hover:text-chalk">
-        <span className="inline-block w-3 transition-transform group-open:rotate-90">›</span>
+      <summary className="eyebrow flex min-h-[24px] cursor-pointer list-none select-none items-center gap-1 py-1 hover:text-chalk">
+        <ChevronRight aria-hidden className="h-3.5 w-3.5 transition-transform group-open:rotate-90" />
         {summary}
       </summary>
       <div className="pt-3">{children}</div>

@@ -1,0 +1,685 @@
+"""What the business does, and where it stands among the names doing the same.
+
+WHY THESE TESTS EXIST
+
+The first run of this ranking crowned RIGS.JK — a small tug and barge operator —
+with 99.4% of Indonesian marine shipping and 456 times the runner-up's revenue.
+Yahoo labels its statements USD while serving them in rupiah, so converting at
+the boundary multiplied a correct figure by about 16,300. The output was not a
+crash or an obviously silly number. It was a confident market leader.
+
+That is the shape of every failure worth guarding here: bad units and missing
+peers do not break a ranking, they produce a plausible wrong one.
+
+WHAT THESE TESTS PROTECT
+
+1. A MISLABELLED CURRENCY LEAVES A NAME UNPLACED, never merely low. Placing it
+   at zero would hand its field's lead to whoever is next, which is the same
+   error one rank down.
+2. THE UNITS TEST ONLY RUNS ON A CONVERTED FIGURE. An earlier version ran it on
+   everything and refused 71 names, nearly all of them companies that are simply
+   expensive — a tiny price-to-sales ratio is what the market loving something
+   looks like.
+3. A THIN FIELD NAMES NO LEADER. Being the largest of two is not a position.
+4. A NARROW LEAD NAMES NO LEADER. Under LEAD_MARGIN one disposal reverses it.
+5. "NOT FETCHED" AND "NONE PUBLISHED" STAY DIFFERENT. The first is a gap a
+   refetch fills; the second is a fact about the data. Collapsing them sends a
+   reader to re-run a scan that cannot change the answer.
+6. THE CAVEAT TRAVELS IN THE PAYLOAD. A rank rendered without `basis` reads as
+   market share, which nothing here measures.
+7. "NO LISTED RIVAL" ACCOUNTS FOR THE RIVALS THAT DID NOT RETURN. A field of one
+   whose other members merely failed to file is a thin measurement, not a
+   monopoly, and it is the strongest claim this module makes.
+"""
+
+from __future__ import annotations
+
+import pandas as pd
+import pytest
+
+from _lib import field as F
+
+
+def income(revenue: float, label: str = "2025-12-31") -> pd.DataFrame:
+    return pd.DataFrame({pd.Timestamp(label): {"Total Revenue": revenue}})
+
+
+def record(revenue=1_000.0, *, currency="IDR", financial=None, fx=None,
+           cap=2_000.0, **extra):
+    out = {"income": income(revenue), "currency": currency,
+           "financial_currency": financial, "fx_rate": fx, "market_cap": cap}
+    out.update(extra)
+    return out
+
+
+# --------------------------------------------------------------------------- #
+# profile: description, and the two ways a description can be missing
+# --------------------------------------------------------------------------- #
+def test_summary_is_repeated_not_judged():
+    out = F.profile({"sector": "Energy", "industry": "Thermal Coal",
+                     "business_summary": "Mines and sells thermal coal.",
+                     "employees": 4200.0, "country": "Indonesia"})
+    assert out["industry"] == "Thermal Coal"
+    assert out["summary"] == "Mines and sells thermal coal."
+    assert out["employees"] == 4200
+    assert "Thermal Coal" in out["reading"]
+
+
+def test_absent_key_is_a_gap_and_empty_key_is_a_fact():
+    # No key at all: the record predates the app asking for a description.
+    stale = F.profile({"industry": "Steel"})
+    assert stale["summaryState"] == "not fetched"
+    assert "refetch" in stale["reading"]
+
+    # Key present and empty: the provider has none, and refetching cannot help.
+    empty = F.profile({"industry": "Steel", "business_summary": ""})
+    assert empty["summaryState"] == "none published"
+    assert "refetch" not in empty["reading"]
+
+
+def test_profile_of_nothing_says_so_rather_than_inventing_fields():
+    out = F.profile(None)
+    assert out["industry"] is None and out["summary"] is None
+    assert out["summaryState"] == "not fetched"
+
+
+def test_summary_is_trimmed_at_a_sentence_where_one_is_near():
+    body = ("A. " * 3) + "B" * 400
+    trimmed = F._trim(body, limit=60)
+    assert len(trimmed) <= 60
+    # A full stop deep enough into the budget beats the budget.
+    long_first = "First sentence runs on for a good while and then stops. " + "x" * 300
+    assert F._trim(long_first, limit=80).endswith(".")
+
+
+# --------------------------------------------------------------------------- #
+# revenue: the units guard
+# --------------------------------------------------------------------------- #
+def test_revenue_reads_the_top_line_in_the_trading_currency():
+    out = F.revenue_of(record(5_000.0, cap=10_000.0))
+    assert out["usable"] is True
+    assert out["value"] == 5_000.0
+    assert out["currency"] == "IDR"
+
+
+def test_unconverted_foreign_statements_are_refused_not_compared():
+    # Statements in USD, shares in IDR, no rate applied: the figure is real but
+    # on a different scale from every name it would be ranked against.
+    out = F.revenue_of(record(5_000.0, currency="IDR", financial="USD", fx=None))
+    assert out["usable"] is False
+    assert "no exchange rate was applied" in out["reason"]
+
+
+def test_a_mislabelled_currency_is_refused_rather_than_crowned():
+    # The RIGS.JK case, to scale: statements already in rupiah, labelled USD,
+    # so the boundary multiplied them by 16,300.
+    out = F.revenue_of(record(366_000.0 * 16_300, currency="IDR", financial="USD",
+                              fx=16_300.0, cap=423_000.0))
+    assert out["usable"] is False
+    assert "label looks wrong" in out["reason"]
+    assert out["value"] is None            # not placed low — not placed at all
+
+
+def test_a_correct_conversion_survives_the_units_test():
+    # An ADR reporting in won and trading in dollars: huge raw figure, sane once
+    # converted, which is the opposite verdict on the same shape of input.
+    out = F.revenue_of(record(25_000.0, currency="USD", financial="KRW",
+                              fx=0.00072, cap=4_400.0))
+    assert out["usable"] is True
+
+
+def test_an_expensive_company_is_not_mistaken_for_a_units_error():
+    # MSTR's shape: $477m of revenue against $52bn of market value. A real
+    # price-to-sales ratio of 0.009, and no conversion involved.
+    out = F.revenue_of(record(477_233_000.0, currency="USD", financial="USD",
+                              cap=52_031_979_520.0))
+    assert out["usable"] is True
+
+
+def test_no_revenue_line_is_stated_not_guessed():
+    # A statement that arrived without a top line is not rescued by the summary:
+    # the stand-in is for listings with no statements at all.
+    filed = pd.DataFrame({pd.Timestamp("2025-12-31"): {"Net Income": 40.0}})
+    out = F.revenue_of({"income": filed, "currency": "USD", "revenue_ttm": 900.0})
+    assert out["usable"] is False
+    assert "no revenue line" in out["reason"]
+
+
+def test_no_statements_and_no_summary_figure_says_both():
+    out = F.revenue_of({"income": pd.DataFrame(), "currency": "USD"})
+    assert out["usable"] is False and out["source"] is None
+    assert "no statements came back" in out["reason"]
+    assert "summary carries no revenue" in out["reason"]
+
+
+# --------------------------------------------------------------------------- #
+# revenue: the summary's trailing year, where the provider files nothing
+#
+# 215 of 770 cached Indonesian records carried no statements at all and a
+# trailing year's revenue in the summary. CCSI.JK, a cable maker filed beside
+# KETR.JK, is one: unranked until now, which is what made KETR "the only one
+# that could be measured" rather than the largest of three.
+# --------------------------------------------------------------------------- #
+def test_a_listing_with_no_statements_is_ranked_on_the_summary():
+    out = F.revenue_of({"income": pd.DataFrame(), "currency": "IDR",
+                        "financial_currency": "IDR", "market_cap": 312e9,
+                        "revenue_ttm": 309.5e9, "revenue_ttm_through": "2026-06-30"})
+    assert out["usable"] is True
+    assert out["value"] == 309.5e9
+    assert out["source"] == "summary"
+    assert out["asOf"] == "2026-06-30"
+    assert out["trailing"] == 309.5e9
+
+
+def test_a_filed_year_is_never_replaced_by_the_summary():
+    """KETR.JK's shape: 750bn filed for 2025, 624bn on the summary to June.
+
+    The stand-in is for listings with nothing filed. A fresher summary does not
+    displace a filed year, so the 555 names already measured stay measured the
+    way they were; the summary figure rides along for re-making a comparison.
+    """
+    out = F.revenue_of(record(750.2e9, cap=1.3e12, revenue_ttm=623.6e9))
+    assert out["value"] == 750.2e9
+    assert out["source"] == "statement"
+    assert out["trailing"] == 623.6e9
+
+
+def test_an_unconverted_summary_in_another_currency_is_refused():
+    out = F.revenue_of({"income": pd.DataFrame(), "currency": "IDR",
+                        "financial_currency": "USD", "fx_rate": None,
+                        "market_cap": 3.4e11, "revenue_ttm": 16_065_026.0})
+    assert out["usable"] is False and out["source"] == "summary"
+    assert "summary figures are written in USD" in out["reason"]
+
+
+def test_a_mis_scaled_summary_is_refused_like_a_mis_scaled_statement():
+    # The RIGS.JK case on the summary: rupiah figures labelled USD and scaled.
+    out = F.revenue_of({"income": pd.DataFrame(), "currency": "IDR",
+                        "financial_currency": "USD", "fx_rate": 16_300.0,
+                        "market_cap": 423e9, "revenue_ttm": 291e9 * 16_300})
+    assert out["usable"] is False
+    assert "summary figures are labelled USD" in out["reason"]
+    assert out["value"] is None
+
+
+# --------------------------------------------------------------------------- #
+# standings
+# --------------------------------------------------------------------------- #
+def entries(*pairs, industry="Thermal Coal"):
+    return [{"ticker": t, "name": t, "industry": industry, "revenue": r}
+            for t, r in pairs]
+
+
+def test_a_clear_leader_is_named():
+    out = F.standings(entries(("A", 100.0), ("B", 20.0), ("C", 10.0)))
+    assert out["fields"]["Thermal Coal"]["leader"] == "A"
+    assert out["positions"]["A"]["leads"] is True
+    assert out["positions"]["A"]["rank"] == 1
+    assert out["positions"]["B"]["leads"] is False
+    assert out["positions"]["B"]["rank"] == 2
+
+
+def test_a_field_too_thin_to_rank_names_nobody():
+    out = F.standings(entries(("A", 100.0), ("B", 1.0)))
+    assert out["fields"]["Thermal Coal"]["leader"] is None
+    assert out["positions"]["A"]["leads"] is False
+    # A hundred times the other is still not a lead over a field of two; the
+    # reading says how far ahead it is without naming it a leader.
+    assert "too few to name a leader" in out["positions"]["A"]["reading"]
+    assert "not a position" in out["positions"]["B"]["reading"]
+
+
+def test_a_narrow_lead_names_nobody():
+    out = F.standings(entries(("A", 100.0), ("B", 90.0), ("C", 10.0)))
+    assert out["fields"]["Thermal Coal"]["leader"] is None
+    assert out["positions"]["A"]["leads"] is False
+    assert "no leader is named" in out["positions"]["A"]["reading"]
+
+
+def test_unplaced_names_are_counted_rather_than_dropped():
+    rows = [
+        *entries(("A", 100.0), ("B", 20.0), ("C", 10.0)),
+        {"ticker": "D", "industry": "", "revenue": 500.0},
+        {"ticker": "E", "industry": "Thermal Coal", "revenue": None},
+    ]
+    out = F.standings(rows)
+    assert out["measured"] == 3
+    assert out["unplaced"] == 2
+    assert {d["ticker"] for d in out["unplacedDetail"]} == {"D", "E"}
+    # The missing names are not in anyone's peer count.
+    assert out["positions"]["A"]["peers"] == 3
+
+
+def test_a_missing_peer_can_hand_over_the_lead_and_the_count_says_so():
+    """The failure this instrument exists for, stated as a test.
+
+    The same field with and without its largest member produces two different
+    leaders, and nothing about the second is visibly wrong. `unplaced` is the
+    only thing standing between a reader and that.
+    """
+    full = F.standings(entries(("BIG", 900.0), ("A", 100.0), ("B", 20.0), ("C", 5.0)))
+    partial = F.standings([
+        *entries(("A", 100.0), ("B", 20.0), ("C", 5.0)),
+        {"ticker": "BIG", "industry": "Thermal Coal", "revenue": None},
+    ])
+    assert full["fields"]["Thermal Coal"]["leader"] == "BIG"
+    assert partial["fields"]["Thermal Coal"]["leader"] == "A"
+    assert partial["unplaced"] == 1
+
+
+def test_the_basis_caveat_travels_with_every_position():
+    out = F.standings(entries(("A", 100.0), ("B", 20.0), ("C", 10.0)))
+    assert "not a market share" in out["basis"]
+    assert out["positions"]["A"]["basis"] == out["basis"]
+    assert "Private and overseas" in out["positions"]["A"]["reading"]
+
+
+def test_runners_up_are_told_how_far_behind_rather_than_how_far_ahead():
+    out = F.standings(entries(("A", 100.0), ("B", 25.0), ("C", 10.0)))
+    assert out["positions"]["A"]["margin"] == pytest.approx(4.0)
+    assert out["positions"]["A"]["behindLeader"] is None
+    assert out["positions"]["B"]["margin"] is None
+    assert out["positions"]["B"]["behindLeader"] == pytest.approx(0.25)
+
+
+def test_fields_do_not_leak_into_each_other():
+    rows = [*entries(("A", 100.0), ("B", 20.0), ("C", 10.0)),
+            *entries(("X", 50.0), ("Y", 5.0), ("Z", 2.0), industry="Gold")]
+    out = F.standings(rows)
+    assert out["positions"]["A"]["peers"] == 3
+    assert out["positions"]["X"]["industry"] == "Gold"
+    assert set(out["leaders"]) == {"Thermal Coal", "Gold"}
+    # Field share is of the whole scanned population, not of one field.
+    assert out["positions"]["A"]["fieldShareOfMarket"] == pytest.approx(130 / 187)
+
+
+def test_no_niche_flag_ships():
+    """Measured and rejected; see the module docstring.
+
+    Field share does not measure narrowness — the median field holds 1/97th of
+    scanned revenue because there are 97 labels. A flag built on it would sort
+    fields by how finely the provider subdivides them.
+    """
+    out = F.standings(entries(("A", 100.0), ("B", 20.0), ("C", 10.0)))
+    assert "niche" not in out["positions"]["A"]
+    assert "niche" not in out["fields"]["Thermal Coal"]
+
+
+def test_standings_of_nothing_is_empty_rather_than_an_error():
+    out = F.standings([])
+    assert out["fields"] == {} and out["positions"] == {}
+    assert out["measured"] == 0 and out["unplaced"] == 0
+
+
+# --------------------------------------------------------------------------- #
+# standings across the two kinds of figure
+# --------------------------------------------------------------------------- #
+def kinds(*rows, industry="Communication Equipment"):
+    """(ticker, ranked figure, source, trailing figure)."""
+    return [{"ticker": t, "name": t, "industry": industry, "revenue": r,
+             "revenueSource": s, "revenueTrailing": tr} for t, r, s, tr in rows]
+
+
+def test_a_lead_that_holds_on_both_kinds_is_named_and_says_both():
+    """KETR.JK on the 21 September sweep, once its two rivals were placed."""
+    out = F.standings(kinds(("KETR", 750.2, "statement", 623.6),
+                            ("CCSI", 309.5, "summary", 309.5),
+                            ("IOTF", 72.8, "summary", 72.8)))
+    field = out["fields"]["Communication Equipment"]
+    assert field["leader"] == "KETR"
+    assert field["leaderMargin"] == pytest.approx(750.2 / 309.5)
+    assert field["leaderMarginTrailing"] == pytest.approx(623.6 / 309.5)
+    assert field["summaryFigures"] == 2
+    reading = out["positions"]["KETR"]["reading"]
+    assert "2.4x the revenue of the next one" in reading
+    assert "2.0x on both companies' trailing twelve months" in reading
+    assert "The other 2 figures here are the provider's trailing-twelve-month" in reading
+
+
+def test_a_lead_that_depends_on_the_kind_of_figure_is_not_named():
+    """DIVA.JK on the same sweep: 2.05x filed against trailing, 1.85x trailing
+    against trailing. A lead one choice of figure grants and the other takes
+    away is inside the range LEAD_MARGIN exists to refuse."""
+    out = F.standings(kinds(("DIVA", 3504.9, "statement", 3155.5),
+                            ("TOSK", 1708.0, "summary", 1708.0),
+                            ("IRSX", 410.1, "statement", 400.0),
+                            industry="Software - Application"))
+    assert out["fields"]["Software - Application"]["leader"] is None
+    place = out["positions"]["DIVA"]
+    assert place["leads"] is False
+    assert place["marginTrailing"] == pytest.approx(3155.5 / 1708.0)
+    assert "compares its filed year with the next one's trailing twelve months" in place["reading"]
+    assert "1.85x" in place["reading"] and "no leader is named" in place["reading"]
+
+
+def test_a_mixed_lead_that_cannot_be_re_made_is_not_named():
+    out = F.standings(kinds(("A", 900.0, "statement", None),
+                            ("B", 100.0, "summary", 100.0),
+                            ("C", 50.0, "statement", None)))
+    place = out["positions"]["A"]
+    assert place["leads"] is False and place["marginTrailing"] is None
+    assert "could not be re-made" in place["reading"]
+
+
+def test_a_summary_leader_over_a_filed_runner_up_is_re_made_the_same_way():
+    # INOV.JK over MHKI.JK in Waste Management: 3.3x as ranked, 3.6x trailing.
+    out = F.standings(kinds(("INOV", 700.2, "summary", 700.2),
+                            ("MHKI", 213.0, "statement", 193.7),
+                            ("OPMS", 6.6, "summary", 6.6),
+                            industry="Waste Management"))
+    assert out["fields"]["Waste Management"]["leader"] == "INOV"
+    assert "Its figure, like 1 other here, is the provider's" in \
+        out["positions"]["INOV"]["reading"]
+    # The runner-up is told it is behind, and that the comparison mixes kinds.
+    assert "INOV is the largest" in out["positions"]["MHKI"]["reading"]
+    assert "The other 2 figures here are" in out["positions"]["MHKI"]["reading"]
+
+
+def test_one_kind_of_figure_reads_exactly_as_before():
+    """A field ranked wholly on filed years, the state of every field until the
+    summary stand-in existed, says nothing about kinds of figure."""
+    old = F.standings(entries(("A", 100.0), ("B", 20.0), ("C", 10.0)))
+    new = F.standings(kinds(("A", 100.0, "statement", 90.0),
+                            ("B", 20.0, "statement", 25.0),
+                            ("C", 10.0, "statement", 12.0), industry="Thermal Coal"))
+    for ticker in "ABC":
+        assert new["positions"][ticker]["reading"] == old["positions"][ticker]["reading"]
+    assert new["fields"]["Thermal Coal"]["leaderMarginTrailing"] is None
+    assert new["fields"]["Thermal Coal"]["summaryFigures"] == 0
+
+
+def test_a_field_wholly_on_the_summary_says_so_once():
+    out = F.standings(kinds(("PEVE", 3699.0, "summary", 3699.0),
+                            ("IKPM", 400.2, "summary", 400.2),
+                            ("X", 100.0, "summary", 100.0),
+                            industry="Pharmaceutical Retailers"))
+    reading = out["positions"]["PEVE"]["reading"]
+    assert out["fields"]["Pharmaceutical Retailers"]["leader"] == "PEVE"
+    assert "Every figure here is the provider's trailing-twelve-month summary" in reading
+    assert "on both companies' trailing" not in reading, "nothing was mixed to re-make"
+
+
+# --------------------------------------------------------------------------- #
+# no listed rival, which is a stronger claim than being the only ranked name
+# --------------------------------------------------------------------------- #
+def test_a_field_of_one_with_no_other_listing_is_a_sole_listing():
+    out = F.standings(entries(("A", 100.0)))
+    place = out["positions"]["A"]
+    assert place["soleListing"] is True
+    assert place["unranked"] == 0
+    assert "is not listed on this exchange" in place["reading"]
+
+
+def test_an_unrankable_peer_cancels_the_sole_listing_claim():
+    """The rival that did not return its filings is still a rival.
+
+    Without this the claim reads as "nobody else does this", when what happened
+    is "nobody else could be measured" — the difference between a niche and a
+    thin scan, on the one flag the specialist shortlist selects with.
+    """
+    out = F.standings([
+        {"ticker": "A", "name": "A", "industry": "Thermal Coal", "revenue": 100.0},
+        {"ticker": "B", "name": "B", "industry": "Thermal Coal", "revenue": None},
+    ])
+    place = out["positions"]["A"]
+    assert place["peers"] == 1              # still the only one ranked
+    assert place["unranked"] == 1
+    assert place["soleListing"] is False    # but not alone in its field
+    assert "only one that could be measured" in place["reading"]
+    assert out["fields"]["Thermal Coal"]["unranked"] == 1
+    assert out["fields"]["Thermal Coal"]["unrankedTickers"] == ["B"]
+
+
+def test_a_named_leader_says_how_many_of_its_field_went_unmeasured():
+    out = F.standings([
+        *entries(("A", 100.0), ("B", 20.0), ("C", 10.0)),
+        {"ticker": "D", "industry": "Thermal Coal", "revenue": None},
+    ])
+    place = out["positions"]["A"]
+    assert place["leads"] is True
+    assert place["unranked"] == 1
+    assert "lead is over the measured group only" in place["reading"]
+
+
+def test_a_name_with_no_industry_at_all_counts_against_no_field():
+    out = F.standings([
+        *entries(("A", 100.0), ("B", 20.0), ("C", 10.0)),
+        {"ticker": "X", "industry": "", "revenue": None},
+    ])
+    assert out["fields"]["Thermal Coal"]["unranked"] == 0
+    assert out["unplaced"] == 1
+
+
+def test_a_conversion_the_app_declined_is_still_comparable():
+    """`market_data` now refuses to scale statements whose label it can show is
+    wrong — RIGS.JK's rupiah figures labelled USD. Those figures are ALREADY in
+    the trading currency, which is the scale this ranking needs, so treating the
+    absent rate as "not converted" would drop the one name the guard rescued.
+    """
+    out = F.revenue_of({
+        **record(365_897_785_357.0, currency="IDR", financial="USD", fx=None,
+                 cap=423_345_324_032.0),
+        "fx_skipped": {"reportingCurrency": "USD", "tradingCurrency": "IDR",
+                       "rateRefused": 16_300.0, "reason": "wrong label at the source"},
+    })
+    assert out["usable"] is True
+    assert out["value"] == 365_897_785_357.0
+    assert out["labelOverridden"] is True
+
+
+def test_a_genuinely_missing_rate_is_still_refused():
+    out = F.revenue_of(record(5_000.0, currency="IDR", financial="USD", fx=None))
+    assert out["usable"] is False
+    assert "no exchange rate was applied" in out["reason"]
+
+
+# --------------------------------------------------------------------------- #
+# The words that identify a company, where the industry label cannot
+#
+# KETR.JK is filed under "Communication Equipment", which it shares with radio
+# makers and handset distributors. On a 726-name Indonesian sweep this returns
+# cable, optic, fiber. It is word frequency and nothing more — not a
+# classification, and a term can mislead, because "prime mover trucks"
+# tokenises into separate words.
+# --------------------------------------------------------------------------- #
+def described(ticker, name, summary):
+    return {"ticker": ticker, "name": name, "summary": summary}
+
+
+def corpus():
+    """A market where 'cable' is rare and 'services' is everywhere.
+
+    Padded past `MIN_CORPUS`, because the function refuses a corpus too small to
+    have anything to be distinctive AGAINST — the filler carries the common word
+    and nothing else, which is what makes 'services' uninformative.
+    """
+    rows = [
+        described("KETR", "PT Ketrosden Triasmitra",
+                  "Sells submarine and terrestrial fiber optic cable systems and "
+                  "provides cable management services."),
+        described("BIRD", "PT Blue Bird Tbk",
+                  "Provides taxi services, car rental and taxi shuttle services."),
+        described("B", "Beta", "Provides cable services to households."),
+        # A second taxi operator, so "taxi" clears MIN_DOCUMENTS. Without one it
+        # is a term a single description uses, which this deliberately drops.
+        described("TX", "Omega", "Provides taxi services in regional cities."),
+        described("C", "Gamma", "Provides catering services to airlines."),
+        described("D", "Delta", "Provides catering services to hospitals."),
+    ]
+    rows += [described(f"F{i}", f"Filler {i}", "Provides services to customers.")
+             for i in range(F.MIN_CORPUS)]
+    return rows
+
+
+def test_a_rare_term_beats_a_common_one():
+    terms = F.distinctive_terms(corpus())
+    assert "cable" in terms["KETR"]
+    # "services" is in every description, so it identifies nothing.
+    for picked in terms.values():
+        assert "services" not in picked
+
+
+def test_a_companys_own_name_is_never_its_distinguishing_term():
+    """Without this, Blue Bird's terms are 'blue' and 'bird'."""
+    terms = F.distinctive_terms(corpus())
+    assert "blue" not in terms["BIRD"] and "bird" not in terms["BIRD"]
+    assert "taxi" in terms["BIRD"]
+
+
+def test_a_term_only_one_description_uses_is_not_reported():
+    """It cannot be checked against anything, and is usually a proper noun."""
+    terms = F.distinctive_terms(corpus())
+    # "hospitals" appears once; "catering" appears twice and survives.
+    assert "catering" in terms["C"]
+    assert "hospitals" not in terms["D"]
+
+
+def test_a_corpus_too_small_to_compare_against_returns_nothing():
+    """Distinctive is a comparison, and the bounds cross on a small population.
+
+    The ceiling is a SHARE of the corpus and the floor is a count, so below
+    about fifty descriptions the share falls under the floor and almost every
+    term is excluded — a scan that reported nothing while looking as though it
+    had worked. Refusing outright says so instead.
+    """
+    assert F.distinctive_terms(corpus()[:8]) == {}
+    assert F.distinctive_terms(corpus()) != {}
+
+
+def test_at_most_four_terms_and_ordered_stably():
+    terms = F.distinctive_terms(corpus())
+    assert all(len(v) <= F.TERMS_PER_NAME for v in terms.values())
+    assert F.distinctive_terms(corpus()) == terms
+
+
+def test_a_name_with_no_description_gets_no_terms():
+    rows = [*corpus(), described("E", "Epsilon", None)]
+    assert "E" not in F.distinctive_terms(rows)
+
+
+def test_an_empty_corpus_is_empty_rather_than_an_error():
+    assert F.distinctive_terms([]) == {}
+    assert F.distinctive_terms(None) == {}
+
+
+# --------------------------------------------------------------------------- #
+# A fund is not a company competing in a field
+#
+# The module docstring recorded that nothing available separates a closed-end
+# trust from an operating asset manager. Four signals were tested — quoteType,
+# headcount, the name, the statement structure — and all four failed. The
+# DESCRIPTION was not tested, because the names in question had come back empty
+# from a throttled fetch and there was nothing to read. Once refetched, BTX
+# described itself as "a mutual fund launched by BlackRock".
+#
+# Measured on 3,359 described US names: of the 138 labelled Asset Management, 57
+# say they are a fund and the 81 that do not are operating firms — Ares,
+# AllianceBernstein, Principal Financial, and the BDCs. Zero false positives
+# among the other 3,221.
+# --------------------------------------------------------------------------- #
+def test_an_entity_that_calls_itself_a_fund_is_recognised():
+    assert F.describes_itself_as_a_fund(
+        "BlackRock Innovation and Growth Term Trust is a mutual fund launched by "
+        "BlackRock, Inc.") is True
+    assert F.describes_itself_as_a_fund(
+        "Nuveen Quality Municipal Income Fund is a closed-ended fixed income "
+        "mutual fund launched by Nuveen Investments.") is True
+
+
+def test_a_manager_of_funds_is_not_a_fund():
+    """The distinction the regex exists for: what it IS, not what it deals in."""
+    assert F.describes_itself_as_a_fund(
+        "Ares Management Corporation operates as an alternative investment "
+        "manager and manages mutual funds for institutional clients.") is False
+    assert F.describes_itself_as_a_fund(
+        "Main Street Capital Corporation is a business development company "
+        "specializing in lower middle market investments.") is False
+
+
+def test_a_fund_is_left_unplaced_with_its_reason_not_ranked():
+    rows = [
+        {"ticker": "MGR", "name": "Manager", "industry": "Asset Management",
+         "revenue": 900.0, "summary": "Manager Corp operates as an asset manager."},
+        {"ticker": "A", "name": "A", "industry": "Asset Management",
+         "revenue": 400.0, "summary": "A Corp manages money for clients."},
+        {"ticker": "B", "name": "B", "industry": "Asset Management",
+         "revenue": 100.0, "summary": "B Corp advises institutions."},
+        {"ticker": "TRUST", "name": "Trust", "industry": "Asset Management",
+         "revenue": 5_000.0,
+         "summary": "Big Term Trust is a mutual fund launched by Big, Inc."},
+    ]
+    out = F.standings(rows)
+    # The fund has the largest "revenue" and must not take the field.
+    assert out["fields"]["Asset Management"]["leader"] == "MGR"
+    assert "TRUST" not in out["positions"]
+    assert {"ticker": "TRUST", "why": "describes itself as a fund"} in out["unplacedDetail"]
+    # It still counts against the field, so "no listed rival" cannot be claimed.
+    assert out["fields"]["Asset Management"]["unranked"] == 1
+
+
+def test_a_name_with_no_description_is_not_assumed_to_be_a_fund():
+    out = F.standings([
+        {"ticker": "A", "name": "A", "industry": "Gold", "revenue": 100.0},
+        {"ticker": "B", "name": "B", "industry": "Gold", "revenue": 20.0},
+        {"ticker": "C", "name": "C", "industry": "Gold", "revenue": 10.0},
+    ])
+    assert out["positions"]["A"]["leads"] is True
+
+
+# --------------------------------------------------------------------------- #
+# noCloseRival: what the specialist screen selects on, and why it is monotone
+# --------------------------------------------------------------------------- #
+def test_the_larger_of_two_by_the_margin_has_no_close_rival_but_leads_nothing():
+    """KETR.JK on 1 November: CCSI.JK measured at under half its size, IOTF.JK
+    at the 50-rupiah floor and out of the scan. Before `noCloseRival`, reading
+    one more rival correctly would have taken KETR off the shortlist."""
+    out = F.standings(kinds(("KETR", 750.2, "statement", 623.6),
+                            ("CCSI", 309.5, "summary", 309.5)))
+    place = out["positions"]["KETR"]
+    assert place["leads"] is False, "two names are still too few to name a leader"
+    assert place["noCloseRival"] is True
+    assert "too few to name a leader" in place["reading"]
+    assert "2.4x as much, 2.0x on both companies' trailing twelve months" in place["reading"]
+    assert out["positions"]["CCSI"]["noCloseRival"] is False
+
+
+def test_a_close_pair_has_a_close_rival():
+    out = F.standings(entries(("A", 100.0), ("B", 60.0)))
+    assert out["positions"]["A"]["noCloseRival"] is False
+    assert "not a position" in out["positions"]["A"]["reading"]
+
+
+def test_a_pair_that_clears_only_on_mixed_figures_has_a_close_rival():
+    # DIVA.JK's numbers in a field of two: 2.05x one way, 1.85x the other.
+    out = F.standings(kinds(("DIVA", 3504.9, "statement", 3155.5),
+                            ("TOSK", 1708.0, "summary", 1708.0)))
+    assert out["positions"]["DIVA"]["noCloseRival"] is False
+
+
+@pytest.mark.parametrize("rows,ticker,expected", [
+    ((("A", 100.0),), "A", True),                                # alone
+    ((("A", 100.0), ("B", 20.0), ("C", 10.0)), "A", True),       # named leader
+    ((("A", 100.0), ("B", 90.0), ("C", 10.0)), "A", False),      # narrow lead
+    ((("A", 100.0), ("B", 20.0), ("C", 10.0)), "B", False),      # not first
+])
+def test_no_close_rival_contains_both_flags_the_screen_used_before(rows, ticker, expected):
+    """`leads` and `onlyRanked` each imply it, so nothing the screen selected
+    before falls out; the only names it adds are larger-of-two by the margin."""
+    place = F.standings(entries(*rows))["positions"][ticker]
+    assert place["noCloseRival"] is expected
+    if place["leads"] or place["onlyRanked"]:
+        assert place["noCloseRival"] is True
+
+
+def test_a_coin_is_described_as_what_it_is_not_as_a_throttled_fetch():
+    """BTC-USD's What-it-is tab blamed a throttle for a description no fetch will
+    ever return. Found in the November 2026 audit."""
+    out = F.profile({"quote_type": "CRYPTOCURRENCY", "business_summary": "",
+                     "sector": "", "industry": ""})
+    assert out["summaryState"] == "not a company"
+    assert "a cryptocurrency, not a company" in out["reading"]
+    assert "throttled" not in out["reading"]
+    # A fund that IS described keeps its description.
+    fund = F.profile({"quote_type": "ETF", "business_summary": "Tracks the S&P 500.",
+                      "sector": "", "industry": ""})
+    assert fund["summaryState"] == "described"

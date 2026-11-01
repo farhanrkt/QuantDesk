@@ -74,7 +74,10 @@ def test_risk_free_failure_is_not_cached(monkeypatch):
 # --------------------------------------------------------------------------- #
 def _stub_company(monkeypatch, calls: list, delay: float = 0.0) -> None:
     """Replace the network fetch with a counter, and clear the day's cache."""
-    def fake(ticker: str) -> dict:
+    def fake(ticker: str, convert: bool = True) -> dict:
+        # `convert` exists because the disk cache stores UNCONVERTED statements
+        # and re-applies today's FX rate; the stub accepts it and ignores it,
+        # having no foreign-currency statements to convert.
         calls.append(ticker)
         if delay:
             time.sleep(delay)
@@ -815,3 +818,390 @@ def test_a_valuation_refuses_rather_than_mixing_currencies(monkeypatch):
         V.analyze("TEST.JK", market_code="ID")
     except V.ValuationError as exc:
         assert "exchange rate" not in exc.as_detail()["message"], exc.as_detail()["message"]
+
+
+# --------------------------------------------------------------------------- #
+# A wrong currency LABEL, which is not the same problem as a missing rate
+#
+# The test above covers the app refusing to mix currencies when no rate is
+# available. This covers the opposite failure: a rate IS available, the label
+# that asked for it is wrong, and converting produces a confident answer four
+# orders of magnitude out.
+#
+# RIGS.JK, a small Indonesian tug and barge operator, was served with
+# `financialCurrency: USD` against statements written in rupiah, so every
+# valuation and accounting screen for it ran on figures multiplied by ~16,300.
+# YPF is the same fault inverted: dollars labelled pesos, so conversion divides
+# by about a thousand. Measured across all 388 mismatched records in the local
+# cache, exactly those two fire and 100 correctly-labelled ones pass.
+# --------------------------------------------------------------------------- #
+def _statements(revenue: float) -> dict:
+    return {"income": pd.DataFrame(
+        {pd.Timestamp("2025-12-31"): {"Total Revenue": revenue}})}
+
+
+def test_a_conversion_that_makes_the_company_impossible_is_declined(monkeypatch):
+    """RIGS.JK to scale: rupiah statements labelled USD, 366bn against a 423bn cap."""
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    record = {"currency": "IDR", "financial_currency": "USD",
+              "market_cap": 423_345_324_032.0, **_statements(365_897_785_357.0)}
+
+    out = MD._apply_fx(record)
+
+    assert out.get("fx_rate") is None, "the statements must not be scaled"
+    assert out["fx_skipped"]["rateRefused"] == 16_300.0
+    assert out["fx_skipped"]["reportingCurrency"] == "USD"
+    assert "wrong label at the source" in out["fx_skipped"]["reason"]
+    # And the figures are untouched, not zeroed or dropped.
+    assert float(out["income"].iloc[0, 0]) == 365_897_785_357.0
+
+
+def test_the_same_fault_inverted_is_declined_too(monkeypatch):
+    """YPF's shape: dollars labelled pesos, so conversion divides by ~1000."""
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 0.001)
+    record = {"currency": "USD", "financial_currency": "ARS",
+              "market_cap": 5_000_000_000.0, **_statements(4_200_000_000.0)}
+
+    out = MD._apply_fx(record)
+    assert out.get("fx_rate") is None
+    assert out["fx_skipped"]["rateRefused"] == 0.001
+
+
+def test_a_correct_conversion_is_still_applied(monkeypatch):
+    """An ADR reporting in won and trading in dollars must convert as before.
+
+    Huge raw figure, sane once converted — the opposite verdict on the same
+    shape of input, which is the whole point of comparing rather than
+    thresholding.
+    """
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 0.00072)
+    record = {"currency": "USD", "financial_currency": "KRW",
+              "market_cap": 4_400_000_000.0,
+              **_statements(25_810_082_000_000.0)}
+
+    out = MD._apply_fx(record)
+    assert out["fx_rate"] == 0.00072
+    assert "fx_skipped" not in out
+    assert float(out["income"].iloc[0, 0]) == pytest.approx(
+        25_810_082_000_000.0 * 0.00072)
+
+
+def test_a_near_parity_rate_is_never_second_guessed(monkeypatch):
+    """EUR, CAD, GBP, CHF and AUD against USD — 283 of the 388 mismatches.
+
+    The test cannot discriminate at a rate near 1 and does not pretend to. A
+    mislabel there is off by less than a factor of two, not by four orders of
+    magnitude, and refusing on a guess would break far more than it fixed.
+    """
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 1.08)
+    record = {"currency": "USD", "financial_currency": "EUR",
+              "market_cap": 5_000_000_000.0, **_statements(3_000_000_000.0)}
+
+    out = MD._apply_fx(record)
+    assert out["fx_rate"] == 1.08
+    assert "fx_skipped" not in out
+
+
+def test_the_guard_never_converts_something_it_was_not_going_to(monkeypatch):
+    """One-sided by construction: it can only decline, never initiate."""
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    same = {"currency": "IDR", "financial_currency": "IDR",
+            "market_cap": 1e12, **_statements(1e12)}
+    out = MD._apply_fx(same)
+    assert out.get("fx_rate") is None and "fx_skipped" not in out
+
+
+@pytest.mark.parametrize("record", [
+    {"currency": "IDR", "financial_currency": "USD", "market_cap": None},
+    {"currency": "IDR", "financial_currency": "USD", "market_cap": 0.0},
+    {"currency": "IDR", "financial_currency": "USD", "market_cap": 1e12},
+])
+def test_without_a_yardstick_the_conversion_proceeds(monkeypatch, record):
+    """No market cap or no revenue means no independent check, so no refusal.
+
+    Declining on missing data would turn a gap into a finding — the conversion
+    is the documented default and stays it.
+    """
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    full = {**record, "income": pd.DataFrame()}
+    out = MD._apply_fx(full)
+    assert out["fx_rate"] == 16_300.0
+
+
+# --------------------------------------------------------------------------- #
+# What a listing is, and how long a lookup that came back empty is kept
+# --------------------------------------------------------------------------- #
+def test_the_listing_type_is_kept_and_read(monkeypatch):
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.fast_info = _FakeFastInfo()
+            self.info = {"quoteType": "ETF", "longName": "A Fund Trust"}
+            self.dividends = None
+
+        def __getattr__(self, name):
+            return pd.DataFrame()
+
+    monkeypatch.setattr(MD.yf, "Ticker", FakeTicker)
+    data = MD._company_uncached("SPY")
+    assert data["quote_type"] == "ETF"
+    assert MD.non_company(data, "SPY") == "an exchange-traded fund"
+
+
+@pytest.mark.parametrize(("record", "symbol", "expected"), [
+    ({"quote_type": "CRYPTOCURRENCY"}, "BTC-USD", "a cryptocurrency"),
+    ({"quote_type": "INDEX"}, "^GSPC", "a market index"),
+    ({}, "BTC-USD", "a cryptocurrency"),              # the pair says what the lookup did not
+    ({"quote_type": "EQUITY"}, "BTC-USD", None),      # the provider's word wins
+    ({}, "AAPL", None),                               # a missing type is a gap, not a fund
+    ({"quote_type": "EQUITY"}, "AAPL", None),
+])
+def test_non_company_names_what_is_not_a_company(record, symbol, expected):
+    assert MD.non_company(record, symbol) == expected
+
+
+def test_a_lookup_that_came_back_empty_is_kept_for_minutes_not_the_day(monkeypatch):
+    """JPM in the November audit: one throttled `.info`, and the day's cache
+    served a record with no sector until midnight — so the valuation took a bank
+    for an ordinary company all day. The disk cache already refused to keep one."""
+    calls: list = []
+
+    def fetch(ticker, convert=True):
+        calls.append(ticker)
+        return {"ok": True, "name": ticker, "price": 100.0, "shares": 1e9,
+                "sector": "" if len(calls) == 1 else "Financial Services",
+                "industry": "", "income": pd.DataFrame({"a": [1.0]}),
+                "balance": pd.DataFrame({"a": [1.0]}), "cashflow": pd.DataFrame({"a": [1.0]})}
+
+    clock = [1_000.0]
+    monkeypatch.setattr(MD, "_company_uncached", fetch)
+    monkeypatch.setattr(MD, "fundamentals_ttl", lambda: 0)
+    monkeypatch.setattr(MD.time, "monotonic", lambda: clock[0])
+    MD._COMPANY_CACHE.clear()
+    MD._COMPANY_EXPIRES.clear()
+    MD._COMPANY_LOCKS.clear()
+
+    assert MD.company("JPM")["sector"] == ""
+    assert MD.company("JPM")["sector"] == "", "within minutes, one request's legs share it"
+    assert MD.cached_company("JPM")["sector"] == ""
+    clock[0] += MD.COMPANY_GAP_TTL_SECONDS + 1
+    assert MD.company("JPM")["sector"] == "Financial Services"
+    clock[0] += 50_000
+    assert MD.company("JPM")["sector"] == "Financial Services"
+    assert len(calls) == 2, "a record whose lookup arrived is kept for the day"
+
+
+# --------------------------------------------------------------------------- #
+# The summary's trailing top line, for listings the provider files nothing for
+#
+# 215 of 770 cached Indonesian records carried no statements at all, and it is
+# not a throttle: re-asked unhurried on 1 November, 47 of 47 came back empty
+# again while four large listings asked between them returned complete
+# statements. The summary carried a trailing year's revenue for all 215, and
+# `field.revenue_of`
+# ranks on it where nothing was filed — so it has to arrive on the same scale
+# as the filed years it is compared with.
+# --------------------------------------------------------------------------- #
+def test_the_record_keeps_the_summary_top_line_and_the_quarter_it_runs_to(monkeypatch):
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.fast_info = _FakeFastInfo()
+            self.info = {"sector": "Industrials", "totalRevenue": 309_528_952_832,
+                         "mostRecentQuarter": 1_782_777_600}      # 30 June 2026
+            self.dividends = None
+
+        def __getattr__(self, name):
+            return pd.DataFrame()
+
+    monkeypatch.setattr(MD.yf, "Ticker", FakeTicker)
+    data = MD._company_uncached("TEST")
+
+    assert data["revenue_ttm"] == 309_528_952_832.0
+    assert data["revenue_ttm_through"] == "2026-06-30"
+    assert data["income"].empty, "a stand-in, not a statement"
+
+
+@pytest.mark.parametrize("stamp", [None, 0, -5, "soon", float("nan"), 1e30])
+def test_an_unreadable_quarter_stamp_is_absent_rather_than_invented(stamp):
+    assert MD._epoch_date(stamp) is None
+
+
+def test_the_summary_top_line_is_converted_with_the_statements(monkeypatch):
+    """BOAT.JK's shape: dollar figures, rupiah shares, and no statements at all.
+
+    Six of the 215 report in dollars. Left unconverted, the summary figure
+    would be ranked against rupiah filings at 1/16,600th of its size.
+    """
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_600.0)
+    record = {"currency": "IDR", "financial_currency": "USD",
+              "market_cap": 343_164_649_472.0, "income": pd.DataFrame(),
+              "revenue_ttm": 16_065_026.0, "net_income_info": 1_821_033.0}
+
+    out = MD._apply_fx(record)
+    assert out["fx_rate"] == 16_600.0
+    assert out["revenue_ttm"] == pytest.approx(16_065_026.0 * 16_600.0)
+    assert out["net_income_info"] == pytest.approx(1_821_033.0 * 16_600.0)
+
+
+def test_a_mislabelled_summary_is_declined_like_a_mislabelled_statement(monkeypatch):
+    """With no statements, the summary figure is the one a conversion would
+    scale, so it is the one the yardstick reads. Rupiah labelled USD, as on
+    RIGS.JK, would otherwise rank a small listing at 16,300 times its size."""
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    record = {"currency": "IDR", "financial_currency": "USD",
+              "market_cap": 423_000_000_000.0, "income": pd.DataFrame(),
+              "revenue_ttm": 291_131_752_448.0}
+
+    out = MD._apply_fx(record)
+    assert out.get("fx_rate") is None
+    assert out["fx_skipped"]["rateRefused"] == 16_300.0
+    assert out["revenue_ttm"] == 291_131_752_448.0
+
+
+def test_the_summary_never_overrules_a_filed_top_line_in_the_yardstick(monkeypatch):
+    """Where an income statement arrived, it alone decides the units question.
+
+    The planted summary would condemn the conversion; the filed figure passes
+    it, and the filed figure is what the valuation and the ranking read.
+    """
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    record = {"currency": "IDR", "financial_currency": "USD", "market_cap": 1e12,
+              "revenue_ttm": 9e11, **_statements(5e7)}
+
+    out = MD._apply_fx(record)
+    assert out["fx_rate"] == 16_300.0 and "fx_skipped" not in out
+
+
+def test_a_record_cached_before_the_summary_figure_existed_still_converts(monkeypatch):
+    monkeypatch.setattr(MD, "fx_rate", lambda base, quote: 16_300.0)
+    record = {"currency": "IDR", "financial_currency": "USD", "market_cap": 1e12,
+              **_statements(5e7)}
+
+    out = MD._apply_fx(record)
+    assert out["fx_rate"] == 16_300.0
+    assert "revenue_ttm" not in out, "a key the record never had is not invented"
+
+
+# --------------------------------------------------------------------------- #
+# Earnings calendar: one fetch a day, shared by the event study and the company view
+# --------------------------------------------------------------------------- #
+def test_earnings_calendar_splits_past_from_next_and_caches_for_the_day(monkeypatch):
+    import datetime as dt
+    import types
+
+    import pandas as pd
+
+    today = dt.date.today()
+    calls = {"n": 0}
+
+    class Ticker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        @property
+        def earnings_dates(self):
+            calls["n"] += 1
+            index = pd.DatetimeIndex([
+                pd.Timestamp(today + dt.timedelta(days=40)),
+                pd.Timestamp(today + dt.timedelta(days=5)),
+                pd.Timestamp(today - dt.timedelta(days=85)),
+            ]).tz_localize("America/New_York")
+            return pd.DataFrame({"EPS Estimate": [1.0, 1.0, 1.0]}, index=index)
+
+    monkeypatch.setattr(MD, "yf", types.SimpleNamespace(Ticker=Ticker))
+    MD._EARNINGS_CACHE.clear()
+    first = MD.earnings_calendar("PLNT")
+    second = MD.earnings_calendar("plnt")
+    assert calls["n"] == 1, "the second caller must read the day cache"
+    assert first["next"] == (today + dt.timedelta(days=5)).isoformat()
+    assert first["past"] == [(today - dt.timedelta(days=85)).isoformat()]
+    assert len(second["dates"]) == 3, "the event study still gets every timestamp"
+    assert MD.earnings_dates("PLNT") == second["dates"]
+
+
+def test_earnings_calendar_failure_is_empty_not_an_exception(monkeypatch):
+    import types
+
+    class Broken:
+        def __init__(self, symbol):
+            pass
+
+        @property
+        def earnings_dates(self):
+            raise RuntimeError("throttled")
+
+    monkeypatch.setattr(MD, "yf", types.SimpleNamespace(Ticker=Broken))
+    MD._EARNINGS_CACHE.clear()
+    out = MD.earnings_calendar("NOPE")
+    assert out["available"] is False and out["next"] is None and out["dates"] == []
+
+
+def test_without_a_parser_the_calendar_still_supplies_the_next_date(monkeypatch):
+    """The earnings table needs lxml and raised ImportError silently for years.
+    The calendar needs no parser; it backs up the NEXT date and nothing else."""
+    import datetime as dt
+    import types
+
+    soon = dt.date.today() + dt.timedelta(days=9)
+
+    class NoParser:
+        def __init__(self, symbol):
+            pass
+
+        @property
+        def earnings_dates(self):
+            raise ImportError("Missing optional dependency 'lxml'.")
+
+        @property
+        def calendar(self):
+            return {"Earnings Date": [soon], "Earnings Average": 1.98, "Revenue High": 1e11}
+
+    monkeypatch.setattr(MD, "yf", types.SimpleNamespace(Ticker=NoParser))
+    MD._EARNINGS_CACHE.clear()
+    out = MD.earnings_calendar("PLNT")
+    assert out["next"] == soon.isoformat()
+    assert out["dates"] == [] and out["past"] == [], "no past dates are invented"
+    assert "Earnings Average" not in str(out), "an analyst estimate never leaves this function"
+
+
+# --------------------------------------------------------------------------- #
+# yf.download keeps its results in module globals; two at once cross over
+# --------------------------------------------------------------------------- #
+def test_concurrent_downloads_never_hand_one_symbol_anothers_prices(monkeypatch):
+    """A fake `download` with yfinance's actual flaw: results go into one shared
+    dict that every call resets on entry and reads on exit. Without the lock in
+    market_data, threads interleave and a symbol receives another's frame —
+    exactly how a made-up ticker came back with Microsoft's history."""
+    import threading as th
+    import types
+
+    shared = {}
+
+    def download(ticker, **_kw):
+        shared.clear()                             # "shared._DFS = {}"
+        time.sleep(0.01)                           # the network, during which others run
+        level = {"AAA": 10.0, "BBB": 500.0, "CCC": 9000.0}[ticker]
+        idx = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=30)
+        shared[ticker] = pd.DataFrame({"Open": level, "High": level, "Low": level,
+                                       "Close": level, "Volume": 1000.0}, index=idx)
+        time.sleep(0.01)
+        return next(iter(shared.values()))         # assembled from the shared dict
+
+    monkeypatch.setattr(MD, "yf", types.SimpleNamespace(download=download))
+    results: dict[str, float] = {}
+    errors: list[str] = []
+
+    def fetch(symbol, expected):
+        frame = MD.ohlcv(symbol, start=dt.date.today() - dt.timedelta(days=60),
+                         end=dt.date.today(), allow_stale=True)
+        got = float(frame["Close"].iloc[-1])
+        results[symbol] = got
+        if got != expected:
+            errors.append(f"{symbol} received {got}, expected {expected}")
+
+    threads = [th.Thread(target=fetch, args=(s, v))
+               for s, v in [("AAA", 10.0), ("BBB", 500.0), ("CCC", 9000.0)] * 4]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors, errors

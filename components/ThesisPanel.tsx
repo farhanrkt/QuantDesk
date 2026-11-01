@@ -1,15 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Download, Lock, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowRight, Download, Lock, Trash2 } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
-import { ApplyButton, Field, NumberField, PercentField } from "@/components/ui/controls";
-import { useHorizon } from "@/components/ui/horizon";
+import Link from "next/link";
+import { usePreferences } from "@/components/shell/preferences";
+import { Button } from "@/components/ui/button";
+import { ApplyButton, Field, PercentField } from "@/components/ui/controls";
+import { HorizonPicker } from "@/components/ui/horizon";
+import { useToast } from "@/components/ui/toaster";
 import {
   JOURNAL_KEY, appendEntry, contradictions, drift, newId, readJournal,
   type ThesisEntry, type ThesisSnapshot,
 } from "@/lib/journal";
-import { cn } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { Textarea } from "@/components/ui/input";
 
 /**
  * What you believed, written down before you acted, and never edited after.
@@ -36,7 +41,7 @@ import { cn } from "@/lib/utils";
  * this app refuses composites elsewhere on far better evidence than that.
  */
 
-const THESIS = "#A78BFA";
+const THESIS = palette.thesis;
 
 export function ThesisPanel({
   ticker, snapshot,
@@ -45,7 +50,8 @@ export function ThesisPanel({
   /** What the app is showing right now, frozen into an entry when one is saved. */
   snapshot: ThesisSnapshot;
 }) {
-  const horizon = useHorizon();
+  const { horizon, setHorizon } = usePreferences();
+  const toast = useToast();
   const [entries, setEntries] = useState<ThesisEntry[]>([]);
   const [thesis, setThesis] = useState("");
   const [falsifier, setFalsifier] = useState("");
@@ -98,18 +104,7 @@ export function ThesisPanel({
     setFalsifier("");
   };
 
-  const exportAll = () => {
-    const blob = new Blob([JSON.stringify(entries, null, 2)],
-                          { type: "application/json;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `quantdesk-thesis-journal-${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+  const exportAll = () => exportJournal(entries);
 
   return (
     <div className="space-y-4 animate-rise">
@@ -131,31 +126,23 @@ export function ThesisPanel({
 
           <div className="space-y-1.5">
             <span className="eyebrow">What has to be true for this to work?</span>
-            <textarea
+            <Textarea
               value={thesis}
               onChange={(e) => setThesis(e.target.value)}
               rows={3}
               aria-label="What has to be true"
               placeholder="The specific thing you are betting on."
-              className="w-full rounded border border-rule bg-ink px-3 py-2 text-meta
-                         leading-relaxed text-chalk placeholder:text-faint
-                         focus:border-tech/60 focus:outline-none
-                         focus-visible:ring-1 focus-visible:ring-tech"
             />
           </div>
 
           <div className="space-y-1.5">
             <span className="eyebrow">What would tell you it is wrong?</span>
-            <textarea
+            <Textarea
               value={falsifier}
               onChange={(e) => setFalsifier(e.target.value)}
               rows={2}
               aria-label="What would falsify this"
               placeholder="Something observable, that you would actually notice."
-              className="w-full rounded border border-rule bg-ink px-3 py-2 text-meta
-                         leading-relaxed text-chalk placeholder:text-faint
-                         focus:border-tech/60 focus:outline-none
-                         focus-visible:ring-1 focus-visible:ring-tech"
             />
             <Note>
               A thesis with nothing that could disprove it is a hope. If no observation would
@@ -173,9 +160,14 @@ export function ThesisPanel({
                    hint="Share of the account. Checked against this stock's own worst fall.">
               <PercentField value={size ?? undefined} onChange={setSize} />
             </Field>
-            <Field label="Horizon" hint="Set on the bar above the tabs.">
-              <NumberField value={horizon} onChange={() => undefined} min={1} max={10} />
-            </Field>
+            {/* THE SAME CONTROL AS THE BAR ABOVE THE TABS. This was a number
+                box whose onChange did nothing — it looked editable, accepted a
+                keystroke and silently kept the old value. Now it is the shared
+                horizon, so changing it here changes it everywhere. */}
+            <div className="flex flex-col gap-1">
+              <span className="eyebrow">Horizon</span>
+              <HorizonPicker value={horizon} onChange={setHorizon} />
+            </div>
             <ApplyButton onClick={save} disabled={!ready}>Lock this entry</ApplyButton>
           </div>
           {!ready && (
@@ -188,7 +180,7 @@ export function ThesisPanel({
       </Card>
 
       {live.length > 0 && (
-        <Card accent="#F2C14E">
+        <Card tone="warn">
           <CardHeader>
             <CardTitle>Where this disagrees with the page</CardTitle>
             <span className="font-mono text-micro text-ash">before you save</span>
@@ -218,7 +210,14 @@ export function ThesisPanel({
           <CardBody className="space-y-4 px-0">
             {forTicker.map((entry) => (
               <Entry key={entry.id} entry={entry} current={snapshot}
-                     onDelete={() => persist(entries.filter((e) => e.id !== entry.id))} />
+                     onDelete={() => {
+                       // ONE CLICK, AND UNDOABLE. Delete used to be immediate and
+                       // final; the journal's whole value is that entries are
+                       // kept, so the removal is offered back for a few seconds.
+                       const before = entries;
+                       persist(entries.filter((e) => e.id !== entry.id));
+                       toast({ message: "Entry deleted", action: { label: "Undo", onClick: () => persist(before) } });
+                     }} />
             ))}
           </CardBody>
         </Card>
@@ -235,30 +234,30 @@ export function ThesisPanel({
             Which also means it is one cleared cache, one private window or one new machine
             away from gone. Export it.
           </Note>
-          <button
-            type="button"
-            onClick={exportAll}
-            disabled={entries.length === 0}
-            className={cn(
-              "inline-flex h-9 items-center gap-2 rounded border border-rule px-4",
-              "font-mono text-micro uppercase tracking-[0.14em] text-chalk",
-              "transition-colors hover:border-tech/60 disabled:cursor-not-allowed",
-              "disabled:opacity-40 focus:outline-none focus-visible:ring-1 focus-visible:ring-tech",
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant="quiet" size="sm" onClick={exportAll} disabled={entries.length === 0}>
+              <Download aria-hidden className="h-3.5 w-3.5" />
+              Export as JSON
+            </Button>
+            {entries.length > forTicker.length && (
+              <Link href="/journal" className="inline-flex items-center gap-1.5 text-meta text-tech hover:underline">
+                All {entries.length} entries, every company
+                <ArrowRight aria-hidden className="h-3.5 w-3.5" />
+              </Link>
             )}
-          >
-            <Download aria-hidden className="h-3.5 w-3.5" />
-            Export as JSON
-          </button>
+          </div>
         </CardBody>
       </Card>
     </div>
   );
 }
 
-function Entry({
+export function Entry({
   entry, current, onDelete,
-}: { entry: ThesisEntry; current: ThesisSnapshot; onDelete: () => void }) {
-  const moved = drift(entry, current);
+}: { entry: ThesisEntry; current: ThesisSnapshot | null; onDelete: () => void }) {
+  // No current snapshot (the journal page, which loads no company): nothing to
+  // measure movement against, so none is claimed.
+  const moved = current ? drift(entry, current) : [];
   const written = contradictions(entry);
 
   return (
@@ -292,7 +291,7 @@ function Entry({
         <ul className="mt-2 space-y-1">
           {written.map((c) => (
             <li key={c.key} className="flex gap-2 text-meta leading-relaxed text-ash">
-              <AlertTriangle aria-hidden className="mt-0.5 h-3 w-3 shrink-0 text-warn/70" />
+              <AlertTriangle aria-hidden className="mt-0.5 h-3 w-3 shrink-0 text-warn" />
               <span>{c.title}, at the time of writing.</span>
             </li>
           ))}
@@ -307,7 +306,8 @@ function Entry({
               <li key={d.key} className="flex items-baseline gap-2 text-micro">
                 <span className="text-ash">{d.label}</span>
                 <span className="num ml-auto text-ash">{d.then}</span>
-                <span className="text-ash">&rarr;</span>
+                <ArrowRight aria-hidden className="h-3.5 w-3.5 shrink-0 self-center text-ash" />
+                <span className="sr-only">to</span>
                 <span className="num text-body">{d.now}</span>
               </li>
             ))}
@@ -319,4 +319,18 @@ function Entry({
       )}
     </div>
   );
+}
+
+/** Download every entry as JSON — the journal's only backup, since it lives in one browser. */
+export function exportJournal(entries: ThesisEntry[]) {
+  const blob = new Blob([JSON.stringify(entries, null, 2)],
+                        { type: "application/json;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `quantdesk-thesis-journal-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

@@ -1,0 +1,2302 @@
+{
+ "verifiedOn": "2026-11-01",
+ "note": "Transcribed from the official schedules named in `sources` on the date above. Run scripts/refresh_calendar.py to compare against the sources again.",
+ "sources": {
+  "fomc": {
+   "name": "Federal Reserve, FOMC meeting calendars",
+   "url": "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+  },
+  "bls": {
+   "name": "U.S. Bureau of Labor Statistics, release schedules 2024-2027",
+   "url": "https://www.bls.gov/schedule/2026/home.htm"
+  },
+  "bea": {
+   "name": "U.S. Bureau of Economic Analysis, release schedule",
+   "url": "https://www.bea.gov/news/schedule"
+  },
+  "bi-rate": {
+   "name": "Bank Indonesia, BI-Rate decisions",
+   "url": "https://www.bi.go.id/en/statistik/indikator/bi-rate.aspx"
+  },
+  "bi-schedule": {
+   "name": "Bank Indonesia, Board of Governors meeting schedule",
+   "url": "https://www.bi.go.id/en/publikasi/kalender/default.aspx"
+  },
+  "nyse": {
+   "name": "NYSE holidays and trading hours",
+   "url": "https://www.nyse.com/markets/hours-calendars"
+  },
+  "idx": {
+   "name": "IDX 2027 exchange holidays (notice Peng-00169/BEI.POP/09-2026), as reported by IDX Channel and Emiten News; 2026 from IDX's 2026 calendar as reported by the press",
+   "url": "https://www.idxchannel.com/market-news/dear-investor-ini-kalender-libur-bursa-efek-indonesia-2027/all"
+  }
+ },
+ "pending": [
+  {
+   "kind": "bi-rate",
+   "note": "Bank Indonesia has not yet published its 2027 meeting schedule."
+  },
+  {
+   "kind": "bps-cpi",
+   "note": "BPS's release calendar could not be read, so Indonesian inflation dates are not shown. BPS usually publishes on the first working day of the month."
+  },
+  {
+   "kind": "fomc-minutes",
+   "note": "The Fed lists each set of minutes once it is released, so upcoming minutes are not shown."
+  }
+ ],
+ "events": [
+  {
+   "kind": "bi-rate",
+   "date": "2024-01-17",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.00%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2024-01-31",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting January 30-31; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2024-02-21",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.00%."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2024-03-20",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.00%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2024-03-20",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting March 19-20; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2024-04-24",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.25%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2024-05-01",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting Apr/May 30-1; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2024-05-22",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.25%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2024-06-12",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting June 11-12; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2024-06-20",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.25%."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2024-07-17",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.25%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2024-07-31",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting July 30-31; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2024-08-21",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.25%."
+  },
+  {
+   "kind": "jobs",
+   "date": "2024-09-06",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "August 2024."
+  },
+  {
+   "kind": "cpi",
+   "date": "2024-09-11",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "August 2024."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2024-09-18",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.00%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2024-09-18",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting September 17-18; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "jobs",
+   "date": "2024-10-04",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "September 2024."
+  },
+  {
+   "kind": "cpi",
+   "date": "2024-10-10",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "September 2024."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2024-10-16",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.00%."
+  },
+  {
+   "kind": "jobs",
+   "date": "2024-11-01",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "October 2024."
+  },
+  {
+   "kind": "fomc",
+   "date": "2024-11-07",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting November 6-7; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "cpi",
+   "date": "2024-11-13",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "October 2024."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2024-11-20",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.00%."
+  },
+  {
+   "kind": "jobs",
+   "date": "2024-12-06",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "November 2024."
+  },
+  {
+   "kind": "cpi",
+   "date": "2024-12-11",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "November 2024."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2024-12-18",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 6.00%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2024-12-18",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting December 17-18; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "jobs",
+   "date": "2025-01-10",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "December 2024."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-01-15",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.75%."
+  },
+  {
+   "kind": "cpi",
+   "date": "2025-01-15",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "December 2024."
+  },
+  {
+   "kind": "fomc",
+   "date": "2025-01-29",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting January 28-29; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "jobs",
+   "date": "2025-02-07",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "January 2025."
+  },
+  {
+   "kind": "cpi",
+   "date": "2025-02-12",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "January 2025."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-02-19",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.75%."
+  },
+  {
+   "kind": "jobs",
+   "date": "2025-03-07",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "February 2025."
+  },
+  {
+   "kind": "cpi",
+   "date": "2025-03-12",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "February 2025."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-03-19",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.75%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2025-03-19",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting March 18-19; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "jobs",
+   "date": "2025-04-04",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "March 2025."
+  },
+  {
+   "kind": "cpi",
+   "date": "2025-04-10",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "March 2025."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-04-23",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.75%."
+  },
+  {
+   "kind": "jobs",
+   "date": "2025-05-02",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "April 2025."
+  },
+  {
+   "kind": "fomc",
+   "date": "2025-05-07",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting May 6-7; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "cpi",
+   "date": "2025-05-13",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "April 2025."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-05-21",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.50%."
+  },
+  {
+   "kind": "jobs",
+   "date": "2025-06-06",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "May 2025."
+  },
+  {
+   "kind": "cpi",
+   "date": "2025-06-11",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "May 2025."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-06-18",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.50%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2025-06-18",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting June 17-18; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "jobs",
+   "date": "2025-07-03",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "June 2025."
+  },
+  {
+   "kind": "cpi",
+   "date": "2025-07-15",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "June 2025."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-07-16",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.25%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2025-07-30",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting July 29-30; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "jobs",
+   "date": "2025-08-01",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "July 2025."
+  },
+  {
+   "kind": "cpi",
+   "date": "2025-08-12",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "July 2025."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-08-20",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.00%."
+  },
+  {
+   "kind": "jobs",
+   "date": "2025-09-05",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "August 2025."
+  },
+  {
+   "kind": "cpi",
+   "date": "2025-09-11",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "August 2025."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-09-17",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 4.75%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2025-09-17",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting September 16-17; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-10-22",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 4.75%."
+  },
+  {
+   "kind": "cpi",
+   "date": "2025-10-24",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "September 2025. Published late after the 2025 shutdown."
+  },
+  {
+   "kind": "fomc",
+   "date": "2025-10-29",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting October 28-29; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-11-19",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 4.75%."
+  },
+  {
+   "kind": "jobs",
+   "date": "2025-11-20",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "September 2025. Published late after the 2025 shutdown."
+  },
+  {
+   "kind": "fomc",
+   "date": "2025-12-10",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting December 9-10; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "jobs",
+   "date": "2025-12-16",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "November 2025. Published late after the 2025 shutdown."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2025-12-17",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 4.75%."
+  },
+  {
+   "kind": "cpi",
+   "date": "2025-12-18",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "November 2025. Published late after the 2025 shutdown."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-01-01",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "New Year's Day."
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-01-09",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "December 2025."
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-01-13",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "December 2025."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-01-19",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Martin Luther King, Jr. Day."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-01-21",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 4.75%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2026-01-28",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting January 27-28; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-02-11",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "January 2026."
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-02-13",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "January 2026."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-02-16",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Washington's Birthday."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-02-19",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 4.75%."
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-03-06",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "February 2026."
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-03-11",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "February 2026."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-03-17",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 4.75%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2026-03-18",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting March 17-18; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-04-03",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Good Friday."
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-04-03",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "March 2026."
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-04-10",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "March 2026."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-04-22",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 4.75%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2026-04-29",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting April 28-29; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-05-08",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "April 2026."
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-05-12",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "April 2026."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-05-20",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.25%."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-05-25",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Memorial Day."
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-06-05",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "May 2026."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-06-09",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.50%. Decided outside the published schedule."
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-06-10",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "May 2026."
+  },
+  {
+   "kind": "fomc",
+   "date": "2026-06-17",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting June 16-17; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-06-18",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.75%."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-06-19",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Juneteenth."
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-07-02",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "June 2026."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-07-03",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Independence Day, observed."
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-07-14",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "June 2026."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-07-22",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.75%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2026-07-29",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting July 28-29; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-08-07",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "July 2026."
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-08-12",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "July 2026."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-08-19",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.75%."
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-09-04",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "August 2026."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-09-07",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Labor Day."
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-09-11",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "August 2026."
+  },
+  {
+   "kind": "fomc",
+   "date": "2026-09-16",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting September 15-16; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-09-23",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.75%."
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-10-02",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "September 2026."
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-10-14",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "September 2026."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-10-21",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-rate",
+   "title": "Bank Indonesia rate decision",
+   "detail": "BI-Rate set at 5.75%."
+  },
+  {
+   "kind": "fomc",
+   "date": "2026-10-28",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting October 27-28; statement at 14:00 ET, press conference after.",
+   "projections": false
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-11-06",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "October 2026."
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-11-10",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "October 2026."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-11-18",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-schedule",
+   "title": "Bank Indonesia rate decision",
+   "detail": "Board of Governors meeting, 17–18 November. Scheduled: in 2026 BI moved one meeting by a week and decided once between meetings.",
+   "scheduled": true
+  },
+  {
+   "kind": "gdp",
+   "date": "2026-11-25",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Second estimate, Q3 2026."
+  },
+  {
+   "kind": "pce",
+   "date": "2026-11-25",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, October 2026. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-11-26",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Thanksgiving Day."
+  },
+  {
+   "kind": "early-close",
+   "date": "2026-11-27",
+   "time": "13:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closes at 1 p.m.",
+   "detail": "The day after Thanksgiving."
+  },
+  {
+   "kind": "jobs",
+   "date": "2026-12-04",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "November 2026."
+  },
+  {
+   "kind": "fomc",
+   "date": "2026-12-09",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting December 8-9; statement at 14:00 ET, press conference after.",
+   "projections": true
+  },
+  {
+   "kind": "cpi",
+   "date": "2026-12-10",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "November 2026."
+  },
+  {
+   "kind": "bi-rate",
+   "date": "2026-12-16",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "bi-schedule",
+   "title": "Bank Indonesia rate decision",
+   "detail": "Board of Governors meeting, 15–16 December. Scheduled: in 2026 BI moved one meeting by a week and decided once between meetings.",
+   "scheduled": true
+  },
+  {
+   "kind": "gdp",
+   "date": "2026-12-23",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Third estimate, Q3 2026."
+  },
+  {
+   "kind": "pce",
+   "date": "2026-12-23",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, November 2026. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-12-24",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Cuti bersama, Christmas."
+  },
+  {
+   "kind": "early-close",
+   "date": "2026-12-24",
+   "time": "13:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closes at 1 p.m.",
+   "detail": "Christmas Eve."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-12-25",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Christmas Day."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-12-25",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Christmas Day."
+  },
+  {
+   "kind": "holiday",
+   "date": "2026-12-31",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Exchange holiday (libur bursa)."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-01-01",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "New Year's Day."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-01-01",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "New Year's Day."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-01-05",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Isra Mi'raj."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-01-08",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "December 2026."
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-01-13",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "December 2026."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-01-18",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Martin Luther King, Jr. Day."
+  },
+  {
+   "kind": "fomc",
+   "date": "2027-01-27",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting January 26-27; statement at 14:00 ET, press conference after.",
+   "projections": false,
+   "tentative": true
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-01-28",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Advance estimate, Q4 2026."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-01-28",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, December 2026. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-02-05",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Cuti bersama, Chinese New Year."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-02-05",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "January 2027."
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-02-11",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "January 2027."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-02-15",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Washington's Birthday."
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-02-25",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Second estimate, Q4 2026."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-02-25",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, January 2027. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-03-05",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "February 2027."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-03-08",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Nyepi."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-03-09",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Cuti bersama, Eid al-Fitr."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-03-10",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Eid al-Fitr."
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-03-10",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "February 2027."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-03-11",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Eid al-Fitr."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-03-12",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Cuti bersama, Eid al-Fitr."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-03-15",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Cuti bersama, Eid al-Fitr."
+  },
+  {
+   "kind": "fomc",
+   "date": "2027-03-17",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting March 16-17; statement at 14:00 ET, press conference after.",
+   "projections": true,
+   "tentative": true
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-03-25",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Cuti bersama, Good Friday."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-03-26",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Good Friday."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-03-26",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Good Friday."
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-03-31",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Third estimate, Q4 2026."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-03-31",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, February 2027. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-04-02",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "March 2027."
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-04-13",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "March 2027."
+  },
+  {
+   "kind": "fomc",
+   "date": "2027-04-28",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting April 27-28; statement at 14:00 ET, press conference after.",
+   "projections": false,
+   "tentative": true
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-04-29",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Advance estimate, Q1 2027."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-04-29",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, March 2027. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-05-06",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Ascension Day."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-05-07",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "April 2027."
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-05-12",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "April 2027."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-05-17",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Eid al-Adha."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-05-18",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Cuti bersama, Eid al-Adha."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-05-19",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Cuti bersama, Vesak."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-05-20",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Vesak."
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-05-27",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Second estimate, Q1 2027."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-05-27",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, April 2027. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-05-31",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Memorial Day."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-06-01",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Pancasila Day."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-06-04",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "May 2027."
+  },
+  {
+   "kind": "fomc",
+   "date": "2027-06-09",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting June 8-9; statement at 14:00 ET, press conference after.",
+   "projections": true,
+   "tentative": true
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-06-10",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "May 2027."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-06-18",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Juneteenth, observed."
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-06-25",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Third estimate, Q1 2027."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-06-25",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, May 2027. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-07-02",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "June 2027."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-07-05",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Independence Day, observed."
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-07-14",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "June 2027."
+  },
+  {
+   "kind": "fomc",
+   "date": "2027-07-28",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting July 27-28; statement at 14:00 ET, press conference after.",
+   "projections": false,
+   "tentative": true
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-07-29",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Advance estimate, Q2 2027."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-07-29",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, June 2027. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-08-06",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "July 2027."
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-08-11",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "July 2027."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-08-17",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Independence Day."
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-08-25",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Second estimate, Q2 2027."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-08-25",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, July 2027. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-09-03",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "August 2027."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-09-06",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Labor Day."
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-09-14",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "August 2027."
+  },
+  {
+   "kind": "fomc",
+   "date": "2027-09-15",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting September 14-15; statement at 14:00 ET, press conference after.",
+   "projections": true,
+   "tentative": true
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-09-30",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Third estimate, Q2 2027."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-09-30",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, August 2027. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-10-08",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "September 2027."
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-10-14",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "September 2027."
+  },
+  {
+   "kind": "fomc",
+   "date": "2027-10-27",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "Meeting October 26-27; statement at 14:00 ET, press conference after.",
+   "projections": false,
+   "tentative": true
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-10-28",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Advance estimate, Q3 2027."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-10-28",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, September 2027. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-11-05",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "October 2027."
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-11-10",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "October 2027."
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-11-24",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Second estimate, Q3 2027."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-11-24",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, October 2027. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-11-25",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Thanksgiving Day."
+  },
+  {
+   "kind": "early-close",
+   "date": "2027-11-26",
+   "time": "13:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closes at 1 p.m.",
+   "detail": "The day after Thanksgiving."
+  },
+  {
+   "kind": "jobs",
+   "date": "2027-12-03",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US jobs report",
+   "detail": "November 2027."
+  },
+  {
+   "kind": "fomc",
+   "date": "2027-12-08",
+   "time": "14:00",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "fomc",
+   "title": "FOMC rate decision",
+   "detail": "With the Fed's economic projections. Meeting December 7-8; statement at 14:00 ET, press conference after.",
+   "projections": true,
+   "tentative": true
+  },
+  {
+   "kind": "cpi",
+   "date": "2027-12-10",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bls",
+   "title": "US consumer prices (CPI)",
+   "detail": "November 2027."
+  },
+  {
+   "kind": "gdp",
+   "date": "2027-12-22",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US GDP",
+   "detail": "Third estimate, Q3 2027."
+  },
+  {
+   "kind": "pce",
+   "date": "2027-12-22",
+   "time": "08:30",
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "bea",
+   "title": "US PCE inflation",
+   "detail": "Personal income and outlays, November 2027. The Fed's preferred inflation measure."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-12-24",
+   "time": null,
+   "tz": "America/New_York",
+   "market": "US",
+   "source": "nyse",
+   "title": "NYSE closed",
+   "detail": "Christmas Day, observed."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-12-24",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Cuti bersama, Christmas."
+  },
+  {
+   "kind": "holiday",
+   "date": "2027-12-31",
+   "time": null,
+   "tz": "Asia/Jakarta",
+   "market": "ID",
+   "source": "idx",
+   "title": "IDX closed",
+   "detail": "Exchange holiday (libur bursa)."
+  }
+ ]
+}

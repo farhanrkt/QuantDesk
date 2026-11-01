@@ -1,118 +1,47 @@
 {
-  "measuredOn": "2026-09-01",
+  "measuredOn": "2026-11-01",
   "years": 9,
   "blockWeeks": 52,
   "blocks": 9,
   "transitions": 8,
-  "weeks": 475,
+  "weeks": 474,
   "killAt": 0.25,
-  "namesMeasured": 157,
+  "namesMeasured": 156,
   "namesExcludedForShortHistory": {
-    "ABNB": 300,
-    "APP": 282,
-    "ARM": 156,
-    "BUKA.JK": 265,
-    "CEG": 242,
-    "DASH": 300,
-    "DDOG": 364,
-    "GEHC": 195,
-    "GFS": 254,
-    "GOTO.JK": 230,
-    "MBMA.JK": 177,
-    "NCKL.JK": 178,
-    "PGEO.JK": 184,
-    "PLTR": 310,
-    "TAPG.JK": 282
+    "ABNB": 308,
+    "APP": 290,
+    "ARM": 164,
+    "BUKA.JK": 270,
+    "CEG": 250,
+    "DASH": 308,
+    "DDOG": 372,
+    "GEHC": 203,
+    "GFS": 262,
+    "GOTO.JK": 235,
+    "MBMA.JK": 182,
+    "NCKL.JK": 184,
+    "PGEO.JK": 190,
+    "PLTR": 318,
+    "TAPG.JK": 287,
+    "WBD": 0
   },
   "tiers": {
-    "all": 157,
-    "US": 111,
+    "all": 156,
+    "US": 110,
     "ID": 46,
     "resources": 12,
-    "nonResources": 145,
+    "nonResources": 144,
     "ID-illiquidHalf": 23,
     "ID-liquidHalf": 23,
     "US-illiquidHalf": 55,
-    "US-liquidHalf": 56
+    "US-liquidHalf": 55
   },
   "factors": {
     "gold": {
       "label": "gold",
       "symbol": "GC=F",
       "all": {
-        "names": 157,
-        "persistenceWhereLoaded": {
-          "usable": false,
-          "reason": "Only 1 consecutive block pairs with 10+ shared names."
-        },
-        "persistenceAllNames": {
-          "usable": true,
-          "transitions": 8,
-          "meanRankCorrelation": 0.06555637921524458,
-          "stdev": 0.07793067563729993,
-          "tStat": 2.3793126346744637,
-          "min": -0.03612649545085246,
-          "max": 0.14756975669658084,
-          "byTransition": [
-            {
-              "from": "y1",
-              "to": "y2",
-              "names": 153,
-              "rho": 0.13796523394046614
-            },
-            {
-              "from": "y2",
-              "to": "y3",
-              "names": 156,
-              "rho": -0.01973415940952411
-            },
-            {
-              "from": "y3",
-              "to": "y4",
-              "names": 157,
-              "rho": 0.13510689101272025
-            },
-            {
-              "from": "y4",
-              "to": "y5",
-              "names": 157,
-              "rho": 0.14756975669658084
-            },
-            {
-              "from": "y5",
-              "to": "y6",
-              "names": 157,
-              "rho": 0.02969194797784655
-            },
-            {
-              "from": "y6",
-              "to": "y7",
-              "names": 157,
-              "rho": -0.03612649545085246
-            },
-            {
-              "from": "y7",
-              "to": "y8",
-              "names": 157,
-              "rho": 0.006657818517852381
-            },
-            {
-              "from": "y8",
-              "to": "y9",
-              "names": 157,
-              "rho": 0.123320040436867
-            }
-          ]
-        },
-        "dispersion": {
-          "usable": true,
-          "medianWithinNameSd": 0.2799250154485723,
-          "medianAbsBeta": 0.08819344076630982,
-          "names": 157
-        }
-      },
-      "US": {
-        "names": 111,
+        "names": 156,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -120,67 +49,139 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.011642513717719481,
-          "stdev": 0.17563073315544914,
-          "tStat": 0.18749566780138277,
-          "min": -0.1567918567918568,
-          "max": 0.2989225185058161,
+          "meanRankCorrelation": 0.09533167246352299,
+          "stdev": 0.08844231867448835,
+          "tStat": 3.0487519129349394,
+          "min": -0.06989932196424901,
+          "max": 0.18504076568592695,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 108,
-              "rho": 0.2989225185058161
+              "names": 152,
+              "rho": 0.12824718594304227
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 110,
-              "rho": -0.14134751932917072
+              "names": 155,
+              "rho": 0.18504076568592695
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 111,
-              "rho": 0.10505440505440504
+              "names": 156,
+              "rho": 0.07824753836670827
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 111,
-              "rho": 0.1311074061074061
+              "names": 156,
+              "rho": 0.1716742267389483
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 111,
-              "rho": -0.1567918567918568
+              "names": 156,
+              "rho": 0.15432978773845837
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 111,
-              "rho": -0.14914882414882413
+              "names": 156,
+              "rho": -0.06989932196424901
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 111,
-              "rho": -0.125008775008775
+              "names": 156,
+              "rho": 0.11163408196488121
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 111,
-              "rho": 0.13035275535275534
+              "names": 156,
+              "rho": 0.003379115234467607
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.2604598412280357,
-          "medianAbsBeta": 0.0737670442346538,
-          "names": 111
+          "medianWithinNameSd": 0.27844031967415184,
+          "medianAbsBeta": 0.08725424405735932,
+          "names": 156
+        }
+      },
+      "US": {
+        "names": 110,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.04786785470784134,
+          "stdev": 0.15094425499084993,
+          "tStat": 0.8969585405372024,
+          "min": -0.14045488357414962,
+          "max": 0.30008424929955524,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 107,
+              "rho": 0.30008424929955524
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 109,
+              "rho": 0.14666852006301548
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 110,
+              "rho": 0.1179766922886189
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 110,
+              "rho": 0.1423213037891937
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 110,
+              "rho": -0.05163311768816356
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 110,
+              "rho": -0.14045488357414962
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 110,
+              "rho": -0.08809593580235782
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 110,
+              "rho": -0.04392399071298154
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.26012336840404315,
+          "medianAbsBeta": 0.07195269657768398,
+          "names": 110
         }
       },
       "ID": {
@@ -192,66 +193,66 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.1509369831525243,
-          "stdev": 0.10508711285661067,
-          "tStat": 4.062479648274995,
-          "min": 0.015232809127351218,
-          "max": 0.30965155720012333,
+          "meanRankCorrelation": 0.17175244582737648,
+          "stdev": 0.16088665463782525,
+          "tStat": 3.0194504175204644,
+          "min": -0.043741765480895915,
+          "max": 0.4537156953438175,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 45,
-              "rho": 0.017918313570487482
+              "rho": -0.043741765480895915
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 46,
-              "rho": 0.1411655874190564
+              "rho": 0.2606845513413506
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 46,
-              "rho": 0.1738513721862473
+              "rho": 0.07073697193956213
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 46,
-              "rho": 0.11970397779833486
+              "rho": 0.15386987357385137
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 46,
-              "rho": 0.15929694727104532
+              "rho": 0.3045945112550108
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 46,
-              "rho": 0.015232809127351218
+              "rho": 0.037927844588344126
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 46,
-              "rho": 0.30965155720012333
+              "rho": 0.4537156953438175
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 46,
-              "rho": 0.2706753006475485
+              "rho": 0.13623188405797101
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.3450547562941649,
-          "medianAbsBeta": 0.12750537878571253,
+          "medianWithinNameSd": 0.35957099123704467,
+          "medianAbsBeta": 0.09677396254320612,
           "names": 46
         }
       },
@@ -264,71 +265,71 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.2211538461538462,
-          "stdev": 0.44675468203301155,
-          "tStat": 1.4001365007681417,
-          "min": -0.7552447552447553,
-          "max": 0.7132867132867133,
+          "meanRankCorrelation": 0.2701048951048951,
+          "stdev": 0.4750532056812119,
+          "tStat": 1.608181994574475,
+          "min": -0.8251748251748254,
+          "max": 0.6713286713286714,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 12,
-              "rho": -0.7552447552447553
+              "rho": -0.8251748251748254
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 12,
-              "rho": 0.16083916083916086
+              "rho": 0.5944055944055945
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 12,
-              "rho": 0.5034965034965035
+              "rho": 0.43356643356643365
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 12,
-              "rho": 0.5104895104895105
+              "rho": 0.31468531468531474
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 12,
-              "rho": 0.3076923076923077
+              "rho": 0.6713286713286714
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 12,
-              "rho": 0.06293706293706294
+              "rho": 0.17482517482517487
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 12,
-              "rho": 0.7132867132867133
+              "rho": 0.5454545454545455
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 12,
-              "rho": 0.2657342657342658
+              "rho": 0.2517482517482518
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.4187871998137134,
-          "medianAbsBeta": 0.23080766638567385,
+          "medianWithinNameSd": 0.4423880678070059,
+          "medianAbsBeta": 0.2533349275762727,
           "names": 12
         }
       },
       "nonResources": {
-        "names": 145,
+        "names": 144,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -336,67 +337,67 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.0425553230416971,
-          "stdev": 0.10439194873901685,
-          "tStat": 1.1530068309615333,
-          "min": -0.07649976381672176,
-          "max": 0.1845541333105013,
+          "meanRankCorrelation": 0.06980470863894614,
+          "stdev": 0.1034619991187598,
+          "tStat": 1.908309650220169,
+          "min": -0.10926372478096617,
+          "max": 0.22097045767641207,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 141,
-              "rho": 0.1845541333105013
+              "names": 140,
+              "rho": 0.22097045767641207
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 144,
-              "rho": -0.05672373603408086
+              "names": 143,
+              "rho": 0.12424078269148689
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 145,
-              "rho": 0.11118327822390174
+              "names": 144,
+              "rho": 0.04424081665460976
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 145,
-              "rho": 0.1375373956857188
+              "names": 144,
+              "rho": 0.14742785949682502
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 145,
-              "rho": -0.006530467642890882
+              "names": 144,
+              "rho": 0.11340728237279962
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 145,
-              "rho": -0.07649976381672176
+              "names": 144,
+              "rho": -0.10926372478096617
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 145,
-              "rho": -0.06377342150842387
+              "names": 144,
+              "rho": 0.031122900088417327
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 145,
-              "rho": 0.11069516611557234
+              "names": 144,
+              "rho": -0.013708705088015432
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.27561984365666903,
-          "medianAbsBeta": 0.08222069975032142,
-          "names": 145
+          "medianWithinNameSd": 0.2730159661020092,
+          "medianAbsBeta": 0.07827379199914963,
+          "names": 144
         }
       },
       "ID-illiquidHalf": {
@@ -408,113 +409,41 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.043372388481084136,
-          "stdev": 0.23061815692945625,
-          "tStat": 0.5319426782274251,
-          "min": -0.3142292490118577,
-          "max": 0.36462450592885376,
-          "byTransition": [
-            {
-              "from": "y1",
-              "to": "y2",
-              "names": 22,
-              "rho": 0.06041784302653869
-            },
-            {
-              "from": "y2",
-              "to": "y3",
-              "names": 23,
-              "rho": -0.3142292490118577
-            },
-            {
-              "from": "y3",
-              "to": "y4",
-              "names": 23,
-              "rho": -0.11462450592885376
-            },
-            {
-              "from": "y4",
-              "to": "y5",
-              "names": 23,
-              "rho": -0.12055335968379448
-            },
-            {
-              "from": "y5",
-              "to": "y6",
-              "names": 23,
-              "rho": 0.36462450592885376
-            },
-            {
-              "from": "y6",
-              "to": "y7",
-              "names": 23,
-              "rho": 0.03063241106719368
-            },
-            {
-              "from": "y7",
-              "to": "y8",
-              "names": 23,
-              "rho": 0.33498023715415026
-            },
-            {
-              "from": "y8",
-              "to": "y9",
-              "names": 23,
-              "rho": 0.1057312252964427
-            }
-          ]
-        },
-        "dispersion": {
-          "usable": true,
-          "medianWithinNameSd": 0.33201395308245196,
-          "medianAbsBeta": 0.11505236704206218,
-          "names": 23
-        }
-      },
-      "ID-liquidHalf": {
-        "names": 23,
-        "persistenceWhereLoaded": {
-          "usable": false,
-          "reason": "Only 0 consecutive block pairs with 10+ shared names."
-        },
-        "persistenceAllNames": {
-          "usable": true,
-          "transitions": 8,
-          "meanRankCorrelation": 0.22097332015810278,
-          "stdev": 0.23315428506935867,
-          "tStat": 2.68065814185862,
-          "min": -0.0909090909090909,
-          "max": 0.4841897233201581,
+          "meanRankCorrelation": 0.0941205533596838,
+          "stdev": 0.24948740923380539,
+          "tStat": 1.067040324544679,
+          "min": -0.1274703557312253,
+          "max": 0.5296442687747036,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 23,
-              "rho": -0.0909090909090909
+              "rho": 0.001976284584980237
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 23,
-              "rho": 0.4841897233201581
+              "rho": 0.024703557312252968
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 23,
-              "rho": 0.4762845849802372
+              "rho": -0.1274703557312253
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 23,
-              "rho": 0.3320158102766798
+              "rho": 0.0009881422924901185
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 23,
-              "rho": 0.04644268774703557
+              "rho": 0.44861660079051385
             },
             {
               "from": "y6",
@@ -526,20 +455,92 @@
               "from": "y7",
               "to": "y8",
               "names": 23,
-              "rho": 0.21739130434782608
+              "rho": 0.5296442687747036
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 23,
-              "rho": 0.37055335968379455
+              "rho": -0.05731225296442688
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.3570801845826454,
-          "medianAbsBeta": 0.13532829869648821,
+          "medianWithinNameSd": 0.3357278683760102,
+          "medianAbsBeta": 0.09404648289322452,
+          "names": 23
+        }
+      },
+      "ID-liquidHalf": {
+        "names": 23,
+        "persistenceWhereLoaded": {
+          "usable": false,
+          "reason": "Only 0 consecutive block pairs with 10+ shared names."
+        },
+        "persistenceAllNames": {
+          "usable": true,
+          "transitions": 8,
+          "meanRankCorrelation": 0.25158808582721626,
+          "stdev": 0.17536595671816127,
+          "tStat": 4.057791942824536,
+          "min": -0.06041784302653869,
+          "max": 0.5088932806324111,
+          "byTransition": [
+            {
+              "from": "y1",
+              "to": "y2",
+              "names": 22,
+              "rho": -0.06041784302653869
+            },
+            {
+              "from": "y2",
+              "to": "y3",
+              "names": 23,
+              "rho": 0.5088932806324111
+            },
+            {
+              "from": "y3",
+              "to": "y4",
+              "names": 23,
+              "rho": 0.2509881422924901
+            },
+            {
+              "from": "y4",
+              "to": "y5",
+              "names": 23,
+              "rho": 0.12845849802371542
+            },
+            {
+              "from": "y5",
+              "to": "y6",
+              "names": 23,
+              "rho": 0.316205533596838
+            },
+            {
+              "from": "y6",
+              "to": "y7",
+              "names": 23,
+              "rho": 0.1660079051383399
+            },
+            {
+              "from": "y7",
+              "to": "y8",
+              "names": 23,
+              "rho": 0.3003952569169961
+            },
+            {
+              "from": "y8",
+              "to": "y9",
+              "names": 23,
+              "rho": 0.40217391304347827
+            }
+          ]
+        },
+        "dispersion": {
+          "usable": true,
+          "medianWithinNameSd": 0.3812745109886787,
+          "medianAbsBeta": 0.13541276343156589,
           "names": 23
         }
       },
@@ -552,71 +553,71 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.01070135315418333,
-          "stdev": 0.16314257791978673,
-          "tStat": 0.18553095040377732,
-          "min": -0.23369408369408373,
-          "max": 0.28157042119306264,
+          "meanRankCorrelation": 0.03125272264423205,
+          "stdev": 0.23150095271242366,
+          "tStat": 0.3818388106545861,
+          "min": -0.24906204906204912,
+          "max": 0.371450352582428,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 54,
-              "rho": 0.28157042119306264
+              "rho": 0.371450352582428
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 55,
-              "rho": -0.05165945165945167
+              "rho": 0.25360750360750367
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 55,
-              "rho": 0.04841269841269842
+              "rho": 0.1026695526695527
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 55,
-              "rho": 0.13492063492063494
+              "rho": 0.1880230880230881
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 55,
-              "rho": -0.15909090909090912
+              "rho": -0.08766233766233769
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 55,
-              "rho": 0.06919191919191921
+              "rho": -0.09054834054834057
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 55,
-              "rho": -0.23369408369408373
+              "rho": -0.2384559884559885
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 55,
-              "rho": -0.004040404040404041
+              "rho": -0.24906204906204912
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.250723350172638,
-          "medianAbsBeta": 0.08565365919274517,
+          "medianWithinNameSd": 0.2591263071497279,
+          "medianAbsBeta": 0.07252251633282294,
           "names": 55
         }
       },
       "US-liquidHalf": {
-        "names": 56,
+        "names": 55,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -624,112 +625,112 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.011233155430027317,
-          "stdev": 0.22829263167713407,
-          "tStat": 0.13917296095527704,
-          "min": -0.31852358168147643,
-          "max": 0.29910425004764624,
+          "meanRankCorrelation": 0.056221975089899616,
+          "stdev": 0.12692729660669563,
+          "tStat": 1.2528413005109897,
+          "min": -0.1910533910533911,
+          "max": 0.20764790764790766,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 54,
-              "rho": 0.29910425004764624
+              "names": 53,
+              "rho": 0.19996774713755844
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 55,
-              "rho": -0.22878787878787885
+              "names": 54,
+              "rho": 0.022679626453211355
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 56,
-              "rho": 0.13759398496240602
+              "names": 55,
+              "rho": 0.06197691197691199
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 56,
-              "rho": 0.10362269309637732
+              "names": 55,
+              "rho": 0.07922077922077925
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 56,
-              "rho": -0.14757347915242652
+              "names": 55,
+              "rho": -0.017388167388167394
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 56,
-              "rho": -0.31852358168147643
+              "names": 55,
+              "rho": -0.1910533910533911
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 56,
-              "rho": -0.021394395078605605
+              "names": 55,
+              "rho": 0.08672438672438675
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 56,
-              "rho": 0.26582365003417635
+              "names": 55,
+              "rho": 0.20764790764790766
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.26930244190990626,
-          "medianAbsBeta": 0.06532428530503862,
-          "names": 56
+          "medianWithinNameSd": 0.2686887915887821,
+          "medianAbsBeta": 0.0655330871060052,
+          "names": 55
         }
       },
       "stress": {
         "usable": true,
-        "names": 157,
-        "worstBlocksRSquared": 0.013168650395731906,
-        "restRSquared": 0.006827367308180894,
-        "rise": 0.006341283087551012,
+        "names": 156,
+        "worstBlocksRSquared": 0.013494144144101473,
+        "restRSquared": 0.006717784290900536,
+        "rise": 0.006776359853200937,
         "worstBlocks": 2,
         "totalBlocks": 9
       },
       "asymmetry": {
         "usable": true,
-        "names": 157,
+        "names": 156,
         "byHalf": {
-          "signAgreement": 0.4840764331210191,
-          "rankCorrelation": 0.00549184750587637
+          "signAgreement": 0.4935897435897436,
+          "rankCorrelation": -0.006413680833241136
         },
         "byRegime": {
-          "signAgreement": 0.4840764331210191,
-          "rankCorrelation": 0.025189315240109405
+          "signAgreement": 0.5,
+          "rankCorrelation": -0.059818874365823206
         },
-        "medianGapEarly": 0.02142039588462502,
-        "medianGapLate": -0.048745039071601944,
-        "medianGapRising": -0.03162850885187215,
-        "medianGapFalling": -0.04811796221384235,
-        "risingBlocks": 5,
-        "fallingBlocks": 4
+        "medianGapEarly": 0.008821336611514023,
+        "medianGapLate": -0.06313603925242736,
+        "medianGapRising": 0.005466501030926165,
+        "medianGapFalling": -0.03320495347404885,
+        "risingBlocks": 6,
+        "fallingBlocks": 3
       },
       "frequency": {
         "usable": true,
-        "names": 157,
-        "medianAbsDaily": 0.07081809257407541,
-        "medianAbsDimson": 0.13557093534443704,
-        "medianAbsWeekly": 0.25935449320847903,
-        "signDisagreeDailyWeekly": 0.09554140127388536,
-        "signDisagreeDimsonWeekly": 0.03821656050955414,
-        "weeklyOverDaily": 3.6622631841883537
+        "names": 156,
+        "medianAbsDaily": 0.07503406744343985,
+        "medianAbsDimson": 0.13527949364034658,
+        "medianAbsWeekly": 0.24699672563142913,
+        "signDisagreeDailyWeekly": 0.09615384615384616,
+        "signDisagreeDimsonWeekly": 0.02564102564102564,
+        "weeklyOverDaily": 3.291794434809409
       }
     },
     "oil": {
       "label": "the energy complex",
       "symbol": "CL=F",
       "all": {
-        "names": 157,
+        "names": 156,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -737,71 +738,71 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.1981703535593875,
-          "stdev": 0.1291557941877613,
-          "tStat": 4.339800679116786,
-          "min": -0.04395062508890329,
-          "max": 0.3527031301360093,
+          "meanRankCorrelation": 0.25015364782164795,
+          "stdev": 0.10469419095009605,
+          "tStat": 6.758172124279697,
+          "min": 0.07166382005091683,
+          "max": 0.40200407769752333,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 153,
-              "rho": 0.23107233323951587
+              "names": 152,
+              "rho": 0.3245203972143057
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 156,
-              "rho": -0.04395062508890329
+              "names": 155,
+              "rho": 0.07166382005091683
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 157,
-              "rho": 0.13817066590589125
+              "names": 156,
+              "rho": 0.22723838725482448
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 157,
-              "rho": 0.17229392392659346
+              "names": 156,
+              "rho": 0.32055444042294257
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 157,
-              "rho": 0.2973226080538828
+              "names": 156,
+              "rho": 0.27015220243081345
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 157,
-              "rho": 0.3143346212764902
+              "names": 156,
+              "rho": 0.2359090262521534
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 157,
-              "rho": 0.3527031301360093
+              "names": 156,
+              "rho": 0.40200407769752333
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 157,
-              "rho": 0.12341617102562034
+              "names": 156,
+              "rho": 0.14918683124970364
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.11221436188846498,
-          "medianAbsBeta": 0.03496258578313131,
-          "names": 157
+          "medianWithinNameSd": 0.11484416654363393,
+          "medianAbsBeta": 0.034803068714348934,
+          "names": 156
         }
       },
       "US": {
-        "names": 111,
+        "names": 110,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -809,67 +810,67 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.09010474159476345,
-          "stdev": 0.13682637147051258,
-          "tStat": 1.8626138547407063,
-          "min": -0.12555958794490907,
-          "max": 0.2923394173394173,
+          "meanRankCorrelation": 0.144404467891034,
+          "stdev": 0.1479744086629225,
+          "tStat": 2.7601902086187002,
+          "min": -0.05176536002224076,
+          "max": 0.33324617361314607,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 108,
-              "rho": 0.05375975306524908
+              "names": 107,
+              "rho": 0.12814710319559552
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 110,
-              "rho": -0.12555958794490907
+              "names": 109,
+              "rho": -0.05176536002224076
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 111,
-              "rho": 0.15024570024570025
+              "names": 110,
+              "rho": 0.33324617361314607
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 111,
-              "rho": 0.2923394173394173
+              "names": 110,
+              "rho": 0.29674728940783984
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 111,
-              "rho": 0.16637416637416635
+              "names": 110,
+              "rho": 0.14102292450916307
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 111,
-              "rho": 0.12655317655317652
+              "names": 110,
+              "rho": 0.0748686968870455
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 111,
-              "rho": 0.13806598806598808
+              "names": 110,
+              "rho": 0.27341252845840003
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 111,
-              "rho": -0.08094068094068094
+              "names": 110,
+              "rho": -0.04044361292067714
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.10234430704044739,
-          "medianAbsBeta": 0.029272225298502444,
-          "names": 111
+          "medianWithinNameSd": 0.10528059146731852,
+          "medianAbsBeta": 0.029138245648837754,
+          "names": 110
         }
       },
       "ID": {
@@ -881,66 +882,66 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.25167318420093626,
-          "stdev": 0.2803500740912402,
-          "tStat": 2.5391085166380365,
-          "min": -0.06395312981806969,
-          "max": 0.6224483502929387,
+          "meanRankCorrelation": 0.3415632971715303,
+          "stdev": 0.22181229408182213,
+          "tStat": 4.355425376833845,
+          "min": -0.11896392229417205,
+          "max": 0.5558433549182855,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 45,
-              "rho": 0.3440052700922266
+              "rho": 0.43148880105401843
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 46,
-              "rho": 0.048905334566759176
+              "rho": 0.21122417514646932
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 46,
-              "rho": -0.06395312981806969
+              "rho": -0.11896392229417205
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 46,
-              "rho": -0.05445575084798027
+              "rho": 0.4329941412272587
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 46,
-              "rho": 0.6131976564909035
+              "rho": 0.517113783533765
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 46,
-              "rho": 0.6224483502929387
+              "rho": 0.5558433549182855
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 46,
-              "rho": 0.3913043478260869
+              "rho": 0.4561825470243602
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 46,
-              "rho": 0.11193339500462535
+              "rho": 0.24662349676225717
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.14617916196947994,
-          "medianAbsBeta": 0.05646747561887707,
+          "medianWithinNameSd": 0.1383931705610685,
+          "medianAbsBeta": 0.0685646640537162,
           "names": 46
         }
       },
@@ -953,71 +954,71 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.004370629370629372,
-          "stdev": 0.34152266820296745,
-          "tStat": 0.03619673835750699,
-          "min": -0.46153846153846156,
-          "max": 0.4685314685314686,
+          "meanRankCorrelation": 0.07517482517482518,
+          "stdev": 0.42961282693918446,
+          "tStat": 0.49492589906452555,
+          "min": -0.4125874125874127,
+          "max": 0.7062937062937064,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 12,
-              "rho": 0.1958041958041958
+              "rho": 0.3216783216783217
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 12,
-              "rho": -0.22377622377622378
+              "rho": -0.16783216783216784
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 12,
-              "rho": -0.18881118881118883
+              "rho": -0.3636363636363637
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 12,
-              "rho": 0.0
+              "rho": -0.16783216783216784
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 12,
-              "rho": -0.21678321678321683
+              "rho": 0.07692307692307693
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 12,
-              "rho": 0.46153846153846156
+              "rho": 0.7062937062937064
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 12,
-              "rho": 0.4685314685314686
+              "rho": 0.6083916083916086
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 12,
-              "rho": -0.46153846153846156
+              "rho": -0.4125874125874127
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.16293222086035308,
-          "medianAbsBeta": 0.15622747848797286,
+          "medianWithinNameSd": 0.13469947838421417,
+          "medianAbsBeta": 0.18421482837846986,
           "names": 12
         }
       },
       "nonResources": {
-        "names": 145,
+        "names": 144,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -1025,67 +1026,67 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.15072473804057415,
-          "stdev": 0.10168476079647334,
-          "tStat": 4.192505682316651,
-          "min": -0.0614862149344908,
-          "max": 0.28200677058730905,
+          "meanRankCorrelation": 0.18386957854924946,
+          "stdev": 0.100117542541135,
+          "tStat": 5.194511273293301,
+          "min": 0.033536885649561705,
+          "max": 0.32770275701310186,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 141,
-              "rho": 0.1926580761162721
+              "names": 140,
+              "rho": 0.26892042596925503
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 144,
-              "rho": -0.0614862149344908
+              "names": 143,
+              "rho": 0.033536885649561705
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 145,
-              "rho": 0.16442686191150996
+              "names": 144,
+              "rho": 0.23364279398762158
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 145,
-              "rho": 0.17490946307668082
+              "names": 144,
+              "rho": 0.23807973635559845
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 145,
-              "rho": 0.14404818138875766
+              "names": 144,
+              "rho": 0.1376255927980066
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 145,
-              "rho": 0.21587151629664617
+              "names": 144,
+              "rho": 0.15314685314685317
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 145,
-              "rho": 0.28200677058730905
+              "names": 144,
+              "rho": 0.32770275701310186
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 145,
-              "rho": 0.09336324988190835
+              "names": 144,
+              "rho": 0.07830158347399727
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.10997315023115954,
-          "medianAbsBeta": 0.03089749734731695,
-          "names": 145
+          "medianWithinNameSd": 0.11226885202866732,
+          "medianAbsBeta": 0.03207245827174065,
+          "names": 144
         }
       },
       "ID-illiquidHalf": {
@@ -1097,66 +1098,66 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.19177018633540374,
-          "stdev": 0.29240644425773676,
-          "tStat": 1.85497962647701,
-          "min": -0.23715415019762848,
-          "max": 0.5247035573122529,
+          "meanRankCorrelation": 0.23480731225296445,
+          "stdev": 0.28660504031963036,
+          "tStat": 2.317249446570688,
+          "min": -0.41699604743083,
+          "max": 0.48122529644268774,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 22,
-              "rho": 0.3088650479954828
+              "names": 23,
+              "rho": 0.3142292490118577
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 23,
-              "rho": -0.07114624505928854
+              "rho": 0.10375494071146245
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 23,
-              "rho": -0.23715415019762848
+              "rho": -0.41699604743083
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 23,
-              "rho": -0.023715415019762844
+              "rho": 0.24802371541501977
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 23,
-              "rho": 0.5247035573122529
+              "rho": 0.3764822134387352
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 23,
-              "rho": 0.45553359683794475
+              "rho": 0.3804347826086957
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 23,
-              "rho": 0.49604743083003955
+              "rho": 0.48122529644268774
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 23,
-              "rho": 0.08102766798418974
+              "rho": 0.391304347826087
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.1576525206630424,
-          "medianAbsBeta": 0.05356467241365462,
+          "medianWithinNameSd": 0.16215423505134682,
+          "medianAbsBeta": 0.07123088229901492,
           "names": 23
         }
       },
@@ -1169,66 +1170,66 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.33102766798418976,
-          "stdev": 0.29316653818918353,
-          "tStat": 3.1937056696551154,
-          "min": 0.0,
-          "max": 0.7915019762845852,
+          "meanRankCorrelation": 0.43229460756634674,
+          "stdev": 0.24193603699045763,
+          "tStat": 5.053872127244899,
+          "min": 0.05434782608695652,
+          "max": 0.7717391304347826,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 23,
-              "rho": 0.4466403162055336
+              "names": 22,
+              "rho": 0.6194240542066629
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 23,
-              "rho": 0.11857707509881424
+              "rho": 0.3003952569169961
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 23,
-              "rho": 0.11363636363636365
+              "rho": 0.1847826086956522
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 23,
-              "rho": 0.0
+              "rho": 0.5612648221343874
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 23,
-              "rho": 0.7124505928853756
+              "rho": 0.5731225296442688
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 23,
-              "rho": 0.7915019762845852
+              "rho": 0.7717391304347826
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 23,
-              "rho": 0.30138339920948615
+              "rho": 0.39328063241106714
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 23,
-              "rho": 0.16403162055335968
+              "rho": 0.05434782608695652
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.11973091746532044,
-          "medianAbsBeta": 0.06761853390710619,
+          "medianWithinNameSd": 0.11457292164225732,
+          "medianAbsBeta": 0.06589844580841746,
           "names": 23
         }
       },
@@ -1241,71 +1242,71 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.09825155190721231,
-          "stdev": 0.1261033498964407,
-          "tStat": 2.203726980218876,
-          "min": -0.1407647907647908,
-          "max": 0.2684704184704185,
+          "meanRankCorrelation": 0.1900582645865665,
+          "stdev": 0.10587479731954132,
+          "tStat": 5.077374072475456,
+          "min": 0.010389610389610393,
+          "max": 0.3516594516594517,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 54,
-              "rho": 0.06415094339622641
+              "rho": 0.15105774728416235
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 55,
-              "rho": -0.1407647907647908
+              "rho": 0.09422799422799426
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 55,
-              "rho": 0.18340548340548343
+              "rho": 0.2705627705627706
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 55,
-              "rho": 0.2684704184704185
+              "rho": 0.2405483405483406
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 55,
-              "rho": 0.010822510822510824
+              "rho": 0.010389610389610393
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 55,
-              "rho": 0.19357864357864363
+              "rho": 0.20793650793650797
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 55,
-              "rho": 0.10021645021645025
+              "rho": 0.3516594516594517
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 55,
-              "rho": 0.10613275613275615
+              "rho": 0.1940836940836941
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.1004271537925822,
-          "medianAbsBeta": 0.030737744024703233,
+          "medianWithinNameSd": 0.09584948938574589,
+          "medianAbsBeta": 0.03204780266167427,
           "names": 55
         }
       },
       "US-liquidHalf": {
-        "names": 56,
+        "names": 55,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -1313,112 +1314,112 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.06696371252602633,
-          "stdev": 0.1882722641486031,
-          "tStat": 1.0060004416413897,
-          "min": -0.27074504442925496,
-          "max": 0.2850991114149009,
+          "meanRankCorrelation": 0.09890132142490635,
+          "stdev": 0.2723525407028367,
+          "tStat": 1.027106923510088,
+          "min": -0.29574995235372586,
+          "max": 0.38946608946608957,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 54,
-              "rho": 0.045244901848675426
+              "names": 53,
+              "rho": 0.1311885179809708
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 55,
-              "rho": -0.10714285714285716
+              "names": 54,
+              "rho": -0.29574995235372586
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 56,
-              "rho": 0.062474367737525634
+              "names": 55,
+              "rho": 0.38946608946608957
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 56,
-              "rho": 0.28086124401913876
+              "names": 55,
+              "rho": 0.3555555555555556
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 56,
-              "rho": 0.2850991114149009
+              "names": 55,
+              "rho": 0.2694805194805195
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 56,
-              "rho": 0.07347915242652085
+              "names": 55,
+              "rho": 0.0008658008658008659
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 56,
-              "rho": 0.1664388243335612
+              "names": 55,
+              "rho": 0.23506493506493512
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 56,
-              "rho": -0.27074504442925496
+              "names": 55,
+              "rho": -0.29466089466089473
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.11302452903765417,
-          "medianAbsBeta": 0.02702172333287221,
-          "names": 56
+          "medianWithinNameSd": 0.11050223598084657,
+          "medianAbsBeta": 0.025747141318188487,
+          "names": 55
         }
       },
       "stress": {
         "usable": true,
-        "names": 157,
-        "worstBlocksRSquared": 0.024130904738593768,
-        "restRSquared": 0.010812305196939053,
-        "rise": 0.013318599541654715,
+        "names": 156,
+        "worstBlocksRSquared": 0.02447807580859302,
+        "restRSquared": 0.014508520463231846,
+        "rise": 0.009969555345361175,
         "worstBlocks": 2,
         "totalBlocks": 9
       },
       "asymmetry": {
         "usable": true,
-        "names": 157,
+        "names": 156,
         "byHalf": {
-          "signAgreement": 0.4840764331210191,
-          "rankCorrelation": -0.0630616662221919
+          "signAgreement": 0.46794871794871795,
+          "rankCorrelation": -0.1177379842265809
         },
         "byRegime": {
-          "signAgreement": 0.47770700636942676,
-          "rankCorrelation": -0.10169996092756715
+          "signAgreement": 0.4423076923076923,
+          "rankCorrelation": -0.10272320652431603
         },
-        "medianGapEarly": -0.0004816135355201305,
-        "medianGapLate": 0.035736419067072624,
-        "medianGapRising": 0.025577800336117833,
-        "medianGapFalling": 0.00522077002025105,
-        "risingBlocks": 5,
-        "fallingBlocks": 4
+        "medianGapEarly": -0.005328834567307959,
+        "medianGapLate": 0.024446834072565687,
+        "medianGapRising": 0.042476895888141214,
+        "medianGapFalling": -0.017464901247733512,
+        "risingBlocks": 4,
+        "fallingBlocks": 5
       },
       "frequency": {
         "usable": true,
-        "names": 157,
-        "medianAbsDaily": 0.061509936297022595,
-        "medianAbsDimson": 0.059262256470568785,
-        "medianAbsWeekly": 0.07366483371497277,
-        "signDisagreeDailyWeekly": 0.044585987261146494,
-        "signDisagreeDimsonWeekly": 0.03184713375796178,
-        "weeklyOverDaily": 1.1976086816161853
+        "names": 156,
+        "medianAbsDaily": 0.06046946695619867,
+        "medianAbsDimson": 0.050308328558198626,
+        "medianAbsWeekly": 0.08594837024511441,
+        "signDisagreeDailyWeekly": 0.02564102564102564,
+        "signDisagreeDimsonWeekly": 0.057692307692307696,
+        "weeklyOverDaily": 1.4213515443648859
       }
     },
     "copper": {
       "label": "copper",
       "symbol": "HG=F",
       "all": {
-        "names": 157,
+        "names": 156,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -1426,71 +1427,71 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.12984830297006042,
-          "stdev": 0.06628911044429854,
-          "tStat": 5.540373973360031,
-          "min": 0.016568572119648472,
-          "max": 0.23131190344767705,
+          "meanRankCorrelation": 0.12856286940129397,
+          "stdev": 0.111112372100841,
+          "tStat": 3.272639222568353,
+          "min": -0.01867165092971545,
+          "max": 0.33184239224921364,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 153,
-              "rho": 0.11199455858898583
+              "names": 152,
+              "rho": 0.14251054203486901
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 156,
-              "rho": 0.09962225980306932
+              "names": 155,
+              "rho": -0.01867165092971545
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 157,
-              "rho": 0.184762991583922
+              "names": 156,
+              "rho": 0.33184239224921364
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 157,
-              "rho": 0.016568572119648472
+              "names": 156,
+              "rho": 0.1767255140585734
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 157,
-              "rho": 0.23131190344767705
+              "names": 156,
+              "rho": 0.059717722179197415
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 157,
-              "rho": 0.17047364471374793
+              "names": 156,
+              "rho": 0.19828673483902573
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 157,
-              "rho": 0.088585888029571
+              "names": 156,
+              "rho": 0.02310379162649555
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 157,
-              "rho": 0.1354666054738618
+              "names": 156,
+              "rho": 0.11498790915269237
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.1904955714172074,
-          "medianAbsBeta": 0.06041040092213327,
-          "names": 157
+          "medianWithinNameSd": 0.1981904228202658,
+          "medianAbsBeta": 0.06291668930017733,
+          "names": 156
         }
       },
       "US": {
-        "names": 111,
+        "names": 110,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -1498,67 +1499,67 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.11404725703576772,
-          "stdev": 0.09006646716105632,
-          "tStat": 3.5815144689314913,
-          "min": -0.009985959985959986,
-          "max": 0.279282284786872,
+          "meanRankCorrelation": 0.1234027836624704,
+          "stdev": 0.09639587743648496,
+          "tStat": 3.620857964699748,
+          "min": 0.0065054211843202665,
+          "max": 0.24111953604106665,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 108,
-              "rho": 0.138395876799375
+              "names": 107,
+              "rho": 0.24111953604106665
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 110,
-              "rho": 0.279282284786872
+              "names": 109,
+              "rho": 0.2053007135575943
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 111,
-              "rho": -0.009985959985959986
+              "names": 110,
+              "rho": 0.16186010864909947
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 111,
-              "rho": 0.17155142155142156
+              "names": 110,
+              "rho": 0.11798570881139687
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 111,
-              "rho": 0.1329062829062829
+              "names": 110,
+              "rho": 0.006830016004327932
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 111,
-              "rho": 0.10933660933660933
+              "names": 110,
+              "rho": 0.0065054211843202665
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 111,
-              "rho": 0.031177606177606176
+              "names": 110,
+              "rho": 0.035159930572774604
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 111,
-              "rho": 0.059713934713934706
+              "names": 110,
+              "rho": 0.2124608344791831
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.17100575329974255,
-          "medianAbsBeta": 0.06444847697362856,
-          "names": 111
+          "medianWithinNameSd": 0.17529663167480944,
+          "medianAbsBeta": 0.07487774445409766,
+          "names": 110
         }
       },
       "ID": {
@@ -1570,66 +1571,66 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.17881976564909033,
-          "stdev": 0.1040247433005299,
-          "tStat": 4.8620997231537295,
-          "min": 0.01227258711069997,
-          "max": 0.35368485969781066,
+          "meanRankCorrelation": 0.2162220026350461,
+          "stdev": 0.1543759396427605,
+          "tStat": 3.9615511240620083,
+          "min": 0.024606845513413505,
+          "max": 0.5268578476719087,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 45,
-              "rho": 0.09999999999999998
+              "rho": 0.283399209486166
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 46,
-              "rho": 0.01227258711069997
+              "rho": 0.024606845513413505
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 46,
-              "rho": 0.15843354918285538
+              "rho": 0.244650015417823
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 46,
-              "rho": 0.13327166204131977
+              "rho": 0.5268578476719087
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 46,
-              "rho": 0.260191181005242
+              "rho": 0.13364168979340116
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 46,
-              "rho": 0.35368485969781066
+              "rho": 0.2314523589269195
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 46,
-              "rho": 0.22355843354918287
+              "rho": 0.07049028677150786
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 46,
-              "rho": 0.18914585260561206
+              "rho": 0.2146777674992291
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.29751718700009533,
-          "medianAbsBeta": 0.09231728624746188,
+          "medianWithinNameSd": 0.29900447005640657,
+          "medianAbsBeta": 0.09450369242123971,
           "names": 46
         }
       },
@@ -1642,71 +1643,71 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.36888111888111896,
-          "stdev": 0.2628995977304413,
-          "tStat": 3.968638109214081,
-          "min": 0.034965034965034975,
-          "max": 0.7762237762237763,
+          "meanRankCorrelation": 0.39160839160839167,
+          "stdev": 0.2215801331154526,
+          "tStat": 4.99880463798746,
+          "min": -0.08391608391608392,
+          "max": 0.6503496503496504,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 12,
-              "rho": 0.32867132867132864
+              "rho": 0.41958041958041964
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 12,
-              "rho": 0.6853146853146854
+              "rho": 0.4265734265734266
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 12,
-              "rho": 0.034965034965034975
+              "rho": -0.08391608391608392
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 12,
-              "rho": 0.16083916083916086
+              "rho": 0.3916083916083916
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 12,
-              "rho": 0.30069930069930073
+              "rho": 0.6503496503496504
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 12,
-              "rho": 0.7762237762237763
+              "rho": 0.5664335664335665
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 12,
-              "rho": 0.16783216783216784
+              "rho": 0.2867132867132868
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 12,
-              "rho": 0.49650349650349657
+              "rho": 0.4755244755244756
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.3392306427689933,
-          "medianAbsBeta": 0.19028240667147625,
+          "medianWithinNameSd": 0.33617225987920774,
+          "medianAbsBeta": 0.1908458041465647,
           "names": 12
         }
       },
       "nonResources": {
-        "names": 145,
+        "names": 144,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -1714,67 +1715,67 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.08696003691561585,
-          "stdev": 0.0779270502937449,
-          "tStat": 3.156286889519297,
-          "min": -0.06202172886159659,
-          "max": 0.18105022831050227,
+          "meanRankCorrelation": 0.0802150838193241,
+          "stdev": 0.11807378077870395,
+          "tStat": 1.9215317523675548,
+          "min": -0.0629575823237795,
+          "max": 0.32872357527529944,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 141,
-              "rho": 0.09116828631362642
+              "names": 140,
+              "rho": 0.05504799807570359
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 144,
-              "rho": 0.0356763925729443
+              "names": 143,
+              "rho": -0.0629575823237795
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 145,
-              "rho": 0.1788497874350496
+              "names": 144,
+              "rho": 0.32872357527529944
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 145,
-              "rho": -0.06202172886159659
+              "names": 144,
+              "rho": 0.04986737400530505
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 145,
-              "rho": 0.18105022831050227
+              "names": 144,
+              "rho": 0.03595370147094285
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 145,
-              "rho": 0.09143048338844276
+              "names": 144,
+              "rho": 0.1502531950807813
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 145,
-              "rho": 0.07686584789796881
+              "names": 144,
+              "rho": -0.0026324250462181494
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 145,
-              "rho": 0.10266099826798929
+              "names": 144,
+              "rho": 0.08746483401655816
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.1820847116227269,
-          "medianAbsBeta": 0.0589373388949682,
-          "names": 145
+          "medianWithinNameSd": 0.18565946710279863,
+          "medianAbsBeta": 0.06007999632594091,
+          "names": 144
         }
       },
       "ID-illiquidHalf": {
@@ -1786,66 +1787,66 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.11005434782608696,
-          "stdev": 0.25948739029729806,
-          "tStat": 1.1995985709784123,
-          "min": -0.18873517786561267,
-          "max": 0.5909090909090909,
+          "meanRankCorrelation": 0.07645750988142294,
+          "stdev": 0.24887790571125662,
+          "tStat": 0.8689180111072649,
+          "min": -0.2381422924901186,
+          "max": 0.5681818181818182,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 22,
-              "rho": -0.09881422924901187
+              "names": 23,
+              "rho": 0.15217391304347824
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 23,
-              "rho": -0.06126482213438736
+              "rho": -0.2381422924901186
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 23,
-              "rho": -0.18873517786561267
+              "rho": -0.08201581027667984
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 23,
-              "rho": -0.0029644268774703555
+              "rho": 0.5681818181818182
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 23,
-              "rho": 0.2964426877470355
+              "rho": 0.20454545454545459
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 23,
-              "rho": 0.27865612648221344
+              "rho": 0.0029644268774703555
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 23,
-              "rho": 0.06620553359683795
+              "rho": -0.11857707509881424
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 23,
-              "rho": 0.5909090909090909
+              "rho": 0.12252964426877472
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.34700030901208045,
-          "medianAbsBeta": 0.07542491782240147,
+          "medianWithinNameSd": 0.3247208504395891,
+          "medianAbsBeta": 0.09336083873239932,
           "names": 23
         }
       },
@@ -1858,66 +1859,66 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.2745800395256917,
-          "stdev": 0.1794734387210089,
-          "tStat": 4.327267796521226,
-          "min": -0.0909090909090909,
-          "max": 0.4683794466403162,
+          "meanRankCorrelation": 0.377240965556183,
+          "stdev": 0.1696649427366733,
+          "tStat": 6.288857098785431,
+          "min": 0.06620553359683795,
+          "max": 0.5306324110671937,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 23,
-              "rho": 0.3557312252964427
+              "names": 22,
+              "rho": 0.5189158667419538
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 23,
-              "rho": 0.13339920948616601
+              "rho": 0.32806324110671936
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 23,
-              "rho": 0.4683794466403162
+              "rho": 0.5306324110671937
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 23,
-              "rho": 0.27964426877470355
+              "rho": 0.5088932806324111
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 23,
-              "rho": 0.2845849802371542
+              "rho": 0.06620553359683795
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 23,
-              "rho": 0.42885375494071143
+              "rho": 0.49604743083003955
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 23,
-              "rho": 0.33695652173913043
+              "rho": 0.21343873517786563
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 23,
-              "rho": -0.0909090909090909
+              "rho": 0.3557312252964427
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.22610729481288783,
-          "medianAbsBeta": 0.09633920233301578,
+          "medianWithinNameSd": 0.2516189254562279,
+          "medianAbsBeta": 0.09770832124866087,
           "names": 23
         }
       },
@@ -1930,71 +1931,71 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.09105015791336547,
-          "stdev": 0.15972136138258183,
-          "tStat": 1.6123625176079377,
-          "min": -0.06681096681096682,
-          "max": 0.3812409812409813,
+          "meanRankCorrelation": 0.0954176195921479,
+          "stdev": 0.126004759535843,
+          "tStat": 2.1418380101457575,
+          "min": -0.10072150072150074,
+          "max": 0.27113997113997124,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 54,
-              "rho": 0.13756432246998285
+              "rho": 0.2133409567371831
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 55,
-              "rho": 0.3812409812409813
+              "rho": 0.15324675324675327
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 55,
-              "rho": 0.2671717171717172
+              "rho": 0.27113997113997124
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 55,
-              "rho": 0.05865800865800867
+              "rho": 0.020129870129870133
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 55,
-              "rho": -0.06681096681096682
+              "rho": -0.03347763347763348
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 55,
-              "rho": -0.0008658008658008659
+              "rho": -0.10072150072150074
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 55,
-              "rho": -0.015223665223665226
+              "rho": 0.09675324675324677
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 55,
-              "rho": -0.03333333333333334
+              "rho": 0.14292929292929296
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.1811728134959261,
-          "medianAbsBeta": 0.06996786806243396,
+          "medianWithinNameSd": 0.1881927324011931,
+          "medianAbsBeta": 0.07484002986418173,
           "names": 55
         }
       },
       "US-liquidHalf": {
-        "names": 56,
+        "names": 55,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -2002,112 +2003,112 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.12174830300450956,
-          "stdev": 0.1721904823155537,
-          "tStat": 1.9998561940183832,
-          "min": -0.25153793574846206,
-          "max": 0.29460013670539986,
+          "meanRankCorrelation": 0.16614829091244185,
+          "stdev": 0.166731430002038,
+          "tStat": 2.818534770206357,
+          "min": -0.10894660894660897,
+          "max": 0.3922754394452507,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 54,
-              "rho": 0.17331808652563369
+              "names": 53,
+              "rho": 0.3922754394452507
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 55,
-              "rho": 0.11789321789321792
+              "names": 54,
+              "rho": 0.29102344196683816
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 56,
-              "rho": -0.25153793574846206
+              "names": 55,
+              "rho": 0.08520923520923523
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 56,
-              "rho": 0.29460013670539986
+              "names": 55,
+              "rho": 0.2941558441558442
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 56,
-              "rho": 0.25953520164046484
+              "names": 55,
+              "rho": 0.05108225108225109
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 56,
-              "rho": 0.2309637730690362
+              "names": 55,
+              "rho": 0.07279942279942282
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 56,
-              "rho": 0.062474367737525634
+              "names": 55,
+              "rho": -0.10894660894660897
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 56,
-              "rho": 0.08673957621326042
+              "names": 55,
+              "rho": 0.25158730158730164
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.15911587108424466,
-          "medianAbsBeta": 0.05922823881520119,
-          "names": 56
+          "medianWithinNameSd": 0.15870030117088266,
+          "medianAbsBeta": 0.07491545904401359,
+          "names": 55
         }
       },
       "stress": {
         "usable": true,
-        "names": 157,
-        "worstBlocksRSquared": 0.015697182014976482,
-        "restRSquared": 0.005415438569255249,
-        "rise": 0.010281743445721234,
+        "names": 156,
+        "worstBlocksRSquared": 0.017109540874341595,
+        "restRSquared": 0.005089160506117417,
+        "rise": 0.012020380368224177,
         "worstBlocks": 2,
         "totalBlocks": 9
       },
       "asymmetry": {
         "usable": true,
-        "names": 157,
+        "names": 156,
         "byHalf": {
-          "signAgreement": 0.4840764331210191,
-          "rankCorrelation": -0.0635578240996285
+          "signAgreement": 0.47435897435897434,
+          "rankCorrelation": -0.015169666988035593
         },
         "byRegime": {
-          "signAgreement": 0.4840764331210191,
-          "rankCorrelation": -0.11325113651163801
+          "signAgreement": 0.4807692307692308,
+          "rankCorrelation": -0.073072971819633
         },
-        "medianGapEarly": 0.02331919062599666,
-        "medianGapLate": -0.01631301970231585,
-        "medianGapRising": -0.01589880335215535,
-        "medianGapFalling": 0.0565957333405083,
+        "medianGapEarly": 0.04346455553430507,
+        "medianGapLate": 0.00983548964933242,
+        "medianGapRising": 0.022320431982450956,
+        "medianGapFalling": 0.012883876595765167,
         "risingBlocks": 5,
         "fallingBlocks": 4
       },
       "frequency": {
         "usable": true,
-        "names": 157,
-        "medianAbsDaily": 0.15488535545701004,
-        "medianAbsDimson": 0.18005936356749125,
-        "medianAbsWeekly": 0.27579427249452143,
-        "signDisagreeDailyWeekly": 0.006369426751592357,
-        "signDisagreeDimsonWeekly": 0.006369426751592357,
-        "weeklyOverDaily": 1.780634919813777
+        "names": 156,
+        "medianAbsDaily": 0.15432364588150302,
+        "medianAbsDimson": 0.17783638382125455,
+        "medianAbsWeekly": 0.27888666652057537,
+        "signDisagreeDailyWeekly": 0.00641025641025641,
+        "signDisagreeDimsonWeekly": 0.00641025641025641,
+        "weeklyOverDaily": 1.8071544702534938
       }
     },
     "dollar": {
       "label": "the dollar",
       "symbol": "DX-Y.NYB",
       "all": {
-        "names": 157,
+        "names": 156,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 1 consecutive block pairs with 10+ shared names."
@@ -2115,71 +2116,71 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.07661048932415047,
-          "stdev": 0.12276877570402413,
-          "tStat": 1.765002418586496,
-          "min": -0.07914338342460571,
-          "max": 0.2604580777603433,
+          "meanRankCorrelation": 0.05448727313083987,
+          "stdev": 0.15101120613921984,
+          "tStat": 1.02054201947531,
+          "min": -0.19131355597351077,
+          "max": 0.27195081474925314,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 153,
-              "rho": 0.0998116950129334
+              "names": 152,
+              "rho": 0.09477579808500604
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 156,
-              "rho": -0.0371544625499834
+              "names": 155,
+              "rho": -0.054297315587638166
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 157,
-              "rho": -0.07914338342460571
+              "names": 156,
+              "rho": -0.19131355597351077
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 157,
-              "rho": 0.03777622039332916
+              "names": 156,
+              "rho": 0.008569486810703165
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 157,
-              "rho": 0.2604580777603433
+              "names": 156,
+              "rho": 0.23141723696480215
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 157,
-              "rho": 0.2255223612153387
+              "names": 156,
+              "rho": 0.27195081474925314
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 157,
-              "rho": -0.014828918561886392
+              "names": 156,
+              "rho": -0.009868660207678081
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 157,
-              "rho": 0.12044232474773474
+              "names": 156,
+              "rho": 0.08466438020578147
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.7138886420546702,
-          "medianAbsBeta": 0.19188082683472651,
-          "names": 157
+          "medianWithinNameSd": 0.7326641210809911,
+          "medianAbsBeta": 0.18069663869492303,
+          "names": 156
         }
       },
       "US": {
-        "names": 111,
+        "names": 110,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -2187,67 +2188,67 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.09237084513278458,
-          "stdev": 0.1227377620490725,
-          "tStat": 2.128637507703945,
-          "min": -0.14665672165672164,
-          "max": 0.20630045630045626,
+          "meanRankCorrelation": 0.09881752855066706,
+          "stdev": 0.14160515733517828,
+          "tStat": 1.9737853014175029,
+          "min": -0.19104659288145528,
+          "max": 0.25745328314135657,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 108,
-              "rho": 0.07353739746777557
+              "names": 107,
+              "rho": 0.23282195967789338
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 110,
-              "rho": 0.18045217861731624
+              "names": 109,
+              "rho": 0.14550088036326567
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 111,
-              "rho": -0.14665672165672164
+              "names": 110,
+              "rho": -0.19104659288145528
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 111,
-              "rho": 0.18486310986310983
+              "names": 110,
+              "rho": 0.25745328314135657
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 111,
-              "rho": 0.19034749034749032
+              "names": 110,
+              "rho": 0.046250253589703125
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 111,
-              "rho": 0.022893997893997892
+              "names": 110,
+              "rho": 0.03624191330613349
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 111,
-              "rho": 0.027228852228852227
+              "names": 110,
+              "rho": 0.0984559204742691
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 111,
-              "rho": 0.20630045630045626
+              "names": 110,
+              "rho": 0.16486261073417036
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.6687664313769254,
-          "medianAbsBeta": 0.254376630745962,
-          "names": 111
+          "medianWithinNameSd": 0.66085472477263,
+          "medianAbsBeta": 0.19874426220957053,
+          "names": 110
         }
       },
       "ID": {
@@ -2259,66 +2260,66 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.11405474728786477,
-          "stdev": 0.11089165071332317,
-          "tStat": 2.909105770001043,
-          "min": -0.013999383287079862,
-          "max": 0.33148319457292624,
+          "meanRankCorrelation": 0.1267684943795027,
+          "stdev": 0.19730821189840592,
+          "tStat": 1.8172353021517458,
+          "min": -0.11896392229417205,
+          "max": 0.46037619488128273,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 45,
-              "rho": 0.0600790513833992
+              "rho": 0.11923583662714096
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 46,
-              "rho": -0.013999383287079862
+              "rho": 0.07641073080481037
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 46,
-              "rho": 0.10662966389145853
+              "rho": -0.11896392229417205
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 46,
-              "rho": 0.06395312981806969
+              "rho": -0.09528214616096208
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 46,
-              "rho": 0.18186864014801107
+              "rho": 0.3469010175763182
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 46,
-              "rho": 0.33148319457292624
+              "rho": 0.46037619488128273
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 46,
-              "rho": 0.016096207215541166
+              "rho": 0.11921060746222632
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 46,
-              "rho": 0.16632747456059202
+              "rho": 0.10625963613937711
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.8556712154370183,
-          "medianAbsBeta": 0.21878706411713916,
+          "medianWithinNameSd": 0.8368074860382758,
+          "medianAbsBeta": 0.20830469369382265,
           "names": 46
         }
       },
@@ -2331,71 +2332,71 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.2648601398601399,
-          "stdev": 0.2877333162617162,
-          "tStat": 2.6035831150087927,
-          "min": -0.18181818181818185,
-          "max": 0.6433566433566434,
+          "meanRankCorrelation": 0.30419580419580416,
+          "stdev": 0.3167321599686745,
+          "tStat": 2.7164771139959027,
+          "min": -0.2517482517482518,
+          "max": 0.7832167832167832,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 12,
-              "rho": -0.18181818181818185
+              "rho": -0.2517482517482518
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 12,
-              "rho": -0.07692307692307693
+              "rho": 0.08391608391608392
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 12,
-              "rho": 0.3636363636363637
+              "rho": 0.32867132867132864
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 12,
-              "rho": 0.6433566433566434
+              "rho": 0.37762237762237766
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 12,
-              "rho": 0.5524475524475525
+              "rho": 0.7832167832167832
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 12,
-              "rho": 0.2517482517482518
+              "rho": 0.4755244755244756
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 12,
-              "rho": 0.16783216783216784
+              "rho": 0.1188811188811189
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 12,
-              "rho": 0.39860139860139865
+              "rho": 0.5174825174825175
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.8810509304019862,
-          "medianAbsBeta": 0.40665471926690655,
+          "medianWithinNameSd": 1.0328970428232755,
+          "medianAbsBeta": 0.26451718839772753,
           "names": 12
         }
       },
       "nonResources": {
-        "names": 145,
+        "names": 144,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 1 consecutive block pairs with 10+ shared names."
@@ -2403,67 +2404,67 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.046464226388904746,
-          "stdev": 0.13740049306709265,
-          "tStat": 0.956478942070122,
-          "min": -0.1319634703196347,
-          "max": 0.24357187844433942,
+          "meanRankCorrelation": 0.020320796126399983,
+          "stdev": 0.1643329759538417,
+          "tStat": 0.34975263258477723,
+          "min": -0.273647616751065,
+          "max": 0.26338316855558236,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 141,
-              "rho": 0.07189948199837322
+              "names": 140,
+              "rho": 0.07696311036277362
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 144,
-              "rho": -0.068997668997669
+              "names": 143,
+              "rho": -0.09891165172855312
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 145,
-              "rho": -0.1319634703196347
+              "names": 144,
+              "rho": -0.273647616751065
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 145,
-              "rho": -0.02964887419304046
+              "names": 144,
+              "rho": -0.011646973715939235
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 145,
-              "rho": 0.24357187844433942
+              "names": 144,
+              "rho": 0.1722249015352464
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 145,
-              "rho": 0.22454731538340417
+              "names": 144,
+              "rho": 0.26338316855558236
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 145,
-              "rho": -0.03780507006770587
+              "names": 144,
+              "rho": -0.014508480025721405
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 145,
-              "rho": 0.10011021886317116
+              "names": 144,
+              "rho": 0.048709910778876306
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.6834275839834962,
-          "medianAbsBeta": 0.18616016087200032,
-          "names": 145
+          "medianWithinNameSd": 0.7182452302716782,
+          "medianAbsBeta": 0.16274259394629492,
+          "names": 144
         }
       },
       "ID-illiquidHalf": {
@@ -2475,66 +2476,66 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.05106578204404292,
-          "stdev": 0.1433494242571073,
-          "tStat": 1.0075788153895342,
-          "min": -0.09486166007905138,
-          "max": 0.3656126482213439,
+          "meanRankCorrelation": 0.05681818181818182,
+          "stdev": 0.1916064435100115,
+          "tStat": 0.8387300744659422,
+          "min": -0.2440711462450593,
+          "max": 0.34782608695652173,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 22,
-              "rho": -0.02428006775832863
+              "names": 23,
+              "rho": 0.017786561264822136
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 23,
-              "rho": -0.015810276679841896
+              "rho": 0.2223320158102767
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 23,
-              "rho": 0.06719367588932806
+              "rho": -0.03359683794466403
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 23,
-              "rho": -0.09486166007905138
+              "rho": -0.2440711462450593
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 23,
-              "rho": 0.0899209486166008
+              "rho": 0.07509881422924902
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 23,
-              "rho": 0.3656126482213439
+              "rho": 0.34782608695652173
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 23,
-              "rho": 0.07509881422924902
+              "rho": 0.1818181818181818
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 23,
-              "rho": -0.05434782608695652
+              "rho": -0.11264822134387352
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 1.052078910193794,
-          "medianAbsBeta": 0.2796775386354192,
+          "medianWithinNameSd": 1.039719713803379,
+          "medianAbsBeta": 0.2534338684954319,
           "names": 23
         }
       },
@@ -2547,66 +2548,66 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.20812747035573126,
-          "stdev": 0.20345102665873144,
-          "tStat": 2.893440216187255,
-          "min": -0.10177865612648221,
-          "max": 0.43478260869565216,
+          "meanRankCorrelation": 0.21892645398080185,
+          "stdev": 0.27683990507852435,
+          "tStat": 2.236735056631956,
+          "min": -0.12450592885375496,
+          "max": 0.6017786561264823,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 23,
-              "rho": 0.16699604743083005
+              "names": 22,
+              "rho": 0.23658949745906271
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 23,
-              "rho": -0.08300395256916995
+              "rho": -0.08102766798418974
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 23,
-              "rho": 0.25592885375494073
+              "rho": -0.12450592885375496
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 23,
-              "rho": 0.25592885375494073
+              "rho": 0.0800395256916996
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 23,
-              "rho": 0.3596837944664032
+              "rho": 0.6017786561264823
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 23,
-              "rho": 0.43478260869565216
+              "rho": 0.5503952569169961
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 23,
-              "rho": -0.10177865612648221
+              "rho": 0.08399209486166008
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 23,
-              "rho": 0.3764822134387352
+              "rho": 0.4041501976284585
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.7861321910890383,
-          "medianAbsBeta": 0.1835950073654885,
+          "medianWithinNameSd": 0.7191335524240032,
+          "medianAbsBeta": 0.17052899489433962,
           "names": 23
         }
       },
@@ -2619,71 +2620,71 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.09840078684418307,
-          "stdev": 0.16231297596958474,
-          "tStat": 1.7147085927289558,
-          "min": -0.1798701298701299,
-          "max": 0.33686868686868693,
+          "meanRankCorrelation": 0.11925573116610855,
+          "stdev": 0.18979839660563574,
+          "tStat": 1.7771812135616603,
+          "min": -0.307936507936508,
+          "max": 0.3126262626262627,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
               "names": 54,
-              "rho": -0.029388221841052026
+              "rho": 0.20548885077186962
             },
             {
               "from": "y2",
               "to": "y3",
               "names": 55,
-              "rho": 0.26962481962481966
+              "rho": 0.2531746031746032
             },
             {
               "from": "y3",
               "to": "y4",
               "names": 55,
-              "rho": -0.1798701298701299
+              "rho": -0.307936507936508
             },
             {
               "from": "y4",
               "to": "y5",
               "names": 55,
-              "rho": 0.33686868686868693
+              "rho": 0.3126262626262627
             },
             {
               "from": "y5",
               "to": "y6",
               "names": 55,
-              "rho": 0.06847041847041849
+              "rho": 0.08131313131313134
             },
             {
               "from": "y6",
               "to": "y7",
               "names": 55,
-              "rho": 0.14855699855699858
+              "rho": 0.09134199134199136
             },
             {
               "from": "y7",
               "to": "y8",
               "names": 55,
-              "rho": 0.06681096681096682
+              "rho": 0.18665223665223668
             },
             {
               "from": "y8",
               "to": "y9",
               "names": 55,
-              "rho": 0.10613275613275615
+              "rho": 0.1313852813852814
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.6663104549339433,
-          "medianAbsBeta": 0.22989873912074113,
+          "medianWithinNameSd": 0.6766158212681319,
+          "medianAbsBeta": 0.19320552669885666,
           "names": 55
         }
       },
       "US-liquidHalf": {
-        "names": 56,
+        "names": 55,
         "persistenceWhereLoaded": {
           "usable": false,
           "reason": "Only 0 consecutive block pairs with 10+ shared names."
@@ -2691,105 +2692,105 @@
         "persistenceAllNames": {
           "usable": true,
           "transitions": 8,
-          "meanRankCorrelation": 0.09046290862949255,
-          "stdev": 0.18003883131441797,
-          "tStat": 1.4211808790529645,
-          "min": -0.17676008202323992,
-          "max": 0.3019138755980862,
+          "meanRankCorrelation": 0.061825032933523504,
+          "stdev": 0.14486489272381026,
+          "tStat": 1.2071082016461732,
+          "min": -0.13621933621933627,
+          "max": 0.25858585858585864,
           "byTransition": [
             {
               "from": "y1",
               "to": "y2",
-              "names": 54,
-              "rho": 0.23941299790356388
+              "names": 53,
+              "rho": 0.21085308821157878
             },
             {
               "from": "y2",
               "to": "y3",
-              "names": 55,
-              "rho": 0.1261904761904762
+              "names": 54,
+              "rho": 0.007051648561082522
             },
             {
               "from": "y3",
               "to": "y4",
-              "names": 56,
-              "rho": -0.17676008202323992
+              "names": 55,
+              "rho": -0.13621933621933627
             },
             {
               "from": "y4",
               "to": "y5",
-              "names": 56,
-              "rho": 0.022829801777170197
+              "names": 55,
+              "rho": 0.25858585858585864
             },
             {
               "from": "y5",
               "to": "y6",
-              "names": 56,
-              "rho": 0.3019138755980862
+              "names": 55,
+              "rho": 0.022438672438672442
             },
             {
               "from": "y6",
               "to": "y7",
-              "names": 56,
-              "rho": -0.08120300751879699
+              "names": 55,
+              "rho": -0.07525252525252527
             },
             {
               "from": "y7",
               "to": "y8",
-              "names": 56,
-              "rho": -0.007928913192071087
+              "names": 55,
+              "rho": 0.0037518037518037527
             },
             {
               "from": "y8",
               "to": "y9",
-              "names": 56,
-              "rho": 0.2992481203007519
+              "names": 55,
+              "rho": 0.20339105339105346
             }
           ]
         },
         "dispersion": {
           "usable": true,
-          "medianWithinNameSd": 0.6692956517384709,
-          "medianAbsBeta": 0.2684489920312536,
-          "names": 56
+          "medianWithinNameSd": 0.6608462975984286,
+          "medianAbsBeta": 0.21524270585995792,
+          "names": 55
         }
       },
       "stress": {
         "usable": true,
-        "names": 157,
-        "worstBlocksRSquared": 0.024122077463329967,
-        "restRSquared": 0.003970328446809343,
-        "rise": 0.02015174901652062,
+        "names": 156,
+        "worstBlocksRSquared": 0.02548266037156573,
+        "restRSquared": 0.003934998240052861,
+        "rise": 0.02154766213151287,
         "worstBlocks": 2,
         "totalBlocks": 9
       },
       "asymmetry": {
         "usable": true,
-        "names": 157,
+        "names": 156,
         "byHalf": {
-          "signAgreement": 0.49044585987261147,
-          "rankCorrelation": 0.11350231643709029
+          "signAgreement": 0.532051282051282,
+          "rankCorrelation": 0.14219468634919633
         },
         "byRegime": {
-          "signAgreement": 0.5222929936305732,
-          "rankCorrelation": 0.1049032802237672
+          "signAgreement": 0.5769230769230769,
+          "rankCorrelation": 0.23907003208420916
         },
-        "medianGapEarly": -0.1418237116150067,
-        "medianGapLate": 0.12782416714194966,
-        "medianGapRising": 0.00992094975281449,
-        "medianGapFalling": 0.12596600291674107,
-        "risingBlocks": 4,
-        "fallingBlocks": 5
+        "medianGapEarly": -0.055287857439638426,
+        "medianGapLate": 0.10733404591157339,
+        "medianGapRising": 0.05354569928582931,
+        "medianGapFalling": 0.1813479876364011,
+        "risingBlocks": 3,
+        "fallingBlocks": 6
       },
       "frequency": {
         "usable": true,
-        "names": 157,
-        "medianAbsDaily": 0.4028384032327591,
-        "medianAbsDimson": 0.5496933753813292,
-        "medianAbsWeekly": 1.1044424802705923,
-        "signDisagreeDailyWeekly": 0.01910828025477707,
-        "signDisagreeDimsonWeekly": 0.006369426751592357,
-        "weeklyOverDaily": 2.7416514200421154
+        "names": 156,
+        "medianAbsDaily": 0.41223729324266,
+        "medianAbsDimson": 0.56625836365366,
+        "medianAbsWeekly": 1.1219752762211592,
+        "signDisagreeDailyWeekly": 0.01282051282051282,
+        "signDisagreeDimsonWeekly": 0.00641025641025641,
+        "weeklyOverDaily": 2.7216734017334963
       }
     }
   },

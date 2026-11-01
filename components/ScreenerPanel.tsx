@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { AlertTriangle } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note } from "@/components/ui/card";
 import {
   ApplyButton, DownloadButton, Field, NumberField, SelectField,
@@ -11,10 +9,15 @@ import { useScreener } from "@/lib/api";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import type { Market } from "@/lib/types";
 import { cn, num, pct } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { Textarea } from "@/components/ui/input";
+import { StateCard } from "@/components/ui/state";
+import { useSessionState } from "@/lib/session";
+import { ScrollRegion } from "@/components/ui/scroll";
 
-const ACC = "#35C4A8";
-const DIST = "#FF6B6B";
-const NEU = "#7A8CA0";
+const ACC = palette.acc;
+const DIST = palette.dist;
+const NEU = palette.ash;
 
 const flowColor = (flow: string) =>
   flow === "Accumulation" ? ACC : flow === "Distribution" ? DIST : NEU;
@@ -40,11 +43,11 @@ const DEFAULT_UNIVERSE = "AAPL, NVDA, TSLA, JPM, KO, BBCA.JK, BBRI.JK, TLKM.JK";
  */
 export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => void }) {
   const { state, scan } = useScreener();
-  const [tickers, setTickers] = useState(DEFAULT_UNIVERSE);
-  const [recentDays, setRecentDays] = useState(10);
-  const [period, setPeriod] = useState("2y");
-  const [mode, setMode] = useState("threshold");
-  const [market, setMarket] = useState<Market>("US");
+  const [tickers, setTickers] = useSessionState("screener:tickers", DEFAULT_UNIVERSE);
+  const [recentDays, setRecentDays] = useSessionState("screener:recentDays", 10);
+  const [period, setPeriod] = useSessionState("screener:period", "2y");
+  const [mode, setMode] = useSessionState("screener:mode", "threshold");
+  const [market, setMarket] = useSessionState<Market>("screener:market", "US");
 
   const bareCodes = tickers
     .replace(/\n/g, ",")
@@ -80,15 +83,7 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
             {" "}Capped at 20 a scan: each symbol costs one download and one model fit.
           </Explainer>
           <Field label="Universe" hint="Comma or newline separated.">
-            <textarea
-              value={tickers}
-              onChange={(e) => setTickers(e.target.value)}
-              rows={3}
-              className={cn(
-                "w-full rounded border border-rule bg-raised px-3 py-2",
-                "font-mono text-meta text-chalk transition-colors focus:border-tech/60",
-              )}
-            />
+            <Textarea mono value={tickers} onChange={(e) => setTickers(e.target.value)} rows={3} />
           </Field>
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Bare codes are" hint="Suffixed symbols are left alone.">
@@ -143,15 +138,7 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
       {state.status === "loading" && <Card><PanelSkeleton /></Card>}
 
       {state.status === "error" && (
-        <Card className="border-dist/40 bg-dist/5">
-          <div className="flex gap-3 p-5">
-            <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-dist" />
-            <div>
-              <div className="eyebrow mb-1 text-dist">The scan could not run</div>
-              <p className="text-base leading-relaxed text-body">{state.failure.message}</p>
-            </div>
-          </div>
-        </Card>
+        <StateCard kind="error" title="The scan could not run">{state.failure.message}</StateCard>
       )}
 
       {state.status === "ready" && (
@@ -181,7 +168,7 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
                 result, not a failure.
               </p>
             ) : (
-              <div className="overflow-x-auto">
+              <ScrollRegion label="Screener results">
                 <table className="w-full text-left text-meta">
                   <thead>
                     <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -247,7 +234,7 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ScrollRegion>
             )}
           </CardBody>
         </Card>

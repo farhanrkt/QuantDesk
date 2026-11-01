@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import type { TooltipProps } from "recharts";
 import { useState } from "react";
+import { useSessionState } from "@/lib/session";
 import { Card, CardBody, CardHeader, CardTitle, Explainer, Note, Stat } from "@/components/ui/card";
 import { IndicatorGrid } from "@/components/IndicatorGrid";
 import { HorizonPanel } from "@/components/HorizonPanel";
@@ -17,14 +18,16 @@ import type { TechnicalOptions } from "@/lib/api";
 import type { TechPoint, TechnicalResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { TONE, cn, num, pct, splitEmphasis } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { ScrollRegion } from "@/components/ui/scroll";
 
-const TECH = "#5B8DEF";
-const FAST = "#F2C14E";
-const SLOW = "#7FA8F5";
-const BAND = "#A78BFA";
-const UP = "#35C4A8";
-const EXPOSURE_HUE = "#D4763A";
-const DOWN = "#FF6B6B";
+const TECH = palette.tech;
+const FAST = palette.seriesFast;
+const SLOW = palette.seriesSlow;
+const BAND = palette.seriesViolet;
+const UP = palette.acc;
+const EXPOSURE_HUE = palette.drivers;
+const DOWN = palette.dist;
 
 /** A series row plus the derived columns the band and marker layers read. */
 type ChartPoint = TechPoint & {
@@ -51,11 +54,13 @@ function TechTooltip({ active, payload }: TooltipProps<number, string>) {
 }
 
 export function TechnicalPanel({
-  data, onApply, busy,
+  data, onApply, busy, stateKey,
 }: {
   data: TechnicalResponse;
   onApply: (o: TechnicalOptions) => void;
   busy: boolean;
+  /** Which company this is, so the chosen sub-section survives a tab switch. */
+  stateKey?: string;
 }) {
   const { latest, summary, series, levels, signals } = data;
 
@@ -68,7 +73,10 @@ export function TechnicalPanel({
   // DIFFERENT question ("where would the levels be if I bought this month?"),
   // not a more detailed version of the same one, and nesting them would imply
   // otherwise.
-  const [section, setSection] = useState(data.hasLongTerm ? "long" : "chart");
+  // Kept for the session per company: the old panel forgot the reader was on
+  // "Short term" every time they glanced at another tab and came back.
+  const [section, setSection] = useSessionState<string>(
+    `tech:section:${stateKey ?? data.ticker}`, data.hasLongTerm ? "long" : "chart");
   const guided = useDetail() === "simple";
 
   const downloadSeries = () =>
@@ -117,11 +125,11 @@ export function TechnicalPanel({
   // reason they stop using it. The line below the tabs says it is one click
   // away in Full, so nothing disappears silently.
   const SECTIONS = [
-    ...(data.hasLongTerm ? [{ id: "long", label: "Long term · years", accent: "#35C4A8" }] : []),
-    { id: "mid", label: "Mid term · weeks–months", accent: "#5B8DEF" },
-    { id: "short", label: "Short term · days–weeks", accent: "#F2C14E" },
-    { id: "chart", label: "Chart & signals", accent: "#A78BFA" },
-    ...(guided ? [] : [{ id: "indicators", label: "All indicators", accent: "#A78BFA" }]),
+    ...(data.hasLongTerm ? [{ id: "long", label: "Long term · years", accent: palette.trend }] : []),
+    { id: "mid", label: "Mid term · weeks–months", accent: palette.trend },
+    { id: "short", label: "Short term · days–weeks", accent: palette.trend },
+    { id: "chart", label: "Chart & signals", accent: palette.trend },
+    ...(guided ? [] : [{ id: "indicators", label: "All indicators", accent: palette.trend }]),
   ];
 
   // A section that is open when the mode changes underneath it would otherwise
@@ -323,7 +331,7 @@ export function TechnicalPanel({
                   <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full"
                         style={{ background: chip.tone === "bull" ? UP
                                              : chip.tone === "bear" ? DOWN
-                                             : chip.tone === "warn" ? FAST : "#63748A" }} />
+                                             : chip.tone === "warn" ? FAST : palette.faint }} />
                   <span className="eyebrow">{chip.label}</span>
                 </div>
                 <div className={cn("num text-base font-semibold", TONE[chip.tone] ?? "text-chalk")}>
@@ -347,7 +355,16 @@ export function TechnicalPanel({
           <CardTitle>Floors and ceilings</CardTitle>
           <DownloadButton onClick={downloadSeries}>Indicators CSV</DownloadButton>
         </CardHeader>
+        {/* GUIDED KEEPS THE COUNT, NOT AN EMPTY BOX. The tuning fields are Full's;
+            hiding them used to leave Guided a header over a blank body, which
+            reads as a panel that failed to load. */}
         <CardBody>
+          {guided && (
+            <p className="text-meta text-ash">
+              {levels.length} level{levels.length === 1 ? "" : "s"} drawn on the chart. Switch to
+              Full to change how far apart the turning points must be.
+            </p>
+          )}
           <div className={guided ? "hidden" : "flex flex-wrap items-end gap-3"}>
             <Field label="Turning points apart (days)"
                    hint="Larger keeps only the major turns.">
@@ -372,68 +389,80 @@ export function TechnicalPanel({
           <span className="font-mono text-micro text-ash">{data.currency}</span>
         </CardHeader>
         <CardBody>
-          <ResponsiveContainer width="100%" height={320}>
-            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={48} />
-              <YAxis domain={["auto", "auto"]} tickLine={false} axisLine={false} width={56} />
-              <Tooltip content={<TechTooltip />} />
-              <Area dataKey="bbBase" stackId="bb" stroke="none" fill="transparent" isAnimationActive={false} />
-              <Area dataKey="bbSpan" stackId="bb" stroke="none" fill={BAND} fillOpacity={0.10}
-                    isAnimationActive={false} />
-              {levels.map((level) => (
-                <ReferenceLine key={level} y={level} strokeDasharray="4 4"
-                               stroke={level > latest.close ? "#EF9A9A" : "#80CBC4"} strokeOpacity={0.45}
-                               label={{ value: num(level), position: "insideLeft", fill: "#7A8CA0", fontSize: 10 }} />
-              ))}
-              <Line dataKey="close" stroke={TECH} strokeWidth={1.5} dot={false} isAnimationActive={false} />
-              <Line dataKey="sma50" stroke={FAST} strokeWidth={1.2} dot={false} connectNulls
-                    isAnimationActive={false} />
-              <Line dataKey="sma200" stroke={SLOW} strokeWidth={1.2} dot={false} connectNulls
-                    isAnimationActive={false} />
-              <Scatter dataKey="buy" fill={UP} shape="triangle" isAnimationActive={false} />
-              <Scatter dataKey="sell" fill={DOWN} shape="triangle" isAnimationActive={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          {/* Hidden from assistive tech: the crossover table and the levels list carry what the chart shows; Recharts stamps role=img on each buy/sell marker. */}
+          <div aria-hidden>
+            <ResponsiveContainer width="100%" height={320}>
+              <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" vertical={false} />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={48} />
+                <YAxis domain={["auto", "auto"]} tickLine={false} axisLine={false} width={56} />
+                <Tooltip content={<TechTooltip />} />
+                <Area dataKey="bbBase" stackId="bb" stroke="none" fill="transparent" isAnimationActive={false} />
+                <Area dataKey="bbSpan" stackId="bb" stroke="none" fill={BAND} fillOpacity={0.10}
+                      isAnimationActive={false} />
+                {levels.map((level) => (
+                  <ReferenceLine key={level} y={level} strokeDasharray="4 4"
+                                 stroke={level > latest.close ? palette.levelAbove : palette.levelBelow} strokeOpacity={0.45}
+                                 label={{ value: num(level), position: "insideLeft", fill: palette.axis, fontSize: 10 }} />
+                ))}
+                <Line dataKey="close" stroke={TECH} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                <Line dataKey="sma50" stroke={FAST} strokeWidth={1.2} dot={false} connectNulls
+                      isAnimationActive={false} />
+                <Line dataKey="sma200" stroke={SLOW} strokeWidth={1.2} dot={false} connectNulls
+                      isAnimationActive={false} />
+                <Scatter dataKey="buy" fill={UP} shape="triangle" isAnimationActive={false} />
+                <Scatter dataKey="sell" fill={DOWN} shape="triangle" isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
 
           <div className="eyebrow mt-5 mb-1">RSI (14) · above 70 stretched, below 30 washed out</div>
-          <ResponsiveContainer width="100%" height={110}>
-            <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="date" hide />
-              <YAxis domain={[0, 100]} ticks={[30, 50, 70]} tickLine={false} axisLine={false} width={56} />
-              <ReferenceLine y={70} stroke={DOWN} strokeOpacity={0.35} strokeDasharray="3 3" />
-              <ReferenceLine y={30} stroke={UP} strokeOpacity={0.35} strokeDasharray="3 3" />
-              <Line dataKey="rsi" stroke="#4DD0E1" strokeWidth={1.3} dot={false} connectNulls
-                    isAnimationActive={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <div aria-hidden>
+            <ResponsiveContainer width="100%" height={110}>
+              <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" vertical={false} />
+                <XAxis dataKey="date" hide />
+                <YAxis domain={[0, 100]} ticks={[30, 50, 70]} tickLine={false} axisLine={false} width={56} />
+                <ReferenceLine y={70} stroke={DOWN} strokeOpacity={0.35} strokeDasharray="3 3" />
+                <ReferenceLine y={30} stroke={UP} strokeOpacity={0.35} strokeDasharray="3 3" />
+                <Line dataKey="rsi" stroke={palette.seriesCyan} strokeWidth={1.3} dot={false} connectNulls
+                      isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
 
           <div className="eyebrow mt-5 mb-1">MACD (12, 26, 9)</div>
-          <ResponsiveContainer width="100%" height={110}>
-            <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="2 4" vertical={false} />
-              <XAxis dataKey="date" hide />
-              <YAxis tickLine={false} axisLine={false} width={56} />
-              <ReferenceLine y={0} stroke="#7A8CA0" strokeOpacity={0.4} />
-              <Bar dataKey="macdHist" isAnimationActive={false}
-                   shape={(props: unknown) => {
-                     // Recharts passes the rect geometry plus the source row;
-                     // it has no exported type for a custom Bar shape.
-                     const { x, y, width, height, payload } = props as {
-                       x: number; y: number; width: number; height: number;
-                       payload: ChartPoint;
-                     };
-                     const positive = (payload.macdHist ?? 0) >= 0;
-                     return <rect x={x} y={y} width={width} height={height}
-                                  fill={positive ? UP : DOWN} opacity={0.5} />;
-                   }} />
-              <Line dataKey="macd" stroke={TECH} strokeWidth={1.3} dot={false} connectNulls
-                    isAnimationActive={false} />
-              <Line dataKey="macdSignal" stroke="#FFB74D" strokeWidth={1.1} dot={false} connectNulls
-                    isAnimationActive={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <div aria-hidden>
+            <ResponsiveContainer width="100%" height={110}>
+              <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="2 4" vertical={false} />
+                <XAxis dataKey="date" hide />
+                <YAxis tickLine={false} axisLine={false} width={56} />
+                <ReferenceLine y={0} stroke={palette.axis} strokeOpacity={0.4} />
+                <Bar dataKey="macdHist" isAnimationActive={false}
+                     shape={(props: unknown) => {
+                       // Recharts passes the rect geometry plus the source row;
+                       // it has no exported type for a custom Bar shape.
+                       const { x, y, width, height, payload } = props as {
+                         x: number; y: number; width: number; height: number;
+                         payload: ChartPoint;
+                       };
+                       const positive = (payload.macdHist ?? 0) >= 0;
+                       // A BAR BELOW ZERO ARRIVES WITH A NEGATIVE HEIGHT, which an
+                       // SVG <rect> refuses: every negative histogram bar was
+                       // dropped and logged as an error, so the chart showed only
+                       // the positive half. Found in the November 2026 audit.
+                       return <rect x={x} y={height < 0 ? y + height : y} width={width}
+                                    height={Math.abs(height)}
+                                    fill={positive ? UP : DOWN} opacity={0.5} />;
+                     }} />
+                <Line dataKey="macd" stroke={TECH} strokeWidth={1.3} dot={false} connectNulls
+                      isAnimationActive={false} />
+                <Line dataKey="macdSignal" stroke={palette.seriesOrange} strokeWidth={1.1} dot={false} connectNulls
+                      isAnimationActive={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         </CardBody>
       </Card>
 
@@ -448,7 +477,7 @@ export function TechnicalPanel({
               The 50-day and 200-day averages never crossed inside this range. Try a longer one.
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Every crossover in this range">
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -473,7 +502,7 @@ export function TechnicalPanel({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           )}
         </CardBody>
       </Card>

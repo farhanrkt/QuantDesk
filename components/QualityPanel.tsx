@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Minus, X } from "lucide-react";
+import { ArrowRight, Check, Minus, X } from "lucide-react";
 import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
 import {
   Explain, ExplainedStat, TONE_HEX, useDetail,
@@ -12,7 +12,6 @@ import type {
 } from "@/lib/types";
 import { cn, num } from "@/lib/utils";
 
-const ASH = "#7A8CA0";
 
 /**
  * Where each score came from, beside the score.
@@ -80,7 +79,8 @@ function FlagWorth({ data, explain }: {
             as a clean bill of health; the pair reads as what the test did. */}
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="num text-base text-ash">{point.priorText}</span>
-          <span className="text-ash">&rarr;</span>
+          <ArrowRight aria-hidden className="h-3.5 w-3.5 shrink-0 self-center text-ash" />
+          <span className="sr-only">to</span>
           <span className="num text-h2 font-semibold text-chalk">{shown}</span>
           <span className="text-meta leading-relaxed text-ash">
             {data.flagged
@@ -111,7 +111,7 @@ function FlagWorth({ data, explain }: {
                   <span className="text-body">{point.label}</span> — {point.source}
                   {point.event ? `, counting ${point.event}` : ""}.
                   {point.extrapolated && (
-                    <span className="text-warn/90">
+                    <span className="text-warn">
                       {" "}Beneish&apos;s error rates were never measured against that
                       broader definition, so this stop brackets the range rather than
                       answering the same question.
@@ -127,7 +127,7 @@ function FlagWorth({ data, explain }: {
         </p>
 
         {data.partialNote && (
-          <p className="text-meta leading-relaxed text-warn/90">{data.partialNote}</p>
+          <p className="text-meta leading-relaxed text-warn">{data.partialNote}</p>
         )}
 
         <p className="text-meta leading-relaxed text-ash">
@@ -183,7 +183,8 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
 
   if (!data.applicable) {
     return (
-      <Card className="animate-rise">
+      <div className="space-y-4 animate-rise">
+      <Card>
         <CardHeader><CardTitle>Accounting quality</CardTitle></CardHeader>
         <CardBody>
           <p className="text-base leading-relaxed text-ash">{data.reason}</p>
@@ -194,21 +195,26 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
           )}
         </CardBody>
       </Card>
+      {/* What the company does moved to the "What it is" tab, and a one-line
+          version sits under the ticker on every tab — including this one, the
+          branch where a reader knows least about the company. */}
+      </div>
     );
   }
 
   const { piotroski, altman, beneish } = data;
-  const verdictColor = TONE_HEX[
-    data.verdict === "SOUND" ? "good" : data.verdict === "CONCERNS" ? "bad" : "neutral"
-  ] ?? ASH;
+  // The verdict is the server's (quality.py), so mapping it to a tone here
+  // restates a judgement rather than making one.
+  const verdictTone =
+    data.verdict === "SOUND" ? "good" : data.verdict === "CONCERNS" ? "bad" : "neutral";
 
   return (
     <div className="space-y-4 animate-rise">
       {/* ---------------- the summary in plain English ---------------- */}
-      <Card accent={verdictColor}>
+      <Card tone={verdictTone}>
         <CardHeader>
           <CardTitle>What the filings say</CardTitle>
-          <span className="num text-meta font-semibold" style={{ color: verdictColor }}>
+          <span className="num text-meta font-semibold" style={{ color: TONE_HEX[verdictTone] }}>
             {data.verdict ?? "—"}
           </span>
         </CardHeader>
@@ -220,6 +226,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
           </p>
         </CardBody>
       </Card>
+
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         {piotroski && <ExplainedStat explain={ex.piotroski} sub={piotroski.reading} />}
@@ -319,7 +326,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
       {!simple && (
         <div className="grid gap-4 lg:grid-cols-2">
           {altman && (
-            <Card accent={TONE_HEX[ex.altman?.tone ?? "neutral"]}>
+            <Card tone={ex.altman?.tone}>
               <CardHeader><CardTitle>How far from running out of money</CardTitle></CardHeader>
               <CardBody className="space-y-3">
                 <p className="text-base leading-relaxed text-body">{altman.reading}</p>
@@ -344,7 +351,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
           )}
 
           {beneish && (
-            <Card accent={TONE_HEX[ex.beneish?.tone ?? "neutral"]}>
+            <Card tone={ex.beneish?.tone}>
               <CardHeader><CardTitle>Do the earnings look massaged?</CardTitle></CardHeader>
               <CardBody className="space-y-3">
                 <p className="text-base leading-relaxed text-body">{beneish.reading}</p>

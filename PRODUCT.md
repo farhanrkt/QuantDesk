@@ -19,16 +19,33 @@ time to read but no way to tell an ordinary number from an alarming one. They ar
 knowing a ticker and little else.
 
 **Secondary: the experienced investor, and the author.** Full mode is a standing promise
-to them — "the app as it has always been: nothing moved, nothing renamed, nothing added".
-That promise is load-bearing: a mode that simplifies by taking capability away from the
-people who came for the capability is a mode they turn off once and never trust again.
-Full mode may not be degraded to serve the newcomer.
+to them — **every control and every indicator, nothing removed or hidden**. That promise is
+load-bearing: a mode that simplifies by taking capability away from the people who came for
+the capability is a mode they turn off once and never trust again. Full mode may not be
+degraded to serve the newcomer.
+
+*Revised by the owner, 25 October 2026.* The promise used to read "nothing moved, nothing
+renamed, nothing added", and the overhaul that gave the app routes moved things. Moves are
+now allowed and listed here, so a reader of the old layout can find everything:
+
+- **Scan & rank and the anomaly screener** moved from the stock page's last tab to
+  **/markets**, with the exposure scan and the local scanner report beside them.
+- **What the company does** moved from the Quality tab to the new first tab, **What it is**,
+  and a one-line version sits under the ticker on every tab.
+- **The thesis journal** is still the Thesis tab; every entry for every company is also on
+  **/journal**.
+- **The detection and look-back controls** are unchanged, and the tab, ticker and any
+  non-default tuning now live in the URL.
+- *1 November 2026:* **/markets opens on Today**, the board of what moved the markets.
+  Ranking a universe is one tab along, at `/markets?view=rank`, with nothing removed.
 
 ## Product Purpose
 
 Read one listed company through four models that use **different data** — order flow,
 price trend, intrinsic value, accounting quality — and show where they agree, where they
-disagree, and what none of them can tell you. Covers US and Indonesian (IDX) listings.
+disagree, and what none of them can tell you. Covers US and Indonesian (IDX) listings, with
+the day's market context — indices, rates, the dollar and the rupiah, commodities — beside
+them.
 
 Success is a reader who finishes with a defensible view of what is and is not known about
 a company, including the gaps. It is explicitly **not** a reader who has been told what to
@@ -38,14 +55,21 @@ do.
 
 Most research tools give one opinion. This gives four that share no inputs, and then
 spends real effort establishing how much that agreement is actually worth — publishing the
-measurement whichever way it comes out. Five stamped artifacts already do this
+measurement whichever way it comes out. Eight stamped artifacts already do this
 (`backtest_results.json`, `check_calibration.json`, `correlation_stability.json`,
-`lens_agreement.json`, `exposure_stability.json`), including a backtest that reports
-its own ranking has **no detectable edge** and a beta study that refuses one of the
-four factors it tested.
+`lens_agreement.json`, `exposure_stability.json`, `tape_calibration.json`,
+`patterns_calibration.json`, `verdict_backtest.json`), including a backtest that reports
+its own ranking has **no detectable edge**, a beta study that refuses one of the four
+factors it tested, a tape calibration that reports the signal it calibrates **does not
+exist on US markets** — 4.2% of names firing against 5% expected by chance — a
+chart-pattern study whose every surviving formation predicted the **opposite** of what the
+textbooks claim for it, and a walk-forward on the scanner's own blended score that
+publishes its own **40% coverage** rather than implying it measured the whole thing.
 
 *The count said "three" while listing four, from before `lens_agreement.json`
-existed. Corrected 31 August 2026 along with the fifth.*
+existed. Corrected 31 August 2026 along with the fifth. A sixth landed 8 September
+2026 with the market scanner; a seventh and an eighth on 9 September with the chart
+patterns and the blend walk-forward.*
 
 A neighbouring product could copy the four lenses. It could not truthfully copy
 "we measured whether our own signal works and published the null result".
@@ -54,17 +78,124 @@ A neighbouring product could copy the four lenses. It could not truthfully copy
 
 These are durable product facts. Future work preserves them; none is a style preference.
 
-1. **No composite buy/hold/sell.** Not a number, letter, traffic light or sortable
-   "conviction" column. Guarded by `tests/test_synthesis.py` and `tests/test_pretrade.py`.
-   This is the direction any change toward "easier to interpret" will drift, and it is
-   permanently refused.
+1. **No composite buy/hold/sell — on the published single-company view.** Not a number,
+   letter, traffic light or sortable "conviction" column. Guarded by
+   `tests/test_synthesis.py` and `tests/test_pretrade.py`. This is the direction any
+   change toward "easier to interpret" will drift, and it is permanently refused *there*.
 
    *Confirmed boundary for v2 (29 Aug 2026):* per-lens status chips driven by the existing
    `explain.tone` are permitted — four chips side by side, one word each. They are **never
    summed, averaged, counted or ordered by strength**. Nothing may aggregate them.
 
+   *Scoped by the owner, 8 September 2026.* This constraint previously read as absolute,
+   and the private market scanner (`api/_lib/verdict.py`, `scripts/scan_market.py`,
+   `GET /api/verdict`) produces exactly the composite it refuses: one 0-100 score and one
+   action per name. The two are not in conflict, and saying why is the point of this
+   paragraph rather than a footnote.
+
+   The refusal was always an answer to a specific question. **"What is and is not known
+   about this one company"** must not be compressed to a verdict, because the reader is
+   forming their own view and a number takes that from them. The scanner asks a different
+   question — **"of 837 Indonesian listings, which forty deserve my attention this
+   week"** — which is not answerable without ordering. Refusing to order there is not
+   restraint; it is refusing to answer.
+
+   What holds the line, and is enforced rather than intended:
+
+   - **The published surfaces cannot reach it.** `explain.for_synthesis` and
+     `pretrade.assess` do not import `verdict`, and `tests/test_verdict.py` asserts the
+     import direction by AST. Their own aggregate guards are untouched and still pass.
+   - **`/api/confluence` carries no score and no ordering.** It gained one field in the
+     October 2026 overhaul, a `company` leg, and it is description only: what the company
+     sells, its listing, its statements year by year. Neither `explain.for_synthesis` nor
+     `pretrade.assess` is handed it, and `tests/test_api.py` asserts both produce identical
+     output whether it arrived or failed.
+   - **Every score ships with the null result.** `verdict.provenance()` returns the
+     measured finding that this app's price ranking shows no detectable relationship to
+     subsequent returns, and it is the first block on the report, above the table. Where
+     the artifact is missing it gets *louder*, not quieter.
+   - **The scanner is private, and drawn as private where it appears.** It writes to
+     `reports/`, which is gitignored, so the deployed app has no report to show. Locally,
+     the report is the **Latest local scan** view on /markets and the per-name score is the
+     **Score it** tab — both behind a "Private" divider, never the default, never printed,
+     and never read by the compare view. (This line used to say the scanner was not linked
+     from the app, which stopped being true the day the landing panel and the tab shipped.)
+   - **The annotated chart is part of the private surface, not the published one.**
+     `api/_lib/chartlayers.py` and `components/AnnotatedChart.tsx` draw the scanner's
+     readings — defended levels with their touch counts, the detected formations, the
+     sessions the tape test counted, the stop and the first ceiling — and they are
+     reachable from `GET /api/verdict` and nowhere else. The technical panel's own chart
+     is unchanged.
+
+   *Confirmed boundary for Compare (25 Oct 2026):* the compare view puts two to four
+   companies side by side and **never decides between them**. Columns stay in the reader's
+   order with no sort; every column is the same width with no highlight; each cell carries
+   its own company's server tone and nothing is computed across columns; the rail's
+   agreement count is not repeated per column, because "2 of 2" beside "1 of 2" is a
+   cross-company count; fired pre-trade conditions are listed, never counted; and the
+   private score is never read. `scripts/check_frontend.mjs` rule 14 fails the build on a
+   sort, max, reduce, the agreement count or the verdict in any compare file, and
+   `tests/frontend/assertions.cjs` pins order and the absence of aggregate keys.
+
+   *Confirmed boundary for the sensitivity grid (25 Oct 2026):* values only. No fill, no
+   tone and no comparison with the price inside the grid — the price is printed beside it.
+   Rule 13 enforces it.
+
+   *Confirmed boundary for the market board (1 Nov 2026):* the board of what moved the
+   markets is context, never a lens and never a call.
+   - **No mood or risk-on score.** It carries no composite reading of the day.
+   - **No leaderboard.** Rows stay in declared order, never sorted by size of move.
+   - **No colour from direction.** Every tone is neutral; a move is emphasised only when
+     it was unusual for its own instrument, measured against that instrument's past year.
+   - **Headlines are not causes.** They are shown as mentioning a market, never as
+     explaining a move.
+   - **Relation only where measured.** It marks what a stock is related to only from its
+     own index, its valuation's discount rate and the exposure the Trend tab measured, and
+     its requests never carry a ticker.
+   - **Event history is history.** The calendar's line on how past FOMC, CPI, jobs and Bank
+     Indonesia days went is a count against the half any day shows, with its sample size.
+     It says when the result is within chance, as all nine measured pairs are, and is never
+     worded as a forecast.
+   - **The watchlist stays personal.** Its report dates are asked for in a POST body,
+     `no-store`, like holdings and a reader's own ranking list.
+
+   Rule 19 and a structural check in `scripts/check_frontend.mjs` enforce it.
+
 2. **No predictive claim that isn't measured.** If a feature implies something predicts
    returns, it is measured offline and published including nulls, or it does not ship.
+
+   *Worked example, 11 September 2026.* `volumeprofile.py` was built to fix an observed
+   gap: a full IDX sweep left 46 of 251 names with no usable floor, and volume-at-price
+   is a second, independent way to find one. The measurement asked whether price arriving
+   at a high-volume band holds more often than price arriving at an ordinary band the
+   same distance away — 250 names, six years, 64,969 touches, paired within calendar
+   month. Every distance bucket leaned positive and **not one survived a false-discovery
+   correction** (q = 0.19 to 0.30); the nearest bucket, the only one where a level could
+   act as a stop, came back negative at a 60-name sample and positive at 250.
+
+   The same test on the US market came out with the **opposite sign** — pooled −1.4
+   points against IDX's +2.9, nothing significant on either. Two markets disagreeing
+   about the direction of an effect neither can detect is what no effect looks like.
+
+   So the feature shipped as description: it draws, it reports where the year's trade
+   sat, and `structure.py` finds its levels exactly as before. The motivating gap is not
+   closed, and the module's own docstring says so. **A feature that survives its
+   measurement by being scoped down is the normal outcome here, not a failure.**
+
+   *Second worked example, 20 September 2026.* `field.py` reports what a company sells
+   and whether it is the largest of the scanned names sharing its industry label. The
+   asked-for feature was a **niche champion** screen, and the "niche" half was built,
+   measured and dropped: the obvious measure is the field's share of the scanned
+   market's revenue, and across the fields with a clear leader the median field holds
+   0.5% of it — which is 1/97 restated, an artifact of how many labels the provider
+   uses, not a measure of how narrow a business is. A threshold on it would have sorted
+   fields by how finely their corner of the economy happens to be subdivided.
+
+   The "champion" half survived with a stated definition rather than a vibe: rank 1 by
+   revenue, at least 3 measured peers, at least 2x the runner-up. A bare rank-1 test
+   calls 97 of 97 Indonesian fields won; at 2x it is 31. The standing is **not market
+   share** and the caveat ships inside the payload as `basis`, because a rank rendered
+   without it is a claim nothing here measured.
 
 3. **Absence of a flag is never evidence of quality.** An empty panel is not a clean bill
    of health and must say so in words.
@@ -74,14 +205,67 @@ These are durable product facts. Future work preserves them; none is a style pre
    Python has no interpretation to offer (a day's price change, the seasonality grid).
 
 5. **Existing refusals stay.** `applicable: false` for financials on the accounting
-   screens; the candlestick firewall; the declined multi-bar chart patterns; the
-   `unavailable` band.
+   screens; the candlestick firewall; the `unavailable` band.
+
+   *Scoped by the owner, 9 September 2026, for the multi-bar chart patterns only.*
+   `swing.py` declines head-and-shoulders, flags, wedges, cups and double tops on three
+   arguments, and two of them were always empirical claims rather than principles: that
+   two honest implementations disagree, and that a matcher fires on noise. The private
+   scanner answers the first by using Lo, Mamaysky and Wang's own kernel-regression
+   definitions — inequalities on five extrema, no thresholds picked by eye — and the
+   second by measuring the firing rate and publishing it.
+
+   The third argument, that LMW found no demonstrated net edge, is not answered and is
+   not waved away: `patterns.py` scores **nothing** until `calibrate_patterns.py` has
+   run, and then only for formations whose forward returns survived a false-discovery
+   correction across every pattern and horizon tested.
+
+   **The published single-company view is unchanged.** `swing.UNDETECTABLE_PATTERNS`
+   still renders and still names every refused shape. Flags, pennants, wedges and
+   cup-and-handle stay refused everywhere, because LMW never defined them either.
+
+   **No price target is ever projected from a formation.** *Added 11 September 2026, when
+   the formations were first drawn.* Every chart-pattern convention ends in a measured
+   move — the height of the head, projected from the neckline, as an arrow. It is the
+   most persuasive mark available and it is refused here for the same reason the textbook
+   direction is not scored: the measurement below found that direction carries no
+   information. What is drawn beside each formation instead is its **measured** excess
+   return with the horizon and the number of months behind it, and the textbook bias
+   beside it, labelled as textbook. Where the two disagree — a bullish shape that measured
+   negative — the panel says so in the same card.
+
+   **The curve under a formation is refitted at detection time.** Smoothing the whole
+   series once and drawing that is one line of code and is a look-ahead: a two-sided
+   kernel at a past date is fitted partly from prices that came after it, so the drawn
+   shape would be partly made of the returns it is about to be credited with predicting.
+   The drawn curve ends on the detection bar.
+
+   What the measurement found is worth recording here because it is a product fact:
+   every formation that survived correction predicted **underperformance**, on both
+   markets, whichever way the chart books read it. A head-and-shoulders and its bullish
+   mirror image measured the same. The scanner therefore scores the presence of a
+   formation by its measured sign and never by its textbook one.
 
 6. **One data module, one serverless function, no server state, a generated glossary,
-   offline tests against planted ground truth.** The thesis journal and holdings never
+   offline tests against planted ground truth.**
+
+   *Scoped 12 September 2026.* `market_data` may keep FILING-DERIVED data on local disk
+   across days, because a 9,997-name sweep cannot finish inside one. This is not server
+   state: it is off unless a caller opts in, only `scripts/scan_market.py` does, the
+   deployed function never writes it, and every record is regenerable. The price and the
+   FX rate are re-derived on every read and must stay that way — caching either would be
+   a correctness bug rather than a staleness trade-off. The thesis journal and holdings never
    reach a server; `scripts/check_frontend.mjs` fails the build if `lib/api.ts` so much as
    mentions the journal.
 
+
+   *Clarified 25 October 2026.* "One serverless function" means the Python API — the one
+   bundle carrying numpy, pandas, scipy and scikit-learn. The routed front end adds a small
+   Next.js render function for `/stock/[symbol]`, which renders an empty shell named after
+   the ticker and fetches nothing; every number still comes from the one Python function.
+   The watchlist and recent tickers join the journal and holdings as things that never
+   reach a server unasked: `lib/api.ts` may not import those stores or touch browser
+   storage, and analytics report route templates, never a path with a ticker in it.
 7. **Every figure explains itself — in one sentence, on the page.** Each number carries
    what it measures and whether *this* value is good or bad. The rest — why, what would
    change it, the evidence grade — lives behind the figure's own info icon.
@@ -107,20 +291,47 @@ These are durable product facts. Future work preserves them; none is a style pre
 ## Terminology
 
 - **Lens** — one of the four models (Flow, Trend, Value, Quality).
-- **Family** — the body of data a lens reads: *price and volume*, or *the filings*. Flow
-  and Trend are one family; Value and Quality are the other.
+- **Family** — the body of data a reading rests on: *price and volume*, *the filings*, or
+  *the share register*. Flow and Trend are the first; Value and Quality the second. The
+  third exists only in the private scanner (`verdict.py`) and holds free float and share
+  issuance — facts no published lens reads. The single-company view still speaks of two.
 - **Tone** — the server's judgement on a figure: `good` / `bad` / `warn` / `neutral` /
   `none`. The only permitted input to colour.
 - **Guided / Full** — the two reading modes. Guided is the default.
 - **Horizon** — how long the reader means to hold, stated once and read by several panels.
+- **Company block** — what the company sells, its listing and its statements year by year.
+  Description, never a lens: it casts no vote and the synthesis and pre-trade checks never
+  read it.
+- **Watchlist / recent** — tickers a reader keeps, in this browser only. They leave it only
+  when the reader presses "rank these", and then in a POST body, never a URL.
 
 ## Evidence and assets
 
-- Measured artifacts, each stamped with its date, in `api/_lib/*.json`.
+- Measured artifacts, each stamped with its date, in `api/_lib/*.json`. Nothing draws its
+  own version of one: `chartlayers.py` positions readings that `structure`, `patterns` and
+  `tape` already took, and `tape._marks` is shared by the significance test and the chart
+  so a session cannot be circled on one and uncounted by the other.
 - `docs/field-manual.html` — beginner's guide; its glossary is **generated** from
   `api/_lib/explain.py` and CI fails if a metric is added without regenerating.
-- Six network scripts in `scripts/` deliberately outside CI. Re-run after touching what
-  they measure; a stale stamped number is worse than none.
+- Twelve network scripts in `scripts/` deliberately outside CI. Re-run after touching what
+  they measure; a stale stamped number is worse than none. Two arrived with the market
+  scanner: `refresh_listings.py` fetches the whole-market universe, and
+  `calibrate_tape.py` measures the per-market baselines the tape reading is tested
+  against — without which it has no null to test and reports no direction at all. A
+  third, `calibrate_patterns.py`, decides whether any chart formation is allowed to
+  score. A fourth, `backtest_verdict.py`, is the only one that measures the scanner's
+  own blended score — partially, and it says by how much. A fifth,
+  `calibrate_volume_profile.py`, asked whether a volume shelf holds better than an
+  ordinary band and **came back null**, which is why `volumeprofile.py` draws and does
+  not gate.
+
+  **Every per-market artifact is merged, never overwritten.** These scripts take
+  `--market` as a repeatable flag and used to write only what the current run measured,
+  so `backtest_verdict.py --market US` silently deleted the Indonesian study — which it
+  did, on 11 September 2026, printing "written to ..." and exiting zero. `_lib/artifacts`
+  now merges, keeps each market's own `measuredOn`, and every run prints what it carried
+  forward. A measurement is the only thing standing between a feature and constraint 2;
+  losing one quietly turns a measured feature back into an unmeasured one.
 
 ## Accessibility
 
@@ -136,8 +347,18 @@ Audited and fixed 29 Aug 2026. What the audit found and what happened to it:
 | Both tablists announcing as "Lenses" | the inner one is "Time horizon" |
 
 Verified by walking the real tab order: 64 focusables, none unnamed, none without a
-visible focus style, no positive `tabindex`. Seven of these rules are now enforced by
-`npm run check:frontend` so they cannot come back.
+visible focus style, no positive `tabindex`. These rules and the ones added since are
+enforced by `npm run check:frontend` (nineteen design rules, plus the privacy, analytics and
+drift checks) so they cannot come back.
+
+*Overhaul, 25 Oct 2026:* the command palette is a native `<dialog>` with the ARIA combobox
+pattern (`aria-activedescendant`, arrow keys, Escape returns focus); the phone menu and the
+shortcut list are native dialogs too; every page has a skip link and exactly one `h1`;
+confirmations go through live regions that exist before any message; the lens tabs scroll
+on one row instead of wrapping into three sticky rows on a phone. Re-audited the same day
+with axe-core on every route and tab: zero violations after six fixes. Also re-checked: no
+sideways scroll at 375px anywhere, and a printed tearsheet that clears AA on every tab.
+DESIGN.md lists what each pass found.
 
 **Not a conformance claim.** Nobody has listened to this with a screen reader — the
 keyboard contract is implemented and measured, but how it *sounds* is untested.
@@ -154,4 +375,31 @@ decision behind a choice.
 - Whether Guided and Full eventually become two genuinely distinct designs rather than one
   design with elements hidden. Not now; v2 keeps one design with Guided as the default.
 - IDX fundamentals curation — the largest single effort, and blocked on an architectural
-  decision about where curated figures live relative to `market_data.py`.
+  decision about where curated figures live relative to `market_data.py`. **The market
+  scanner has now measured the size of this gap rather than assuming it:** on a full
+  sweep, seven of the top forty-five IDX names by price rank had no usable statements at
+  all, so both filings lenses went quiet and the whole verdict rested on price history.
+  Those rows are marked `crossChecked: false` and their scores are shrunk for it, but a
+  shrunk score is a workaround, not a fix.
+- ~~Whether the scanner's own composite should be backtested~~ **Partly answered,
+  9 September 2026.** `scripts/backtest_verdict.py` runs a monthly walk-forward over the
+  four components that can be reconstructed without reading the future — about 40% of the
+  intended evidence — and publishes that coverage rather than implying it measured the
+  whole score. The other five cannot be reconstructed at all: this data source has no
+  point-in-time filings, so a historical value or quality reading would use numbers
+  published years later. That half is now measured **prospectively** instead, by
+  `_lib/scanlog.py`, which records what the scanner said on the day it said it and
+  refuses to quote a rate under thirty resolved observations, counting a name once per
+  63-session window however often it is called inside one. It will say nothing useful for
+  months, which is the nature of the instrument rather than a fault in it.
+- What a round trip actually costs. The scanner reports one per name and the blend
+  backtest reports a breakeven, but the estimator resolves a spread for only about one
+  IDX listing in twenty — it clears its own noise floor on the widest names and almost
+  nowhere else. So the app can say "this survives if a round trip costs under 2.2%" and
+  cannot say what a round trip costs. That gap decides whether the only surviving result
+  in the whole private tier is real, and closing it needs a data source with quoted
+  spreads rather than an estimator.
+- Whether the scanner should ever act on its own concentration measurement. It reports
+  that a buy list spans fewer bets than names and stops there — dropping the most
+  redundant name would be portfolio construction, which needs to know what is already
+  owned and how much the holder has, and the app knows neither.

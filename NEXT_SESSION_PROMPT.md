@@ -11,13 +11,16 @@ CODEBASE_REVIEW.md is older and partly superseded.
 
 STATE
 =====
-Branch: feature/pre-trade-checks (41 commits ahead of main, NOT pushed, tree
-clean apart from this file). Everything below is committed.
-
+Branch: claude/codebase-app-overhaul-e51579 — feature/personal-verdict-scanner
+plus main's IC-bar commit and the fix-ci advisory commit (merged, not
+cherry-picked), plus the October 2026 overhaul. It is open for review as PR
+farhanrkt/QuantDesk#5. The market board (November 2026) is on
+claude/markets-today, stacked on that branch so #5 stays reviewable: merge #5
+first. Each commit states what it changed and why.
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
-single Vercel Python function on the back. 1,145 offline pytest tests, 35
-frontend assertions and 7 enforced design rules. US and Indonesian (IDX)
-listings.
+single Vercel Python function on the back. ~1,740 offline pytest tests, 78
+frontend assertions, 19 enforced design rules plus structural checks. US and
+Indonesian (IDX) listings. lxml is now a runtime dependency (see below).
 
 The full battery, all green as of the last commit:
   .venv/bin/python -m pytest && .venv/bin/ruff check api tests scripts
@@ -28,11 +31,179 @@ The full battery, all green as of the last commit:
 Both halves run from .claude/launch.json (`quantdesk-web`, `quantdesk-api`) or
 `npm run dev` / `npm run dev:api`. Both are pinned to `.venv/bin/python -m
 uvicorn` — a bare `uvicorn` resolves to a system Python here carrying yfinance
-1.5.2 against this project's 0.2.66.
+1.5.2 against this project's 0.2.66. `npm run build` clobbers `.next` under a
+running dev server: stop it, delete `.next`, start it again.
 
+THE OCTOBER 2026 OVERHAUL — WHAT EXISTS NOW
+-------------------------------------------
+Routes: / (landing), /stock/[symbol] (?tab=, non-default tuning), /markets
+(opens on Today; ?view=rank|screener|exposure|scan), /compare?symbols=, /journal. A shell
+(components/shell/) with a top bar, phone menu, command palette (⌘K, backed by
+GET /api/symbols over the committed listing files), shortcuts ([ ] w ?),
+toasts, a watchlist and recent tickers (localStorage only), print styles.
+
+New on the stock page: a "What it is" tab first in the order (Trend still the
+default) fed by a `company` leg in /api/confluence — description only, never
+read by the synthesis or pre-trade checks — and a sensitivity grid on the
+Value tab. New page: Compare, which never sorts, sums or highlights.
+
+THE MARKET BOARD (1 November 2026). Markets -> Today, and a markets panel in
+its own column beside every page from 1280px (a band of the same tiles above
+the page below that). 22 instruments, each move set against that instrument's
+own past year (api/_lib/marketboard.py). A calendar of FOMC, CPI, jobs, PCE,
+GDP, Bank Indonesia and exchange closures (api/_lib/econcalendar.py, a
+committed file; scripts/refresh_calendar.py re-checks it) — shown as a list,
+as a month grid in the panel and on Today, and as a seven-day strip in the
+band (components/markets/CalendarWidgets.tsx) — with each event's
+past occurrences counted against the half any day shows — all nine pairs are
+within chance. US headlines from Yahoo with thumbnails through next/image; the
+Indonesian press from Google News as text. Tone-neutral, declared order, no
+ticker in any GET, the watchlist's report dates only in a POST body — rule 19
+and structural checks hold those. Read RESEARCH_ROADMAP §20 before touching
+it. THE CALENDAR GOES STALE: its coverage and pending notes are on the page;
+Bank Indonesia's 2027 meetings and BPS's inflation dates still need adding.
+
+lib/palette.ts is the only place a colour is written; lib/session.ts keeps
+results per symbol for the tab; lib/cache.ts shares confluence payloads across
+views for five minutes. Read lib/url.ts before touching routing, and
+lib/compare.ts before touching Compare.
+
+FIVE SILENT BUGS THE OVERHAUL FOUND, FOUR OF THEM LONG-STANDING
+----------------------------------------------------------------
+1. yf.download KEEPS ITS RESULTS IN MODULE GLOBALS. Two downloads at once in
+   one process could hand a caller the other's frame: a made-up ticker came
+   back with Microsoft's 1,610 bars and an "Uptrend". market_data now holds a
+   lock around every yf.download (`_DOWNLOAD_LOCK`), and a test plants the
+   flaw and fails without it. Anything new that downloads must go through
+   market_data — it always had to, and now it also has to for correctness.
+2. THE EARNINGS TABLE NEEDS lxml, WHICH WAS NEVER INSTALLED. The bare except
+   swallowed the ImportError, so earnings_dates was [] on every call and the
+   event study's earnings-proximity tag never fired once. lxml==6.0.2 is
+   pinned in both requirements files.
+3. stale-while-revalidate WAS IN THE BROWSER'S Cache-Control, so Chrome served
+   the previous answer for five minutes. It is in CDN-Cache-Control now.
+4. THE TRACK RECORD QUOTED INDONESIAN BASE RATES UNDER US COMPANIES. read()
+   takes the market; off the IDX the figures are reported bare.
+5. cn() DROPPED THE APP'S OWN FONT SIZES. tailwind-merge files an unknown
+   `text-*` as a colour, so `text-figure` lost to any tone after it (every
+   toned headline figure rendered at body size) and small primary buttons lost
+   `text-ink` to `text-meta` (1.71:1). lib/utils.ts extends the merge with the
+   scale; check_frontend fails if the two lists drift. Found by axe, not by
+   looking — the page looked plausible.
+
+VERIFIED IN THE BROWSER, 25 OCTOBER 2026
+-----------------------------------------
+axe-core on every route, tab, sub-tab, loaded panel and dialog: zero
+violations. 375px: no sideways scroll anywhere. Print emulation on every stock
+tab: every text node clears AA, explanations open, score tab refused. DESIGN.md
+("Second audit") lists the fixes; rules 16-18 keep them fixed.
+
+Also: the on-demand panels (event study, peers, portfolio, score) ran for the
+text in the ticker box rather than the loaded ticker; the exposure panel's
+universe list never loaded; the field manual 404'd in production; every Card
+accent was a no-op and a third of them were judgements; the rail printed the
+bank refusal for any unscorable company.
+
+NOT DONE IN THE OVERHAUL, AND WORTH DOING
+-----------------------------------------
+- PORTFOLIO CORRELATIONS RUN ON ONE SHARED CALENDAR. Found building the
+  board: market_data.ohlcv_batch forward-fills a symbol across days another
+  symbol in the batch traded, so a book mixing US and IDX names (or holding
+  bitcoin) gets 0.00% days that pull its correlations toward zero, against
+  portfolio.daily_returns' own docstring. `own_sessions=True` exists; switching
+  portfolio to it means per-symbol returns AND re-running
+  measure_correlation_stability.py and measure_exposure_stability.py. See the
+  RESEARCH_ROADMAP open row.
+- THE SCANNER'S FORWARD LOG now counts names, not rows (scanlog.observations:
+  a name once per 63-session window), and its December read is pre-registered
+  in RESEARCH_ROADMAP section 21: run review_scanlog.py for ID and US on or
+  after 22 December 2026, and read it by that section's nulls. Still to do:
+  restart the weekly scans (none since 21 September).
+- RankingPanel (~770 lines), ScanPanel (~930) and VerdictPanel (~730) were not
+  split into subcomponents. Their state was lifted into lib/session.ts, which
+  was the functional half; the split is maintainability only.
+- In `next dev` only, a hidden copy of the stock workspace (React's streamed
+  Suspense placeholder, id S:0) stays in the DOM beside the real one, and
+  StrictMode doubles the first confluence request. Checked against `next
+  start` (launch config `quantdesk-web-prod`, port 3001): one h1, one tablist,
+  no S:0. Not worth chasing unless it shows up in production.
+- Under four concurrent cold requests the provider throttles `info` for one or
+  two names (no sector, no name). Compare fetches two at a time for that
+  reason; the throttle is reported honestly, not hidden.
+- Nobody has listened to any of this with a screen reader.
+
+SIX SILENT BUGS FROM 20-21 SEPTEMBER, ALL MINE OR LONG-STANDING
+----------------------------------------------------------------
+None threw. None changed a count. All exited zero. This is the shape of defect
+this codebase actually produces, so it is worth knowing before adding anything.
+
+1. A CACHE REFRESH THAT REPLACED ANSWERS WITH GAPS. At midnight the calendar
+   rolled, `--fundamentals-days 1` expired every record, the rebuild came back
+   "not in hand" for all 771 names, and `refresh_free_legs` wrote that over 771
+   good payloads and saved them. A rebuild that knows LESS than what it would
+   replace is now discarded. Related trap: `--fundamentals-days 1` means
+   YESTERDAY's record is already expired; use 2+ when replaying.
+
+2. A CSS CLAMP THAT COMPUTED CORRECTLY AND DID NOTHING. `line-clamp-3` sets
+   `display: -webkit-box`; a later `block` in the same class list overrode it.
+   The DOM read `webkitLineClamp: 3` and clamped nothing. A screenshot would not
+   have told you; reading computed style did.
+
+3. `neglect.py` READ `drawdown.current` FOR ITS WHOLE LIFE. The field has always
+   been `currentDrawdown`. The module has no momentum filter BY DESIGN and
+   compensates by reporting the drawdown as context — which had never rendered
+   once. THE TEST PLANTED THE SAME WRONG KEY, so fixture and code agreed and
+   neither agreed with the data. `scripts/check_payload_keys.py` now audits this
+   class against a real sweep.
+
+4. A MISSING BALANCE SHEET REPORTED AS NET CASH. Three lines each defaulted to
+   zero, so subtracting gave zero net debt, which reads as "holds more cash than
+   borrowings". A fabricated fact about a company nothing was known about.
+
+5. A BUTTON NESTED INSIDE A BUTTON. Each specialist row was one big button and
+   the term chips are buttons. Invalid HTML, React hydration error, browser
+   rendered it anyway — visible only in the dev overlay's issue count.
+
+6. NO KEYBOARD PATH TO THE TABLE'S PRIMARY ACTION. A `<tr onClick>` cannot be
+   tabbed to. Seven rows had no focusable element at all and the rest had only
+   the SEARCH buttons, so a keyboard user could reach every secondary action and
+   none of the primary one.
+
+THE INSTRUMENTS FAILED TOO, TWICE
+----------------------------------
+`check_payload_keys.py` did not catch the bug it was written for on its first
+run: `finditer` returns no overlapping matches, so in a three-deep chain the
+middle hop swallowed the call the next pair needed. A design rule for the
+React-child bug was written, fired on four correct files, and was DELETED with
+the reasoning left in `check_frontend.mjs` — a regex cannot tell a string map
+from an object map, and a rule nobody trusts is worse than none.
+
+Put the bug back and watch the instrument react. That is the only test these
+have.
+
+READ THIS BEFORE YOU TRUST A GREEN BATTERY
+------------------------------------------
+On 20 September the scan panel was opened in a browser for the first time and
+showed "SOMETHING BROKE WHILE RENDERING". It had been failing since the day it
+was written, a week earlier, with every check above passing — because the only
+rendering that had been verified was the SERVER-SIDE one, which shows the
+loading state. A panel fed by a fetch only fails once the data arrives.
+
+So: the battery does not cover the page. Open it. The browser pane works.
 
 WHAT THE LAST SESSIONS DID
 ==========================
+THE NOVEMBER 2026 AUDIT (RESEARCH_ROADMAP §23), on branch claude/full-audit,
+which merges every finished branch (the market board and calendar widgets,
+§18.9's summary revenue, §21's forward log, §22's per-holding sessions). Every
+API route was called with real tickers and the main calculations recomputed
+outside the app: indicators, the DCF, beta, the accounting scores, the board,
+the event-day tests, correlations, long-term returns and the track record all
+matched. Six things were wrong and are fixed: a throttled bank valued as an
+ordinary company, a throttled lookup cached all day, coins and funds told
+their data was missing, the DCF ignoring short-term investments, an invisible
+negative MACD histogram, and a misleading one-year-change reading.
+
 Written up in RESEARCH_ROADMAP.md §7-§15 and DESIGN.md — read those rather than
 re-deriving the reasoning.
 
@@ -60,6 +231,44 @@ re-deriving the reasoning.
           plus a copy edit — Trend tab 2,476 visible words to 1,975, with ~1,100
           words one click away rather than gone.
 
+
+  20-21 Sep  WHAT THE COMPANY DOES, AND WHO ELSE DOES IT. The scanner could say
+          a business was cheap, solid and unwatched and could not say what the
+          business WAS. Everything added is DESCRIPTION — nothing scores, gates
+          or moves a verdict.
+
+          `field.py`       the provider's business summary; a standing among the
+                           scanned names sharing an industry label, by REVENUE
+                           not market cap; and `distinctive_terms`, the words
+                           common in one description and rare across the
+                           market's. KETR reads cable, optic, fiber.
+          `trackrecord.py` profits, cash, growth and borrowings over the years
+                           the filings cover.
+          the SEARCH       over the full description prose, in ScanPanel, with
+                           each term a clickable chip.
+          the SHORTLIST    `_specialists_summary`: largest or only measurable
+                           name in its field, compounding, and uncovered.
+
+          FIVE MEASUREMENTS CHANGED WHAT SHIPPED, all in the docstrings: a
+          "niche" flag on field revenue share does not discriminate (the median
+          field is 1/97 restated); "profitable every year" admits 67% of the IDX
+          and is therefore description, not a screen; a leverage flag at the
+          textbook 3x EBITDA sits exactly on this market's median for
+          borrowers; no signal separates a closed-end trust from an operating
+          asset manager, so no filter ships and the limitation is stated; and
+          distinctive terms refuse a corpus under fifty descriptions because the
+          ceiling and the floor cross.
+
+          THE RESULT, ON A FULL 771-NAME INDONESIAN SWEEP: seven specialists,
+          KETR.JK first at 28.6%/yr on an 18.5% net margin — the name this was
+          asked for. All seven are gated, six on turnover, which is the expected
+          outcome and is printed rather than hidden. Fifteen ungated buys, led
+          by SRSN.JK at 77.3.
+
+          A WRONG CURRENCY LABEL MANUFACTURES A CHAMPION: RIGS.JK took 99.4% of
+          Indonesian marine shipping because rupiah statements are labelled USD.
+          Guarded in `field.revenue_of` AND at the source in
+          `market_data._apply_fx`, which is what every valuation reads.
 
 PRINCIPLES THAT ARE LOAD-BEARING — do not quietly break these
 =============================================================
@@ -100,7 +309,38 @@ WHERE TO BE CAREFUL
   measure_exposure_stability.py after a change to exposure.REFERENCES or to the
   estimation window. A stale stamped number is worse than none.
 
-- `npm run check:frontend` now enforces 7 design rules by grep over source. Each
+- AFTER ANY THROTTLED SWEEP, REFETCH THE NAMES WHOSE DESCRIPTIVE FIELDS CAME
+  BACK EMPTY, BEFORE READING THE BUY LIST. `field.profile` marks those `not
+  returned`; 239 of 3,387 on the first US sweep. Their quality lens is a GAP
+  rather than a refusal, and a missing component's weight is REMOVED from the
+  blend, so the score goes UP.
+  Measured on that sweep: refetching the 239 changed 30 verdicts, and 23 of them
+  fell out of BUY. AAT went 60.5 to 46.3, BFH 72.2 to 50.2, BTX 72.9 to 58.3 —
+  two of them had been STRONG BUYS at the top of the list purely on an absent
+  lens. `reports/us-throttled.txt` is written by the analysis in the scratchpad;
+  rebuild it from the report's `summaryState` and re-run those tickers with
+  `--tickers @file --no-cache`, then replay the full scan.
+
+- `scripts/check_payload_keys.py` finds reads of a key no real payload carries —
+  the `drawdown.current` class of bug, where the parent hop resolves and the
+  leaf never does, so Python returns None and a missing key is indistinguishable
+  from a company that has no value for it. It needs a real sweep on disk and is
+  therefore outside CI: an offline suite plants its own ground truth, and a key
+  audit against planted data proves only that fixture and code agree, which is
+  the failure that let the original through. Run it after a sweep and after
+  changing what any module puts in a payload.
+
+- THE SCAN PANEL RENDERS EVERY ROW, AND THAT IS MEASURED RATHER THAN ASSUMED.
+  On the 3,364-name US report: payload 2.0MB, fetch 946ms, JSON.parse 5ms, and
+  the "Everything" filter takes 889ms to paint 3,364 rows across 56,862 DOM
+  nodes. Adding the business descriptions and term chips roughly quadruples the
+  payload and adds about 13,000 nodes, so expect one to one and a half seconds
+  on that filter and nothing noticeable on the default one. If it ever needs
+  fixing the answer is row virtualisation, not trimming what is sent — the full
+  description has to travel because the search reads it, and the character-361
+  finding in `field.py` is why.
+
+- `npm run check:frontend` now enforces 10 design rules by grep over source. Each
   one describes a bug that was actually in this codebase. If one fires on
   something legitimate, widen the rule or add to its allowlist WITH the reason —
   do not delete the check.
@@ -119,12 +359,41 @@ WHERE TO BE CAREFUL
 
 WHAT I MIGHT WANT NEXT — pick with me before building
 =====================================================
-  a) The sensitivity grid (growth x discount rate) for the valuation. Open since
-     §5. Note the roadmap's old claim was imprecise: pv_of_growing_stream is
-     vectorised over DRAWS, with growth, rate and terminal broadcast row-wise,
-     so a grid means flattening a meshgrid into that axis rather than an outer
-     product it already supports. Still cheap. Watch principle 1: a grid of fair
-     values against price, coloured, is a buy/sell heat map.
+  0) OPEN AND UNFINISHED, in order:
+
+     - THE NEXT IDX SCAN RE-RANKS THE FIELDS (1 November, RESEARCH_ROADMAP
+       §18.9). 215 of 770 Indonesian listings have no statements at the
+       provider — measured, not a throttle — and are now ranked on its
+       trailing-year summary. On the September sweep that moves KETR.JK from
+       "only one measurable" to leading three at 2.4x, takes MHKI.JK off the
+       shortlist, and un-names DIVA.JK. Records cached before 1 November lack
+       `revenue_ttm`, so a `--fundamentals-days` replay of old records will NOT
+       place those 215: it needs fresh company records. Look at the specialist
+       card and the field readings on the first scan that has them. Expect
+       KETR as "largest of 2": IOTF.JK now sits at the 50-rupiah floor and is
+       dropped before deepening, and the screen selects `noCloseRival`, which
+       admits the larger of two by 2x (a live 12-name scan confirmed it).
+     - THE SPECIALIST SCREEN IS A FRONTIER-MARKET TOOL AND THE US PROVES IT.
+       On 2,136 US names the three conditions select NOTHING, because only 4%
+       are uncovered against 79% on the IDX and the median US name is 85%
+       institutionally held. Drop coverage and it returns StoneX and Microsoft.
+       Measured, not assumed: across 2,171 US names with both readings — all
+       already above the turnover floor — the uncovered share runs 0% in the
+       highest turnover quintile to 11% in the lowest, monotonically. A US
+       specialist hunt therefore has to go BELOW the floor, which means
+       `--include-illiquid` and roughly 9,200 names at about ten a minute. The
+       owner has been told and has not chosen; do not start it unasked.
+     - THE US SWEEP HAS NEVER PRODUCED A USABLE BUY LIST. Asked for repeatedly;
+       the 12 Sep run was contaminated by the quality throttle and two
+       completion runs were killed. It is ~3,300 names at roughly 3.5s each with
+       the fundamentals cache warm.
+     - The specialist shortlist has been verified on cached data (5 names of
+       729, KETR.JK at the top) but the card rendering it was verified only on
+       an IDX scan. Look at it on a US scan.
+
+  a) (Done in the overhaul: the sensitivity grid is on the Value tab, uncoloured
+     — RESEARCH_ROADMAP §19.1. So is the currency-label guard in
+     `market_data._apply_fx`, since 21 September — §18.4.)
 
   b) IDX fundamentals curation — the durable moat and the largest single effort.
      Blocked on an architecture decision first: a curated overlay is a second
@@ -132,11 +401,18 @@ WHAT I MIGHT WANT NEXT — pick with me before building
      module. Where curated figures live, how they are dated, and how a reader
      tells them from fetched ones is a session on its own.
 
-  c) Lens-vote correlation is DONE (§15). Accessibility and responsive layout is
-     DONE for the single-ticker read and the panels. What has NOT been done is a
-     real screen-reader pass — the keyboard walkthrough is clean (64 focusables,
-     zero unnamed, zero without a focus style, zero dangling aria-controls, all
-     four roving groups at one tab stop), but nobody has listened to it.
+     THIS IS NOW BETTER MOTIVATED THAN IT WAS, AND BETTER MEASURED. 215 of 770
+     cached IDX records carry no statements at all, and it is not a throttle:
+     re-asked unhurried, 47 of 47 came back empty again (§18.9). The provider's
+     trailing-year summary now places them in a field, but nothing gives them a
+     track record, a quality score or a filed valuation — a quarter of the
+     exchange, including two of KETR.JK's three listed rivals, can be ranked
+     by size and read no further. Only curation reaches that.
+
+  c) A real screen-reader pass. The keyboard walkthrough is clean (64
+     focusables, zero unnamed, zero without a focus style, zero dangling
+     aria-controls, all four roving groups at one tab stop), but nobody has
+     listened to it.
 
   d) Composition for Scan & rank, Screener, Portfolio and Thesis. They have the
      tokens, the copy pass and the Explainer treatment, but not the Section
@@ -147,7 +423,6 @@ WHAT I MIGHT WANT NEXT — pick with me before building
      seasonality grid). I would leave them: the principle is "direction decided
      once in Python", and these are the cases where Python has nothing to say.
      They are now budgeted in check_frontend.mjs so they cannot multiply.
-
 
 STANDARDS
 =========
@@ -161,7 +436,9 @@ STANDARDS
   can't defend.
 - Explanations may be restructured or progressively disclosed. They may not be
   deleted (PRODUCT.md constraint 7).
-- Before finishing: the full battery above, plus verify the UI live in the
-  browser on both a US and an IDX ticker.
+- Before finishing: the full battery above, plus OPEN THE PAGE IN A BROWSER on
+  both a US and an IDX ticker, and on the landing state where the scan panel
+  lives. See the note under STATE: a green battery does not mean the page
+  renders, and this has already cost a week.
 - Commit on the current branch. Don't push.
 - If you disagree with anything here, say so before building it.

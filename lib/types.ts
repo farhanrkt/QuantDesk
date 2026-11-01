@@ -248,6 +248,23 @@ export interface QualityResponse {
   reason?: string;
   sector: string | null;
   industry: string | null;
+  /**
+   * What the company does, in the data source's own words. Present whether or
+   * not the screens applied — the two commonest reasons they do not are that
+   * the company is a bank and that no sector came back, and a reader looking at
+   * "these models do not transfer to a lender" is exactly the one who still
+   * wants to know what the lender does.
+   *
+   * `summaryState` is `described`, `none published`, `not returned` (nothing
+   * descriptive came back at all — a throttle signature), `not fetched`, or
+   * `not a company` (a coin, fund or index, which has no business to describe).
+   */
+  business?: {
+    sector: string | null; industry: string | null;
+    summary: string | null; summaryShort: string | null; summaryState: string;
+    employees: number | null; country: string | null; website: string | null;
+    reading: string;
+  } | null;
   verdict?: "SOUND" | "NEUTRAL" | "CONCERNS";
   tone?: string;
   headline?: string;
@@ -269,7 +286,7 @@ export interface QualityResponse {
   /** Where the three numbers came from. Absent when the lens refused to score. */
   domains?: ValidationDomains;
   /** Machine-readable reason the lens declined, when it did. */
-  cause?: "financial" | "no-statements";
+  cause?: "financial" | "no-statements" | "unknown-sector" | "not-a-company";
   explain?: ExplainMap;
 }
 
@@ -374,6 +391,8 @@ export interface UniversesResponse {
 
 export interface NewsItem {
   title: string; source: string; link: string; published: string;
+  /** A thumbnail on an allowlisted host, served through Next's image optimizer. */
+  image?: { url: string; width: number; height: number } | null;
 }
 export interface NewsResponse { ticker: string; items: NewsItem[] }
 
@@ -630,6 +649,8 @@ export interface ValuationResponse {
   market: { code: string; name: string; symbol: string };
   engine: "DCF" | "DDM" | "RI"; autoEngine: "DCF" | "DDM"; routeReason: string;
   rateName: string; price: number; priceLabel: string;
+  /** The base case across a grid of its two biggest inputs — never compared with the price. */
+  sensitivity?: ValuationSensitivity;
   /** Which Yahoo endpoint the price came from, and the bar it belongs to.
    *  The valuation used to read the quote endpoint while every other lens
    *  read the chart endpoint; they do not always agree. */
@@ -709,7 +730,10 @@ export type Engine<T> =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "error"; failure: EngineFailure }
-  | { status: "ready"; data: T };
+  // `at` is when the data was fetched (epoch ms). Results now survive
+  // navigation, so a panel showing one can say how old it is — a stale peer
+  // placing or verdict looks identical to a fresh one otherwise.
+  | { status: "ready"; data: T; at?: number };
 
 /**
  * One leg of a /api/confluence response. Each engine reports its own outcome,
@@ -953,6 +977,8 @@ export interface ConfluenceResponse {
   valuation: Leg<ValuationResponse>;
   quality: Leg<QualityResponse>;
   news: Leg<NewsResponse>;
+  /** Description, not a lens: neither the synthesis nor the pre-trade checks read it. */
+  company?: Leg<CompanyResponse>;
   synthesis: Synthesis;
   preTrade: PreTrade;
 }
@@ -1057,4 +1083,1041 @@ export interface ExposureScanResponse {
                   blockWeeks?: number;
                   rawOneYear?: Record<string, number | null> };
   explain?: ExplainMap;
+}
+
+
+/* --------------------------------------------------------------------------- *
+ * The private scanner's verdict
+ *
+ * ONE SCORE AND ONE ACTION PER NAME — the composite the published
+ * single-company view refuses. It is a separate surface answering a separate
+ * question, and `PRODUCT.md` constraint 1 records why the two coexist. Nothing
+ * here is read by the confluence rail, the synthesis or the pre-trade panel.
+ *
+ * `provenance` is not optional and must not be rendered away. It carries the
+ * measured finding that this app's price ranking shows no detectable
+ * relationship to subsequent returns, which is what calibrates every number
+ * beside it.
+ * --------------------------------------------------------------------------- */
+
+export type VerdictAction =
+  | "STRONG_BUY" | "BUY" | "HOLD" | "REDUCE" | "AVOID" | "NO_ACTION";
+
+export interface VerdictComponent {
+  key: string;
+  label: string;
+  /** "price" or "filings" — which body of data this reads. */
+  family: string;
+  evidence: string;
+  detail: string;
+  baseWeight: number;
+  /** Zero when the component did not read. Never imputed. */
+  effectiveWeight: number;
+  score: number | null;
+  available: boolean;
+  /** True only for a DESIGNED refusal, never for a coverage gap. */
+  refused: boolean;
+  reason: string | null;
+  reading: string | null;
+}
+
+export interface VerdictFamily {
+  family: string;
+  label: string;
+  score: number;
+  /** +1, -1 or 0. Zero is the neutral band, not a missing reading. */
+  side: number;
+  members: string[];
+  weight: number;
+  /** Share of this family's intended evidence that actually read. */
+  coverage: number;
+  /** How much of a whole vote it casts. Its own coverage, floored. */
+  vote: number;
+}
+
+/** The heavy-session reading — the readable shadow of bandarmology. */
+export interface VerdictTape {
+  available: boolean;
+  reason?: string;
+  direction?: "accumulation" | "distribution" | "unreadable";
+  score?: number;
+  /** Mean close-location gap between heavy and ordinary sessions. */
+  lift?: number;
+  /** The market's own median lift — the null this is tested against. */
+  liftBaseline?: number;
+  excessLift?: number;
+  tStat?: number | null;
+  pValue?: number | null;
+  significant?: boolean;
+  alpha?: number;
+  /** False when this market has no measured baseline. No direction is reported. */
+  calibrated?: boolean;
+  market?: string | null;
+  measuredOn?: string | null;
+  heavySessions?: number;
+  ordinarySessions?: number;
+  wick?: number | null;
+  spanRatio?: number | null;
+  concentration?: {
+    available: boolean;
+    topFiveShare: number | null;
+    effectiveDays: number | null;
+    sessions: number;
+    band?: string | null;
+    caution?: number | null;
+    severe?: number | null;
+    calibrated?: boolean;
+  };
+  reading?: string;
+  /** What a broker summary would settle and this cannot. Always rendered. */
+  missing?: string;
+}
+
+/** The share register — ownership concentration and share count. */
+export interface VerdictRegister {
+  available: boolean;
+  reason?: string;
+  float?: {
+    available: boolean;
+    reason?: string;
+    freeFloat?: number;
+    insidersHeld?: number;
+    band?: string;
+    score?: number;
+    reading?: string;
+    institutionsHeld?: number | null;
+    institutionsCount?: number | null;
+  };
+  /** Scheduled reporting date. Context only — it scores nothing. */
+  earnings?: {
+    available: boolean;
+    reason?: string;
+    date?: string;
+    calendarDays?: number;
+    soon?: boolean;
+    reading?: string;
+  };
+  issuance?: {
+    available: boolean;
+    reason?: string;
+    annualised?: number | null;
+    total?: number | null;
+    years?: number;
+    observations?: number;
+    largestStep?: number | null;
+    largestStepAt?: string | null;
+    band?: string;
+    score?: number;
+    reading?: string;
+  };
+  floatShares?: number | null;
+  sharesOutstanding?: number | null;
+  floatTurnover?: number | null;
+  daysToTradeFloat?: number | null;
+  reading?: string;
+  /** Reported and deliberately never scored. */
+  institutions?: { percentHeld: number | null; count: number | null; note: string };
+}
+
+/** A chart formation found by the Lo-Mamaysky-Wang method, with its measurement. */
+export interface VerdictPatternDetection {
+  pattern: string;
+  label: string;
+  /** The direction a chart book attaches to the shape. Measured, it carries no
+   *  information — a formation and its mirror image predicted the same thing —
+   *  so it is carried for display and never scored. */
+  bias: string;
+  note: string;
+  completedAt: string;
+  detectedAt: string;
+  priceAtDetection: number;
+  /** Share of names showing this in a quarter, on the measured population. */
+  firingRate?: number | null;
+  observations?: number | null;
+  /** Null unless this formation's forward return survived correction. */
+  forward?: { horizonDays: number; meanExcess: number; qValue: number;
+              months?: number } | null;
+  significant: boolean;
+  verdict?: string | null;
+}
+
+export interface VerdictPatterns {
+  available: boolean;
+  reason?: string;
+  bandwidth?: number;
+  window?: number;
+  sessions?: number;
+  detections?: VerdictPatternDetection[];
+  /** False where this market has never been measured. Nothing scores then. */
+  calibrated?: boolean;
+  measuredOn?: string | null;
+  /** True only where at least one detection survived correction. */
+  usable?: boolean;
+  score?: number | null;
+  survivors?: string[];
+  lookback?: number;
+  reading?: string;
+  /** Named and declined, with the reason. An absent pattern is never silent. */
+  refused?: { name: string; reason: string }[];
+}
+
+/**
+ * Where the year's trade happened — the full histogram, beside the bands the
+ * chart draws from it.
+ *
+ * DESCRIPTION, NEVER SUPPORT, unless `usable` says the measurement licensed it.
+ * On IDX it did not: shelves held no better than ordinary bands at the same
+ * distance once corrected across distance buckets.
+ */
+export interface VerdictVolumeProfile {
+  available: boolean;
+  reason?: string;
+  sessions?: number;
+  price?: number;
+  binWidth?: number;
+  binWidthAtr?: number;
+  bins?: number;
+  profile?: { low: number; high: number; mid: number; share: number }[];
+  pointOfControl?: { low: number; high: number; mid: number; share: number };
+  valueArea?: { low: number; high: number; share: number };
+  insideValueArea?: boolean;
+  shelves?: { low: number; high: number; mid: number; share: number; bins: number;
+              peakMultiple: number; side: string; distanceAtr: number;
+              distancePct: number }[];
+  market?: string | null;
+  /** False where this market has never been measured. Nothing reads a shelf then. */
+  calibrated?: boolean;
+  measuredOn?: string | null;
+  /** True only where a shelf was shown to hold better than an ordinary band. */
+  usable?: boolean;
+  calibrationReading?: string | null;
+  reading?: string;
+}
+
+/** Where the price sits against defended levels — the entry, not the asset. */
+export interface VerdictStructure {
+  available: boolean;
+  reason?: string;
+  horizon?: string;
+  price?: number;
+  atr?: number | null;
+  support?: number | null;
+  resistance?: number | null;
+  riskToSupport?: number | null;
+  rewardToResistance?: number | null;
+  /** Null when `ratioWithheld` — a ratio whose denominator is inside the
+   *  daily noise is not a smaller number, it is not a number. */
+  rewardRisk?: number | null;
+  /** The arithmetic that was refused, for anyone who wants to see it. Never render
+   *  this as the ratio; that is the mistake the withholding exists to prevent. */
+  rewardRiskRaw?: number | null;
+  ratioWithheld?: boolean;
+  unboundedUpside?: boolean;
+  noSupport?: boolean;
+  atSupport?: boolean;
+  atResistance?: boolean;
+  band?: "fine" | "poor" | "bad" | "unbounded" | "noSupport" | "riskTooWide"
+       | "riskInsideNoise" | "unmeasured";
+  reading?: string;
+}
+
+/** Where the index itself is. Context: it scores nothing and gates nothing. */
+export interface MarketRegime {
+  available: boolean;
+  reason?: string;
+  symbol?: string | null;
+  state?: string;
+  tone?: string;
+  aboveSlow?: boolean;
+  slowRising?: boolean | null;
+  distanceToSlow?: number | null;
+  drawdownFromYearHigh?: number | null;
+  scores?: boolean;
+  reading?: string;
+}
+
+/**
+ * The walk-forward on the BLEND, from `verdict_backtest.json`.
+ *
+ * Distinct from `provenance`, which measures the seven-signal price composite —
+ * one component of nine. This measures the blend, on the four components that
+ * can be reconstructed without reading the future, and carries its own coverage
+ * so that partial scope is never mistaken for the whole score.
+ */
+export interface BlendBacktest {
+  available: boolean;
+  reason?: string;
+  measuredOn?: string | null;
+  scope?: string;
+  headline?: string;
+  components?: string[];
+  /** Share of the score's intended evidence this covers. Around 0.4. */
+  coverage?: number | null;
+  /** Why each excluded component could not be reconstructed. */
+  excluded?: Record<string, string>;
+  observations?: number;
+  dates?: number;
+  survived?: number;
+  /** Survivors whose IC and quintile spread point opposite ways. */
+  contradicted?: number;
+  /**
+   * Median round trip across the names whose spread RESOLVED. The estimator
+   * clears its noise floor on the widest spreads and almost nowhere else, so
+   * this is an upper bound on a typical cost, never a measurement of one —
+   * `roundTripResolved` over `roundTripAttempted` says how selected it is.
+   */
+  medianRoundTrip?: number | null;
+  roundTripResolved?: number;
+  roundTripAttempted?: number;
+  roundTripResolvedShare?: number | null;
+  roundTripIsUpperBound?: boolean;
+  /** Surviving spreads still positive at that upper bound. */
+  survivesUpperBound?: number;
+  tests?: {
+    horizonDays: number;
+    icMean: number; icT: number; icQ: number; icSurvived: boolean;
+    spreadMean: number; spreadQ: number; spreadSurvived: boolean;
+    signsAgree: boolean;
+    /** The round trip at which this spread reaches zero — the number to compare
+     *  against your own dealing costs. */
+    breakevenRoundTrip?: number | null;
+    rebalancesPerHorizon?: number;
+    costUpperBound?: number; spreadNetUpperBound?: number;
+    survivesUpperBound?: boolean;
+    dates: number; observations: number;
+  }[];
+}
+
+/** What one buy and one sell cost, from the estimated spread. */
+export interface RoundTripCost {
+  available: boolean;
+  reason?: string;
+  /** False when the estimate sits at the estimator's own noise floor. */
+  resolved?: boolean;
+  spread?: number;
+  roundTrip?: number;
+  reading?: string;
+}
+
+/** One market's measured tape baselines, from `tape_calibration.json`. */
+export interface TapeCalibration {
+  names: number;
+  population: string;
+  measuredOn: string;
+  liftMedian: number;
+  liftSd: number;
+  wickSd: number | null;
+  /** Share of this market where the test fires. Compare against `alpha`. */
+  significantShare: number | null;
+  significantCount: number;
+  tested: number;
+  concentration: { caution: number | null; severe: number | null; median: number | null };
+}
+
+export interface VerdictGate {
+  id: string;
+  /** The ceiling this gate imposes. Never a promotion. */
+  action: VerdictAction;
+  label: string;
+  detail: string;
+}
+
+export interface VerdictPenalty {
+  id: string;
+  label: string;
+  band: string;
+  where?: string;
+  firingRate: number;
+  points: number;
+  reading?: string | null;
+  why: string;
+}
+
+/**
+ * One session, with every overlay already positioned.
+ *
+ * `heavy` is the tape test's OWN classification, not a redefinition of it —
+ * this name's top fifth of relative volume inside its own year. A chart that
+ * recomputed it would circle sessions the significance test never counted.
+ */
+export interface ChartBar {
+  date: string;
+  open: number | null; high: number | null; low: number | null;
+  close: number | null; volume: number | null;
+  sma20: number | null; sma50: number | null; sma200: number | null;
+  bbUpper: number | null; bbLower: number | null;
+  relativeVolume: number | null;
+  heavy: boolean;
+  /** -1 closed at the low, +1 at the high. Null on a zero-range session. */
+  closeLocation: number | null;
+}
+
+/** One end of a construction line, in both chart coordinates. */
+export interface ChartAnchor { index: number; date: string | null; price: number }
+
+/**
+ * A detected formation, positioned.
+ *
+ * `path` is refitted on the window available when the shape completed — never
+ * smoothed over the whole series, which would trace a curve built partly out of
+ * prices that came after it. `points` sit at the CLOSES the classifier compared;
+ * `smoothed` is carried separately and is not where the marker goes.
+ */
+export interface ChartPattern {
+  pattern: string;
+  label: string;
+  completedAt: string;
+  detectedAt: string;
+  fromDate: string | null;
+  toDate: string | null;
+  path: { date: string | null; price: number }[];
+  points: { index: number; date: string | null; price: number;
+            smoothed: number; kind: "peak" | "trough" }[];
+  /** Necklines and boundaries only. Never a projected target — see the caption. */
+  guides: { role: "neckline" | "upper" | "lower"; label: string;
+            from: ChartAnchor; to: ChartAnchor }[];
+  /** What the chart books claim. Carried for display, never scored. */
+  textbookBias: string | null;
+  /** Whether this formation's forward return survived a false-discovery correction. */
+  significant: boolean;
+  /** What it actually did on this market. Disagrees with `textbookBias`, by design. */
+  measuredExcess: number | null;
+  measuredHorizon: number | null;
+  /** Every detection the study saw. */
+  measuredObservations: number | null;
+  /** How many calendar months those fell into — the effective sample size. */
+  measuredMonths: number | null;
+  firingRate: number | null;
+}
+
+/** A defended level. `nearest` marks the two the reward-risk ratio used. */
+export interface ChartLevel {
+  price: number;
+  side: "support" | "resistance";
+  touches: number;
+  distancePct: number | null;
+  nearest: boolean;
+}
+
+/** The trade as a shape: where it is wrong, where it is entered, what is overhead. */
+export interface ChartTrade {
+  entry: number;
+  stop: number | null;
+  target: number | null;
+  riskPct: number | null;
+  rewardPct: number | null;
+  rewardRisk: number | null;
+  /** True where the ratio was withheld because the stop sits inside the noise. */
+  ratioWithheld?: boolean;
+  band: string | null;
+  unboundedUpside: boolean;
+  noSupport: boolean;
+  atr: number | null;
+  /** How close counts as "at" a level, in price. Half an average daily range. */
+  levelTolerance: number | null;
+  horizon: string | null;
+}
+
+/**
+ * Where the year's trade actually happened, as bands on the price axis.
+ *
+ * DESCRIPTION, NOT SUPPORT. `scripts/calibrate_volume_profile.py` tested whether
+ * price arriving at a high-volume band behaves differently from price arriving
+ * at an ordinary band the same distance away, and `structure.py` reads the
+ * answer. Never treat a shelf as a stop unless that artifact says so.
+ */
+export interface ChartVolumeProfile {
+  pointOfControl: { low: number | null; high: number | null; share: number | null };
+  valueArea: { low: number | null; high: number | null; share: number | null };
+  insideValueArea: boolean;
+  shelves: { low: number | null; high: number | null; share: number | null;
+             side: string; distanceAtr: number | null }[];
+  binWidth: number | null;
+  sessions?: number;
+  reading?: string;
+}
+
+/**
+ * Every reading the scanner took, positioned for drawing.
+ *
+ * NOTHING HERE IS NEW ANALYSIS. Each layer was decided by the module that owns
+ * it; this payload only says where to put it. `legend` ships with the data
+ * rather than living in the component, so a client cannot draw a layer without
+ * having been handed what that layer is not.
+ */
+export interface VerdictChart {
+  available: boolean;
+  reason?: string;
+  ticker?: string | null;
+  currency?: string | null;
+  sessions?: number;
+  from?: string;
+  to?: string;
+  bars?: ChartBar[];
+  levels?: ChartLevel[];
+  trade?: ChartTrade | null;
+  patterns?: ChartPattern[];
+  /** Null where the profile could not be built, never an empty shape. */
+  volumeProfile?: ChartVolumeProfile | null;
+  crossovers?: { date: string; type: string; price: number | null;
+                 description: string }[];
+  extremes?: {
+    window: number;
+    high: { date: string; price: number | null; inWindow: boolean };
+    low: { date: string; price: number | null; inWindow: boolean };
+  };
+  tape?: { available: boolean; reason?: string | null; rvolCutoff?: number | null;
+           heavyQuantile?: number | null; drawn?: number;
+           /** The two means the Welch test compared, so the test can be drawn. */
+           heavyMeanLocation?: number | null; ordinaryMeanLocation?: number | null;
+           significant?: boolean };
+  legend?: { key: string; label: string; note: string }[];
+  caption?: string;
+}
+
+/** One row of a completed market scan, trimmed to what a table needs. */
+/**
+ * One name on the specialist shortlist: largest or only measurable in its
+ * field, compounding, and uncovered.
+ *
+ * GATED AND UNGATED ROWS SHARE THIS SHAPE AND ARE RENDERED TOGETHER. On the
+ * first full Indonesian sweep all seven selected names were gated, and the top
+ * of them was gated on `poorEntry` alone — a statement about today's price, not
+ * about the company. A screen for companies nobody trades that hides everything
+ * nobody trades has no output.
+ */
+export interface SpecialistRow {
+  ticker: string; name: string | null; score: number | null; action: string;
+  industry: string | null; summary: string | null; terms: string[];
+  /** Nothing else carries this label. The strong claim. */
+  soleListing: boolean;
+  /** Nothing else in the label could be measured. What the screen selects on. */
+  onlyRanked: boolean;
+  /** Same-label listings that returned no usable revenue. */
+  unrankedRivals: number;
+  leadsField: boolean; fieldPeers: number | null;
+  revenueCagr: number | null; netMargin: number | null;
+  yearsProfitable: number | null; yearsAvailable: number | null;
+  analysts: number | null; institutionsHeld: number | null;
+  /** Context, never a criterion — see `neglect.py`. A growth rate shown without
+   *  a price misleads in one direction only: it looks like a bargain. */
+  latestClose: number | null;
+  drawdown: number | null;
+  /** Labels, not ids. "Poor entry at this price" and "Below the turnover floor"
+   *  are not the same news, and the card shows which. */
+  gates: { id: string; label: string }[];
+  recordReading: string | null; fieldReading: string | null;
+}
+
+export interface ScanRow {
+  ticker: string;
+  name: string | null;
+  score: number | null;
+  action: VerdictAction;
+  actionLabel: string;
+  tone: string;
+  conviction: string;
+  coverage: number;
+  crossChecked: boolean;
+  rank: number | null;
+  sectorRank: number | null;
+  sector: string | null;
+  /** The narrower label. A rank inside "Thermal Coal" says what one inside
+   *  "Energy" does not. */
+  industry: string | null;
+  /** The provider's own description of the business, trimmed. Never a judgement
+   *  about it — see `api/_lib/field.py`. */
+  summary: string | null;
+  /** `described` | `none published` | `not fetched`. The last two are NOT the
+   *  same: one is a fact about the data, the other a gap a refetch fills. */
+  summaryState: string | null;
+  /**
+   * Words common in this company's description and rare across the market's.
+   *
+   * WORD FREQUENCY, NOT A CLASSIFICATION. Nothing verified these and a term can
+   * mislead — "prime mover trucks" tokenises into separate words. They are a
+   * way into the descriptions: each one is searchable, and the search reads the
+   * full text rather than these.
+   */
+  terms: string[];
+  /** Annual revenue, for ORDERING only — no currency travels with it because a
+   *  scan is one market. Null where it could not be read or compared. */
+  revenue: number | null;
+  /** Where it stands among the scanned names sharing its industry label. This
+   *  is NOT market share; `ScanResponse.fields.basis` carries the caveat and
+   *  must be rendered wherever a rank is. */
+  field: {
+    rank: number | null; peers: number | null; share: number | null;
+    margin: number | null; leads: boolean; leader: string | null;
+    /**
+     * `soleListing` — nothing else carries this industry label at all. The
+     * strong claim, and the only one to render as "no listed rival".
+     * `onlyRanked` — nothing else in the label could be MEASURED, which is a
+     * statement about the scan. `unranked` counts the listings that share the
+     * label and returned no usable revenue. The shortlist selects on
+     * `onlyRanked` and displays `soleListing`, because a specialist whose two
+     * tiny peers filed nothing is still a specialist.
+     */
+    soleListing: boolean; onlyRanked: boolean; unranked: number;
+    reading: string | null;
+  } | null;
+  /**
+   * What the filings say the business has done. Description, never a score.
+   *
+   * `everyYearProfitable` IS TRUE OF 67% OF THIS EXCHANGE. Render it with the
+   * base rate or not at all; on its own it is not a distinction.
+   */
+  record: {
+    years: number | null; yearsProfitable: number | null;
+    everyYearProfitable: boolean; operatingCashFlowPositive: boolean;
+    revenueCagr: number | null; netMargin: number | null;
+    growing: boolean;
+    /** `null` means the question does not apply — a lender's borrowings ARE its
+     *  business — and is not the same answer as `false`. */
+    netCash: boolean | null;
+    netDebtToEbitda: number | null;
+    reading: string | null;
+  } | null;
+  latestClose: number | null;
+  turnover: number | null;
+  held: boolean;
+  gates: { id: string; label: string }[];
+  entry: { band: string | null; rewardRisk: number | null; ratioWithheld: boolean };
+  /** Cheap, solid and uncovered — the screen the blend cannot reach. */
+  neglected: boolean;
+}
+
+/**
+ * A scan that already ran, read off disk.
+ *
+ * NEVER RUN FROM THE BROWSER. A whole-exchange sweep is about an hour and the
+ * serverless function has sixty seconds. This reads the report the script
+ * wrote, so `available` is false on the deployed app — `reports/` is local and
+ * gitignored — and the panel says so rather than erroring.
+ */
+export interface ScanResponse {
+  available: boolean;
+  market: string;
+  reason?: string;
+  file?: string;
+  generatedAt?: string;
+  /**
+   * The funnel's tallies, guaranteed scalar by the route.
+   *
+   * The report's own version nests `rejectedByReason` inside this block. A
+   * client that believed this type and rendered every value handed React an
+   * object, which throws and blanks the page behind an error boundary — so the
+   * route now splits it out rather than the client guarding against it.
+   */
+  counts?: Record<string, number>;
+  /** Why names never reached a score, by reason. */
+  rejectedByReason?: Record<string, number>;
+  settings?: Record<string, unknown>;
+  universe?: { label?: string; asOf?: string; count?: number } | null;
+  /** The measured null result. Never render the ordering without it. */
+  provenance?: VerdictResponse["provenance"];
+  blendBacktest?: BlendBacktest | null;
+  regime?: MarketRegime | null;
+  concentration?: { reading?: string; bets?: number; names?: number } | null;
+  signalOverlap?: { reading?: string } | null;
+  neglected?: {
+    selected: number;
+    /** How many of the selected names are the largest in their own field. A
+     *  count, never a filter — leading a field is not a selection criterion. */
+    leadTheirField?: number;
+    tradeable: {
+      ticker: string; name: string | null; score: number | null; action: string;
+      value: number | null; quality: number | null;
+      institutionsHeld: number | null; analysts: number | null;
+      industry?: string | null; summary?: string | null;
+      leadsField?: boolean; fieldRank?: number | null; fieldPeers?: number | null;
+      soleListing?: boolean; profitableEveryYear?: boolean; growing?: boolean;
+      revenueCagr?: number | null;
+      gates: string[]; reading: string;
+    }[];
+    gated: { ticker: string; name: string | null; score: number | null }[];
+    note: string;
+  } | null;
+  /**
+   * The largest — or only — scanned name in its field, profitable every year
+   * with cash behind it, growing in the market's top quartile, and uncovered.
+   *
+   * `baseRates` IS NOT DECORATION. The intersection reads as three demanding
+   * tests and one of them (uncovered) admits most of a small exchange. Render
+   * the shares with the list.
+   */
+  specialists?: {
+    selected: number;
+    baseRates: { scanned: number; specialist: number; compounding: number;
+                 unattended: number };
+    tradeable: SpecialistRow[];
+    /** Same shape as `tradeable`. Rendered TOGETHER with it — see ScanPanel. */
+    gated: SpecialistRow[];
+    note: string;
+  } | null;
+  /**
+   * Standings among the scanned names sharing an industry label.
+   *
+   * `basis` IS NOT OPTIONAL COPY. A rank of 1 rendered without it reads as
+   * market share, which nothing in this app measures: private companies,
+   * companies listed elsewhere and names whose revenue could not be read are all
+   * missing from the denominator. `unplaced` says how many of the last kind
+   * there were. Where the provider carries no statements, its trailing twelve
+   * months stands in for a filed year; the readings say so wherever a field
+   * compares the two (`api/_lib/field.py`).
+   */
+  fields?: {
+    measured: number; unplaced: number; count: number;
+    basis: string;
+    thresholds?: { minPeers: number; leadMargin: number };
+    leaders: { industry: string; ticker: string | null;
+               peers: number | null; margin: number | null }[];
+    /** Fields holding exactly one scanned name. A large count is a thin scan,
+     *  not a market of specialists — read it against `unplaced`. */
+    soleListings?: number;
+  } | null;
+  rows?: ScanRow[];
+}
+
+export interface VerdictResponse {
+  ticker: string;
+  name: string;
+  market: string;
+  action: VerdictAction;
+  actionLabel: string;
+  /** `explain.tone`. The only permitted input to colour. */
+  tone: string;
+  score: number | null;
+  rawScore: number | null;
+  shrunkScore: number | null;
+  conviction: "high" | "medium" | "low" | "none";
+  /** Whether BOTH bodies of data returned a reading at all. */
+  crossChecked: boolean;
+  familiesRead: number;
+  coverage: number;
+  componentsRead: number;
+  componentsTotal: number;
+  components: VerdictComponent[];
+  families: {
+    price: VerdictFamily | null;
+    filings: VerdictFamily | null;
+    /** The third body of data: who holds it and how many shares there are. */
+    register: VerdictFamily | null;
+  };
+  tape: VerdictTape | null;
+  register: VerdictRegister | null;
+  patterns: VerdictPatterns | null;
+  /** Where the trade is wrong. Deliberately not a scoring component. */
+  structure: VerdictStructure | null;
+  /** The same readings, positioned for drawing. Never a separate analysis. */
+  chart: VerdictChart | null;
+  /** Where the trade happened. Scores nothing, gates nothing — see `usable`. */
+  volumeProfile: VerdictVolumeProfile | null;
+  regime: MarketRegime | null;
+  costs: RoundTripCost | null;
+  /** The measurement that is about this score, not just its price component. */
+  blendBacktest: BlendBacktest | null;
+  /** Null where this market has never been calibrated. */
+  tapeCalibration: TapeCalibration | null;
+  agreement: { state: string; shrink: number; conviction: string; text: string };
+  shrink: { agreement: number; coverage: number; combined: number; text: string };
+  penalties: VerdictPenalty[];
+  penaltyTotal: number;
+  penaltyCapped: boolean;
+  gates: VerdictGate[];
+  gatedBy: string[];
+  latestClose: number | null;
+  turnover: number | null;
+  sizing: {
+    applicable: boolean;
+    reason?: string;
+    annualVolatility?: number;
+    riskBudget?: number;
+    uncappedWeight?: number;
+    weight?: number;
+    capped?: boolean;
+    basis?: string;
+  };
+  reasons: string[];
+  caveat: string;
+  rank: number | null;
+  universe: {
+    id: string; name: string; asOf: string; count: number;
+    scanned: number; ranked: boolean; note: string;
+  } | null;
+  /** The measured null result. Never render the score without it. */
+  provenance: {
+    available: boolean;
+    headline: string;
+    measuredOn?: string | null;
+    years?: number | null;
+    tests?: number | null;
+    significant?: number | null;
+    appliesTo?: string;
+  };
+}
+
+/** One listing the command palette can offer — GET /api/symbols. */
+export interface SymbolHit {
+  symbol: string;
+  name: string;
+  market: Market;
+  exchange: string | null;
+  match: "symbol" | "prefix" | "name" | "contains";
+}
+
+export interface SymbolSearch {
+  query: string;
+  market: Market | null;
+  results: SymbolHit[];
+  /** How old each listing file is, so a missing IPO reads as "not indexed", not "no such company". */
+  listings: Record<string, { asOf: string; count: number } | null>;
+  note: string;
+}
+
+/** What the provider says the company sells — `field.profile`. */
+export type BusinessProfile = NonNullable<QualityResponse["business"]>;
+
+export const HISTORY_ROWS = [
+  "revenue", "operatingIncome", "netIncome", "dilutedEps", "operatingCashFlow", "capex",
+  "freeCashFlow", "totalDebt", "cash", "equity",
+] as const;
+export type HistoryRow = (typeof HISTORY_ROWS)[number];
+
+/** The statements year by year — `trackrecord.series`. Null is "not reported", never zero. */
+export type CompanyHistory =
+  | { available: false; yearsAvailable: number; reason: string }
+  | {
+      available: true;
+      yearsAvailable: number;
+      fiscalYears: string[];
+      rows: Record<HistoryRow, (number | null)[]>;
+      currency: string | null;
+      freeCashFlowMethod: string | null;
+      financial: boolean;
+      missing: Partial<Record<HistoryRow, string>>;
+      reading: string;
+    };
+
+/** The record compressed to the facts a scan filters on — `trackrecord.read`. */
+export type TrackRecord =
+  | { available: false; yearsAvailable: number; reason: string }
+  | {
+      available: true;
+      yearsAvailable: number;
+      yearsProfitable: number;
+      everyYearProfitable: boolean;
+      latestNetMargin: number | null;
+      returnOnEquity: number | null;
+      operatingCashFlowPositive: boolean;
+      freeCashFlowYears: number | null;
+      freeCashFlowOf: number | null;
+      revenueCagr: number | null;
+      profitCagr: number | null;
+      netDebt: number | null;
+      netCash: boolean | null;
+      netDebtToEbitda: number | null;
+      financial: boolean;
+      baseRates: Record<string, number | string> | null;
+      baseRatesNote: string | null;
+      reading: string;
+    };
+
+export interface CompanyResponse {
+  ticker: string;
+  name: string;
+  profile: BusinessProfile;
+  listing: {
+    exchange: string | null; market: Market; marketCap: number | null; price: number | null;
+    priceAsOf: string | null; priceSource: string | null;
+  };
+  currency: { trading: string | null; reporting: string | null; fxRate: number | null; note: string | null };
+  history: CompanyHistory;
+  dividends: {
+    available: boolean;
+    perShare: { year: string; amount: number; partial: boolean }[];
+    basis?: string;
+    ttm?: number | null;
+    reading: string;
+  };
+  nextEarnings: { date: string | null; past: string[]; source: string; reading: string };
+  record: TrackRecord;
+  explain: ExplainMap;
+}
+
+/** `valuation.sensitivity_grid`. Values only: no tone, no count, no "above the price". */
+export interface ValuationSensitivity {
+  engine: "DCF" | "DDM" | "RI";
+  rowAxis: { name: "growth" | "roe"; label: string; values: number[]; assumedIndex: number };
+  colAxis: { name: "rate"; label: string; values: number[]; assumedIndex: number };
+  cells: { value: number | null; label: string | null; refused: "spread" | "undefined" | null }[][];
+  assumed: { row: number; col: number };
+  terminalGrowth: number;
+  price: number | null;
+  priceLabel: string | null;
+  impliedRow: { rate: number; impliedGrowth: number | null; reason: "spread" | "unreachable" | null }[] | null;
+  impliedRowReason: string | null;
+  refusals: Record<string, string>;
+  reading: string;
+}
+
+// --------------------------------------------------------------------------- //
+// What moved the markets — /api/markets/today and /api/markets/headlines
+// --------------------------------------------------------------------------- //
+
+/**
+ * One instrument on the board. `tone` is always "neutral": a day's move has no
+ * good or bad, so nothing here is ever coloured by sign (api/_lib/marketboard.py).
+ */
+export interface BoardRow {
+  key: string;
+  name: string;
+  symbol: string;
+  group: string;
+  /** How a move is measured: % for prices, basis points for yields, points for the VIX. */
+  change: "pct" | "bp" | "points";
+  unit: string;
+  markets: Market[];
+  note: string | null;
+  /** The exposure reference this quote stands for, when there is one. */
+  exposureKey: string | null;
+  topic: string;
+  digits: number;
+  /** What the compact strip calls it. */
+  short: string;
+  weekends: boolean;
+  tone: "neutral";
+  available: boolean;
+  reason?: string;
+  asOf?: string;
+  last?: number | null;
+  previous?: number | null;
+  move?: number | null;
+  direction?: "up" | "down" | "flat";
+  /** Where the latest move sits among its own past year's moves, by size. Null when too little history. */
+  percentile?: number | null;
+  unusual?: boolean | null;
+  yearSessions?: number;
+  largestSince?: string | null;
+  largestInHistory?: boolean;
+  historyFrom?: string;
+  spark?: number[];
+  sparkFrom?: string;
+}
+
+export interface BoardMarket {
+  strip: string[];
+  unusual: string[];
+  unavailable: string[];
+  baseRate: { share: number; days: number; flaggedDays: number; instruments: number;
+              from: string; to: string } | null;
+}
+
+/** On how many past event days an instrument moved more than on its median day. */
+export interface EventHistoryRow {
+  key: string;
+  name: string;
+  change: "pct" | "bp" | "points";
+  available: boolean;
+  reason?: string;
+  events?: number;
+  above?: number;
+  share?: number;
+  eventMedian?: number;
+  allMedian?: number;
+  /** Two-sided exact binomial against a fair coin. */
+  p?: number;
+  since?: string;
+}
+
+export interface MarketBoard {
+  /** Declaration order, never move order. */
+  groups: { key: string; label: string }[];
+  /** Keyed by event kind: fomc, cpi, jobs, bi-rate. */
+  eventHistory: Record<string, EventHistoryRow[]>;
+  rows: BoardRow[];
+  missing: { key: string; name: string; markets: Market[]; reason: string }[];
+  markets: Record<Market, BoardMarket>;
+  unusualAt: number;
+  minHistory: number;
+  fetchedAt: string | null;
+  source: string;
+  delay: string;
+  explain: {
+    rows: Record<string, { reading: string; moveText: string | null;
+                           percentile: Explanation | null }>;
+    markets: Record<Market, { summary: string; baseRate: string | null }>;
+    eventHistory: Record<string, Record<string, { reading: string; share: Explanation | null }>>;
+  };
+}
+
+export interface HeadlineFeed {
+  topic: string;
+  market: Market;
+  query: string;
+  /** False when the feed could not be read — which is not the same as no news. */
+  available: boolean;
+  items: NewsItem[];
+  /** "Yahoo Finance" (with images) or "Google News". */
+  source: string;
+  reason: string | null;
+}
+
+export interface MarketHeadlines { market: Market; topics: HeadlineFeed[] }
+
+// --------------------------------------------------------------------------- //
+// The calendar — /api/markets/calendar and /api/markets/earnings
+// --------------------------------------------------------------------------- //
+
+export type CalendarKind =
+  | "fomc" | "cpi" | "jobs" | "pce" | "gdp" | "bi-rate" | "holiday" | "early-close" | "earnings";
+
+export interface CalendarEvent {
+  kind: CalendarKind;
+  /** The event's own local date. */
+  date: string;
+  time?: string | null;
+  tz: string;
+  market: Market;
+  source: string;
+  title: string;
+  detail?: string | null;
+  /** The moment in UTC, or null for an all-day date. */
+  utc: string | null;
+  allDay: boolean;
+  label: string;
+  projections?: boolean;
+  tentative?: boolean;
+  /** A published schedule rather than a decision already taken. */
+  scheduled?: boolean;
+  /** For earnings: whose report it is, and whether it is the stock on screen or the watchlist. */
+  ticker?: string;
+  origin?: "stock" | "watchlist";
+}
+
+export interface ExchangeInfo {
+  name: string;
+  tz: string;
+  /** Regular sessions by weekday group, in the exchange's own time. */
+  sessions: { "mon-thu": [string, string][]; fri: [string, string][] };
+  source: string;
+  closures: { date: string; kind: "holiday" | "early-close"; time: string | null; detail: string | null }[];
+}
+
+export interface MarketCalendar {
+  verifiedOn: string;
+  /** From the day before this month began, so a month view is whole, to 90 days ahead. */
+  events: CalendarEvent[];
+  /** The dates `events` covers. A day outside it is not loaded, which is not the same as empty. */
+  window?: { from: string; through: string };
+  kinds: Record<string, { label: string; about: string }>;
+  exchanges: Record<Market, ExchangeInfo>;
+  coverage: Record<string, string>;
+  pending: { kind: string; note: string }[];
+  sources: Record<string, { name: string; url: string }>;
+}
+
+export interface WatchlistEarnings {
+  items: { ticker: string; next: string | null; available: boolean }[];
+  note: string;
 }

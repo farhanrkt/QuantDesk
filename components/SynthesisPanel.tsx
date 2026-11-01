@@ -4,6 +4,8 @@ import { AlertTriangle, ArrowRight, ChevronRight, EyeOff, Scale } from "lucide-r
 import type { AgreementMeasurement, Synthesis } from "@/lib/types";
 import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
 import { cn, pct, signed } from "@/lib/utils";
+import { palette } from "@/lib/palette";
+import { ScrollRegion } from "@/components/ui/scroll";
 
 /**
  * What the four lenses add up to, in sentences.
@@ -71,7 +73,7 @@ function Block({
   const head = (
     <>
       <Icon aria-hidden className="h-4 w-4 shrink-0"
-            style={{ color: tone ? TONE_HEX[tone] : "#8496A9" }} />
+            style={{ color: tone ? TONE_HEX[tone] : palette.ash }} />
       <span className={cn("text-meta font-semibold uppercase tracking-wider",
                           weight === "quiet" ? "text-ash" : "text-chalk")}>
         {title}
@@ -145,7 +147,7 @@ function Measured({ data }: { data: AgreementMeasurement }) {
           <p className="prose-col text-meta text-ash">{data.reading}</p>
 
           {rows.length > 0 && (
-            <div className="overflow-x-auto">
+            <ScrollRegion label="How the lenses agree, measured">
               <table className="w-full text-left text-micro">
                 <caption className="sr-only">
                   Chance-corrected agreement between each pair of lenses
@@ -183,7 +185,7 @@ function Measured({ data }: { data: AgreementMeasurement }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
           )}
 
           <p className="prose-col text-meta leading-relaxed text-faint">

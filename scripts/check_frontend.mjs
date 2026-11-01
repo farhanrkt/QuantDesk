@@ -32,7 +32,7 @@
 
 import { spawnSync } from "node:child_process";
 import {
-  mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, cpSync,
+  cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -50,6 +50,26 @@ const SOURCES = [
   // live in Python with the rest of this project's judgement. This is the
   // escape hatch that already exists for exactly that case.
   "lib/journal.ts",
+  // What the analytics beacon is allowed to learn about the page. A privacy
+  // property, so it is pinned by assertion rather than by reading the source.
+  "lib/redact.ts",
+  // The routing and workspace logic that has no server half: what a URL
+  // means, how a symbol resolves before navigation, what the browser caches,
+  // the watchlist store, which keys are shortcuts, how the palette orders.
+  "lib/url.ts",
+  "lib/symbols.ts",
+  "lib/cache.ts",
+  "lib/watchlist.ts",
+  "lib/shortcuts.ts",
+  "lib/commands.ts",
+  // The compare view's row model: order kept, nothing computed across columns.
+  "lib/compare.ts",
+  // The market board's browser half: which rows a market sees, what the stock
+  // on screen is related to, and nothing reordered by the size of a move.
+  "lib/marketboard.ts",
+  // The calendar's browser half: the reader's day, the exchange clock, the .ics.
+  "lib/marketclock.ts",
+  "lib/calendar.ts",
 ];
 
 // Real packages the compiled output requires at load time.
@@ -73,6 +93,108 @@ if (FORBIDDEN_IN_REQUESTS.test(requestLayer)) {
   console.error("lib/api.ts mentions the thesis journal. Nothing about a reader's own "
                 + "thesis may cross the wire — see components/ThesisPanel.tsx.");
   process.exit(1);
+}
+
+// THE SAME INVARIANT, STATED STRUCTURALLY, for everything a reader keeps in
+// this browser: the journal, the watchlist, recent tickers, holdings. A keyword
+// grep cannot be widened to cover them — this file's own comments already say
+// "watchlist" when explaining what analytics must never see — so the rule is
+// about what the request layer can REACH instead. It may not import the
+// browser-only stores, and it may not open browser storage itself; whatever a
+// request needs from them has to be handed to it explicitly by a component,
+// where a reviewer can see it cross.
+const rawRequestLayer = readFileSync(join(ROOT, "lib/api.ts"), "utf8");
+const strippedRequestLayer = rawRequestLayer
+  .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+for (const [pattern, why] of [
+  [/from\s+["'](?:\.\/|@\/lib\/)(?:journal|watchlist)["']/, "imports a browser-only store"],
+  [/\b(?:localStorage|sessionStorage)\b/, "reads browser storage directly"],
+]) {
+  if (pattern.test(strippedRequestLayer)) {
+    console.error(`lib/api.ts ${why}. The request layer must not be able to reach what a `
+                  + "reader keeps in this browser; pass the specific value in from a component.");
+    process.exit(1);
+  }
+}
+
+// ANALYTICS EVENTS CARRY TWO KEYS, AND NEITHER IS A TICKER. The one custom
+// event reports the market and how many lenses answered. A third key is how a
+// ticker, a watchlist size or a compare list would start leaking, one helpful
+// property at a time, so the shape of every `track(` call is fixed here.
+const TRACK_KEYS = new Set(["market", "lenses"]);
+const trackSources = ["lib", "components", "app"].flatMap((dir) => {
+  const walkAll = (d) => readdirSync(join(ROOT, d), { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walkAll(join(d, e.name))
+                    : /\.(ts|tsx)$/.test(e.name) ? [join(d, e.name)] : []);
+  return walkAll(dir);
+});
+for (const file of trackSources) {
+  const src = readFileSync(join(ROOT, file), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  for (const m of src.matchAll(/\btrack\(([^)]*)\)/g)) {
+    const body = m[1].match(/\{([^}]*)\}/);
+    const keys = body ? [...body[1].matchAll(/(\w+)\s*:/g)].map((k) => k[1]) : null;
+    if (!keys || keys.some((k) => !TRACK_KEYS.has(k))) {
+      console.error(`${file}: an analytics event carries ${keys ? keys.join(", ") : "an unreadable payload"}. `
+                    + "Only `market` and `lenses` may be sent — see the comment in lib/api.ts.");
+      process.exit(1);
+    }
+  }
+}
+
+// THE MARKET BOARD NAMES NOTHING. Which instruments a stock moves with is
+// matched in the browser from the Trend tab's exposure figures, so the board's
+// request carries no ticker and every reader shares one edge-cache entry; the
+// headlines carry a market and keys from a declared topic list. A "helpful"
+// ticker parameter here would send which stock somebody is reading to a route
+// that has no use for it, and would split the cache by stock.
+{
+  const today = strippedRequestLayer.match(/"\/api\/markets\/today",\s*(\{[^}]*\})/);
+  const headlines = strippedRequestLayer.match(/"\/api\/markets\/headlines",\s*(\{[^}]*\})/);
+  const todayOk = today && today[1].replace(/\s/g, "") === "{}";
+  // The calendar is the same for everyone, so it takes nothing either.
+  const calendar = strippedRequestLayer.match(/"\/api\/markets\/calendar",\s*(\{[^}]*\})/);
+  const calendarOk = calendar && calendar[1].replace(/\s/g, "") === "{}";
+  // A watchlist is personal: its report dates are asked for in a POST body and
+  // nowhere else, the rule /api/rank/list and /api/portfolio follow.
+  const earningsCalls = [...strippedRequestLayer.matchAll(/(\w+)<[^>]*>\("\/api\/markets\/earnings"/g)];
+  const earningsOk = earningsCalls.length > 0 && earningsCalls.every((m) => m[1] === "post");
+  // A property name is an identifier right after `{` or `,` — not the `4` in `limit: 4`.
+  const keys = headlines
+    ? [...headlines[1].matchAll(/(?:^|[{,])\s*([A-Za-z_]\w*)\s*(?=[:,}])/g)].map((k) => k[1])
+    : null;
+  const headlinesOk = keys && keys.every((k) => ["market", "topics", "limit"].includes(k));
+  const problems = [
+    !todayOk && "the board request carries a parameter; it names nothing (fetchMarketBoard)",
+    !calendarOk && "the calendar request carries a parameter; it names nothing (fetchMarketCalendar)",
+    !headlinesOk && "the headlines request carries more than a market and declared topics",
+    !earningsOk && "the watchlist's report dates are not asked for in a POST body (fetchWatchlistEarnings)",
+  ].filter(Boolean);
+  if (problems.length) {
+    console.error(`lib/api.ts: ${problems.join("; ")}.`);
+    process.exit(1);
+  }
+}
+
+// THE NEWS THUMBNAILS COME FROM TWO HOSTS, AND BOTH LISTS SAY THE SAME TWO.
+// Next's image optimizer fetches a thumbnail only from a host `next.config.mjs`
+// allows, and `market_data.NEWS_IMAGE_HOSTS` drops any other before it reaches a
+// page. If the two drifted, a thumbnail the server let through would fail to
+// load, or the config would allow a host the server never vets.
+{
+  const python = readFileSync(join(ROOT, "api/_lib/market_data.py"), "utf8")
+    .match(/NEWS_IMAGE_HOSTS = \(([^)]*)\)/);
+  const config = readFileSync(join(ROOT, "next.config.mjs"), "utf8");
+  const allowed = new Set(python ? [...python[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]) : []);
+  const configured = new Set([...config.matchAll(/hostname:\s*"([^"]+)"/g)].map((m) => m[1]));
+  const same = allowed.size > 0 && allowed.size === configured.size
+    && [...allowed].every((host) => configured.has(host));
+  if (!same) {
+    console.error(`next.config.mjs allows ${[...configured].join(", ") || "no image host"} but `
+                  + `market_data.NEWS_IMAGE_HOSTS lists ${[...allowed].join(", ") || "none"}. `
+                  + "They must be the same hosts.");
+    process.exit(1);
+  }
 }
 
 // THE CONFLUENCE RAIL KEEPS ITS OWN COPY OF WHICH LENS READS WHICH DATA, and
@@ -100,6 +222,50 @@ for (const [lens, family] of Object.entries(pyFamilies)) {
     process.exit(1);
   }
 }
+// cn() KNOWS EVERY FONT SIZE THE CONFIG DEFINES. tailwind-merge files an
+// unknown `text-*` as a colour, so a size missing from lib/utils.ts is silently
+// dropped whenever a tone class follows it — which is how every toned figure
+// lost its 24px. The two lists are compared here so a new size cannot repeat it.
+{
+  const tw = readFileSync(join(ROOT, "tailwind.config.ts"), "utf8");
+  const block = tw.match(/fontSize:\s*\{([\s\S]*?)\n\s*\},/);
+  const sizes = block ? [...block[1].matchAll(/^\s*(\w+):\s*\[/gm)].map((m) => m[1]) : [];
+  const utils = readFileSync(join(ROOT, "lib/utils.ts"), "utf8");
+  const known = utils.match(/text:\s*\[([^\]]*)\]/)?.[1] ?? "";
+  const missing = sizes.filter((size) => !new RegExp(`"${size}"`).test(known));
+  if (!sizes.length || missing.length) {
+    console.error(`lib/utils.ts does not tell tailwind-merge about font size(s) `
+                  + `${missing.join(", ") || "(none found in tailwind.config.ts)"}. `
+                  + "cn() would treat them as colours and drop one beside a tone class.");
+    process.exit(1);
+  }
+}
+
+// THE BROWSER RESOLVES SYMBOLS THE WAY THE SERVER DOES. lib/symbols.ts exists
+// so the URL names the symbol the engines will actually fetch; if its pattern
+// or suffix map drifted from the Python ones, /stock/BBCA could open a page
+// for one security while the server analysed another — the BBCA bug that
+// symbols.py was written to end, back through the address bar.
+const tsSymbols = readFileSync(join(ROOT, "lib/symbols.ts"), "utf8");
+const pyIndex = readFileSync(join(ROOT, "api/index.py"), "utf8");
+const pySymbols = readFileSync(join(ROOT, "api/_lib/symbols.py"), "utf8");
+const pyPattern = pyIndex.match(/TICKER_PATTERN\s*=\s*r"([^"]+)"/)?.[1];
+const tsPattern = tsSymbols.match(/TICKER_PATTERN\s*=\s*\/(.+)\/;/)?.[1];
+if (!pyPattern || !tsPattern || pyPattern !== tsPattern) {
+  console.error(`lib/symbols.ts TICKER_PATTERN (${tsPattern}) differs from api/index.py `
+                + `(${pyPattern}). A URL could name a symbol the API refuses, or the reverse.`);
+  process.exit(1);
+}
+const pySuffix = Object.fromEntries([...pySymbols.matchAll(/"(US|ID)":\s*"([^"]*)"/g)]
+  .map((m) => [m[1], m[2]]));
+const tsSuffix = Object.fromEntries([...(tsSymbols.match(/MARKET_SUFFIX[^=]*=\s*\{([^}]*)\}/)?.[1] ?? "")
+  .matchAll(/(US|ID):\s*"([^"]*)"/g)].map((m) => [m[1], m[2]]));
+if (JSON.stringify(pySuffix) !== JSON.stringify(tsSuffix) || !("ID" in pySuffix)) {
+  console.error(`lib/symbols.ts MARKET_SUFFIX ${JSON.stringify(tsSuffix)} differs from `
+                + `api/_lib/symbols.py ${JSON.stringify(pySuffix)}.`);
+  process.exit(1);
+}
+
 if (Object.keys(railFamilies).length < 4) {
   console.error("Could not read all four lens families out of ConfluenceRail.tsx; "
                 + "the drift check between it and explain.py is not running.");
@@ -126,13 +292,17 @@ if (Object.keys(railFamilies).length < 4) {
 const stripComments = (src) =>
   src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-const uiFiles = [];
-for (const dir of ["components", "components/ui", "app"]) {
-  for (const name of readdirSync(join(ROOT, dir))) {
-    if (!/\.(tsx|css)$/.test(name)) continue;
-    uiFiles.push([join(dir, name), stripComments(readFileSync(join(ROOT, dir, name), "utf8"))]);
-  }
-}
+// RECURSIVE, AND IT WAS NOT. The first version listed three directories by
+// hand — components/, components/ui/, app/ — so a file in any new subfolder was
+// simply never read, and every rule below passed on it by not looking. A route
+// under app/stock/[symbol]/ or a panel moved into components/rank/ would have
+// been exempt from the whole design system without anyone deciding that. Keys
+// stay repo-relative posix paths, so SIGN_TONE_BUDGET entries are unchanged.
+const walkUi = (dir) => readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? walkUi(join(dir, e.name))
+                  : /\.(tsx|css)$/.test(e.name) ? [join(dir, e.name)] : []);
+const uiFiles = ["components", "app"].flatMap(walkUi).sort()
+  .map((file) => [file, stripComments(readFileSync(join(ROOT, file), "utf8"))]);
 
 const designFailures = [];
 const fail = (file, rule, detail) => designFailures.push(`  ${file}\n    ${rule}\n    ${detail}`);
@@ -179,10 +349,14 @@ for (const [file, src] of uiFiles) {
 // 4. TEXT COLOUR COMES FROM THE LADDER, NOT FROM ALPHA. `text-chalk/80` and
 //    friends were how v1 faked a body colour it did not have; eight of them
 //    composited to 2.2-3.2:1 and failed contrast outright.
+//    WIDENED to every text and tone token. The first version watched `chalk`
+//    and `ash` only, and eight `text-warn/90`-style sites walked past it — a
+//    tone at 70-90% alpha is both a contrast risk and a quieter judgement than
+//    the server made, which is a change of meaning nobody decided.
 for (const [file, src] of uiFiles) {
-  for (const m of src.matchAll(/text-(?:chalk|ash)\/\d+/g)) {
+  for (const m of src.matchAll(/text-(?:chalk|body|ash|faint|acc|dist|warn|tech)\/\d+/g)) {
     fail(file, `Alpha text colour ${m[0]}.`,
-         "Use chalk / body / ash / faint. Alpha on text was the contrast bug.");
+         "Use the solid token. Alpha on text was the contrast bug.");
   }
 }
 
@@ -220,12 +394,13 @@ for (const [file, src] of uiFiles) {
 //    them. This does not ban the pattern; it stops the list growing quietly.
 const SIGN_TONE_BUDGET = {
   "components/AnomalyPanel.tsx": 2,     // a day's price change, twice
-  // Two, and the second was invisible to the old pattern for the same reason
-  // LongTermPanel's were: it colours a Card accent from a constant pair rather
-  // than a Tailwind class. Both are gated on significance BEFORE they take a
-  // direction — see `carTone` — so an insignificant result stays grey however
-  // it is signed, which is the whole reason these two are allowed.
-  "components/EventStudyPanel.tsx": 2,
+  // One. It was two until the card accent went: that one coloured the whole
+  // event-study card green or red from the sign of the 20-day mean, and once
+  // `Card accent` actually painted a header field it would have shouted a
+  // direction over a result that is usually not significant. The card is the
+  // flow lens's identity now. What remains is gated on significance BEFORE it
+  // takes a direction — see `carTone` — so an insignificant result stays grey.
+  "components/EventStudyPanel.tsx": 1,
   // Three, not one, and the number changed because the CHECK changed rather
   // than the code. The seasonality grid colours twice — an inline background
   // and the figure under it — and the calendar-returns bars colour a third
@@ -243,9 +418,13 @@ const SIGN_TONE_BUDGET = {
 //    geometry from a beta and colour it from a constant — the next person to
 //    touch either will reach for an inline style, and the check has to be there
 //    when they do. Both forms count against the same budget.
+//    WIDENED AGAIN when the palette moved into lib/palette.ts: a sign test that
+//    picks `palette.acc` or `TONE_HEX.good` directly is the same bug spelled
+//    through the token module, and none of the patterns above could see it.
 const SIGN_TONE_PATTERNS = [
   /[<>]=?\s*0\s*\?\s*"text-(?:acc|dist)"/g,
   /[<>]=?\s*0\s*\?\s*[A-Z_]{2,}\s*:\s*[A-Z_]{2,}/g,
+  /[<>]=?\s*0\s*\?\s*(?:palette|TONE_HEX)[.[]/g,
 ];
 for (const [file, src] of uiFiles) {
   const hits = SIGN_TONE_PATTERNS
@@ -270,7 +449,9 @@ for (const [file, src] of uiFiles) {
 //    Contrast is arithmetic on the config, so it does not need a browser. This
 //    reads the palette out of tailwind.config.ts and recomputes it, which means
 //    the claim can never drift from the tokens again.
-const CONFIG = readFileSync(join(ROOT, "tailwind.config.ts"), "utf8");
+//    The palette moved out of tailwind.config.ts into lib/palette.ts so that
+//    Recharts props and Tailwind classes read one source; this follows it.
+const CONFIG = readFileSync(join(ROOT, "lib/palette.ts"), "utf8");
 const hexOf = (name) => {
   const m = CONFIG.match(new RegExp(`\\b${name}:\\s*"(#[0-9A-Fa-f]{6})"`));
   return m ? m[1] : null;
@@ -291,19 +472,308 @@ const GROUNDS = ["ink", "panel", "raised", "sunken"];
 const AA = 4.5;
 for (const token of TEXT_TOKENS) {
   const fg = hexOf(token);
-  if (!fg) { fail("tailwind.config.ts", `Text token \`${token}\` not found.`,
+  if (!fg) { fail("lib/palette.ts", `Text token \`${token}\` not found.`,
                   "The palette check reads it out of the config by name."); continue; }
   for (const ground of GROUNDS) {
     const bg = hexOf(ground);
     if (!bg) continue;
     const ratio = contrast(fg, bg);
     if (ratio < AA) {
-      fail("tailwind.config.ts",
+      fail("lib/palette.ts",
            `${token} on ${ground} is ${ratio.toFixed(2)}:1, below WCAG AA ${AA}.`,
            "Every token in the text ladder is used for text somewhere. Lighten it, "
            + "or stop using it for text and remove it from TEXT_TOKENS with the reason.");
     }
   }
+}
+
+// 9. A RECHARTS CHILD IS NEVER WRAPPED IN A FRAGMENT. Recharts decides what to
+//    draw by walking its own `children` and reading each element's type. It does
+//    NOT look inside a React fragment, so `{show && (<><Line/><Line/></>)}`
+//    compiles, type-checks, lints clean, throws nothing at runtime — and draws
+//    NOTHING. Both Bollinger bands disappeared from the annotated chart this
+//    way while the toggle that controlled them went on looking like it worked,
+//    and the only way it was caught was counting `.recharts-line-curve` nodes in
+//    the rendered DOM. Write each conditional child as its own expression.
+//
+//    NARROWED ON ITS FIRST RUN, which is the point of the note above about
+//    rules nobody trusts. The first version flagged any fragment CONTAINING a
+//    chart tag and immediately fired on `LongTermPanel`, where the fragment
+//    wraps a whole `<ResponsiveContainer>` — legitimate, because the chart
+//    children inside it have a chart to be children of. The bug is a fragment
+//    holding chart children with NO chart container between them and it.
+const CHART_CHILDREN =
+  /<(Line|Bar|Area|Scatter|ReferenceLine|ReferenceArea|ReferenceDot|XAxis|YAxis|Tooltip|CartesianGrid|Legend|Pie|Cell|ErrorBar)[\s/>]/;
+const CHART_CONTAINER =
+  /<(ResponsiveContainer|ComposedChart|LineChart|AreaChart|BarChart|PieChart|ScatterChart|RadarChart|TreeMap)[\s/>]/;
+for (const [file, src] of uiFiles) {
+  if (!/from "recharts"/.test(src)) continue;
+  for (const m of src.matchAll(/<>([\s\S]*?)<\/>/g)) {
+    if (!CHART_CHILDREN.test(m[1]) || CHART_CONTAINER.test(m[1])) continue;
+    fail(file, "A recharts child is wrapped in a React fragment.",
+         "Recharts does not traverse fragments, so this renders nothing at all "
+         + "and reports no error. Give each conditional child its own "
+         + "`{cond && <Line .../>}` expression.");
+  }
+}
+
+// 10. A FIELD STANDING IS NEVER RENDERED WITHOUT ITS BASIS. `field.py` ranks a
+//     company among the SCANNED names sharing its industry label, which is not
+//     market share: private companies, companies listed elsewhere and names
+//     whose filings never arrived are all missing from the denominator. "1 of 7"
+//     on its own is a claim nothing in this app measured, and it is the most
+//     quotable number on the panel.
+//
+//     The caveat ships inside the payload as `basis` precisely so this rule can
+//     be mechanical — a file that reads a rank and never mentions `basis` is
+//     publishing the rank bare.
+const FIELD_STANDING = /\b(fieldRank|leadsField|field\?\.rank|field\?\.leads)\b/;
+for (const [file, src] of uiFiles) {
+  if (!FIELD_STANDING.test(src)) continue;
+  if (/\bbasis\b/.test(src)) continue;
+  fail(file, "A field standing is rendered without `basis`.",
+       "A rank among scanned peers reads as market share and is not one. Render "
+       + "`fields.basis` wherever the rank is, and where the scan could not place "
+       + "every name, `fields.unplaced` too.");
+}
+
+// A RULE THAT WAS TRIED AND IS DELIBERATELY NOT HERE: "never render a value
+// off `Object.entries` as a bare JSX child". It comes from a real bug —
+// `ScanPanel` mapped every entry of the scan's `counts` into a tile, and
+// `counts.rejectedByReason` is itself a map, so React threw "Objects are not
+// valid as a React child" and the error boundary blanked the WHOLE PAGE from
+// the day the panel was written.
+//
+// It cannot be made precise at this level. The first version fired on three
+// panels that pass the value as a prop or read fields off it; narrowing to a
+// bare `{value}` child still fired on `VerdictPanel`, where the map is
+// `Record<string, string>` and rendering a string is always safe, and on a
+// template literal's own `${n}`. A regex cannot tell a string map from an
+// object map, so the rule would permanently cry wolf on correct files — which
+// is worse than no rule, for the reason recorded above rule 9.
+//
+// The actual defect was a TYPE THAT LIED: the payload was declared
+// `Record<string, number>` and was not one. So the fix went to the boundary
+// instead — `GET /api/scan/latest` now returns `counts` as scalars only, with
+// the by-reason breakdown as its own key, and `tests/test_scan_route.py`
+// asserts that contract on the real report. A shape guaranteed by the server
+// needs no rule on the client.
+
+// 11. A COLOUR IS WRITTEN DOWN IN lib/palette.ts AND NOWHERE ELSE. There were
+//     some 140 hex literals across 22 components — the same tone redeclared in
+//     six panels, lens hues copied by hand between the page and the rail, and
+//     five values that were in no palette at all, one of them the `faint` that
+//     failed contrast and was still drawing axis labels. A token that can be
+//     redeclared locally is a suggestion, not a token.
+for (const [file, src] of uiFiles) {
+  for (const m of src.matchAll(/#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?\b/g)) {
+    fail(file, `Hex colour literal ${m[0]}.`,
+         "Import it from lib/palette.ts (or use theme(colors.x) in CSS). Add a token "
+         + "there, with what it is for, if none fits.");
+  }
+}
+
+// 12. ICONS ARE LUCIDE. DESIGN.md has said "no emoji, no unicode glyphs" since
+//     v2, and three survived it: a `›` as the disclosure chevron, `↑`/`↓` as
+//     sort indicators, a `→` as a link affordance. They render at the font's
+//     whim — a different size, weight and baseline on every platform — and a
+//     screen reader announces them as words ("right-pointing angle quotation
+//     mark"). `→` between two figures in running text is typography and stays;
+//     the glyphs below are only ever used as icons. kbd.tsx is the one exemption,
+//     because a printed key IS its glyph.
+const ICON_GLYPHS = /[›‹★☆✓✔✕✗⌘▲▼↑↓]/;
+for (const [file, src] of uiFiles) {
+  if (file === "components/ui/kbd.tsx") continue;
+  const m = src.match(ICON_GLYPHS);
+  if (m) {
+    fail(file, `Unicode glyph ${m[0]} used as an icon.`,
+         "Use a lucide icon with aria-hidden, or <Kbd> for a keyboard key.");
+  }
+}
+
+// 13. THE SENSITIVITY GRID IS NUMBERS, NOT A HEAT MAP. A grid of fair values
+//     coloured green above the price and red below it is a buy/sell signal with
+//     extra steps — the owner named that exact risk before it was built. So the
+//     grid's file may not touch a tone class or the tone maps, and may not
+//     compare anything with the price; the price is printed beside the grid
+//     and the reader does the comparing.
+const GRID_FILE = "components/valuation/SensitivityGrid.tsx";
+for (const [file, src] of uiFiles) {
+  if (file !== GRID_FILE) continue;
+  const tone = src.match(/\b(?:text|bg|border|ring|fill)-(?:acc|dist|warn)\b|\bTONE_[A-Z]+\b|\.tone\b/);
+  // Operators with whitespace on both sides: `cell.value > price`. The first
+  // version also matched the JSX text "Market price <span", which is a tag,
+  // not a comparison — narrowed on its first run.
+  const versus = src.match(/\s[<>]=?\s+(?:data\.)?price\b|\bprice\s+[<>]=?\s/);
+  if (tone || versus) {
+    fail(file, `The sensitivity grid ${tone ? `uses a tone (${tone[0]})` : `compares with the price (${versus[0]})`}.`,
+         "Cells are uncoloured numbers; the price sits beside the grid. See PRODUCT.md constraint 1.");
+  }
+}
+if (!uiFiles.some(([file]) => file === GRID_FILE)) {
+  fail(GRID_FILE, "Rule 13 is guarding a file that no longer exists.",
+       "Point GRID_FILE at the grid's new home rather than deleting the rule.");
+}
+
+// 14. A COMPARISON NEVER DECIDES. Two to four companies side by side is the
+//     layout where "which is best" arrives without anyone deciding to build it:
+//     a sort, a max, a sum across columns, the rail's agreement count repeated
+//     per column, the private score. None of those may appear in the compare
+//     files. lib/compare.ts is read explicitly because lib/ is outside the UI
+//     walk; the columns stay in the reader's order and are moved by hand.
+const COMPARE_FORBIDDEN =
+  /\bagreementOf\b|\buseVerdict\b|api\/verdict|\bVerdictPanel\b|\.sort\(|\btoSorted\(|\bMath\.max\b|\.reduce\(/;
+const compareSources = [
+  ...uiFiles.filter(([file]) => /^(components|app)\/compare\//.test(file)),
+  ["lib/compare.ts", stripComments(readFileSync(join(ROOT, "lib/compare.ts"), "utf8"))],
+];
+for (const [file, src] of compareSources) {
+  const m = src.match(COMPARE_FORBIDDEN);
+  if (m) {
+    fail(file, `The compare view uses ${m[0]}.`,
+         "Compare keeps the reader's order and computes nothing across columns — no sort, "
+         + "max, sum, agreement count or score. See lib/compare.ts.");
+  }
+}
+if (compareSources.length < 2) {
+  fail("components/compare", "Rule 14 found no compare component to guard.",
+       "Point the rule at the compare view's new home rather than deleting it.");
+}
+
+// 15. A LINK TO THE FIELD MANUAL RESOLVES. "New to this?" pointed at
+// /docs/field-manual.html for months while production returned a 404: docs/
+// was excluded from the upload and nothing copied the file into public/. The
+// copy now happens in `prebuild`, and this checks the other half — that every
+// /docs/ path the UI links to names a file that exists to be copied.
+for (const [file, src] of uiFiles) {
+  for (const m of src.matchAll(/["'`](\/docs\/[^"'`#?]+)/g)) {
+    if (!existsSync(join(ROOT, m[1].slice(1)))) {
+      fail(file, `Links to ${m[1]}, which is not in docs/.`,
+           "prebuild copies docs/field-manual.html into public/docs/; a link to anything "
+           + "else under /docs/ will 404 in production.");
+    }
+  }
+}
+
+// 16. A SCROLL CONTAINER A KEYBOARD CAN SCROLL. A table in a bare
+//     `overflow-x-auto` box can be scrolled by a mouse and a finger and not by a
+//     keyboard, unless something inside it takes focus; axe found the first on
+//     the flagged-days table, and at a phone's width nearly every table in the
+//     app overflows. `ScrollRegion` becomes a labelled, focusable region exactly
+//     when its content overflows. Two exemptions, each holding its own focus:
+//     the tab strip (every tab is focusable, and the active one is scrolled into
+//     view) and the palette's list (driven by aria-activedescendant from the
+//     input, which scrolls the active option into view).
+const SCROLL_EXEMPT = new Set([
+  "components/ui/scroll.tsx", "components/ui/tabs.tsx", "components/palette/CommandPalette.tsx",
+]);
+for (const [file, src] of uiFiles) {
+  if (SCROLL_EXEMPT.has(file) || !file.endsWith(".tsx")) continue;
+  const m = src.match(/\boverflow-(?:x-|y-)?auto\b/);
+  if (m) {
+    fail(file, `A bare scroll container (${m[0]}).`,
+         "Use <ScrollRegion label=...> from components/ui/scroll.tsx so a keyboard can scroll it.");
+  }
+}
+
+// 17. A SCATTER CHART NEVER REACHES THE ACCESSIBILITY TREE. Recharts stamps
+//     role="img" on every scatter symbol with no name, so one chart can put
+//     hundreds of "image" announcements in front of a screen reader: 1,464 on
+//     the anomaly chart in September, then 120 on the exposure chart and 360 on
+//     the annotated chart in October, each found by axe and not by reading. A
+//     chart that draws `<Scatter` must sit inside an `aria-hidden` wrapper, and
+//     its panel must say the finding in text.
+for (const [file, src] of uiFiles) {
+  if (!/<Scatter\b/.test(src)) continue;
+  let from = 0;
+  for (const m of src.matchAll(/<Scatter\b/g)) {
+    const container = src.lastIndexOf("<ResponsiveContainer", m.index);
+    if (container < from) continue;
+    from = container + 1;
+    if (!/aria-hidden/.test(src.slice(Math.max(0, container - 200), container))) {
+      fail(file, "A Recharts <Scatter> outside an aria-hidden wrapper.",
+           "Wrap its <ResponsiveContainer> in <div aria-hidden> and state the finding in prose; "
+           + "each scatter symbol is an unlabelled role=img otherwise.");
+    }
+  }
+}
+
+// 18. EVERY COLOUR ON SCREEN HAS ONE ON PAPER. The first print of the Value
+//     tab set its "what this cannot tell you" well in mid-grey with grey text
+//     on it — `bg-sunken/40` was missing from a print reset that named
+//     `bg-ink/` and `bg-raised/` only — and the numbered next steps in
+//     `text-tech` at 2.4:1 on white. A class the print block does not name
+//     prints in its screen colour. So every text token and every ground a UI
+//     file uses must be named in globals.css's print block, and every paper
+//     text token must clear AA on white. Colours set inline are mapped by the
+//     plugin in tailwind.config.ts, from the palette, so they cannot drift.
+const GLOBALS = readFileSync(join(ROOT, "app/globals.css"), "utf8");
+const PRINT_CSS = GLOBALS.slice(GLOBALS.indexOf("@media print"));
+const PALETTE_TOKENS = new Set([...CONFIG.matchAll(/^\s+(\w+):\s*"#[0-9A-Fa-f]{6}"/gm)].map((m) => m[1]));
+const printNames = new Map();   // selector the print block must contain -> first file using it
+for (const [file, src] of uiFiles) {
+  for (const m of src.matchAll(/\btext-([a-zA-Z]+)\b/g)) {
+    // `ink` is the dark text on a filled control, already dark on paper.
+    if (!PALETTE_TOKENS.has(m[1]) || m[1] === "ink" || m[1].startsWith("print")) continue;
+    if (!printNames.has(`.text-${m[1]}`)) printNames.set(`.text-${m[1]}`, file);
+  }
+  for (const m of src.matchAll(/\bbg-(ink|panel|raised|sunken)(\/\d+)?\b/g)) {
+    const selector = m[2] ? `[class*="bg-${m[1]}/"]` : `.bg-${m[1]}`;
+    if (!printNames.has(selector)) printNames.set(selector, file);
+  }
+}
+for (const [selector, file] of printNames) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!new RegExp(`${escaped}(?![\\w-])`).test(PRINT_CSS)) {
+    fail(file, `\`${selector}\` has no print equivalent.`,
+         "Name it in the @media print block of app/globals.css, mapped to a print token from lib/palette.ts.");
+  }
+}
+for (const token of ["printText", "printBody", "printMuted", "printAcc", "printDist", "printWarn"]) {
+  const hex = hexOf(token);
+  const ratio = hex ? contrast(hex, "#FFFFFF") : 0;
+  if (ratio < AA) {
+    fail("lib/palette.ts", `Print token \`${token}\` clears ${ratio.toFixed(2)}:1 on white.`,
+         `Paper text must clear ${AA}:1 like screen text does.`);
+  }
+}
+
+// 19. THE MARKET BOARD NEVER RANKS A MOVE AND NEVER COLOURS ONE. A board of
+//     today's moves sorted by size is a leaderboard that invites reading its top
+//     line as the day's real story, and a red fall or a green rise is a verdict
+//     picked from a sign — crude falling helps an airline and hurts a miner. The
+//     rows keep the server's declared order (a stock page may lift the rows it is
+//     related to to the front, by filtering, never by sorting), every tone is
+//     neutral, and emphasis comes only from a move being unusual for its own
+//     instrument. lib/marketboard.ts is read explicitly; lib/ is outside the walk.
+const BOARD_FILES = [
+  "components/markets/TodayView.tsx", "components/markets/MarketRail.tsx",
+  "components/markets/MarketBand.tsx", "components/markets/PriceTile.tsx",
+  "components/markets/NewsList.tsx", "components/markets/CalendarList.tsx",
+  "components/markets/ExchangeStatus.tsx", "components/landing/MarketsToday.tsx",
+  "components/markets/CalendarWidgets.tsx",
+];
+const BOARD_FORBIDDEN = [
+  [/\.sort\(|\btoSorted\(/, "sorts"],
+  [/\b(?:text|bg|border|ring)-(?:acc|dist|warn)\b|\bTONE_[A-Z]+\b|\.tone\b/, "colours by tone"],
+];
+const boardSources = [
+  ...uiFiles.filter(([file]) => BOARD_FILES.includes(file)),
+  ["lib/marketboard.ts", stripComments(readFileSync(join(ROOT, "lib/marketboard.ts"), "utf8"))],
+];
+for (const [file, src] of boardSources) {
+  for (const [pattern, what] of BOARD_FORBIDDEN) {
+    const m = src.match(pattern);
+    if (m) {
+      fail(file, `The market board ${what} (${m[0]}).`,
+           "Rows keep the declared order and every move is tone-neutral; emphasis is for a "
+           + "move unusual for its own instrument. See api/_lib/marketboard.py.");
+    }
+  }
+}
+if (boardSources.length !== BOARD_FILES.length + 1) {
+  fail("components/markets", "Rule 19 could not find every market board file it guards.",
+       "Point BOARD_FILES at the board's new home rather than deleting the rule.");
 }
 
 if (designFailures.length) {
@@ -312,7 +782,7 @@ if (designFailures.length) {
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 8 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 19 checked across ${uiFiles.length} UI files`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));

@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
+import { alpha } from "@/lib/palette";
 import { cn } from "@/lib/utils";
 
 export interface Tab {
@@ -10,6 +11,12 @@ export interface Tab {
   accent: string;
   /** What this tab answers, in the reader's own words. Shown when there is room. */
   hint?: string;
+  /**
+   * A label drawn before this tab, marking where one kind of tab ends and
+   * another begins — the private scoring tier after the published lenses.
+   * Presentation only: it is not a tab and takes no focus.
+   */
+  divider?: string;
 }
 
 /**
@@ -48,6 +55,15 @@ export function Tabs({
 }) {
   const strip = useRef<HTMLDivElement>(null);
 
+  // ONE ROW, SCROLLED SIDEWAYS, and the selected tab kept in view. The strip
+  // used to wrap, which on a phone made it three sticky rows covering a third of
+  // the screen; scrolling keeps it one row, and a tab chosen from the palette or
+  // with `]` is brought into view rather than selected off-screen.
+  useEffect(() => {
+    const el = strip.current?.querySelector<HTMLElement>(`[role=tab][aria-selected=true]`);
+    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
+
   const onKeyDown = (event: React.KeyboardEvent) => {
     const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
     if (!keys.includes(event.key)) return;
@@ -71,13 +87,21 @@ export function Tabs({
       role="tablist"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className="flex flex-wrap gap-1 border-b border-rule"
+      className="flex gap-1 overflow-x-auto border-b border-rule [scrollbar-width:none]
+                 [&::-webkit-scrollbar]:hidden"
     >
       {tabs.map((tab) => {
         const selected = tab.id === active;
         return (
+          <Fragment key={tab.id}>
+          {tab.divider && (
+            <span aria-hidden
+                  className="ml-2 flex shrink-0 items-center border-l border-rule pl-3 pr-1 text-micro
+                             uppercase tracking-[0.14em] text-faint">
+              {tab.divider}
+            </span>
+          )}
           <button
-            key={tab.id}
             type="button"
             role="tab"
             id={`${idPrefix}-${tab.id}`}
@@ -97,7 +121,7 @@ export function Tabs({
               // No `rounded-t`. A 2px underline under rounded top corners reads as a
               // box that failed to close; the tint alone carries the active state
               // and the rule finishes it.
-              "-mb-px shrink-0 border-b-2 px-3.5 py-2.5 text-meta font-medium",
+              "-mb-px shrink-0 whitespace-nowrap border-b-2 px-3.5 py-2.5 text-meta font-medium",
               "transition-colors focus:outline-none focus-visible:ring-2",
               "focus-visible:ring-tech focus-visible:ring-offset-0",
               selected
@@ -106,11 +130,12 @@ export function Tabs({
             )}
             style={selected
               ? { borderBottomColor: tab.accent, color: tab.accent,
-                  background: `${tab.accent}0F` }
+                  background: alpha(tab.accent, 0.06) }
               : undefined}
           >
             {tab.label}
           </button>
+          </Fragment>
         );
       })}
     </div>

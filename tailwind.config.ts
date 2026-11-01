@@ -1,72 +1,56 @@
 import type { Config } from "tailwindcss";
+import plugin from "tailwindcss/plugin";
+import { palette } from "./lib/palette";
 
 /**
- * THE PALETTE HAS TWO JOBS AND THEY MUST NOT BLEND.
+ * PRINT FOR COLOURS SET INLINE. The print block in globals.css maps every text
+ * and tone CLASS to its paper equivalent, but a lens hue, a card title and a
+ * tone badge arrive as `style={{ color }}` from the palette — and none of those
+ * were mapped. The first print of the Value tab set "What this is worth" in
+ * value amber on white at 1.8:1 and the tone badge in screen red at 2.5:1.
  *
- * IDENTITY says which model is speaking: flow teal, trend azure, value amber,
- * quality gold. It is structural, always on, and means nothing about the
- * company — a lens is that colour whether its reading is good or terrible.
- *
- * TONE says what the server concluded: `acc` good, `dist` bad, `warn` caution.
- * It arrives from `explain.tone` and from nowhere else. A component that picks
- * a tone colour from the sign of a number has re-litigated a judgement Python
- * already made, which is the bug class §14 spent an audit removing.
- *
- * Keeping them apart is why `tech` is not allowed to mean "good" and `acc` is
- * not allowed to mean "the flow lens". Before v2 both drifted: the flow lens's
- * teal and the accumulation tone were the same token doing two jobs, so a lens
- * heading and a verdict were the same colour and neither read as meaningful.
- *
- * NEUTRALS ARE A LADDER, NOT A PAIR. The v1 palette had exactly two text
- * colours — `chalk` and `ash` — and 54% of every screen was `ash`. When more
- * than half a page is in the de-emphasis colour, nothing is emphasised. The
- * ladder below gives secondary text somewhere to go that is not the dimmest
- * value available.
+ * An author `!important` beats an inline declaration, so these select on the
+ * style attribute itself. React writes it two ways — `color:#E8B44C` and, when
+ * it sets the property through the DOM, `color: rgb(232, 180, 76);` — so each
+ * value is matched in both spellings. Any inline colour prints as text; the
+ * tones and the muted greys then print as their paper equivalents, so a "bad"
+ * reading still prints red. `html` lifts these above the class rules, because
+ * an inline colour already won over its element's class on screen.
+ */
+const printInlineColours = plugin(({ addBase }) => {
+  const rgb = (hex: string) =>
+    `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
+  const declaring = (hex: string) => [
+    `html [style^="color:${hex}" i]`, `html [style*=";color:${hex}" i]`,
+    `html [style^="color: ${rgb(hex)}"]`, `html [style*="; color: ${rgb(hex)}"]`,
+  ].join(", ");
+  const onPaper: [string, string][] = [
+    [palette.acc, palette.printAcc],
+    [palette.dist, palette.printDist],
+    [palette.warn, palette.printWarn],
+    [palette.ash, palette.printMuted],
+    [palette.faint, palette.printMuted],
+  ];
+  addBase({
+    "@media print": {
+      'html [style^="color"], html [style*=";color"], html [style*="; color"]':
+        { color: `${palette.printText} !important` },
+      ...Object.fromEntries(onPaper.map(([screen, paper]) =>
+        [declaring(screen), { color: `${paper} !important` }])),
+    },
+  });
+});
+
+/**
+ * Colours come from lib/palette.ts and nowhere else — that file explains the
+ * identity/tone split and the text ladder, and check_frontend.mjs recomputes
+ * the ladder's contrast from it on every build.
  */
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
     extend: {
-      colors: {
-        // --- strata -------------------------------------------------------
-        ink: "#080C10",       // page ground
-        panel: "#111820",     // the standard surface
-        raised: "#161F29",    // a surface on top of a surface
-        sunken: "#0C1116",    // wells: tables, code, quoted figures
-        rule: "#1E2A36",      // hairline
-        ruleSoft: "#18222C",  // hairline INSIDE a group, so nesting reads
-
-        // --- text ladder --------------------------------------------------
-        chalk: "#E7EEF5",     // headings and figures
-        body: "#C3CFDC",      // running prose. NOT ash — this is the fix.
-        ash: "#8496A9",       // genuinely secondary: units, counts, captions
-        // LIGHTENED FROM #63748A, 1 September 2026, because it is not furniture.
-        // The ladder called it that, but `.eyebrow` uses it for every field
-        // label in the app and the footer disclaimer is set in it — twenty-one
-        // sites, most of them text a reader has to read. At #63748A it cleared
-        // 3.48 to 4.11 against the four grounds, so it failed WCAG AA (4.5)
-        // everywhere it was used. #7387A0 clears 4.52 to 5.33 while staying a
-        // clear step below `ash` at 5.48 to 6.46, so the ladder is intact.
-        faint: "#7387A0",     // furniture AND small labels — must clear AA
-
-        // --- tone: the server's judgement, never chrome --------------------
-        acc: "#35C4A8",
-        dist: "#FF6B6B",
-        warn: "#F2C14E",
-
-        // --- identity: which lens is speaking, never a judgement -----------
-        flow: "#2FBFA4",
-        trend: "#6B9BFF",
-        value: "#E8B44C",
-        quality: "#C9A227",
-        thesis: "#A78BFA",
-
-        // Retained: `tech` is the interactive accent (focus, links, controls)
-        // and `dcf`/`ddm` are the valuation engine hues the charts key off.
-        tech: "#6B9BFF",
-        dcf: "#E8B44C",
-        ddm: "#A78BFA",
-      },
+      colors: { ...palette },
       fontFamily: {
         sans: ["var(--font-inter)", "system-ui", "sans-serif"],
         mono: ["var(--font-plex)", "ui-monospace", "monospace"],
@@ -92,6 +76,11 @@ const config: Config = {
         h3: ["1.0625rem", { lineHeight: "1.35" }],      // 17px  subsection
         h2: ["1.375rem", { lineHeight: "1.3" }],        // 22px  section
         h1: ["1.75rem", { lineHeight: "1.2" }],         // 28px  the ticker
+        // The landing's one sentence, and nothing else. 29% above h1, so it
+        // reads as a different kind of text rather than a slightly larger
+        // heading; a stock page never uses it — the ticker stays the biggest
+        // thing there.
+        display: ["2.25rem", { lineHeight: "1.15" }],   // 36px  the landing headline
         figure: ["1.5rem", { lineHeight: "1.15" }],     // 24px  a headline number
       },
       // A measure cap for prose. 15px Inter at 68ch lands near 640px, which is
@@ -114,6 +103,6 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [printInlineColours],
 };
 export default config;

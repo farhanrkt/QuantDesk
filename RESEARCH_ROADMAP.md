@@ -669,12 +669,18 @@ them to inform position size where a return forecast may not. A test asserts the
 measurement still supports it, so a future re-measurement that found otherwise would fail the
 build rather than let the panel quietly carry on.
 
+Re-measured on 1 November 2026 with each name on its own sessions (§22): **0.48 to 0.68**, at
+t-statistics from +8.5 to +14.2. The calendar change moved no figure past the fourth decimal; the
+difference from the table above is two more months of data.
+
 ### The same measurement found the limit, and it is on the panel
 
 In the worst quarter of quarters for those markets the mean pairwise correlation runs about
 **+0.06 higher** than in the rest — up to +0.12 on the LQ45. A correlation measured over an
 ordinary year is therefore a **floor** on how correlated these positions will be in the stretch
-a holder actually needs the diversification. The panel says so beside the numbers.
+a holder actually needs the diversification. The panel says so beside the numbers. On 1 November
+2026 the same figure read **+0.14**, and §22.4 shows why neither number is precise: where the
+quarters are cut moves it more than two months of data did.
 
 ### A measurement mistake worth recording
 
@@ -1557,24 +1563,820 @@ Recorded so the next audit does not re-open them.
 
 ---
 
+## 18. What the company does, and where it stands among the names doing it
+
+The scanner could establish that a business was cheap, solid and unwatched. It could not
+establish what the business *was*. The owner's worked example was a company that "is the
+biggest player on their field, its financial report solid, and they are needed" — four
+claims, of which the app could check one.
+
+Three of the four are now checkable. The fourth — whether the world needs the product — is
+not computable from anything available here and **no proxy for it was invented**.
+
+### 18.1 An industry label is not a description, and the gap is measurable
+
+`field.profile` carries the data source's own business summary, and the scan panel searches
+it. The label alone cannot find a specialist, and the case that settled it is the one the
+work was asked for: KETR.JK is filed under *Communication Equipment*, a label it shares with
+radio makers and handset distributors. What identifies it — "sells submarine and terrestrial
+fiber optic cable systems" — exists only in the prose, at **character 361** of a
+673-character summary, against a 320-character display trim.
+
+So the full text travels and the client clamps. Shipping the trimmed version would have
+saved about 60% of the payload and broken the one query the feature exists to answer.
+
+The search also **ignores the action filter**. A specialist is almost always a *Hold* — that
+is the entire premise of `neglect.py` next door — so intersecting a lookup with the current
+view would hide the answer and give no sign it had.
+
+Three states of a missing description are kept apart, because they send a reader to
+different places: `not fetched` (the record predates the field, and a refetch fixes it),
+`none published` (the source has none, and a refetch cannot), and `not returned` — no
+sector, industry or summary at all, which is the throttle signature `quality.py` already
+refuses to score on. Observed on INDF.JK, which reads "Packaged Foods" on any unhurried
+fetch.
+
+### 18.1b The words that identify a company
+
+`field.distinctive_terms` reports the terms common in a company's own description and rare
+across the market's: for KETR, *cable, optic, fiber*. Clicking one runs the full-text
+search, and "cable" returns 24 of the 771 Indonesian names — KETR, MTEL, IKBI, INET, DATA
+and nineteen more — sitting in at least three different industry labels. **That is the
+competitive set no standing built on those labels could assemble.**
+
+The search then names the largest three of the match by revenue. For "cable" that is TOWR,
+MTEL and MDIY, not KETR; both facts are true and both are on screen. The sentence beside it
+refuses the word *field*, because a text match is a set of companies that use a word and
+nothing here has checked that they compete — TOWR leases towers, KETR lays submarine cable.
+
+**Word frequency, not a classification.** A company's own name is excluded, which is most of
+the cleanup — without it Blue Bird returns *blue, bird*, Garuda Maintenance returns *garuda*
+and Telkom returns *telekomunikasi*, each repeating its own name back. A term can still
+mislead: MAHA returns *hauling, mover* because "prime mover trucks" tokenises into separate
+words. The stopword list is a judgement built by reading output, not by any test, and the
+docstring says so; the cost of getting it wrong is a bland word in a list of four.
+
+**A corpus under fifty descriptions returns nothing.** The "too common" ceiling is a share
+of the corpus and the floor is a count, so the two cross on a small scan: at 45
+descriptions, 6% is 2.7, and only terms in exactly two documents survived. That is a
+feature reporting almost nothing while looking as though it worked, which is worse than a
+refusal — so it refuses, and the scan says why.
+
+### 18.2 Ranking a field by revenue, not by market value
+
+`field.standings` ranks the scanned names inside each industry label. **By revenue, and the
+reason is structural**: market capitalisation is the quantity this whole line of work
+suspects of being wrong, so ranking a cheap champion by it means the more underrated it is,
+the smaller it looks. Revenue is what the company sells and the market has no vote on it.
+
+"Leads its field" costs rank 1, three or more measured peers, and twice the runner-up's
+revenue. The thresholds are measured, not chosen:
+
+| Test | Indonesian fields won | US fields won |
+|---|---|---|
+| Bare rank 1 | 97 of 97 | 142 of 142 |
+| ≥ 1.5× the runner-up | 42 | 60 |
+| ≥ 2.0× the runner-up | **31** | **32** |
+
+At 2× the US standings return AAPL for consumer electronics, AMZN for internet retail, MSFT
+for infrastructure software, NVDA for semiconductors, PM for tobacco and HCA for medical
+care facilities. **That is weak evidence and is treated as such**: it says the arithmetic is
+not broken, not that the ranking predicts anything.
+
+### 18.3 It is not market share, and the caveat is enforced
+
+Four things are missing from the denominator: private companies, companies listed elsewhere,
+divisions of larger groups, and **companies whose revenue could not be read** — which until
+November was a quarter of the Indonesian exchange, and was wrongly put down to throttling
+(§18.9). A field missing its largest member crowns the runner-up and looks no different from
+a correct one.
+
+So `basis` ships *inside* the payload and design rule 10 fails the build on any component
+that renders a rank without it, and `unplaced` is reported beside every count.
+
+**"No listed rival" turned out to be a claim the scan could not make.** The obvious test for
+it is a field of one, and that conflates two statements. Of the 28 Indonesian fields holding
+exactly one *ranked* name, only 13 have no same-label listing that failed to return revenue —
+so the strong reading was wrong on more than half. KETR.JK is one of the wrong ones: two
+other Indonesian listings carry its label and filed nothing usable. (§18.9 measures them, and
+KETR leads both.)
+
+Tightening the flag alone would have **dropped the one company the feature was built to
+find**, which is its own kind of wrong — two tiny peers filing nothing does not stop a
+company being the specialist. The selection rule and the claim were therefore split:
+`onlyRanked` is what a screen may select on, `soleListing` is the only thing rendered as "no
+listed rival", and `unranked` counts the rivals nobody could measure.
+
+### 18.4 A wrong currency label manufactures a champion
+
+The first run of the standings crowned RIGS.JK with 99.4% of Indonesian marine shipping and
+456 times the runner-up. It is a small tug and barge operator whose rupiah statements the
+provider labels USD, so converting at the boundary multiplied a correct figure by about
+16,300. **The output was not a crash. It was a confident market leader.**
+
+Market capitalisation is an independent yardstick — it comes from the quote feed and is
+always in the trading currency — so the test is a comparison, not a threshold: if the
+unconverted revenue implies a sane price-to-sales ratio and the converted one does not, the
+label is what is wrong. Across all 388 mismatched records in the local cache it fires on
+exactly two (RIGS.JK, YPF), passes 100 correctly-labelled ones, and **declines to judge the
+283** where the rate is near 1, because a mislabel there is off by less than a factor of two
+rather than four orders of magnitude.
+
+An earlier version applied the plausibility band to every name regardless of conversion and
+refused 71 — MSTR, DJT, a row of pre-revenue biotechs, and DCII.JK, the most expensive
+listing on the Indonesian exchange. **A very low price-to-sales ratio is what an expensive
+company looks like**, and is indistinguishable from a mis-scaled one by inspection. The test
+only means anything where a conversion actually happened.
+
+This was then fixed at its source: `market_data._apply_fx` carries the same guard, so the
+valuation and accounting lenses no longer run on statements four orders of magnitude out.
+
+### 18.5 "Profitable" is not a screen on this exchange
+
+`trackrecord.py` reports profits, cash, growth and borrowings over the years the statements
+cover. Its first finding is that its own headline flag is worthless alone:
+
+| Condition | Indonesian listings with 3+ years |
+|---|---|
+| Profitable in **every** available year | 350 of 523 — **67%** |
+| …and operating cash flow positive | 301 — 58% |
+| …and revenue CAGR ≥ 15% | 73 — **14%** |
+
+A flag admitting two thirds of a market is not a distinction. Profitability ships as
+description; the narrowing is the conjunction, and each step carries its own base rate.
+`GROWING_AT = 0.15` is p75 of the measured distribution (14.8%), not a round number that
+sounded ambitious.
+
+**Four annual columns is the median history.** That does not span a cycle, it excludes 2020,
+and on this exchange those years were a commodity upswing — so "profitable every year" on an
+Indonesian coal name is close to a statement about the coal price. Every consistency figure
+carries `yearsAvailable` for that reason.
+
+**Negative free cash flow is reported, never penalised.** KETR is profitable in all four
+years and grew revenue 28.6% a year while free cash flow was negative in three of them,
+because it was laying cable. A screen that demoted it for that would have been wrong about
+the one company it was built to find; one that ignored the figure would hide the main thing
+to ask about. One negative year is called a single heavy year, not a build-out — a pattern
+needs more than one observation.
+
+**No leverage flag ships**, for the same reason. 39% of non-financial Indonesian listings
+carry net cash, and of the 242 that borrow the **median is 3.0× EBITDA** — which is exactly
+where the textbook draws "levered". A flag there would mark half the borrowers and mean
+nothing, so the ratio is quoted against that median and the reader draws the line. Free cash
+flow and net debt are both withheld for lenders, whose borrowings *are* the business.
+
+### 18.6 The shortlist, and its ingredients' base rates
+
+`_specialists_summary` intersects the three: largest **or only measurable** name in its
+field, compounding, and uncovered. On the full 771-name Indonesian sweep:
+
+| Ingredient | Share of the scan |
+|---|---|
+| Largest or only measurable in its field | 8% |
+| Profitable every year, cash-backed, growing in the top quartile | 10% |
+| Uncovered | **79%** |
+| All three | **7 names (0.9%)** |
+
+The 79% is why each base rate ships with the list: two thirds of a small exchange being
+uncovered is a fact about the exchange, not a filter, and an intersection reads as three
+demanding tests when one of them is not.
+
+The seven are KETR.JK (submarine fibre optic cable, +29%/yr, 18.5% net margin), GMFI.JK
+(aircraft maintenance), CASS.JK (cargo and ground handling), MAHA.JK (coal transport),
+PTSN.JK (electronics manufacturing), MHKI.JK (industrial waste) and BIRD.JK (taxis). **All
+seven are gated** — six below the turnover floor, which is the expected outcome and not a
+failure: a specialist nobody covers is usually a specialist nobody trades. KETR's gate is
+"Poor entry at this price", which is a statement about today rather than about the business,
+and the card shows every gate beside its name rather than hiding the list.
+
+### 18.7 The screen is a frontier-market tool, and the US says so
+
+Run against 2,136 US names the same three conditions select **nothing**, and the
+reason is one ingredient rather than the method:
+
+| | Indonesia | US |
+|---|---|---|
+| Uncovered (≤5% institutional, ≤2 analysts) | 79% | **4%** |
+| Median institutional holding | — | **85%** |
+| Median analyst count | — | 4 |
+
+Dropping the coverage condition leaves exactly two: StoneX Group and
+**Microsoft**. The arithmetic works; the US simply has no undiscovered champion
+in the liquid tier, which is what a market whose median company is 85%
+institutionally held looks like.
+
+**Uncovered and illiquid are close to the same set, and that is measured rather
+than assumed.** Across 2,171 US names carrying both a turnover and a coverage
+reading — all of them already ABOVE the turnover floor — the uncovered share
+rises monotonically as turnover falls:
+
+| Turnover quintile | Median daily turnover | Uncovered |
+|---|---|---|
+| Highest | 329,502,969 | 0% |
+| 4th | 83,642,022 | 1% |
+| 3rd | 31,536,454 | 1% |
+| 2nd | 11,360,770 | 4% |
+| Lowest | 3,763,908 | **11%** |
+
+So a US specialist hunt has to go BELOW the turnover floor, where this scan does
+not look unless `--include-illiquid` is passed — and those names are gated as
+untradeable when it is. That is not a contradiction so much as the shape of the
+problem: on a market this well covered, the companies nobody has read are the
+companies nobody can buy at size.
+
+### 18.8 A throttled fetch inflates a score, measured at scale
+
+`verdict.py` already records that a missing lens RAISES a score, because the
+absent component's weight is removed from the blend rather than counted against
+the name. The first full US sweep measured what that costs in practice.
+
+239 of 3,387 names came back with no sector, industry or description — the
+throttle signature, not companies nobody describes. Refetching them changed
+**30 verdicts, and 23 fell out of BUY**:
+
+| | Before | After | Quality lens |
+|---|---|---|---|
+| BTX | 72.9 **Strong buy** | 58.3 Hold | gap → refused |
+| BFH | 72.2 **Strong buy** | 50.2 Hold | gap → refused |
+| CTBI | 67.0 Buy | 50.0 Hold | gap → refused |
+| ACNB | 61.4 Buy | 48.2 Hold | gap → refused |
+| AAT | 60.5 Buy | 46.3 Hold | gap → **scored 25** |
+
+Two of the list's Strong Buys were Strong Buys because a lens was missing. The
+operational consequence is in `NEXT_SESSION_PROMPT.md`: after a throttled sweep,
+refetch the names marked `not returned` before reading the buy list at all.
+
+**This finds what it was described, and that is all it establishes.** Industry labels and
+the share register arrive as a current snapshot with no history, so the screen cannot be
+backtested even in principle — the same wall `neglect.py` publishes. `scanlog.py` records
+what each screen selected on the day it selected it, which it had been cited for doing in
+two docstrings without actually doing.
+
+### 18.9 A quarter of the exchange files nothing the provider carries
+
+215 of the 770 cached Indonesian records carry no income statement, balance sheet or cash
+flow statement at all, and every one of them has a sector — so the summary scrape arrived.
+§18.3, `field.py` and the README all called this a throttled fetch. **Measured on 1 November,
+it is not one.**
+
+| Re-asked, unhurried, six weeks after the sweep | Came back with statements |
+|---|---|
+| 47 of the 215, annual and quarterly | **0** |
+| BBCA, TLKM, ASII, UNVR, asked in between | 4 of 4, complete |
+
+The provider carries no statements for these listings, and no refetch changes that. They are
+small: a median market value of about 300 billion rupiah.
+
+**Its summary does carry a trailing year's revenue for all 215**, to June or September 2026
+for 209. Where a listing has both, the two agree:
+
+| Trailing ÷ filed, 104 names with both (100 at random) | |
+|---|---|
+| Median | 1.04 |
+| Within ±25% | 90 |
+| Within a factor of 1.5 | 100 |
+| Currency label disagrees | 0 |
+
+The outliers are what a trailing year does to a filed one — SFAN.JK, whose latest filing is
+2024, and a broker's volatile income at PADI.JK — not units errors. Six of the 215 report in
+dollars; each converts to a plausible price-to-sales ratio, and `market_data._apply_fx` now
+reads the summary figure as its yardstick where no statement exists, so a mislabel there is
+declined as RIGS.JK's was.
+
+So `field.revenue_of` ranks a listing with no statements on the summary, and **never prefers
+it to a filed year** — the 555 names already measured stay measured as they were. Re-ranking
+the 21 September sweep:
+
+| | As scanned | With the summary |
+|---|---|---|
+| Placed in a field | 526 | **725** |
+| Unplaced | 244 | 45, all with no industry label |
+| Named leaders | 32 | **38** — 7 gained, 1 lost |
+| Fields of one that are a sole listing | 14 of 29 | **20 of 20** |
+| Specialist shortlist | 7 | **6** (MHKI out) |
+
+**KETR.JK's two unmeasured rivals are CCSI.JK, a cable maker, and IOTF.JK.** KETR leads them
+on 2.4× the runner-up, so the name the screen was built for moves from "the only one that
+could be measured" to the largest of three. **MHKI.JK leaves the shortlist**: INOV.JK, a
+recycler filed under the same Waste Management label, has 3.3× its revenue, and MHKI had
+held the field only because INOV could not be read. That is §18.3's warning, observed — a
+field missing its largest member crowned the runner-up, and nothing about it looked wrong.
+
+**A lead can depend on which kind of figure is used, and one did.** A filed year (usually to
+December 2025) and a trailing twelve months (to June or September 2026) end on different
+dates, and 67 fields mix them. DIVA.JK led TOSK.JK by 2.05× on DIVA's filed year against
+TOSK's trailing one, and by **1.85×** on both companies' trailing years. So where the top two
+are of different kinds the lead is re-made on both trailing years, and a leader is named only
+if it clears `LEAD_MARGIN` both ways, and not at all if it cannot be re-made. DIVA loses the
+title; KETR keeps it narrowly, at 2.0× re-made. Every reading that compares the two kinds says
+so.
+
+**Measuring more exposed a hole in the screen.** By 1 November IOTF.JK traded at the
+exchange's 50-rupiah floor, so a fresh scan drops it before deepening and KETR's field holds
+two measured names. The screen selected `leads`, which needs three, or `onlyRanked`, which
+needs one — so the larger of two could never qualify, however far ahead, and reading CCSI
+correctly would have taken KETR off the shortlist for having a rival measured at under half
+its size. It now selects `noCloseRival`: alone among the measured, or ahead of the runner-up
+by `LEAD_MARGIN`, re-made where the kinds differ. That contains both earlier flags, so nothing
+that qualified before falls out. On the September sweep it adds nobody — 13 names are the
+larger of two by that margin and none of them compounds — and on a live 12-name scan of
+the three fields above, KETR is selected as the larger of two at 2.4×. `leads` still needs
+three names, and the reading of a pair says it is too few to name a leader while stating the
+gap.
+
+**What the summary cannot give these 215 is a history.** One trailing year shows no run of
+profits, no compounding and no borrowings, so `trackrecord` has nothing to read, the
+accounting screens in `quality.py` still refuse, and none of them can be a specialist itself. They can only
+now be measured against one. Curating IDX filings (`NEXT_SESSION_PROMPT.md`, item b) remains
+the only route to the rest, and is no less motivated for this.
+
+---
+
+## 19. The sensitivity grid, and the company record
+
+Two descriptive additions in the October 2026 overhaul. Neither predicts anything, so
+PRODUCT.md constraint 2 does not ask for a measurement; both are written up because each
+has a way to be read as more than it is.
+
+### 19.1 Value across growth and discount rate, and why it is not coloured
+
+`valuation.sensitivity_grid` evaluates the base case across growth ±6 points (2-point steps)
+and the discount rate ±2 points (1-point steps), clipped to what the route accepts. It is
+the deterministic base case, not the Monte Carlo median: the assumed cell equals
+`baseCase.impliedPrice` exactly, which a test pins, because two different "centres" on one
+panel would be a contradiction the reader cannot resolve. Cells within 1.5 points of
+perpetual growth are refused rather than computed — the core floors the spread silently,
+so such a cell would print a number that is not the stated formula. The bottom row solves
+for the growth today's price implies at each discount rate, which is the range the README
+once claimed the app showed and did not.
+
+The owner named the risk before it was built: "a grid of fair values against price,
+coloured, is a buy/sell heat map". So the grid is uncoloured mono numerals, the assumed
+cell is outlined in the engine's identity colour, and the price is printed beside the grid
+rather than used inside it. `check_frontend.mjs` rule 13 fails the build if the grid's file
+touches a tone or compares anything with the price; both halves were planted and seen to
+fail. Every cell is checked against an independently written closed form.
+
+### 19.2 The record year by year
+
+`trackrecord.series` hands over the statement lines the valuation and quality lenses had
+already fetched — revenue, operating and net income, operating and free cash flow, capital
+spending, debt, cash, equity — as a table of fiscal years. A missing year is null, never
+zero; lenders' free cash flow and debt are withheld for the reasons §18.5 gives; statements
+left in their reporting currency are labelled with it. It rides in `/api/confluence` as a
+`company` leg that neither the synthesis nor the pre-trade checks are handed.
+
+Writing it found that `trackrecord.read` quoted Indonesian base rates — "two thirds of this
+market", "a median of 3.0", "a commodity upswing" — under any company, including the US
+names the scanner sweeps. The reading now takes the market and reports a US company's
+figures bare, with `baseRatesNote` saying no sample has been measured there.
+
+It also found that yfinance's earnings table needs lxml, which was never installed. The
+bare `except` around the fetch swallowed the ImportError, so `earnings_dates` returned an
+empty list on every call and the event study's earnings-proximity tag never fired: "no
+earnings nearby" is a legitimate answer, so nothing looked wrong. lxml is pinned, the
+calendar is cached for the day and shared, and the provider's calendar backs up the next
+date alone when the table is unavailable.
+
+---
+
+## 20. What moved the markets — a calibration, not a signal
+
+`_lib/marketboard.py` puts the day's indices, rates, currencies, commodities and bitcoin
+beside the stock being read. The owner asked for it as a live tracker. What makes it more
+than a ticker tape is the same thing `/api/peers` does for a stock's own figures: it tells a
+reader whether a number is ordinary.
+
+### 20.1 The definition
+
+A move's **percentile** is the share of the instrument's own daily moves over the previous
+365 calendar days that were strictly smaller in size.
+
+- **Units.** Prices move in percent, yields in basis points, and the VIX in points.
+- **Unusual.** At 95 or above a move is called unusual.
+- **Refusal.** Below 120 sessions in the window there is no percentile, only a refusal.
+- **Largest since.** "Largest since" is the most recent earlier move at least as large in
+  the same direction, over the two years fetched.
+
+Each instrument is read on its own sessions, so no annualisation constant is involved. On 1
+November 2026 that was 251 sessions for the S&P 500, 239 for the Jakarta Composite, 242 for
+Shanghai, 246 for the Hang Seng, 259 for EUR/USD and 365 for bitcoin.
+
+### 20.2 How often "unusual" happens, stated on the board
+
+At a 95% line each instrument is unusual about one day in twenty. With 15 to 17 instruments
+on a market's board, **at least one of them was unusual on 39% (US) and 40% (IDX) of the
+past year's weekdays**, measured on 1 November 2026. The board prints that figure under its
+summary, because a flag that fires on two days in five and does not say so reads as news
+every time it fires.
+
+Weekdays only: bitcoin trades at weekends and nothing else does. Counting weekends added 104
+days on which only one instrument could cross its line, and the first live run reported 29%.
+
+### 20.3 Three things measuring it first found
+
+1. **A batch shares one calendar.** yfinance aligns every symbol in a call onto the union
+   of their dates, and `normalise` fills interior gaps. In one batch with BTC-USD, the S&P 500
+   came back with 208 weekend bars, every one a 0.00% day. A distribution of daily moves
+   padded with a hundred zeros pushes every real move up the percentiles.
+   `ohlcv_batch(own_sessions=True)` drops rows on which a symbol has no field at all. The
+   default is unchanged, because the portfolio and exposure measurements were taken on it.
+   Those two have since moved to their own sessions, with both studies re-run; see §22.
+2. **USDIDR=X printed on a Saturday.** Open, high, low and close were all 18,120 with no
+   volume: an indicative quote on a closed market, which read as a +0.27% rupiah move.
+   Instruments that do not trade at weekends now drop weekend prints.
+3. **Neither coal contract in the source returns prices** (`NCF=F`, `MTF=F`). Coal, nickel,
+   tin, palm oil and the Indonesian 10-year yield are named on the board as unavailable,
+   with the reason. For coal names the Trend tab's measured exposure to crude (§16) is the
+   stand-in.
+
+### 20.4 What it does not claim
+
+- **No forecasts.** No move forecasts anything, the next day's move in the same instrument
+  included.
+- **Size only.** The percentile is about size; direction is never coloured, because crude
+  falling helps an airline and hurts a miner.
+- **Headlines explain nothing.** The headlines beside the board are labelled as mentioning
+  a market, never as explaining it.
+- **Relation only where measured.** On a stock page the board marks a relation only where
+  one was measured: the stock's own index, the 10-year yield a US valuation discounts from,
+  and a reference the stock's own five-year exposure (§16, |t| ≥ 3) says it moved with.
+  "ITMG.JK has moved with the energy complex over the past 5 years" is a record, and the
+  strip says so.
+
+
+### 20.5 The calendar, and what past event days were like
+
+The panel's calendar (`_lib/econcalendar.py`, `calendar_events.json`) carries the dates the
+board's instruments are read against. Each date is transcribed from an official source and
+cites its URL:
+- **Fed:** FOMC meetings.
+- **BLS:** CPI and the jobs report.
+- **BEA:** GDP and PCE.
+- **Bank Indonesia:** its BI-Rate decisions and its meeting schedule.
+- **NYSE and IDX:** their holidays and early closes.
+
+Four things found while transcribing:
+
+1. **A schedule is not a decision.** Bank Indonesia published 15-16 July 2026 for its July
+   meeting and decided on 22 July. It raised its rate between meetings on 9 June. Past
+   decisions are taken from its BI-Rate table, and upcoming ones from the schedule, marked
+   "scheduled".
+2. **The 2025 shutdown moved the US data.** BLS's 2025 schedule page carries the dates that
+   actually happened:
+   - September CPI on 24 October;
+   - September jobs on 20 November;
+   - November jobs on 16 December, with October folded in;
+   - November CPI on 18 December.
+
+   October CPI was never published.
+3. **Three sources refuse to be read by a script.** BLS answers 403. BPS's release calendar
+   could not be found at all. Bank Indonesia pages its decision table by form post. So
+   `scripts/refresh_calendar.py` checks the Fed, BEA (its .ics feed) and NYSE itself and
+   names the rest. BPS's inflation dates and Bank Indonesia's 2027 meetings are listed as
+   `pending` and shown as not known, never guessed.
+4. **Neither coal contract** in the price source returns prices (§20.3), so the calendar,
+   like the board, says nothing about coal.
+
+**What past event days were like** was measured before it was wired, over the two years of
+prices the board holds. The event day is the first session on or after the release, so the
+April 2026 jobs report, which landed on Good Friday, is read against the Monday after. The
+statistic is how many event days had a larger-than-median move; on any day, half do. Two-sided
+exact binomial:
+
+| Event | Instrument | Larger than median | p |
+|---|---|---|---|
+| FOMC decisions | S&P 500 | 7 of 17 | 0.63 |
+| FOMC decisions | 10-year yield | 10 of 17 | 0.63 |
+| FOMC decisions | dollar index | 12 of 17 | 0.14 |
+| CPI releases | S&P 500 | 11 of 23 | 1.00 |
+| CPI releases | 10-year yield | 10 of 23 | 0.68 |
+| jobs reports | S&P 500 | 15 of 22 | 0.13 |
+| jobs reports | 10-year yield | 11 of 22 | 1.00 |
+| BI decisions | IHSG | 15 of 25 | 0.42 |
+| BI decisions | USD/IDR | 12 of 25 | 1.00 |
+
+**Not one pair is outside what chance produces at its sample size.** On FOMC days the S&P
+500 moved less than on its median day more often than not. The belief that these are the
+big days is mostly not borne out in this window, and the panel says so in those words. Each
+line is a count against one half, with its sample size and "within chance" where it is, and
+never a forecast. Nine pairs are tested at once, so a single p below 0.05 would turn up by
+luck alone on about one board in three (1 - 0.95^9 = 0.37); none came close.
+---
+
+## 21. The forward log's first read, fixed before it resolves
+
+`_lib/scanlog.py` writes down what the scanner said on the day it said it, because the
+value and quality components cannot be reconstructed on a past date and waiting is the only
+honest way to measure them. The first calls reach their 63rd session in December 2026. This
+section was written on 1 November 2026, when no call in either log had resolved. It fixes
+what that first read reports and what counts as nothing, for the reason §12 gives the thesis
+journal: the only version worth keeping is the one written before the outcome.
+
+### 21.1 The log counted rows
+
+Until now `summarise` treated every logged row as an independent call. The scanner names the
+same company on scan after scan, so the rows were not independent:
+
+| | IDX | US |
+|---|---|---|
+| Scans | 6, from 9 to 21 September 2026 | 3, from 11 to 21 September 2026 |
+| Buy and strong buy | 74 calls on 23 names | 518 calls on 382 names |
+| Reduce and avoid | 574 calls on 136 names | 2,318 calls on 1,364 names |
+| Observations, counted once per name | 159 | 1,739 |
+
+Every call in each log was made inside a single 63-session window, so the calls on one name
+are one outcome measured several times. Counted as rows, `MIN_CLOSED = 30` could have been met
+by five Indonesian companies called on every scan; the six most-called buy names supply 31
+rows between them. The `open` count was wider still: it counted every row not yet resolved,
+HOLD and NO_ACTION included, 3,588 for the Indonesian log against 159 observations.
+
+`scanlog.observations` now counts a name once per window:
+
+- **The opening call is the observation.** The call that opens a window is scored on its own
+  action and its own outcome.
+- **Later calls inside it add nothing.** A later call on the same name before that window's
+  `resolvedOn` session is the same observation, whatever it says.
+- **A call after the window opens the next.** A call on or after `resolvedOn` starts a new
+  observation.
+
+Both floors, `MIN_CLOSED` overall and a third of it per side, count these. The payload
+reports the calls, distinct names and scan dates beside them, and `scripts/review_scanlog.py`
+prints every name with every date it was called on.
+
+Seven US names were called Buy on 12 September and Reduce or Avoid on 21 September. Each is
+one observation, scored on the Buy that opened its window. That is why the US has 1,364
+reduce/avoid names but 1,357 reduce/avoid observations. No Indonesian name was called on both
+sides.
+
+The new counting was checked by hand against the real logs, offline. Counting each name's
+windows in plain Python, on synthetic prices running into January, agreed with the payload on
+every count in both markets, before resolution and after.
+
+### 21.2 When it is read
+
+By weekday count, the September windows close on the IDX between 7 December (calls of 9
+September) and 17 December (calls of 21 September). On the NYSE, which shuts for Thanksgiving,
+they close between 10 and 18 December. Each observation is its name's first call, so names
+first called on 20 or 21 September resolve last. A run before then reads only the names first
+called earliest. That is a partial read, not this one.
+
+**The read is the first run of `review_scanlog.py --market ID` and `--market US` on or after
+22 December 2026.** An observation still open on that run, because of a holiday not counted
+here or a missing price, is reported as open. It is not waited for and not dropped.
+
+No call made after 21 September can have resolved by then. None was made between 21 September
+and this writing, and a call made after it closes no earlier than late January. A later call
+on a September name inside its window is absorbed into that observation and changes nothing.
+
+### 21.3 What the read reports
+
+Per market, and per side (buy and strong buy; reduce and avoid):
+
+- **Counts.** The distinct names, the observations, and the calls behind them. Names and
+  observations are equal for this cohort, since no name can have two windows inside twelve
+  days.
+- **Excess return.** The mean and the median, over 63 sessions, against the market's index
+  (^JKSE, ^GSPC), from the close on or before the scan date, as `resolve` computes it.
+- **Hit rate.** The share of buys whose excess was positive, and of reduce and avoid calls
+  whose excess was negative.
+- **Spread.** The buy-minus-sell spread of mean excess, with the lowest and highest values it
+  reaches when each single name is dropped in turn (`spreadLeaveOneOut`).
+
+All of it is published whatever it says, nulls included. Nothing is substituted for it on the
+day: no other horizon, benchmark, definition of a hit, or subset by sector, score, conviction,
+gate or scan date. The code that produces it is the code committed with this section. If that
+code has to change before 22 December, the change and its reason are written here first.
+
+### 21.4 What counts as a null
+
+- **A market with fewer than 30 names.** `summarise` refuses it anyway.
+- **A side with fewer than 30 names.** Its figures are printed and are evidence of nothing. The
+  code prints a side from 10 observations (`MIN_CLOSED // 3`). That floor decides whether a
+  side is shown; this one decides what it is worth. Thirty applies per side because a hit rate
+  is a rate over that side's names, and the argument for thirty is the module's own: a rate
+  quoted from twenty observations describes the twenty.
+- **A spread.** It is a null if either side is a null, if it is zero, or if its sign flips when
+  any single name is dropped (`spreadLeaveOneOut.signHolds` is false).
+
+On the logs as they stand, that settles three things before anything has resolved. **The
+Indonesian buy side is a null in December whatever it shows, because it has 23 names. So is
+the Indonesian spread.** The Indonesian reduce/avoid side (136 names) and both US sides (382 and
+1,357) can be read, and so can the US spread, unless a single name reverses its sign.
+
+### 21.5 What a read that passes still describes
+
+One quarter of one market path, per market. Every observation in each log was opened inside a
+single 63-session window, so every outcome shares that quarter's index path, its sector moves
+and its news. An excess over the index removes the index's level, not what moved inside it: a
+coal rally lifts every Indonesian coal buy at once. The reading sentence says so itself, from
+`oneQuarter` in the payload: *one draw of the market, not many*.
+
+A spread that holds says the ordering worked in that market over the fourth quarter of 2026.
+It does not say the ordering works. No significance test or interval is quoted.
+
+### 21.6 What it does not measure
+
+- **The components the log was built for.** The log exists because the value and quality
+  components cannot be backtested, and this read does not isolate them. It scores the blended
+  action, and a buy is a buy whatever drove it. Family scores are kept in the scan reports
+  beside the log (`reports/scan-*-2026-09-*.json`); on 21 September, 551 of the 770 Indonesian
+  names had a `filings` score. So a read by the filings family is possible. It is not
+  pre-registered here, and anything computed from it in December is exploratory.
+- **The screens.** `neglected`, `leadsField`, `soleListing` and `compounding` print their own
+  reads in the same run and are counted the same way. On the IDX they hold 43, 32, 14 and 78
+  names, recorded from 20 September; in the US, 0, 31, 1 and 262 names, recorded on 21
+  September only. They are not part of this pre-registration.
+
+---
+
+## 22. Each holding on its own sessions
+
+Found while building §20 (§20.3, item 1) and fixed on 1 November 2026. Every figure below was
+measured twice on the same recorded downloads, once through the old code and once through the
+new, so a difference is the change and not the data.
+
+### 22.1 What the shared calendar did
+
+`ohlcv_batch` downloads a batch in one call. yfinance aligns every symbol onto the union of
+their dates and `normalise` forward-fills, so a day one symbol traded and another did not
+reached `portfolio.daily_returns` as a 0.00% day for the second. The exposure references ride
+along in the portfolio's batch, so even a book in one market was affected. Rows in the 252-row
+window on which a holding did not trade:
+
+| Book | Non-trading rows per holding |
+|---|---|
+| AAPL, MSFT, NVDA, JPM | 0 |
+| BBCA.JK, BBRI.JK, BMRI.JK, TLKM.JK, ASII.JK | 18, from the US futures' sessions |
+| AAPL, MSFT, BBCA.JK, TLKM.JK | 6 per US name, 18 per Indonesian one |
+| Any book holding BTC-USD | 77 per US stock, 87 per Indonesian one |
+
+The fix is `ohlcv_batch(own_sessions=True)` in `portfolio.analyse` and `exposure.scan`, with
+returns differenced per symbol before aligning (`exposure.log_returns`), so the move across a
+holiday lands on the first day back instead of becoming NaN.
+
+### 22.2 What removing it changed
+
+Two effects, separated by also measuring the zero-free returns on the old window's dates:
+
+1. **The zero days themselves biased little.** A zero both names in a pair share leaves their
+   correlation where it was, and most of these were shared. On the same dates, Indonesian pairs
+   moved by less than 0.001 and US–IDX pairs by −0.001 to +0.005, since they had almost no
+   correlation to pull toward zero. A correlated pair on different calendars was pulled: MSTR
+   against BTC-USD went from 0.704 to 0.745.
+2. **The window was the larger error.** 252 rows of the union were not a year of each name's
+   trading: 234 sessions for an Indonesian name beside the futures, 175 for a stock beside
+   bitcoin. So holding bitcoin changed the correlation between two other holdings: AAPL against
+   MSFT read 0.155 in a book with BTC-USD and 0.112 in an all-US one. Each name now keeps its own
+   last 252 sessions, which is the window the persistence was measured on, and the pair reads
+   0.112 in both. On the Indonesian book the longer window moved the candidate's correlations by
+   up to 0.016, and the independent bets from 1.96 to 2.01 before the candidate and 2.00 to 2.06
+   after.
+
+Volatility is now annualised on each name's own sessions a year. With one `sqrt(252)`,
+bitcoin's share of the risk beside AAPL, MSFT and NVDA would have read 0.28 where its own rate
+gives 0.33. The shared calendar had hidden that, because its zero days understated the stocks by
+about as much. `overlapDays` now counts days both names traded: 234 for a US–IDX pair, 175 for a
+stock against bitcoin.
+
+### 22.3 Weekly figures
+
+A zero adds nothing to a week, so wherever a market traded in a week the weekly sums are the
+same either way: to 1e-12 across all 77,442 name-weeks of the exposure study. The portfolio
+driver read identically on every book measured. Two things did differ:
+
+- **A week the market was shut throughout** read as a 0.00% week. For the IDX that is Idul
+  Fitri: the weeks ending 6 May 2022, 12 April 2024 and 4 April 2025 in `scan`'s five years.
+  They are now gaps. On the IDX30 the 120 loadings moved by a median of 0.002 in beta (at most
+  0.03), on the resources list the 60 by 0.004 (at most 0.04), and no material flag changed. The
+  Dow 30 did not move.
+- **A row `normalise` dropped left a hole**, and differencing the aligned frame lost the return
+  across it. Crude settled below zero on 20 April 2020, and `normalise` drops non-positive
+  closes, so the exposure study's oil series read **+52.6%** for the week to 24 April 2020 rather
+  than −7.6%. `scan`'s window does not reach 2020, so the panel never showed it.
+
+### 22.4 The two studies, re-run
+
+Both scripts now fetch with `own_sessions=True` and take returns from the same function their
+panel reads. Both artifacts were re-stamped on 1 November 2026.
+
+- **`measure_correlation_stability.py`: the conclusion holds.** Run both ways on the same day's
+  data, no persistence or stress figure moved by more than 0.0001; each universe is one market,
+  so its shared calendar was already nearly every name's own. The stamped figures did move from
+  28 August, for other reasons: yearly persistence from 0.50–0.65 to 0.48–0.68, and the
+  worst-quarter rise from +0.06 to +0.14. **The rise is not precise.** On the 1 November data
+  alone, starting the quarters at 21 different offsets moves it between +0.01 and +0.23 on the US
+  indices and +0.02 and +0.14 on the IDX ones. It was positive at every offset, so the "floor"
+  reading stands; its size is not known to better than about a tenth. Yearly persistence moved
+  by 0.03 to 0.06 per universe across 12 offsets.
+- **`measure_exposure_stability.py`: the headline holds.** Among names that load, persistence
+  still cannot be measured, because no factor has more than one transition with ten loaded
+  names. All-names persistence moved most on oil, from +0.238 to +0.250, because of the April
+  2020 week. The other factors moved by at most 0.017: gold +0.100 to +0.095, copper +0.146 to
+  +0.129, the dollar +0.060 to +0.054.
+
+### 22.5 What it does not settle
+
+- **Cross-market persistence is unmeasured.** The correlation study measures four universes of
+  one market each, so the persistence of a US–IDX pair, or of a stock against bitcoin, has not
+  been measured. The panel quotes the measured figure for every pair.
+- **The source's own holiday bars.** In June 2018 and June 2019 the source publishes a flat bar
+  with no volume for Indonesian stocks on each day the exchange was shut. Those rows are the
+  symbol's own, so `own_sessions` keeps them, and the exposure study's early blocks still carry
+  those weeks at 0.00%. Neither falls inside the panel's or `scan`'s window.
+- **Every other `ohlcv_batch` caller still reads the shared calendar**, each measured on it.
+  `ranking.scan` batches a pasted universe as given, so a list mixing markets is ranked on one
+  calendar, and nothing measured covers that.
+
+---
+
+## 23. The November 2026 audit — every number recomputed outside the app
+
+On 1 November 2026, with every finished branch merged (the market board, the calendar
+widgets, §18.9's summary revenue, §21's forward log and §22's per-holding sessions), the app
+was audited end to end: every API route called with real tickers, the main calculations
+recomputed independently from raw provider data, and every page and tab driven in a browser.
+
+### 23.1 What was recomputed, and matched
+
+| Area | How it was checked | Result |
+|---|---|---|
+| 132 API calls, 14 tickers, both markets, crypto, an ETF, two fake symbols | Every answer scanned for NaN, infinity, leaked `None`, unfilled templates | 125 answered, 7 deliberate refusals, nothing broken |
+| 22 technical indicators on AAPL, BBCA.JK, ITMG.JK, BTC-USD | Textbook formulas on raw prices | Exact, given four documented choices: Bollinger on sample deviation, slow stochastic, Chaikin's 21 days, a 252-day Donchian channel |
+| The DCF bridge on AAPL | By hand: CAPM, WACC, five discounted years, terminal value, per-share | Exact to the cent |
+| Beta on KO and AAPL | Ordinary regression on 500 aligned days | Exact. KO's -0.05 (R² 0.2%) is the data, flagged by the app and floored at 0.40 |
+| Piotroski, Altman Z'', Beneish M on AAPL, TLKM.JK, ITMG.JK | Formulas from the papers on raw statements | Exact, including each Beneish index; a missing index is neutral 1.0 |
+| The 22-row market board | Last close, move in its own unit, percentile in its own year | 21 exact; bitcoin moved between the two fetches |
+| The nine event-day tests | `scipy.stats.binomtest` | Exact |
+| Portfolio correlations, IDX and mixed books | Log returns, each name's own last 252 sessions | Exact, 6 of 6 |
+| Rolling 1-3 year returns, drawdown, CAGR, volatility, calendar years on AAPL | From the app's own five-year series | Exact |
+| Track record (years, profitability, revenue CAGR, margin) | Raw statements | Exact |
+| Upcoming calendar dates | The Fed, BLS, Bank Indonesia and IDX schedules as published | FOMC 8–9 Dec and 26–27 Jan, CPI 10 Nov and 10 Dec, BI 15–16 Dec, IDX 5 Jan (Isra Mi'raj) confirmed |
+
+### 23.2 What was wrong, and is fixed
+
+- **A bank whose `.info` was throttled was valued as an ordinary company.** JPM came back
+  with no sector during the sweep; `detect_engine` read that as "non-financial" and ran a DCF
+  on a bank. It was refused for negative free cash flow, with a form inviting a figure to be
+  typed in; a bank with positive free cash flow would have been given a fair value. The
+  engine now declines a company with no sector unless its income statement rules a bank out:
+  **0 of 296 banks in the local cache report a cost of revenue or gross profit line**,
+  against 3,042 of 3,257 non-financial companies, and 4 of 102 insurers do. ITMG.JK,
+  throttled minutes later, is valued with a notice saying why. The scanner retries the
+  decline as the throttle it is, as it already did for the quality lens.
+- **The throttled record was kept for the rest of the day.** The disk cache has refused to
+  store one since September; the in-memory cache kept it until midnight. It now keeps a
+  record whose `.info` did not arrive for two minutes.
+- **A coin, a fund or an index was told its data was missing.** BTC-USD and SPY were advised
+  to type in a free cash flow (valuation) or to refetch a sector (quality, and the "What it
+  is" tab). The provider's `quoteType` is now kept, and each says plainly that the listing
+  is a cryptocurrency or an exchange-traded fund, not a company.
+- **The DCF counted cash but not short-term investments.** The bridge read "Cash And Cash
+  Equivalents" alone. Across 2,844 non-financial records with matching currencies, the
+  short-term investments it left out were nothing for the median company but at least 5% of
+  market value for 420 (15%) and at least 10% for 280. It now adds "Cash, Cash Equivalents
+  And Short Term Investments" where reported, and the bridge names which it used. AAPL's
+  base case moved from $111.35 to $112.64. The track record's net cash still counts cash
+  alone, because its published base rates were measured that way.
+- **Every negative bar of the MACD histogram was invisible.** The custom bar drew a raw
+  `<rect>` with the negative height Recharts passes for a bar below zero; the browser
+  refused all 614 of them on AAPL and logged an error for each. It now draws them down from
+  the zero line.
+- **"One-year price change: needs a year of history"** was said of Apple: the one-year range
+  holds about 250 sessions and the change needs 253. It now says so.
+
+### 23.3 Checked and left alone
+
+- **Portfolio pairs against bitcoin use about eight months.** Each name keeps its own last
+  252 sessions, so a stock against a coin overlaps on about 175 days; `portfolio.py` states
+  it, and the persistence was measured on that window.
+- **A company searched by its common name may not be found.** The listing files carry the
+  provider's legal names: Telkom Indonesia is "Perusahaan Perseroan (Persero) PT
+  Telekomunikasi Indonesia", found by "telekomunikasi" or "TLKM" but not "telkom".
+- **Headlines are requested twice per page load in development.** React's StrictMode mounts
+  twice and the first request is aborted; production makes one.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
 |---|---|
 | Placing a company in a book-to-market quintile | §8 declines this rather than inventing a breakpoint. It needs a universe-wide scan of book values, and fundamentals do not batch |
 | Multi-factor cost of equity (Fama-French) | Factor returns are freely available for the US; constructing IDX factors is a project in itself |
-| Sensitivity grid (growth × discount rate) | Cheap, though not quite as cheap as this row used to claim: `pv_of_growing_stream` is vectorised over DRAWS, with growth, discount rate and terminal growth broadcast row-wise, so a grid means flattening a meshgrid into that axis rather than an outer product it already supports |
-| Peer / sector relative multiples | Needs a peer-set source beyond yfinance |
+| Peer / sector relative multiples | Needs a peer-set source beyond yfinance. §18 supplies half of it — a field membership from the provider's industry label — but those labels are coarse ("Conglomerates" is not a field anyone competes in) and a quarter of the exchange cannot be placed at all, so they are not yet a base for a multiple |
 | IDX fundamentals curation | The durable moat, and the largest single effort |
 | Single-name exposure betas | §16 ships the portfolio half, which is descriptive. "This stock moves 0.7x as hard as its sector" invites forward use, so it is gated on a stability study — do this period's betas predict next period's — mirroring `measure_correlation_stability.py`. A four-year probe gives year-over-year rank correlations of +0.29 to +0.66, inside the band that licensed the portfolio feature, on three transitions where that study had six. Eight blocks are available; MBMA, NCKL and TAPG cannot supply them and must be excluded by name rather than quietly run on fewer |
+| Track-record base rates for the US | §19 stops the reading quoting the Indonesian ones under a US company; nothing has measured what "profitable every year" or "a median of 3.0x" looks like on a US sample, so the US reading reports its figures bare. A measurement over the US listings file would let it say how ordinary each one is |
+| The worst-quarter rise, as a number | §22.4: where the quarters are cut moves it between +0.01 and +0.23, and the panel prints it in its headline. Averaging the study over offsets would give a figure that does not depend on the start date. That changes what the stamp reports, so it is a re-measurement, not an edit |
+| Cross-market correlation persistence | §22.5: every universe the study measures is one market, so a US–IDX pair, or a stock against bitcoin, has no persistence figure of its own. Measuring one needs a universe spanning two calendars, with enough names for a cross-section in every block |
 | Fundamental exposure — revenue against commodity prices | **Rejected on feasibility, not deferred.** `market_data` fetches annual statements only, five columns, and yfinance's quarterlies for these names return five or six with gaps — ADRO and PTBA are both missing 2025-09-30. Five irregular observations is not a weak estimate, it is not an estimate. Consequence: the reverse DCF's implied growth cannot be restated as an implied commodity path |
 
 **Corrected while writing this:** README quoted the price-implied growth rate moving across
 "24% to 42%" over a range of discount rates, in a sentence that read as something the app
-shows. It does not: varying the discount rate is a query parameter a reader can drive by hand,
-and the sensitivity grid that would present the range is the open item two rows above. The
-sentence now says what the panel actually does, which is to state the conditionality and point
-at the editable input.
+shows. It did not, then: varying the discount rate was a query parameter a reader could drive
+by hand. §19's grid now presents exactly that range — the bottom row is the implied growth at
+each discount rate — and the README sentence can say so.
 
 **Explicitly rejected:** calendar effects (January, Halloween) — precisely where the
 multiple-testing critique bites hardest; headline sentiment — Loughran-McDonald is the right

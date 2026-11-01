@@ -38,6 +38,7 @@ GET /api/confluence                 every lens at once, in ONE invocation
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import io
 import math
 import os
@@ -46,20 +47,25 @@ import sys
 import threading
 import time
 from collections import defaultdict, deque
+from concurrent.futures import ThreadPoolExecutor
 
+import json
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from _lib import (accumulation, eventstudy, explain, exposure, market_data,
-                  microstructure, news, portfolio, pretrade, quality, ranking,
-                  riskmodel, symbols, technical, universes, valuation)
+from _lib import (accumulation, chartlayers, econcalendar, eventstudy, explain, exposure,
+                  field, listings, market_data, marketboard, microstructure, news,
+                  ownership, patterns, portfolio, pretrade, quality, ranking,
+                  riskmodel, structure, symbols, tape, technical, trackrecord,
+                  universes, valuation, verdict, volumeprofile)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 
@@ -99,7 +105,17 @@ app.add_middleware(
 # freshness, and the client previously sent `cache: "no-store"`, which shared
 # caches are specified to honour — so the edge cache below was never exercised.
 # Verify with the `x-vercel-cache` response header (HIT on a repeat request).
-CACHE = "public, max-age=0, s-maxage=60, stale-while-revalidate=300"
+#
+# STALE-WHILE-REVALIDATE IS FOR THE EDGE ONLY. It used to sit in Cache-Control,
+# where browsers honour it too: with max-age=0 every response is instantly
+# stale, and swr=300 let Chrome serve the previous answer for five minutes
+# while revalidating behind it — so "the browser always revalidates" was not
+# true, and a re-run within five minutes could show the old payload. It moved
+# to CDN-Cache-Control, which the Vercel edge reads and browsers ignore;
+# s-maxage stays in Cache-Control for any CDN that does not know the newer
+# header.
+CACHE = "public, max-age=0, must-revalidate, s-maxage=60"
+CDN_CACHE = "public, s-maxage=60, stale-while-revalidate=300"
 
 # The wire cap for daily series. `period=max` on a long-listed US name is ~11k
 # rows x 10 fields, which is megabytes of JSON and as many Recharts points.
@@ -131,9 +147,14 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # not a hundred. The per-IP cap stays as strict as the screener's anyway,
     # because the work per request is still far above a single-ticker route.
     "/api/rank": (3, 60),
+    # The same scan, for a reader's own list in a POST body. Same cost, same cap.
+    "/api/rank/list": (3, 60),
     # Runs the identical universe scan and keeps one row of it, so it carries
     # the identical cost and the identical cap.
     "/api/peers": (3, 60),
+    # Same class as `/api/peers` and for the same reason: it runs a whole
+    # universe scan for the percentile, then four per-symbol lenses on top.
+    "/api/verdict": (3, 60),
     # One batch download of the whole book plus the candidate. Same shape of
     # cost as the ranking scan, same cap.
     "/api/portfolio": (3, 60),
@@ -150,6 +171,21 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # Five years of history plus the benchmark index, then a market model per
     # event — the heaviest single-ticker route in the app.
     "/api/event-study": (6, 60),
+    # The command palette asks on every pause in typing, and the answer is a
+    # scan of two JSON files already in memory — no upstream call at all. A cap
+    # at the default would throttle somebody typing a company name.
+    "/api/symbols": (120, 60),
+    # The board names nothing and is cached at the edge for five minutes, so
+    # almost every poll is served without reaching this function. The cap is
+    # for the ones that do: one batch download, then arithmetic.
+    "/api/markets/today": (30, 60),
+    # Up to four feeds per call, each one bounded and timed out.
+    "/api/markets/headlines": (20, 60),
+    # A committed file and some date arithmetic; the edge answers most of these.
+    "/api/markets/calendar": (30, 60),
+    # One provider call per name and none of them batch, the shape of cost the
+    # shortlist deepening has, so it takes a cap of the same order.
+    "/api/markets/earnings": (3, 60),
     None: (40, 60),                      # default for every other route
 }
 RATE_EXEMPT = {"/api/health", "/api/docs", "/openapi.json"}
@@ -257,7 +293,8 @@ async def rate_limit(request: Request, call_next):
 def ok(payload: dict) -> JSONResponse:
     # Cache at the edge: quotes move, but not within 60s, and every engine
     # re-runs a network fetch that we do not want to pay for on each keystroke.
-    return JSONResponse(content=clean(payload), headers={"Cache-Control": CACHE})
+    return JSONResponse(content=clean(payload),
+                        headers={"Cache-Control": CACHE, "CDN-Cache-Control": CDN_CACHE})
 
 
 def private_ok(payload: dict) -> JSONResponse:
@@ -612,7 +649,18 @@ def rank_universes():
     fetches, so a stale list ranks a slightly wrong universe and reports no
     error. See `_lib/universes.py` for why there is no S&P 500 here.
     """
-    return ok({"universes": universes.catalogue(), "asOf": universes.AS_OF,
+    # The whole-market lists are appended rather than written into
+    # `universes.UNIVERSES` deliberately. Those five entries are hardcoded and
+    # their membership is what four stamped measurement artifacts were taken
+    # against; adding a fetched, dated, market-sized list to that dict would
+    # make "the universes this app knows" mean two different things at once and
+    # would put a moving population inside the constant the artifacts cite.
+    catalogue = list(universes.catalogue())
+    for market in ("ID", "US"):
+        entry = listings.catalogue_entry(market, limit=RANK_MAX_UNIVERSE)
+        if entry is not None:
+            catalogue.append(entry)
+    return ok({"universes": catalogue, "asOf": universes.AS_OF,
                "maxUniverse": RANK_MAX_UNIVERSE, "maxDeepen": DEEPEN_MAX})
 
 
@@ -639,6 +687,14 @@ def rank(
     if universe:
         entry = universes.get(universe)
         if entry is None:
+            # A whole-market id resolves through the cached listing instead. It
+            # is checked SECOND so a predefined index can never be shadowed by a
+            # fetched list that happens to share its id.
+            entry = next(
+                (candidate for candidate in
+                 (listings.as_universe(m, limit=RANK_MAX_UNIVERSE) for m in ("ID", "US"))
+                 if candidate is not None and candidate["id"] == universe), None)
+        if entry is None:
             raise HTTPException(
                 status_code=404,
                 detail=f"Unknown universe '{universe}'. See /api/rank/universes.")
@@ -656,6 +712,12 @@ def rank(
         label = "Custom list"
         as_of = None
 
+    return ok(_ranked(symbols_list, market_code, label, as_of, universe))
+
+
+def _ranked(symbols_list: list, market_code: str, label: str,
+            as_of: Optional[str], universe: Optional[str]) -> dict:
+    """The ranking payload for a resolved list — shared by the GET and the POST."""
     if not symbols_list:
         raise HTTPException(status_code=400, detail="Provide at least one ticker.")
     if len(symbols_list) > RANK_MAX_UNIVERSE:
@@ -675,11 +737,36 @@ def rank(
     result["explain"] = explain.for_ranking(result)
     for row in result["rows"]:
         row["explain"] = explain.for_ranking_row(row)
-    return ok({
+    return {
         "universe": {"id": universe, "name": label, "market": market_code,
                      "asOf": as_of, "symbols": symbols_list},
         **result,
-    })
+    }
+
+
+class RankListRequest(BaseModel):
+    """A reader's own list to rank — their watchlist, or one they pasted.
+
+    WHY A SECOND POST. The README's argument for making the portfolio route a
+    POST was about the input, not its size: "a company name in a URL is not a
+    fact about anybody; a holdings list is". A list somebody keeps and asks to
+    have ranked is the same kind of fact — `lib/api.ts` has called a watchlist
+    "one of the more revealing things someone can tell you" since the analytics
+    were added — so it travels in a body, which no hop between here and the
+    browser logs by default, and the response is `no-store`.
+
+    The GET with `tickers=` stays, for curl and for anyone who prefers it; the
+    UI no longer uses it for a reader's own list.
+    """
+    tickers: list[str] = Field(..., min_length=1, max_length=RANK_MAX_UNIVERSE)
+    market: str = Field("US", pattern="^(US|ID|us|id)$")
+
+
+@app.post("/api/rank/list")
+def rank_list(body: RankListRequest):
+    """Rank a reader's own list. Same engine and caps as `/api/rank`."""
+    symbols_list = parse_ticker_list(",".join(body.tickers), body.market)
+    return private_ok(_ranked(symbols_list, body.market.upper(), "Your list", None, None))
 
 
 @app.get("/api/peers")
@@ -752,6 +839,460 @@ def peers(
         "benchmark": result.get("benchmark"),
         "explain": explain.for_peers(row, context, result["signals"],
                                      result.get("correlation")),
+    })
+
+
+# --------------------------------------------------------------------------- #
+# The private scanner's verdict for one name
+#
+# THIS ROUTE IS NOT PART OF THE PUBLISHED SINGLE-COMPANY VIEW AND MUST NOT
+# BECOME PART OF IT. `PRODUCT.md` constraint 1 refuses a composite buy/hold/sell
+# on that surface permanently, and `/api/confluence` still honours it: its
+# `synthesis` and `preTrade` blocks aggregate nothing, and their suites still
+# assert that they cannot. This is a separate endpoint answering a separate
+# question — "of a whole market, what deserves my attention" — which cannot be
+# answered without ordering, and where refusing to order means refusing to
+# answer. Keeping the two apart is what lets both be honest.
+#
+# It exists so a single name can be checked without running `scan_market.py`
+# over a universe. The heavy path — hundreds of names — stays a script, because
+# it costs minutes and this function has sixty seconds.
+# --------------------------------------------------------------------------- #
+@app.get("/api/verdict")
+async def name_verdict(
+    ticker: str = Query(..., pattern=TICKER_PATTERN),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+    universe: Optional[str] = Query(
+        None, pattern="^[a-z0-9]{1,24}$",
+        description="Peer group for the price percentile. Defaults to the largest "
+                    "predefined universe this ticker belongs to."),
+    risk_budget: float = Query(0.02, gt=0.0, le=0.25),
+    max_weight: float = Query(0.10, gt=0.0, le=1.0),
+):
+    """One name scored on every lens, with the arithmetic and the null result.
+
+    THE PERCENTILE NEEDS A POPULATION, and that is the one input this route
+    cannot derive from the ticker alone. A cross-sectional rank is a claim about
+    a universe on a date — `ranking.py` argues this at length — so the peer
+    group is chosen the same way `/api/peers` chooses it, echoed in the response,
+    and named in the payload. A name in no predefined universe is scored WITHOUT
+    the price component rather than against a borrowed one, and says so.
+
+    Every response carries `provenance`: the measured finding that this app's
+    price ranking showed no detectable relationship to subsequent returns. A
+    caller rendering the score without it is misrepresenting what it is.
+    """
+    symbol, market = resolved_with_market(ticker, market)
+
+    entry = None
+    if universe:
+        entry = universes.get(universe)
+        if entry is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown peer group '{universe}'. See /api/rank/universes.")
+    else:
+        candidates = universes.containing(symbol)
+        if candidates:
+            entry = universes.get(candidates[0]["id"])
+
+    async def leg(name, fn):
+        try:
+            return name, {"ok": True, "data": await asyncio.to_thread(fn)}
+        except HTTPException as exc:
+            return name, {"ok": False, "error": exc.detail}
+        except Exception as exc:
+            return name, {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+    # THE UNIVERSE SCAN RUNS BEFORE THE LENSES AND NOT BESIDE THEM. This was
+    # written the other way first, on the obvious reasoning that the batched
+    # download is the slowest leg and overlapping it with the other four is free.
+    # It is not free: it hangs.
+    #
+    # `ranking.scan` reaches `yf.download(..., threads=True)`, which spawns its
+    # own worker threads, and the four lenses reach `Ticker` on the same
+    # process-wide yfinance session. Run together, the batch download never
+    # returned — measured twice at over four minutes against 3.6 seconds on its
+    # own, while the four lenses beside it finished in 3.4. Every other
+    # concurrent route in this file (`/api/confluence`, `/api/screener`) fans out
+    # over PER-SYMBOL fetches only, which is why nothing had hit this before.
+    #
+    # Sequential costs about four seconds and completes: 8.2s end to end against
+    # a sixty-second budget. A route that is four seconds slower is a cost; a
+    # route that hangs is an outage.
+    scan = None
+    if entry is not None:
+        scan = await asyncio.to_thread(ranking.scan, entry["tickers"], entry["market"])
+
+    results = await asyncio.gather(
+        leg("anomaly", lambda: whale_payload(symbol)),
+        leg("technical", lambda: technical_payload(symbol, range_key="2y",
+                                                   market_code=market.upper())),
+        leg("valuation", lambda: valuation_payload(
+            symbol, **_valuation_kwargs(market=market))),
+        leg("quality", lambda: quality_payload(symbol)),
+    )
+    legs = dict(results)
+
+    row = None
+    universe_context = None
+    if scan is not None and entry is not None:
+        row = next((r for r in scan["rows"] if r["ticker"] == symbol), None)
+        universe_context = {
+            "id": entry["id"], "name": entry["name"], "asOf": entry["asOf"],
+            "count": entry["count"], "scanned": scan["ranked"],
+            "ranked": row is not None,
+            "note": (entry["note"] if row is not None else
+                     f"{symbol} did not rank against {entry['name']} — it needs at "
+                     f"least {ranking.MIN_BARS} trading days of history. The price "
+                     f"component is absent rather than guessed."),
+        }
+
+    # Liquidity and volatility come from the technical leg's own frame where it
+    # returned, so the gate reads the same bars the chart drew. Where it did not,
+    # they are absent and the gate says "unmeasured" — which is not the same as
+    # "liquid" and is treated as harshly.
+    liquidity = None
+    latest_close = None
+    annual_volatility = None
+    tape_result = None
+    register_result = None
+    technical_data = legs["technical"].get("data") if legs["technical"]["ok"] else None
+    if technical_data:
+        latest_close = (technical_data.get("latest") or {}).get("close")
+    if row is not None:
+        annual_volatility = ((row.get("signals") or {}).get("lowVolatility")
+                             or {}).get("raw")
+
+    # TWO YEARS, NOT ONE. The liquidity profile only needs a few weeks, but the
+    # tape reading compares a year's heaviest sessions against its ordinary ones
+    # and `tape.MIN_BARS` wants 160 usable bars after the rolling volume
+    # baseline warms up. Fetching one year here and discovering the tape could
+    # not be read is a silent capability loss, not an error anybody would see.
+    frame = None
+    try:
+        frame = market_data.ohlcv(symbol, period="2y")
+        liquidity = microstructure.liquidity_profile(frame)
+        latest_close = latest_close or float(frame["Close"].iloc[-1])
+    except Exception:
+        liquidity = None
+
+    pattern_result = None
+    profile_result = None
+    if frame is not None:
+        tape_result = tape.read(frame, market_code=symbols.market_of(symbol))
+        pattern_result = patterns.read(frame, market_code=symbols.market_of(symbol))
+        # WHERE THE TRADE HAPPENED, from the frame already in hand. Free: no
+        # fetch, and it scores nothing and gates nothing — see the module's
+        # docstring for the measurement that decided that.
+        profile_result = volumeprofile.build(
+            frame, market_code=symbols.market_of(symbol))
+
+    # WHERE THE TRADE IS WRONG, read off the levels the trend lens already
+    # computed rather than recomputed here — same rule the synthesis follows, so
+    # the numbers beside the verdict are the numbers the chart drew.
+    structure_result = structure.read(
+        technical=legs["technical"].get("data") if legs["technical"]["ok"] else None)
+
+    # The share register is the third body of data, and its own fetch. It is
+    # sequential rather than gathered with the four lenses for the reason the
+    # universe scan above is: this route already learned once what happens when
+    # a batched yfinance call runs beside the per-symbol ones.
+    try:
+        register_result = ownership.read(
+            await asyncio.to_thread(market_data.share_register, symbol),
+            median_volume=(float(frame["Volume"].tail(21).median())
+                           if frame is not None else None))
+    except Exception:
+        register_result = None
+
+    checks = pretrade.assess(legs, market=symbols.market_of(symbol))
+    scored = verdict.score(
+        symbol, legs=legs, rank_row=row, pretrade_result=checks,
+        liquidity=liquidity, market=symbols.market_of(symbol),
+        # The company name comes from the cached listing where there is one.
+        # A report that prints "BBCA.JK" and one that prints "PT Bank Central
+        # Asia Tbk" are the same data and not the same document.
+        name=listings.names_for(symbols.market_of(symbol)).get(symbol),
+        annual_volatility=annual_volatility, latest_close=latest_close,
+        risk_budget=risk_budget, max_weight=max_weight,
+        tape_result=tape_result, register_result=register_result,
+        pattern_result=pattern_result, structure_result=structure_result,
+    )
+
+    # THE MARKET THIS READING WAS TAKEN IN. Every percentile above is
+    # cross-sectional, so the top of a falling market is still a top. Free: the
+    # benchmark frame is already in `riskmodel`'s day cache from the scan.
+    market_regime = {"available": False, "reason": "no benchmark history"}
+    try:
+        benchmark_symbol = riskmodel.MARKET_INDEX.get(symbols.market_of(symbol), "^GSPC")
+        market_regime = structure.regime(
+            await asyncio.to_thread(market_data.ohlcv, benchmark_symbol, period="2y"),
+            symbol=benchmark_symbol)
+    except Exception:
+        pass
+
+    return ok({
+        **scored,
+        "rank": (row or {}).get("rank"),
+        "universe": universe_context,
+        # The full readings ride along beside the components that quote them, so
+        # a panel can show the test statistic and the share-count history rather
+        # than only the one-line summary the component carries.
+        "tape": tape_result,
+        "register": register_result,
+        "patterns": pattern_result,
+        "structure": structure_result,
+        # The full histogram, beside the bands the chart draws from it.
+        "volumeProfile": profile_result,
+        # THE SAME READINGS, POSITIONED FOR DRAWING. Nothing new is measured
+        # here: every level, formation and heavy session below was decided by
+        # the module that owns it, and a reader who can see the five points a
+        # classification was made from can disagree with it, which is the whole
+        # difference between a chart and an assertion.
+        "chart": chartlayers.build(
+            frame, technical=technical_data, structure_result=structure_result,
+            pattern_result=pattern_result, tape_result=tape_result,
+            volume_profile=profile_result, ticker=symbol,
+            currency=(technical_data or {}).get("currency")),
+        # What one buy and one sell actually cost, beside the effects this page
+        # asks the reader to act on. The measured effects here are a few percent
+        # and a round trip on a thin listing can be more than that.
+        "costs": structure.round_trip_cost(liquidity),
+        "regime": market_regime,
+        "patternStudy": patterns.calibration_for(symbols.market_of(symbol)),
+        # WHAT THE TAPE TEST IS WORTH IN THIS MARKET, beside its reading. On US
+        # listings the measured firing rate is chance, and a reader must not have
+        # to go looking for that.
+        "tapeCalibration": tape.calibration_for(symbols.market_of(symbol)),
+        # THE NULL RESULT TRAVELS WITH THE SCORE, in the same response, so a
+        # client cannot render one without having been handed the other.
+        "provenance": verdict.provenance(),
+        "blendBacktest": verdict.blend_validation(symbols.market_of(symbol)),
+        "preTrade": checks,
+    })
+
+
+# --------------------------------------------------------------------------- #
+# The latest local market scan, summarised for the app
+#
+# WHY THE APP READS A FILE INSTEAD OF RUNNING THE SCAN
+# -----------------------------------------------------
+# `scripts/scan_market.py` takes about an hour for a whole exchange and this
+# function has sixty seconds, which is why the scan is a script. But the RESULT
+# is a file that already exists, and for several days the only way to look at it
+# was to open a 7MB HTML report by hand — so the owner of the tool kept being
+# told "check the file", which is not an interface.
+#
+# This route serves what that file already contains. It runs nothing.
+#
+# LOCAL ONLY, AND THAT IS THE PRIVACY BOUNDARY RATHER THAN AN OVERSIGHT.
+# `reports/` is gitignored and never deployed, so on the published app this
+# returns `available: false` and the panel that reads it does not render. The
+# scanner stays exactly as private as `PRODUCT.md` constraint 1 requires: the
+# composite is reachable by whoever ran the scan, on the machine they ran it on.
+# --------------------------------------------------------------------------- #
+SCAN_REPORTS = Path(__file__).resolve().parents[1] / "reports"
+
+# What a row needs to be listed and sorted. Everything else — the chart
+# geometry, the full component readings, the tape and register payloads — stays
+# out: a full report is 35MB and the table needs about a twentieth of it. A
+# reader who wants the detail clicks through to `/api/verdict`, which recomputes
+# that name live and is the same code the report used.
+_SCAN_ROW_FIELDS = ("ticker", "name", "score", "action", "actionLabel", "tone",
+                    "conviction", "coverage", "crossChecked", "rank", "sectorRank",
+                    "sector", "industry", "latestClose", "turnover", "held")
+
+
+def _scan_row(entry: dict) -> dict:
+    row = {key: entry.get(key) for key in _SCAN_ROW_FIELDS}
+    # WHAT THE COMPANY SELLS, AND WHETHER IT IS THE BIGGEST SELLING IT.
+    #
+    # THE FULL DESCRIPTION, NOT THE TRIMMED ONE, AND THE REASON IS A MEASUREMENT
+    # ON THE EXACT NAME THIS FEATURE WAS ASKED FOR. The panel searches these
+    # descriptions, because an industry label is far too coarse to find a
+    # specialist: KETR.JK is labelled "Communication Equipment", which it shares
+    # with radio makers and handset distributors, and what actually distinguishes
+    # it — "sells submarine and terrestrial fiber optic cable systems" — appears
+    # only in the prose.
+    #
+    # It appears at CHARACTER 361, and the display trim is 320. Shipping the
+    # short version would have cost about 60% of the payload and broken the
+    # search on the one query the feature exists to answer. The client clamps
+    # for display; it cannot recover text it was never sent.
+    profile = entry.get("profile") or {}
+    row["summary"] = profile.get("summary")
+    # The words common in this description and rare in the market's. Four short
+    # strings a row; a way into the prose, not a classification. See
+    # `field.distinctive_terms`.
+    row["terms"] = entry.get("terms") or []
+    # The top line, for ordering only. Carried so a client can rank whatever set
+    # a SEARCH just defined — "of the names whose description mentions cable,
+    # which is the biggest" — which the industry label cannot answer because
+    # those names sit in three different labels. No currency travels with it:
+    # a scan is one market, and the figure is used to sort, never to display.
+    revenue = entry.get("revenue") or {}
+    row["revenue"] = revenue.get("value") if revenue.get("usable") else None
+    row["summaryState"] = profile.get("summaryState")
+    # THE RECORD, FLATTENED TO WHAT A TABLE CAN SORT ON. The base rates travel
+    # with it: "profitable every year" is true of two thirds of this exchange,
+    # and a flag shown without that is a distinction the data does not support.
+    record = entry.get("trackRecord") or {}
+    row["record"] = {
+        "years": record.get("yearsAvailable"),
+        "yearsProfitable": record.get("yearsProfitable"),
+        "everyYearProfitable": bool(record.get("everyYearProfitable")),
+        "operatingCashFlowPositive": bool(record.get("operatingCashFlowPositive")),
+        "revenueCagr": record.get("revenueCagr"),
+        "netMargin": record.get("latestNetMargin"),
+        "growing": bool(record.get("growing")),
+        # TRUE, FALSE AND NULL ARE THREE DIFFERENT ANSWERS HERE. Null means the
+        # question does not apply — a lender's borrowings are its business — and
+        # collapsing it to false would report every bank as carrying net debt.
+        "netCash": record.get("netCash"),
+        "netDebtToEbitda": record.get("netDebtToEbitda"),
+        "reading": record.get("reading"),
+    } if record.get("available") else None
+    place = entry.get("fieldPosition") or {}
+    # `basis` is dropped from the ROW because it is identical on every one of
+    # them and ships once at the top level. Nothing else here is: a rank
+    # without its peer count is not interpretable.
+    row["field"] = {"rank": place.get("rank"), "peers": place.get("peers"),
+                    "share": place.get("share"), "margin": place.get("margin"),
+                    "leads": bool(place.get("leads")),
+                    # THE ONLY LISTED NAME IN ITS FIELD IS ITS OWN STATE, not a
+                    # weaker kind of leader. `leads` refuses it, correctly —
+                    # being the largest of one is not a position — but it is
+                    # exactly the signature of a specialist with no listed
+                    # competition, which is what a niche champion is. KETR.JK,
+                    # the name this was asked for, is one.
+                    "soleListing": bool(place.get("soleListing")),
+                    "onlyRanked": bool(place.get("onlyRanked")),
+                    "unranked": place.get("unranked") or 0,
+                    "leader": place.get("leader"),
+                    "reading": place.get("reading")} if place else None
+    row["gates"] = [{"id": g.get("id"), "label": g.get("label")}
+                    for g in (entry.get("gates") or [])]
+    site = entry.get("structure") or {}
+    row["entry"] = {"band": site.get("band"),
+                    "rewardRisk": site.get("rewardRisk"),
+                    "ratioWithheld": bool(site.get("ratioWithheld"))}
+    row["neglected"] = bool((entry.get("neglect") or {}).get("selected"))
+    return row
+
+
+def _scan_fields(standing: Optional[dict]) -> Optional[dict]:
+    """The field standings, minus the per-field membership lists.
+
+    `unplaced` IS CARRIED AND IS NOT DECORATION. A field missing its largest
+    member names the runner-up as leader and looks no different from a correct
+    one, so the count of names that could not be placed is the only thing
+    telling a reader how much to trust a thin field. See `field.py`.
+    """
+    if not isinstance(standing, dict):
+        return None
+    fields = standing.get("fields") or {}
+    return {
+        "measured": standing.get("measured"),
+        "unplaced": standing.get("unplaced"),
+        "count": len(fields),
+        "basis": standing.get("basis"),
+        "thresholds": standing.get("thresholds"),
+        "leaders": [
+            {"industry": industry,
+             "ticker": fields[industry].get("leader"),
+             "peers": fields[industry].get("peers"),
+             "margin": fields[industry].get("leaderMargin")}
+            for industry in (standing.get("leaders") or [])
+            if industry in fields
+        ],
+        # How many fields hold exactly one scanned name. A large number here is
+        # not a market of specialists — it is a scan that placed few names, and
+        # `unplaced` above is the figure that says which.
+        "soleListings": sum(1 for block in fields.values()
+                            if block.get("peers") == 1
+                            and not block.get("unranked")),
+    }
+
+
+def _latest_scan(market: str) -> Optional[Path]:
+    pattern = f"scan-{market.upper()}-*.json"
+    try:
+        found = sorted(SCAN_REPORTS.glob(pattern))
+    except OSError:
+        return None
+    return found[-1] if found else None
+
+
+@app.get("/api/scan/latest")
+def latest_scan(market: str = Query("ID", pattern="^(US|ID|us|id)$")):
+    """The most recent local scan for this market, trimmed to a listable shape.
+
+    Returns `available: false` rather than a 404 when there is no scan: a
+    missing report is the normal state on a fresh checkout and on the deployed
+    app, and the panel says so in words instead of rendering an error.
+    """
+    market = market.upper()
+    path = _latest_scan(market)
+    if path is None:
+        return private_ok({
+            "available": False,
+            "market": market,
+            "reason": (f"No scan of the {market} market has been run on this machine. "
+                       f"Run scripts/scan_market.py --market {market} — it takes about "
+                       f"an hour for a whole exchange and writes the report this reads."),
+        })
+
+    try:
+        report = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=500,
+                            detail=f"Could not read {path.name}: {exc}") from exc
+
+    rows = [_scan_row(entry) for entry in (report.get("verdicts") or [])
+            if entry.get("score") is not None]
+
+    return private_ok({
+        "available": True,
+        "market": market,
+        "file": path.name,
+        "generatedAt": report.get("generatedAt"),
+        # COUNTS ARE SCALARS HERE, AND THE BREAKDOWN IS ITS OWN KEY.
+        #
+        # The report's own `counts` carries `rejectedByReason`, a map of reason
+        # to count, nested inside a block whose other members are all integers.
+        # A client declared that block `Record<string, number>`, believed it,
+        # rendered every value, and handed React an object — which throws, and
+        # the error boundary blanks the WHOLE PAGE rather than the one tile.
+        #
+        # The type was not wrong about what it wanted; the payload was wrong
+        # about what it was. Splitting it here makes the declared shape true, so
+        # no consumer has to be defensive about it. `tests/test_scan_route.py`
+        # holds the contract.
+        "counts": {key: value for key, value in (report.get("counts") or {}).items()
+                   if isinstance(value, (int, float)) and not isinstance(value, bool)},
+        "rejectedByReason": (report.get("counts") or {}).get("rejectedByReason"),
+        "settings": report.get("settings"),
+        "universe": report.get("universe"),
+        # THE NULL RESULT AND THE MARKET'S OWN STATE TRAVEL WITH THE TABLE, in
+        # the same response, so a client cannot render the ordering without
+        # having been handed what the ordering is worth.
+        "provenance": report.get("provenance"),
+        "blendBacktest": report.get("blendBacktest"),
+        "regime": report.get("regime"),
+        "concentration": report.get("concentration"),
+        "signalOverlap": report.get("signalOverlap"),
+        "neglected": report.get("neglected"),
+        # THE SHORTLIST THIS WHOLE LINE OF WORK EXISTS FOR: the largest or only
+        # scanned name in its field, compounding, and uncovered. Shipped whole
+        # — it is a handful of rows, and its base rates are the part that stops
+        # it reading as three demanding tests when one of them is not.
+        "specialists": report.get("specialists"),
+        # THE STANDINGS, WITHOUT THE PER-FIELD MEMBER LISTS. A client needs the
+        # caveat, the thresholds and how many names could not be placed; the
+        # full membership of 142 fields is a local-report concern.
+        "fields": _scan_fields(report.get("fields")),
+        "rows": rows,
     })
 
 
@@ -964,11 +1505,11 @@ def portfolio_context(body: PortfolioRequest):
     It informs position size, which every other measured thing in this app
     refuses to do, and it is allowed to because the underlying claim was
     measured first: pairwise correlations persist year to year at rank
-    correlations of 0.50-0.65 across four universes, where the composite
+    correlations of 0.48-0.68 across four universes, where the composite
     ranking's information coefficient was indistinguishable from zero. See
     `scripts/measure_correlation_stability.py` and the caveat it also found —
-    correlations run about 0.06 higher in the worst quarters, so an ordinary
-    year's reading is a floor.
+    correlations run higher in the worst quarters, so an ordinary year's
+    reading is a floor.
 
     A POST, alone in this app, because the input is a fact about the reader
     rather than about a company and URLs are logged by every hop that handles
@@ -1163,6 +1704,123 @@ def intrinsic_value_simulation(
 # --------------------------------------------------------------------------- #
 # Engine 4 — accounting quality and solvency
 # --------------------------------------------------------------------------- #
+def _finite_or_none(value) -> Optional[float]:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return None
+    return out if out == out and out not in (float("inf"), float("-inf")) else None
+
+
+def _dividend_record(company: dict) -> dict:
+    """Dividends per share by calendar year, as paid — or why there are none.
+
+    CHECKED AGAINST THE PRICE BEFORE IT IS SHOWN. The provider is not internally
+    consistent about which currency its dividend fields use (valuation.py has
+    the ADRO.JK case: one field in dollars, another in rupiah), and a figure off
+    by an exchange rate looks like a perfectly ordinary small dividend. So the
+    latest complete year must imply a yield inside the same plausibility band
+    the valuation uses, or the series is withheld with the reason — a gap, not
+    a chart of the wrong numbers.
+    """
+    history = company.get("dividend_history")
+    price = _finite_or_none(company.get("price"))
+    if not isinstance(history, pd.DataFrame) or history.empty:
+        return {"available": False, "perShare": [],
+                "reading": ("No dividend payments in the provider's record for this listing. "
+                            "That is either a company that does not pay one or a record that "
+                            "is incomplete; the data cannot say which.")}
+    this_year = str(dt.date.today().year)
+    rows = []
+    for _, row in history.iloc[::-1].iterrows():
+        amount = _finite_or_none(row.get("Dividend / Share"))
+        if amount is None:
+            continue
+        year = str(row.get("Year"))
+        rows.append({"year": year, "amount": amount, "partial": year == this_year})
+    complete = [r for r in rows if not r["partial"]]
+    low, high = valuation.PLAUSIBLE_YIELD_BAND
+    if complete and price and not (low <= complete[-1]["amount"] / price <= high):
+        return {"available": False, "perShare": [],
+                "reading": (f"The provider's dividend record implies a "
+                            f"{complete[-1]['amount'] / price * 100:.3g}% yield against "
+                            f"today's price, which is a units problem rather than a dividend, "
+                            f"so the series is withheld.")}
+    paid = len(complete)
+    reading = (f"Paid in each of the {paid} complete calendar year{'' if paid == 1 else 's'} the "
+               f"record covers" if paid else "No complete calendar year in the record")
+    reading += ("; the current year is year to date." if any(r["partial"] for r in rows) else ".")
+    return {
+        "available": bool(rows),
+        "perShare": rows,
+        "basis": "calendar year, as paid, in the trading currency",
+        "ttm": _finite_or_none(company.get("ttm_dividend")),
+        "reading": reading,
+    }
+
+
+def company_payload(symbol: str) -> dict:
+    """Who the company is and what its filings say it has done, year by year.
+
+    DESCRIPTION, AND NOTHING ELSE. Nothing in this block is a lens: it casts no
+    vote, `explain.for_synthesis` and `pretrade.assess` never read it, and a test
+    asserts both produce identical output with and without it.
+
+    ONE FETCH THAT WAS ALREADY PAID FOR. Inside a confluence request the
+    valuation and quality legs have fetched and day-cached the same company
+    record, so this costs the earnings calendar and nothing more. A separate
+    route fetched by the page would often land on a different warm instance and
+    refetch four or five statements — which is why the UI reads this from the
+    confluence payload, and `/api/company` exists for curl and parity.
+    """
+    company = valuation.fetch_company(symbol)
+    if not company.get("ok"):
+        raise HTTPException(
+            status_code=404,
+            detail=f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+        )
+    market_code = symbols.market_of(symbol)
+    record = trackrecord.read(company, market_code)
+    calendar = market_data.earnings_calendar(symbol)
+    trading = (company.get("currency") or "").upper() or None
+    reporting = (company.get("financial_currency") or "").upper() or None
+    fx_rate = _finite_or_none(company.get("fx_rate"))
+    return {
+        "ticker": symbol,
+        "name": company.get("name") or symbol,
+        "profile": field.profile(company),
+        "listing": {
+            "exchange": company.get("exchange") or None,
+            "market": market_code,
+            "marketCap": _finite_or_none(company.get("market_cap")),
+            "price": _finite_or_none(company.get("price")),
+            "priceAsOf": company.get("price_as_of"),
+            "priceSource": company.get("price_source"),
+        },
+        "currency": {
+            "trading": trading,
+            "reporting": reporting,
+            "fxRate": fx_rate,
+            "note": (f"The statements are in {reporting} and were converted to {trading} at "
+                     f"today's rate, so the history carries the currency's moves as well as "
+                     f"the company's." if fx_rate and reporting and reporting != trading
+                     else None),
+        },
+        "history": trackrecord.series(company),
+        "dividends": _dividend_record(company),
+        "nextEarnings": {
+            "date": calendar["next"],
+            "past": calendar["past"],
+            "source": "the data source's earnings calendar",
+            "reading": ("The provider's date for the next report. It is often an estimate "
+                        "until the company confirms it." if calendar["next"] else
+                        "No upcoming report date in the provider's calendar."),
+        },
+        "record": record,
+        "explain": explain.for_company(record, market_code),
+    }
+
+
 def quality_payload(symbol: str) -> dict:
     """Piotroski / Altman / Beneish from the statements already fetched.
 
@@ -1197,6 +1855,17 @@ def quality_payload(symbol: str) -> dict:
     # `resolved_with_market` — so this call and its neighbours cannot diverge.
     payload = quality.analyze(company, symbol=symbol,
                               market_code=symbols.market_of(symbol))
+    # WHAT THE COMPANY ACTUALLY DOES, attached HERE rather than inside
+    # `quality.analyze`, so it survives the lens declining to score.
+    #
+    # The two most common reasons this panel shows no score are that the company
+    # is a bank and that no sector came back, and BOTH of those returns exit
+    # `analyze` early. A reader looking at a panel that says "these models do
+    # not transfer to a lender" is exactly the reader who still wants to know
+    # what the lender does. It is description, not a scanner reading: no
+    # composite reaches the published single-company view, and this is the
+    # provider's own sentence about the business.
+    payload["business"] = field.profile(company)
     payload["explain"] = explain.for_quality(payload)
     return payload
 
@@ -1273,6 +1942,172 @@ def event_study(
         "study": study,
         "earningsProximity": pead,
     })
+
+
+# --------------------------------------------------------------------------- #
+# Finding a symbol
+# --------------------------------------------------------------------------- #
+SYMBOL_QUERY_PATTERN = r"^[A-Za-z0-9 .&'\-^=,()]{1,40}$"
+SYMBOLS_CACHE = "public, max-age=3600, s-maxage=86400"
+
+
+@app.get("/api/symbols")
+def find_symbols(
+    q: str = Query(..., pattern=SYMBOL_QUERY_PATTERN),
+    market: Optional[str] = Query(None, pattern="^(US|ID|us|id)$"),
+    limit: int = Query(8, ge=1, le=20),
+):
+    """Listings whose symbol or name matches what someone is typing.
+
+    Reads the committed listing files and nothing else — no provider call, so it
+    can answer every keystroke. Cached for a day at the edge because the files
+    only change when someone re-runs scripts/refresh_listings.py and commits.
+    The `listings` block says how old each file is, because a finder that
+    silently lacked last month's IPOs would read as "no such company".
+    """
+    results = listings.search(q, market, limit)
+    status = {}
+    for code in listings.SEARCH_MARKETS:
+        payload = listings.load(code)
+        status[code] = ({"asOf": payload.get("asOf"), "count": payload.get("count")}
+                        if payload else None)
+    return JSONResponse(content=clean({
+        "query": q,
+        "market": market.upper() if market else None,
+        "results": results,
+        "listings": status,
+        "note": ("The provider's equity listings as of these dates. Funds, indices, crypto "
+                 "and recent listings are not in them; type a full symbol to open it anyway."),
+    }), headers={"Cache-Control": SYMBOLS_CACHE})
+
+
+# --------------------------------------------------------------------------- #
+# What moved the markets
+# --------------------------------------------------------------------------- #
+# FIVE MINUTES AT THE EDGE, and the request carries nothing, so one upstream
+# fetch serves every reader polling the board. The provider's quotes already
+# trail the market by up to twenty minutes; refetching every minute would buy
+# nothing a reader can see. The browser still revalidates on every request,
+# for the reason `CACHE` gives above.
+BOARD_CACHE = "public, max-age=0, must-revalidate, s-maxage=300"
+BOARD_CDN_CACHE = "public, s-maxage=300, stale-while-revalidate=600"
+HEADLINES_CACHE = "public, max-age=0, must-revalidate, s-maxage=600"
+HEADLINES_CDN_CACHE = "public, s-maxage=600, stale-while-revalidate=1200"
+HEADLINE_TOPICS_MAX = 4
+
+
+@app.get("/api/markets/today")
+def markets_today():
+    """The stock indices, rates, currencies, commodities and bitcoin, each move
+    set against that instrument's own past year. Context, never a lens.
+
+    TAKES NO PARAMETERS, deliberately. The board is the same for everyone, so
+    it is one cache entry; and which of these a particular stock moves with is
+    matched in the browser from the Trend tab's exposure figures, so no ticker
+    is ever sent for it. See `_lib/marketboard.py`.
+    """
+    board = marketboard.fetch()
+    if not any(row.get("available") for row in board["rows"]):
+        raise HTTPException(status_code=502,
+                            detail="The price provider returned nothing for the board just now.")
+    board["explain"] = explain.for_market_board(board)
+    return JSONResponse(content=clean(board),
+                        headers={"Cache-Control": BOARD_CACHE, "CDN-Cache-Control": BOARD_CDN_CACHE})
+
+
+CALENDAR_CACHE = "public, max-age=0, must-revalidate, s-maxage=3600"
+CALENDAR_CDN_CACHE = "public, s-maxage=3600, stale-while-revalidate=86400"
+EARNINGS_MAX = 20
+
+
+@app.get("/api/markets/calendar")
+def markets_calendar():
+    """The dates that move markets for the next 90 days, from a committed file.
+
+    Takes no parameters: the calendar is the same for every reader. Carries the
+    exchanges' hours and closures so the browser can say "open" or "closed"
+    every minute without asking again, the coverage of each source, and what is
+    not published yet. See `_lib/econcalendar.py`.
+    """
+    return JSONResponse(content=clean(econcalendar.payload(dt.date.today())),
+                        headers={"Cache-Control": CALENDAR_CACHE,
+                                 "CDN-Cache-Control": CALENDAR_CDN_CACHE})
+
+
+class EarningsRequest(BaseModel):
+    """The watchlist whose next report dates the calendar should show.
+
+    A THIRD POST, FOR THE SAME REASON AS THE OTHER TWO. A watchlist is a fact
+    about the person who keeps it, so it travels in a body, which no hop between
+    here and the browser logs by default, and the answer is `no-store`. See
+    `RankListRequest`.
+    """
+    tickers: list[str] = Field(..., min_length=1, max_length=EARNINGS_MAX)
+
+
+@app.post("/api/markets/earnings")
+def markets_earnings(body: EarningsRequest):
+    """The next report date for each name on a reader's watchlist, as the provider has it."""
+    symbols_list = parse_ticker_list(",".join(body.tickers), "US")[:EARNINGS_MAX]
+
+    def one(symbol: str) -> dict:
+        calendar = market_data.earnings_calendar(symbol)
+        return {"ticker": symbol, "next": calendar.get("next"),
+                "available": bool(calendar.get("available"))}
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        items = list(pool.map(one, symbols_list))
+    return private_ok({
+        "items": items,
+        "note": ("The data provider's dates. A date is often an estimate until the company "
+                 "confirms it."),
+    })
+
+
+@app.get("/api/markets/headlines")
+def market_headlines(
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+    topics: str = Query("market", pattern=r"^[a-z]{2,12}(,[a-z]{2,12}){0,3}$",
+                        description="Up to four keys from news.HEADLINE_TOPICS, comma separated."),
+    limit: int = Query(5, ge=1, le=8),
+):
+    """Third-party headlines from the past day that mention a market.
+
+    Display-only context and never an instruction source, like `/api/news`.
+    Each topic is a key from a declared table, so a request cannot choose the
+    query text. A topic whose feed failed says so (`available: false`) rather
+    than arriving as an empty list that reads as "no news".
+    """
+    keys = list(dict.fromkeys(topics.split(",")))
+    unknown = [key for key in keys if key not in news.HEADLINE_TOPICS]
+    if unknown:
+        raise HTTPException(status_code=422,
+                            detail=f"Unknown topic {', '.join(unknown)}. Known: "
+                                   f"{', '.join(news.HEADLINE_TOPICS)}.")
+    code = market.upper()
+    with ThreadPoolExecutor(max_workers=HEADLINE_TOPICS_MAX) as pool:
+        feeds = list(pool.map(lambda key: news.fetch_headlines(key, code, limit=limit), keys))
+    return JSONResponse(content=clean({"market": code, "topics": feeds}),
+                        headers={"Cache-Control": HEADLINES_CACHE,
+                                 "CDN-Cache-Control": HEADLINES_CDN_CACHE})
+
+
+# --------------------------------------------------------------------------- #
+# The company itself
+# --------------------------------------------------------------------------- #
+@app.get("/api/company")
+def company_view(
+    ticker: str = Query(..., pattern=TICKER_PATTERN),
+    market: str = Query("US", pattern="^(US|ID|us|id)$"),
+):
+    """What the company does, its listing, and its statements year by year.
+
+    The same block `/api/confluence` carries as its `company` leg. The UI reads
+    it from there, where the company record is already in hand; this route is
+    for curl, and costs a fetch of its own.
+    """
+    symbol, _ = resolved_with_market(ticker, market)
+    return ok(company_payload(symbol))
 
 
 # --------------------------------------------------------------------------- #
@@ -1360,8 +2195,13 @@ async def confluence(
         leg("quality", lambda: quality_payload(symbol)),
         leg("news", lambda: {"ticker": symbol,
                              "items": news.fetch_news(symbol, limit=news_limit)}),
+        leg("company", lambda: company_payload(symbol)),
     )
     legs = dict(results)
+    # THE COMPANY BLOCK IS NOT A LENS, and the two readers of the assembled
+    # payload are handed the lenses only — so neither can start quoting a
+    # description as if it were evidence.
+    lenses = {name: value for name, value in legs.items() if name != "company"}
     # The synthesis reads the ASSEMBLED payload rather than running its own
     # analysis, for the same reason every `explain` layer in this app does: it
     # must quote the figures the panels actually render, and a parallel
@@ -1374,11 +2214,11 @@ async def confluence(
                # was taken on a different population in each market, and a bare
                # code with the wrong market selected would quote the wrong one.
                "synthesis": explain.for_synthesis(
-                   legs, market=symbols.market_of(symbol)),
+                   lenses, market=symbols.market_of(symbol)),
                # The market decides which population the firing rates describe.
                # Taken from the RESOLVED symbol rather than the query parameter,
                # for the same reason every engine downstream of `symbols.resolve`
                # takes it from there: the suffix is what actually determines the
                # listing, and a bare code with the wrong market selected would
                # otherwise be scored against the wrong universe.
-               "preTrade": pretrade.assess(legs, market=symbols.market_of(symbol))})
+               "preTrade": pretrade.assess(lenses, market=symbols.market_of(symbol))})

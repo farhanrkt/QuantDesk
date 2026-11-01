@@ -273,4 +273,461 @@ t("ids carry the ticker and the instant, so two theses cannot collide", () => {
   assert.notEqual(J.newId(when, "AAPL"), J.newId(when, "MSFT"));
 });
 
-console.log(`  ${n} frontend assertions passed`);
+// ---- cn(): the custom type scale is a font size, not a colour ----
+const { cn } = require("./lib/utils.js");
+
+t("a toned figure keeps its size, and a small button keeps its text colour", () => {
+  assert.equal(cn("num text-figure font-semibold", "text-acc"), "num text-figure font-semibold text-acc");
+  assert.equal(cn("bg-tech text-ink", "h-9 px-3.5 text-meta"), "bg-tech text-ink h-9 px-3.5 text-meta");
+  assert.equal(cn("text-meta text-ash", "text-warn"), "text-meta text-warn", "a later tone still replaces a colour");
+  assert.equal(cn("text-meta", "text-lead"), "text-lead", "a later size still replaces a size");
+});
+
+// ---- analytics: a page view carries a route template, never a ticker ----
+const { redactPath, redactUrl } = require("./lib/redact.js");
+
+t("a stock page is reported as its template", () => {
+  assert.equal(redactPath("/stock/AAPL"), "/stock/[symbol]");
+  assert.equal(redactPath("/stock/BBCA.JK/"), "/stock/[symbol]");
+  assert.equal(redactPath("/stock/%5EGSPC"), "/stock/[symbol]");
+});
+t("query strings and fragments never survive", () => {
+  assert.equal(redactPath("/compare?symbols=AAPL,MSFT"), "/compare");
+  assert.equal(redactPath("/stock/AAPL?tab=value#peers"), "/stock/[symbol]");
+  assert.equal(redactUrl("https://q.example/compare?symbols=AAPL,BBCA.JK"), "https://q.example/compare");
+});
+t("an unknown path is /other, so a new route cannot leak by being forgotten", () => {
+  assert.equal(redactPath("/AAPL"), "/other");
+  assert.equal(redactPath("/stock/AAPL/extra"), "/other");
+  assert.equal(redactPath(null), "/");
+  assert.equal(redactUrl("not a url"), "/other");
+});
+
+// ---- lib/url: what the address bar means ----
+const U = require("./lib/url.js");
+
+t("a stock link writes only what differs from the defaults", () => {
+  assert.equal(U.stockHref("aapl"), "/stock/AAPL");
+  assert.equal(U.stockHref("AAPL", "trend"), "/stock/AAPL", "trend is the default tab");
+  assert.equal(U.stockHref("BBCA.JK", "value"), "/stock/BBCA.JK?tab=value");
+  assert.equal(U.stockHref("AAPL", "flow", { mode: "mad", madK: 4 }), "/stock/AAPL?tab=flow&mode=mad&k=4");
+});
+t("symbols that are not path-safe survive the round trip", () => {
+  for (const sym of ["^GSPC", "EURUSD=X", "BRK-B", "BTC-USD", "BBCA.JK"]) {
+    const segment = U.stockHref(sym).slice("/stock/".length);
+    assert.equal(U.symbolFromSegment(segment), sym);
+  }
+});
+t("a path segment that is not a ticker is refused, never guessed at", () => {
+  assert.equal(U.symbolFromSegment("..%2F..%2Fetc"), null);
+  assert.equal(U.symbolFromSegment("%E0%A4%A"), null, "malformed encoding");
+  assert.equal(U.symbolFromSegment("A".repeat(21)), null);
+});
+t("a query is parsed defensively: unknown tabs and bad numbers fall back", () => {
+  const q = U.parseStockQuery("?tab=nonsense&mode=evil&k=NaN&q=0.9&t=-0.2&range=10y");
+  assert.equal(q.tab, U.DEFAULT_TAB);
+  assert.equal(q.run.mode, "threshold");
+  assert.equal(q.run.madK, 3);
+  assert.equal(q.run.contamination, 0.02, "0.9 is outside what the API accepts");
+  assert.equal(q.run.scoreThreshold, -0.2);
+  assert.equal(q.run.range, "10y");
+});
+t("parse then write is the identity on a written link", () => {
+  const href = U.stockHref("NVDA", "quality", { period: "5y", scoreThreshold: -0.2 });
+  const back = U.parseStockQuery(href.split("?")[1]);
+  assert.equal(U.stockHref("NVDA", back.tab, back.run), href);
+});
+t("a compare list keeps the reader's order, resolves, de-duplicates and caps at four", () => {
+  assert.deepEqual(U.parseSymbolList("msft, aapl msft,BBCA.JK"), ["MSFT", "AAPL", "BBCA.JK"]);
+  assert.deepEqual(U.parseSymbolList("bbca,tlkm", "ID"), ["BBCA.JK", "TLKM.JK"]);
+  assert.equal(U.parseSymbolList("A,B,C,D,E,F").length, 4);
+  assert.deepEqual(U.parseSymbolList("AAPL, ../x, <b>"), ["AAPL"]);
+  assert.equal(U.compareHref(["B", "A"]), "/compare?symbols=B,A");
+});
+
+// ---- lib/symbols: the browser's copy of api/_lib/symbols.py ----
+const S = require("./lib/symbols.js");
+
+t("an explicit suffix beats the market dropdown, as on the server", () => {
+  assert.equal(S.resolveSymbol("bbca", "ID"), "BBCA.JK");
+  assert.equal(S.resolveSymbol("BBCA.JK", "US"), "BBCA.JK");
+  assert.equal(S.resolveSymbol("BBCA.JK", "ID"), "BBCA.JK", "idempotent");
+  assert.equal(S.resolveSymbol(" aapl ", "US"), "AAPL");
+  assert.equal(S.marketOf("TLKM.JK"), "ID");
+  assert.equal(S.marketOf("BRK.B"), "US");
+  assert.equal(S.baseCode("BBCA.JK"), "BBCA");
+});
+
+// ---- lib/cache: what the browser keeps, and for how long ----
+const { createTtlCache } = require("./lib/cache.js");
+
+t("a cached value expires after its TTL and is never served stale", () => {
+  let clock = 0;
+  const c = createTtlCache({ ttlMs: 100, now: () => clock });
+  c.set("k", 1);
+  assert.equal(c.peek("k").value, 1);
+  clock = 101;
+  assert.equal(c.peek("k"), undefined);
+});
+t("the oldest entry is evicted past the cap", () => {
+  const c = createTtlCache({ max: 2, now: () => 0 });
+  c.set("a", 1); c.set("b", 2); c.set("c", 3);
+  assert.equal(c.peek("a"), undefined);
+  assert.equal(c.size(), 2);
+});
+const pending = [];
+pending.push((async () => {
+  let calls = 0;
+  const c = createTtlCache({ now: () => 0 });
+  const fetcher = () => new Promise((r) => { calls++; setTimeout(() => r("v"), 5); });
+  const [x, y] = await Promise.all([c.getOrFetch("k", fetcher), c.getOrFetch("k", fetcher)]);
+  t("two callers asking at once share one request", () => {
+    assert.equal(calls, 1);
+    assert.equal(x.value, "v"); assert.equal(y.value, "v");
+  });
+  let failures = 0;
+  const failing = () => { failures++; return Promise.reject(new Error("throttled")); };
+  await c.getOrFetch("bad", failing).catch(() => {});
+  await c.getOrFetch("bad", failing).catch(() => {});
+  t("a failure is never cached: the next caller asks again", () => {
+    assert.equal(failures, 2);
+    assert.equal(c.peek("bad"), undefined);
+  });
+})());
+
+// ---- lib/watchlist: browser-only, and defensive on read ----
+const W = require("./lib/watchlist.js");
+
+t("a corrupt or hand-edited watchlist loses the bad rows, never the good ones", () => {
+  assert.deepEqual(W.parseList(JSON.stringify({ v: 1, symbols: ["aapl", 7, "../x", "AAPL", "BBCA.JK"] })),
+                   ["AAPL", "BBCA.JK"]);
+  assert.deepEqual(W.parseList(JSON.stringify(["msft"])), ["MSFT"], "a bare array still reads");
+  assert.deepEqual(W.parseList("{not json"), []);
+  assert.deepEqual(W.parseList(null), []);
+});
+t("a full watchlist refuses an add rather than silently dropping something kept", () => {
+  const full = Array.from({ length: W.WATCHLIST_MAX }, (_, i) => `T${i}`);
+  assert.equal(W.toggle(full, "NEW"), full);
+  assert.deepEqual(W.toggle(["AAPL"], "aapl"), [], "toggling an existing symbol removes it");
+  assert.deepEqual(W.toggle(["AAPL"], "msft"), ["MSFT", "AAPL"]);
+});
+t("recent tickers are a trail: newest first, de-duplicated, capped", () => {
+  assert.deepEqual(W.pushRecent(["A", "B", "C"], "b"), ["B", "A", "C"]);
+  assert.equal(W.pushRecent(Array.from({ length: 20 }, (_, i) => `T${i}`), "X").length, W.RECENT_MAX);
+});
+
+// ---- lib/shortcuts: never while typing ----
+const K = require("./lib/shortcuts.js");
+
+t("shortcuts never fire in a text field, but the palette chord does", () => {
+  const input = { tagName: "INPUT", type: "text" };
+  assert.equal(K.matchShortcut({ key: "]" }, input), null);
+  assert.equal(K.matchShortcut({ key: "w" }, { tagName: "TEXTAREA" }), null);
+  assert.equal(K.matchShortcut({ key: "w" }, { isContentEditable: true }), null);
+  assert.equal(K.matchShortcut({ key: "k", metaKey: true }, input), "palette");
+  assert.equal(K.matchShortcut({ key: "]" }, { tagName: "INPUT", type: "checkbox" }), "nextTab");
+});
+t("a modified key is left to the browser, and composition is ignored", () => {
+  assert.equal(K.matchShortcut({ key: "[", metaKey: true }), null, "cmd-[ is the browser's back");
+  assert.equal(K.matchShortcut({ key: "w", ctrlKey: true }), null);
+  assert.equal(K.matchShortcut({ key: "/", isComposing: true }), null);
+  assert.equal(K.matchShortcut({ key: "?" }), "help");
+});
+
+// ---- lib/commands: the palette orders by how text matches, never by a company ----
+const C = require("./lib/commands.js");
+
+t("a label prefix outranks a word match outranks a keyword", () => {
+  const cmds = [
+    { id: "a", label: "Thesis journal", group: "Go to" },
+    { id: "b", label: "Markets: rank a universe", group: "Go to", keywords: "journalism" },
+    { id: "c", label: "Journal", group: "Go to" },
+  ];
+  assert.deepEqual(C.rankCommands(cmds, "jour").map((c) => c.id), ["c", "a", "b"]);
+  assert.deepEqual(C.rankCommands(cmds, "zzz"), []);
+  assert.deepEqual(C.rankCommands(cmds, "").map((c) => c.id), ["a", "b", "c"], "no query keeps order");
+});
+
+// ---- lib/compare: side by side, and never a decision ----
+const { buildCompare } = require("./lib/compare.js");
+
+const EXPLAIN = (valueText, tone) => ({ label: "x", what: "x", reading: `reads ${valueText}`, action: "x",
+                                       band: "fair", tone, goodDirection: "high", evidence: null, valueText });
+const PAYLOAD = (symbol, verdict, tone) => ({
+  status: "ready",
+  data: {
+    ticker: symbol,
+    anomaly: { ok: false, error: "no bars" },
+    technical: { ok: false, error: "no bars" },
+    quality: { ok: false, error: "no statements" },
+    news: { ok: true, data: { ticker: symbol, items: [] } },
+    valuation: { ok: true, data: {
+      ticker: symbol, engine: "DCF", verdict, market: { code: symbol.endsWith(".JK") ? "ID" : "US" },
+      monteCarlo: { upside: 0.2, p50Label: "$10", probUndervalued: 0.6 },
+      explain: { impliedGrowth: EXPLAIN("12.0%", tone), terminalShare: EXPLAIN("70%", "warn") },
+    } },
+    company: { ok: true, data: {
+      name: `${symbol} Corp`, profile: { industry: "Widgets", sector: "Industrials", summaryShort: null },
+      listing: { exchange: "X", marketCap: 1e9 }, currency: { trading: symbol.endsWith(".JK") ? "IDR" : "USD" },
+      nextEarnings: { date: null }, explain: {},
+    } },
+    synthesis: { headline: "Both independent readings constructive" },
+    preTrade: { flags: [{ explain: { label: "Balance sheet in the distress zone" } }],
+                caveat: "An empty panel is not a clean bill of health." },
+  },
+});
+
+t("columns keep the reader's order under every permutation", () => {
+  const a = { symbol: "AAA", state: PAYLOAD("AAA", "UNDERVALUED", "good") };
+  const b = { symbol: "BBB.JK", state: PAYLOAD("BBB.JK", "OVERVALUED", "bad") };
+  const c = { symbol: "CCC", state: { status: "error", failure: { message: "nope" } } };
+  for (const order of [[a, b, c], [c, a, b], [b, c, a]]) {
+    const model = buildCompare(order, 3);
+    assert.deepEqual(model.columns.map((x) => x.symbol), order.map((x) => x.symbol));
+    for (const section of model.sections) {
+      for (const row of section.rows) assert.equal(row.cells.length, order.length);
+    }
+  }
+});
+t("each cell carries its own company's server tone, and nothing across columns", () => {
+  const model = buildCompare([
+    { symbol: "AAA", state: PAYLOAD("AAA", "UNDERVALUED", "good") },
+    { symbol: "BBB", state: PAYLOAD("BBB", "OVERVALUED", "bad") },
+  ], 3);
+  const implied = model.sections.find((s) => s.key === "value").rows.find((r) => r.key === "impliedGrowth");
+  assert.deepEqual(implied.cells.map((c) => c.tone), ["good", "bad"]);
+});
+t("no aggregate, winner or agreement count appears anywhere in the model", () => {
+  const model = buildCompare([
+    { symbol: "AAA", state: PAYLOAD("AAA", "UNDERVALUED", "good") },
+    { symbol: "BBB.JK", state: PAYLOAD("BBB.JK", "OVERVALUED", "bad") },
+  ], 3);
+  const keys = new Set();
+  const walk = (o) => { if (o && typeof o === "object") for (const [k, v] of Object.entries(o)) { keys.add(k); walk(v); } };
+  walk(model);
+  for (const banned of ["score", "total", "rank", "composite", "winner", "best", "overall", "count", "tally"]) {
+    assert.ok(!keys.has(banned), `compare model carries "${banned}"`);
+  }
+  const text = JSON.stringify(model);
+  assert.ok(!/independent reading/i.test(text), "the rail's agreement count must not repeat per column");
+  assert.match(model.currencyNote, /not converted/);
+});
+t("fired conditions are listed, never counted", () => {
+  const model = buildCompare([{ symbol: "AAA", state: PAYLOAD("AAA", "UNDERVALUED", "good") }], 3);
+  const fired = model.sections.find((s) => s.key === "pretrade").rows[0].cells[0];
+  assert.deepEqual(fired.items, ["Balance sheet in the distress zone"]);
+  assert.ok(!/\d/.test(fired.text), "no number in the fired cell");
+});
+
+// ---- the market board: order kept, marks only from measured facts ----
+{
+  const MB = require("./lib/marketboard.js");
+  const row = (key, extra = {}) => ({
+    key, name: key.toUpperCase(), short: key, symbol: key, group: "stocks", change: "pct",
+    unit: "points", markets: ["US", "ID"], note: null, exposureKey: null, topic: "market",
+    digits: 2, weekends: false, tone: "neutral", available: true, last: 100, move: 0.01,
+    direction: "up", percentile: 50, unusual: false, ...extra,
+  });
+  // Planted in an order that is NOT the order of the moves, so a sort would show.
+  const board = {
+    groups: [{ key: "stocks", label: "Stocks" }],
+    rows: [
+      row("sp500", { move: 0.001 }),
+      row("jkse", { markets: ["ID"], move: -0.05, unusual: true, direction: "down", topic: "market" }),
+      row("t10y", { change: "bp", move: 11, unusual: true, topic: "rates", digits: 3, last: 4.929 }),
+      row("oil", { exposureKey: "oil", move: 0.03, unusual: true, topic: "oil" }),
+      row("gold", { exposureKey: "gold", markets: ["US", "ID"], topic: "gold" }),
+      row("bitcoin", { markets: ["US"], topic: "bitcoin", digits: 0, last: 77480.25, weekends: true }),
+    ],
+    missing: [], unusualAt: 95, minHistory: 120, fetchedAt: null, source: "", delay: "",
+    markets: {
+      US: { strip: ["bitcoin", "sp500", "oil"], unusual: [], unavailable: [], baseRate: null },
+      ID: { strip: ["gold", "jkse"], unusual: [], unavailable: [], baseRate: null },
+    },
+    explain: { rows: {}, markets: {} },
+  };
+
+  t("a market's rows keep the declared order, never the order of the moves", () => {
+    assert.deepEqual(MB.rowsFor(board, "US").map((r) => r.key), ["sp500", "t10y", "oil", "gold", "bitcoin"]);
+    assert.deepEqual(MB.rowsFor(board, "ID").map((r) => r.key), ["sp500", "jkse", "t10y", "oil", "gold"]);
+  });
+  t("the strip is the declared subset, in board order not strip-list order", () => {
+    assert.deepEqual(MB.stripFor(board, "US").map((r) => r.key), ["sp500", "oil", "bitcoin"]);
+  });
+  t("marks come only from measured exposure, the stock's market and the Value tab's rate", () => {
+    const marks = MB.marksFor(board, { symbol: "ITMG.JK", market: "ID",
+                                       factors: [{ key: "oil", label: "the energy complex", weeks: 257 }] });
+    assert.deepEqual(Object.keys(marks).sort(), ["jkse", "oil"]);
+    assert.equal(marks.oil[0].text, "ITMG.JK has moved with the energy complex over the past 5 years");
+    assert.ok(!marks.t10y, "an IDX valuation does not discount from the US 10-year");
+    const us = MB.marksFor(board, { symbol: "AAPL", market: "US", factors: [] });
+    assert.deepEqual(Object.keys(us).sort(), ["sp500", "t10y"]);
+    assert.deepEqual(MB.marksFor(board, null), {});
+    const pending = MB.marksFor(board, { symbol: "AAPL", market: "US", factors: null });
+    assert.ok(!Object.values(pending).flat().some((m) => m.kind === "movesWith"),
+              "nothing is marked as moving with anything before the Trend tab has measured it");
+  });
+  t("related rows lead by partition, each part still in declared order", () => {
+    const marks = { gold: [{ kind: "movesWith", text: "" }], jkse: [{ kind: "itsMarket", text: "" }] };
+    assert.deepEqual(MB.relatedFirst(MB.rowsFor(board, "ID"), marks).map((r) => r.key),
+                     ["jkse", "gold", "sp500", "t10y", "oil"]);
+  });
+  t("headlines: the market's own feed, then each unusual mover's topic, at most four", () => {
+    assert.deepEqual(MB.headlineTopics(board, "US"), ["market", "rates", "oil"]);
+    assert.deepEqual(MB.headlineTopics(board, "US", 2), ["market", "rates"]);
+  });
+  t("levels, dates and ages read the way a board is read", () => {
+    assert.equal(MB.levelText(board.rows[5]), "77,480");
+    assert.equal(MB.levelText(board.rows[2]), "4.929");
+    assert.equal(MB.levelText(row("x", { last: null })), "—");
+    assert.equal(MB.dayText("2026-10-30"), "30 Oct", "an ISO date is not shifted by the reader's time zone");
+    const now = Date.parse("2026-11-01T12:00:00Z");
+    assert.equal(MB.agoText("Sun, 01 Nov 2026 11:15:00 GMT", now), "45 min ago");
+    assert.equal(MB.agoText("Sat, 31 Oct 2026 09:00:00 GMT", now), "27 h ago");
+    assert.equal(MB.agoText("not a date", now), null);
+    assert.equal(MB.periodText(260), " over the past 5 years");
+    assert.equal(MB.periodText(40), " over the past 40 weeks");
+  });
+  t("'largest since' is said only of an unusual move", () => {
+    assert.equal(MB.sinceText(row("a", { unusual: true, direction: "down", largestSince: "2026-06-05" })),
+                 "largest fall since 5 Jun 2026");
+    assert.equal(MB.sinceText(row("a", { unusual: false, largestSince: "2026-06-05" })), null);
+  });
+}
+
+// ---- the exchange clock and the calendar: computed in the browser, every minute ----
+{
+  const MC = require("./lib/marketclock.js");
+  const CAL = require("./lib/calendar.js");
+  const MB = require("./lib/marketboard.js");
+  const nyse = {
+    name: "NYSE", tz: "America/New_York", source: "",
+    sessions: { "mon-thu": [["09:30", "16:00"]], fri: [["09:30", "16:00"]] },
+    closures: [
+      { date: "2026-11-26", kind: "holiday", time: null, detail: "Thanksgiving Day." },
+      { date: "2026-11-27", kind: "early-close", time: "13:00", detail: "The day after Thanksgiving." },
+    ],
+  };
+  const idx = {
+    name: "IDX", tz: "Asia/Jakarta", source: "", closures: [],
+    sessions: { "mon-thu": [["09:00", "12:00"], ["13:30", "16:00"]], fri: [["09:00", "11:30"], ["14:00", "16:00"]] },
+  };
+  const at = (iso) => new Date(iso);
+
+  t("a US release moves an hour in UTC when the clocks change", () => {
+    assert.equal(MC.zonedInstant("2026-03-06", "08:30", "America/New_York").toISOString(), "2026-03-06T13:30:00.000Z");
+    assert.equal(MC.zonedInstant("2026-03-10", "08:30", "America/New_York").toISOString(), "2026-03-10T12:30:00.000Z");
+  });
+  t("NYSE is open mid-session and says when it closes", () => {
+    const status = MC.exchangeStatus(nyse, at("2026-11-02T15:00:00Z"));       // Mon 10:00 ET
+    assert.equal(status.state, "open");
+    assert.equal(status.next.kind, "closes");
+    assert.equal(status.next.at.toISOString(), "2026-11-02T21:00:00.000Z");
+  });
+  t("before the bell it is closed and opens at 09:30 New York", () => {
+    const status = MC.exchangeStatus(nyse, at("2026-11-02T13:00:00Z"));       // Mon 08:00 ET
+    assert.equal(status.state, "closed");
+    assert.equal(status.next.at.toISOString(), "2026-11-02T14:30:00.000Z");
+  });
+  t("a holiday is closed, says why, and points at the next session", () => {
+    const status = MC.exchangeStatus(nyse, at("2026-11-26T15:00:00Z"));       // Thanksgiving
+    assert.equal(status.state, "closed");
+    assert.equal(status.reason, "Thanksgiving Day.");
+    assert.equal(status.next.at.toISOString(), "2026-11-27T14:30:00.000Z");
+  });
+  t("an early close shuts at 1 p.m., and the weekend is skipped", () => {
+    assert.equal(MC.exchangeStatus(nyse, at("2026-11-27T17:30:00Z")).state, "open");   // 12:30 ET
+    const late = MC.exchangeStatus(nyse, at("2026-11-27T18:30:00Z"));                  // 13:30 ET
+    assert.equal(late.state, "closed");
+    assert.equal(late.next.at.toISOString(), "2026-11-30T14:30:00.000Z", "Monday 09:30 ET");
+  });
+  t("IDX takes a longer Friday break and reopens at 14:00 Jakarta", () => {
+    const status = MC.exchangeStatus(idx, at("2026-11-06T05:00:00Z"));        // Fri 12:00 WIB
+    assert.equal(status.state, "break");
+    assert.equal(status.next.kind, "reopens");
+    assert.equal(status.next.at.toISOString(), "2026-11-06T07:00:00.000Z");
+    assert.equal(MC.exchangeStatus(idx, at("2026-11-05T04:45:00Z")).state, "open", "Thursday 11:45 is still session one");
+    assert.equal(MC.exchangeStatus(idx, at("2026-11-06T04:45:00Z")).state, "break", "Friday 11:45 is already the break");
+  });
+
+  const ev = (extra) => ({ kind: "cpi", date: "2026-11-10", time: "08:30", tz: "America/New_York", market: "US",
+                           source: "bls", title: "US consumer prices (CPI)", detail: "October 2026.",
+                           utc: "2026-11-10T13:30:00Z", allDay: false, label: "CPI", ...extra });
+  t("a timed event falls on the reader's own day; an all-day date keeps its own", () => {
+    const fomc = ev({ kind: "fomc", date: "2026-12-09", time: "14:00", utc: "2026-12-09T19:00:00Z" });
+    assert.equal(CAL.dayOf(fomc, "Asia/Jakarta"), "2026-12-10", "02:00 the next morning in Jakarta");
+    assert.equal(CAL.dayOf(fomc, "America/New_York"), "2026-12-09");
+    assert.equal(CAL.dayOf(ev({ utc: null, allDay: true, time: null, date: "2026-11-18" }), "Asia/Jakarta"), "2026-11-18");
+    assert.equal(CAL.timeText(ev({}), "Asia/Jakarta"), "20:30");
+    assert.equal(CAL.dayHeading("2026-11-10"), "Tue 10 Nov");
+  });
+  t("upcoming drops what has happened and keeps time order", () => {
+    const list = CAL.upcoming([
+      ev({ date: "2026-12-10", utc: "2026-12-10T13:30:00Z" }),
+      ev({ date: "2026-10-14", utc: "2026-10-14T12:30:00Z" }),
+      ev({}),
+    ], at("2026-11-01T00:00:00Z"), 60, "UTC");
+    assert.deepEqual(list.map((e) => e.date), ["2026-11-10", "2026-12-10"]);
+  });
+  t("an .ics is valid iCalendar, timed in UTC or all-day, with text escaped", () => {
+    const timed = CAL.toIcs(ev({ title: "US CPI, October" }), at("2026-11-01T00:00:00Z"));
+    assert.ok(timed.includes("DTSTART:20261110T133000Z\r\n"));
+    assert.ok(timed.includes("SUMMARY:US CPI\\, October\r\n"), "commas are escaped");
+    assert.ok(timed.startsWith("BEGIN:VCALENDAR\r\n") && timed.endsWith("END:VCALENDAR\r\n"));
+    const allDay = CAL.toIcs(ev({ kind: "bi-rate", date: "2026-11-18", utc: null, allDay: true, time: null }), at("2026-11-01T00:00:00Z"));
+    assert.ok(allDay.includes("DTSTART;VALUE=DATE:20261118") && allDay.includes("DTEND;VALUE=DATE:20261119"));
+  });
+  t("report dates become events once per ticker, on the ticker's own market", () => {
+    const out = CAL.earningsEvents({ symbol: "ITMG.JK", date: "2026-11-20" },
+      [{ ticker: "ITMG.JK", next: "2026-11-21" }, { ticker: "AAPL", next: "2027-01-28" }, { ticker: "MSFT", next: null }]);
+    assert.deepEqual(out.map((e) => [e.ticker, e.date, e.market, e.origin]),
+      [["ITMG.JK", "2026-11-20", "ID", "stock"], ["AAPL", "2027-01-28", "US", "watchlist"]]);
+  });
+  t("a month is whole weeks, Monday first, with the days either side marked", () => {
+    const nov = CAL.monthGrid("2026-11");                    // 1 November 2026 is a Sunday
+    assert.equal(nov.length, 6);
+    assert.deepEqual(nov[0].map((c) => c.day), ["2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29",
+      "2026-10-30", "2026-10-31", "2026-11-01"]);
+    assert.deepEqual(nov[0].map((c) => c.inMonth), [false, false, false, false, false, false, true]);
+    assert.equal(nov[5][0].day, "2026-11-30");
+    assert.equal(nov[5][1].inMonth, false);
+    const feb = CAL.monthGrid("2027-02");                    // starts on a Monday, 28 days
+    assert.equal(feb.length, 4, "no empty week either side");
+    assert.ok(feb.flat().every((c) => c.inMonth));
+  });
+  t("dates move by the calendar, across months, years and clock changes", () => {
+    assert.equal(CAL.addDays("2026-12-31", 1), "2027-01-01");
+    assert.equal(CAL.addDays("2026-03-08", 1), "2026-03-09", "a US clock change does not skip a day");
+    assert.equal(CAL.addDays("2026-11-01", -6), "2026-10-26");
+    assert.equal(CAL.shiftMonth("2026-12", 1), "2027-01");
+    assert.equal(CAL.shiftMonth("2027-01", -1), "2026-12");
+    assert.equal(CAL.monthHeading("2026-11"), "November 2026");
+    assert.equal(CAL.dayLong("2026-11-10"), "Tuesday 10 November 2026");
+    assert.equal(CAL.todayIn(at("2026-11-01T18:00:00Z"), "Asia/Jakarta"), "2026-11-02", "01:00 in Jakarta");
+    assert.equal(CAL.todayIn(at("2026-11-01T18:00:00Z"), "America/New_York"), "2026-11-01");
+  });
+  t("a day's events sit under the reader's day, in time order, with a short name that fits a cell", () => {
+    const fomc = ev({ kind: "fomc", date: "2026-12-09", time: "14:00", utc: "2026-12-09T19:00:00Z", label: "FOMC decision" });
+    const jobs = ev({ kind: "jobs", date: "2026-12-10", time: "08:30", utc: "2026-12-10T13:30:00Z" });
+    const days = CAL.byDay([jobs, fomc], "Asia/Jakarta");
+    assert.deepEqual([...days.keys()], ["2026-12-10"], "02:00 and 20:30 in Jakarta are the same day");
+    assert.deepEqual(days.get("2026-12-10").map((e) => e.kind), ["fomc", "jobs"]);
+    assert.deepEqual([...CAL.byDay([jobs, fomc], "America/New_York").keys()], ["2026-12-09", "2026-12-10"]);
+    assert.equal(CAL.cellLabel(fomc), "FOMC");
+    assert.equal(CAL.cellLabel(ev({ kind: "holiday", label: "Exchange holiday" })), "Closed");
+    assert.equal(CAL.cellLabel(ev({ kind: "earnings", ticker: "BBCA.JK", label: "Earnings report" })), "BBCA");
+    assert.equal(CAL.relativeDay("2026-11-06", "2026-11-01"), "in 5 days");
+    assert.equal(CAL.relativeDay("2026-11-02", "2026-11-01"), "tomorrow");
+    assert.equal(CAL.relativeDay("2026-10-31", "2026-11-01"), "yesterday");
+  });
+  t("the panel's history line is history, and says when it is within chance", () => {
+    assert.equal(MB.historyShort({ name: "S&P 500", available: true, events: 17, above: 7, p: 0.63 }),
+      "S&P 500: bigger than a median day on 7 of the last 17 (half expected), within chance");
+    assert.equal(MB.historyShort({ name: "S&P 500", available: false }), null);
+    assert.equal(MB.relationLabel({ kind: "itsMarket", text: "" }), "its market");
+  });
+}
+
+Promise.all(pending).then(() => {
+  console.log(`  ${n} frontend assertions passed`);
+});

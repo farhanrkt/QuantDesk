@@ -14,12 +14,15 @@ import type { ValuationOptions } from "@/lib/api";
 import type { ExplainMap, ValuationResponse } from "@/lib/types";
 import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
+import { alpha, palette } from "@/lib/palette";
+import { SensitivityGrid } from "@/components/valuation/SensitivityGrid";
+import { ScrollRegion } from "@/components/ui/scroll";
 
-const DCF = "#E8B44C";
-const DDM = "#A78BFA";
-const MARKET = "#5B8DEF";
-const UP = "#35C4A8";
-const DOWN = "#FF6B6B";
+const DCF = palette.dcf;
+const DDM = palette.ddm;
+const MARKET = palette.tech;
+const UP = palette.acc;
+const DOWN = palette.dist;
 
 export function ValuationPanel({
   data, onApply, busy, csvUrl,
@@ -79,9 +82,9 @@ export function ValuationPanel({
         <div key={i}
              className="rounded border px-4 py-3 text-meta leading-relaxed"
              style={{
-               borderColor: n.tone === "warn" ? "#F2C14E66" : `${accent}55`,
-               background: n.tone === "warn" ? "#F2C14E14" : `${accent}14`,
-               color: n.tone === "warn" ? "#F2C14E" : "#E7EEF5",
+               borderColor: n.tone === "warn" ? alpha(palette.warn, 0.4) : `${accent}55`,
+               background: n.tone === "warn" ? alpha(palette.warn, 0.08) : `${accent}14`,
+               color: n.tone === "warn" ? palette.warn : palette.chalk,
              }}>
           {n.text}
         </div>
@@ -181,6 +184,8 @@ export function ValuationPanel({
         </Card>
       )}
 
+      {data.sensitivity && <SensitivityGrid data={data.sensitivity} accent={accent} />}
+
       <Card accent={accent}>
         <CardHeader>
           <CardTitle>Distribution of simulated fair value</CardTitle>
@@ -193,15 +198,17 @@ export function ValuationPanel({
           </div>
         </CardHeader>
         <CardBody>
+          {/* top: 20 leaves room for the "Market" and "Median" labels, which sit
+              ABOVE their lines; at 8 the SVG cut them off at the cap height. */}
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={mc.histogram} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+            <BarChart data={mc.histogram} margin={{ top: 20, right: 12, left: 0, bottom: 4 }}>
               <CartesianGrid strokeDasharray="2 4" vertical={false} />
               <XAxis dataKey="value" type="number" domain={["dataMin", "dataMax"]}
                      tickFormatter={(v) => num(v, 0)} tickLine={false} axisLine={false} />
               <YAxis tickLine={false} axisLine={false} width={48} />
               <Tooltip
                 cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                contentStyle={{ background: "#080C10", border: "1px solid #1E2A36",
+                contentStyle={{ background: palette.ink, border: `1px solid ${palette.rule}`,
                                 borderRadius: 4, fontSize: 12 }}
                 labelFormatter={(v) => `Fair value ${num(Number(v))}`}
                 formatter={(v: number) => [`${v} iterations`, ""]} />
@@ -248,7 +255,7 @@ export function ValuationPanel({
             </div>
           </CardHeader>
           <CardBody className="px-0">
-            <div className="overflow-x-auto">
+            <ScrollRegion label="Projection schedule">
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
@@ -269,14 +276,14 @@ export function ValuationPanel({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollRegion>
 
             {data.history.length > 0 && (
               <>
                 <div className="eyebrow px-5 pb-2 pt-5">
                   {data.engine === "DCF" ? "Historical free cash flow" : "Declared dividend history"}
                 </div>
-                <div className="overflow-x-auto">
+                <ScrollRegion label={data.engine === "DCF" ? "Historical free cash flow" : "Declared dividend history"}>
                   <table className="w-full text-left text-meta">
                     <tbody>
                       {data.history.map((row, i) => (
@@ -290,7 +297,7 @@ export function ValuationPanel({
                       ))}
                     </tbody>
                   </table>
-                </div>
+                </ScrollRegion>
               </>
             )}
           </CardBody>
@@ -304,7 +311,7 @@ export function ValuationPanel({
               </CardTitle>
             </CardHeader>
             <CardBody className="px-0">
-              <div className="overflow-x-auto">
+              <ScrollRegion label={data.engine === "DCF" ? "Enterprise to equity bridge" : "Value composition"}>
                 <table className="w-full text-left text-meta">
                   <tbody>
                     {data.bridge.map((row) => (
@@ -315,14 +322,14 @@ export function ValuationPanel({
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ScrollRegion>
             </CardBody>
           </Card>
 
           <Card>
             <CardHeader><CardTitle>Model diagnostics</CardTitle></CardHeader>
             <CardBody className="px-0">
-              <div className="overflow-x-auto">
+              <ScrollRegion label="Model diagnostics">
                 <table className="w-full text-left text-meta">
                   <tbody>
                     {data.diagnostics.map((row) => (
@@ -333,7 +340,7 @@ export function ValuationPanel({
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ScrollRegion>
             </CardBody>
           </Card>
         </div>

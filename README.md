@@ -81,7 +81,8 @@ npm run dev:api
 npm run dev
 ```
 
-Open <http://localhost:3000>, type a ticker (or click a preset), and hit **Run all lenses**.
+Open <http://localhost:3000>, type a ticker (or click a preset), and hit **Run all lenses** —
+or press **⌘K** (Ctrl K) and type a company's name.
 
 `dev:api` runs `.venv/bin/python -m uvicorn` rather than a bare `uvicorn`, so it does not
 depend on the environment being activated — and, more to the point, cannot pick up a different
@@ -193,9 +194,12 @@ simulation to produce a range rather than a single number.
 today's price correct? On AAPL that came out at **37% a year for five years** against a 10%
 assumption — which is a claim about the world you can agree or disagree with, rather than a fair
 value you have no basis to judge. It is stated as conditional on the other inputs, because it is:
-lower the discount rate and the implied growth falls with it. The panel says so and tells you
-to change the input and watch the number move — there is no sensitivity grid computing that
-range for you, which is a gap rather than a claim (see RESEARCH_ROADMAP).
+lower the discount rate and the implied growth falls with it. The panel says so, and a
+**sensitivity grid** shows it: the base-case value across growth ±6 points and the discount
+rate ±2, with the growth today's price implies at each rate along the bottom. The grid is
+uncoloured numbers with the price printed beside it rather than inside it, because a grid of
+fair values coloured against price is a buy/sell heat map — and the build fails if anyone
+colours it.
 
 **What it can't tell you.** Anything with confidence. A DCF is an opinion with arithmetic
 attached — the answer moves enormously with the growth and discount rate you assume, which
@@ -251,6 +255,154 @@ fitted under, a flag is about 11% likely to be real.
 
 ---
 
+## Moving around
+
+Every page has its own address, so a refresh, a bookmark and a shared link all land in the
+same place:
+
+| Route | What it is |
+|---|---|
+| `/` | The landing: which company? Type it, pick a preset, or open one from your watchlist or recent tickers. No figures about any company — one here would be one nobody asked about — and one sentence on what moved the markets today. |
+| `/stock/AAPL` | One company through every lens. `?tab=value` picks the tab; only tuning that differs from the defaults is written. Indonesian listings are `/stock/BBCA.JK`. |
+| `/markets` | **What moved the markets today**, then the tools that read a whole list at once: rank a universe (`?view=rank`), scan for unusual activity, what a market moves with, and the local scanner report. |
+| `/compare?symbols=AAPL,BBCA.JK` | Two to four companies, read the same way, side by side. |
+| `/journal` | Every thesis you have written, for every company. |
+
+**The command palette** (⌘K, `/`, or the search button) opens any company by name or
+ticker from the provider's listing files — Bank Central Asia finds BBCA.JK — and always
+offers "open as typed", so crypto pairs, indices and new listings still open. It also reaches
+every route, every tab of the current stock, the reading mode and your holding horizon.
+Shortcuts: `[` and `]` move between tabs, `w` stars the ticker, `?` lists them all. None fire
+while you are typing.
+
+**Your desk.** Star a ticker to keep it on a **watchlist**; the last twelve you opened are
+**recent**. Both live in this browser only. "Rank these" sends the watchlist to the ranking
+tier in a request body — never a URL — and only when you press it.
+
+**Results stay put.** Leaving a company for the compare view and coming back restores the
+page instead of running four engines again, and a ranking, a screener scan or a half-written
+thesis survives a trip to another tab. Each page says when its figures were fetched.
+
+**Print** gives a tearsheet of the tab you are on, dark on white, with the ticker, the time,
+the close the prices are from, and "not investment advice" in the header. The private score
+is never printed.
+
+---
+
+## What moved the markets
+
+The day's context, beside whatever company you are reading. **Markets → Today** (the page
+`/markets` opens on) shows 22 instruments in fixed groups: the US, Jakarta, Hong Kong and
+Shanghai indices, the VIX, US Treasury yields, the dollar index, USD/IDR and EUR/USD, crude,
+natural gas, gold, silver, copper and bitcoin, plus 60 days of the dates that move markets and
+the day's headlines.
+
+**The markets panel** sits in its own column beside every other page on a screen 1280px or
+wider. It scrolls on its own and can be hidden.
+- **Prices:** eight large price tiles, each with a three-month sparkline.
+- **Exchange status:** whether NYSE and IDX are open, ticking on your clock.
+- **Calendar:** a month with the dates written into their days, and the next 14 days as a
+  list. Choosing a day in the month lists that day instead.
+- **Headlines:** with thumbnails.
+
+Narrower screens get a band of the same tiles at the top of the page, with the next seven days
+as a strip; a tap on a day lists what is on it. Markets → Today has a larger month beside the
+full 60-day list, and its filters apply to both.
+
+**Calibrated, not coloured.** A day's move has no good or bad: crude falling helps an airline
+and hurts a coal miner. So nothing is red or green. Each move is set against **that
+instrument's own daily moves over the past year**: "larger than 98% of its days", "its
+largest fall since 5 June". At the 95th percentile a move is marked *unusual*. One sentence at
+the top names the unusual moves, in the board's order, never ranked by size. The board also
+says how often "unusual" happens: on about 40% of weekdays, something among twenty
+instruments moves that much. Yields move in basis points, and the VIX in points.
+
+**Each instrument on its own calendar.** The S&P 500 has about 251 sessions a year, the
+Jakarta Composite 239 and bitcoin 365. A shared calendar would pad the S&P with a hundred
+weekend 0.00% days, so each series keeps only the days it traded.
+
+**Linked to the stock on screen, by measurement only.** On a stock page the bar marks:
+- the stock's own index;
+- for a US listing, the 10-year yield its valuation discounts from;
+- any reference the Trend tab *measured* it moving with ("ITMG.JK has moved with the energy
+  complex over the past 5 years"), with those related quotes first.
+
+Nothing is marked from a sector or a guess, and the board's request never carries a ticker.
+
+**Headlines from the past day** sit beside it, for the market and for each unusual mover,
+newest first. They are labelled as *mentioning* a market: this app cannot tell which story,
+if any, moved a price.
+- **US stories** come from Yahoo Finance with a thumbnail. The thumbnail is fetched by this
+  app's own image optimizer, so your browser never contacts Yahoo.
+- **Indonesian stories** come from Google News as text, because Yahoo has no Indonesian
+  coverage.
+
+**The calendar.**
+- **US:** FOMC decisions (with the Fed's projections marked), CPI, the jobs report, PCE and
+  GDP.
+- **Indonesia:** Bank Indonesia's rate decisions.
+- **Closures:** NYSE and IDX holidays and early closes.
+- **Report dates:** the next report for the stock on screen and for each name on your
+  watchlist. The watchlist is sent in a request body, never a URL, and nothing about it is
+  stored.
+
+Every timed event is shown on your own clock, and any event can be added to your calendar
+as an `.ics` file built in the browser. The dates are transcribed from the Fed, BLS, BEA,
+Bank Indonesia, NYSE and IDX schedules into a committed file, which
+`scripts/refresh_calendar.py` re-checks against the sources. The calendar says what it does
+not know: Bank Indonesia has not published 2027, and BPS's inflation calendar could not be
+read.
+
+**What past event days were like.** Beside each FOMC, CPI, jobs and Bank Indonesia date sits
+how often the market moved more than on its median day on the past ones, over the two years
+the board holds. On any day, half do.
+- **FOMC days:** the S&P 500 moved more than on its median day on 7 of the last 17.
+- **Within chance:** none of the nine event-and-market pairs measured is outside what chance
+  produces.
+
+The panel says that, and it is history, never a forecast.
+
+**What it cannot show.** Newcastle coal, nickel, tin, palm oil and the Indonesian 10-year
+yield are not available from this data source, and the board names each one with the
+reason. Quotes are the provider's, up to about twenty minutes behind the market, and are
+refreshed every five minutes while the page is visible.
+
+---
+
+## What it is
+
+The first tab says who the company is before any lens reads it: what it sells in the data
+provider's own words, its market value, exchange and currencies, the next report date, its
+statements year by year as small charts and a table (revenue, operating and net income,
+operating and free cash flow, capital spending, debt, cash, equity), what that record adds up
+to, and dividends per share by year. Every figure was already being fetched for the valuation
+and quality lenses and thrown away before reaching the page.
+
+It is **description, never a lens**: no chip in the rail, no vote in the synthesis, no input
+to the pre-trade checks, and a test asserts both are unchanged with or without it. A missing
+year is a dash, never a zero; a bank's free cash flow is withheld because it describes
+nothing; statements left in their reporting currency say so; and a dividend series that
+implies an impossible yield against today's price is withheld as a units problem rather than
+charted. The comparisons in the record's reading were measured on Indonesian listings, so a
+US company's figures are reported bare.
+
+---
+
+## Compare
+
+Up to four companies, each read through the same lenses — what it is, who is trading it,
+what the price did, what it is worth, the accounting screens, and which pre-trade conditions
+fired — with the answers lined up row by row.
+
+**It never decides between them.** The columns stay in the order you put them (move them by
+hand; there is no sort), every column is the same width, each cell carries its own company's
+reading and nothing is computed across columns. The rail's "two independent readings"
+count is not repeated per column, fired conditions are listed and never counted, and the
+private score is never read. The build fails if a compare file sorts, takes a maximum, sums,
+or touches either. Mixed currencies stay mixed, and the page says so.
+
+---
+
 ## Three more tools
 
 **Scan & rank.** The breadth half of a two-tier workflow: rank a whole universe, then open
@@ -302,11 +454,13 @@ sixth of the money and half the risk is the portfolio wearing a smaller name.
 **This is the only place in the app where a measurement informs position size, and it was
 earned.** Using a correlation to size something is a claim that last year's correlation says
 something about next year's, so that was measured first: across four index universes, one
-year's pairwise correlations rank-correlate **0.50 to 0.65** with the next year's, at
-t-statistics near or above ten. The composite ranking's information coefficient, by contrast,
-was indistinguishable from zero. The same measurement found the limit and the panel carries it:
-correlations run about **0.06 higher in the worst quarters**, so an ordinary year's reading is a
-floor on how correlated these will be when it matters.
+year's pairwise correlations rank-correlate **0.48 to 0.68** with the next year's, at
+t-statistics from +8.5 to +14.2 (re-measured 1 November 2026). The composite ranking's
+information coefficient, by contrast, was indistinguishable from zero. The same measurement
+found the limit and the panel carries it: correlations run **higher in the worst quarters** —
++0.14 when last measured, a figure that moves between +0.01 and +0.23 with where the quarters
+are cut — so an ordinary year's reading is a floor on how correlated these will be when it
+matters.
 
 Holdings live in your browser, never on a server — this app still has no database. They are sent
 to answer that one question and forgotten, and they never reach the analytics event.
@@ -412,6 +566,498 @@ as data.
 
 ---
 
+## The market scanner (private)
+
+Everything above reads **one** company and refuses to tell you what to do about it. That
+refusal is right for that surface and it is not an answer to a different question: *of 837
+Indonesian listings, which forty deserve an hour this week?* You cannot answer that without
+ordering, and there is no honest way to order without a score.
+
+So there is a second, private tier — not linked from the app, writing to a gitignored
+`reports/` directory — that sweeps a whole market and scores every name it can reach.
+
+```bash
+python scripts/refresh_listings.py --market ID     # once, then when it goes stale
+python scripts/calibrate_tape.py                   # the tape baselines
+python scripts/calibrate_patterns.py               # what the chart patterns predicted
+python scripts/backtest_verdict.py --market ID     # what the blend is worth
+python scripts/scan_market.py --market ID --deepen all --hold BBCA,TLKM
+```
+
+**The universe is fetched, not remembered.** `universes.py` refuses to ship an S&P 500 list
+from memory because a misremembered ticker produces a plausible row for a company nobody
+asked about. IDX has ~840 listings — the same error at twice the length. So the whole-market
+list comes from the provider's own equity screener, is written to disk with the date it was
+taken, and every report prints how many days old it is.
+
+**The funnel narrows in a deliberate order.** Universe → batched price history → **the
+turnover floor** → cross-sectional rank → four lenses and the share register on a shortlist →
+verdict. Tradeability
+is filtered *second*, not last, and that placement is the single most consequential decision
+in the scanner: most of IDX cannot absorb a personal order, thin names carry the most extreme
+percentiles on every price signal, and a scan that ranked first would spend its whole
+fundamentals budget on names it was about to discard. On a real sweep, **837 listed → 243
+tradeable**.
+
+**The score is three family scores, not nine component scores.** Price rank, long-horizon
+trend, order flow, the tape reading and chart formations are one weighted mean; value and
+accounting quality are another; free float and share-count trend are a third. The three are then weighted
+*equally*, because nine measurements over three bodies of data are not nine opinions — the
+same argument `explain._family_votes` has made since it shipped. Averaging all nine would
+hand the price record five votes to the filings' two purely because price signals are cheaper
+to compute. A family that read only half its evidence casts only half a vote.
+
+**A third body of data: the share register.** The app's cross-check always rested on price
+and filings sharing no inputs. The register is neither — who holds the shares, how little of
+the company is actually for sale, and whether the count of shares keeps going up. On IDX the
+median listing is **68% insider-held**, and a 9% free float is a different instrument from a
+60% one: the quoted price is what a handful of holders agree it is, and the turnover floor
+does not catch it because a thin float still prints respectable volume on its excited days.
+Share issuance is the other half — rights issues are routine on IDX, and nothing else in this
+app would notice a company that doubled its share count in three years. Both are gates as
+well as components: under 8% free float, or over 25% a year of issuance, caps the action at
+hold whatever the score.
+
+The independence claim for this third family is deliberately narrower than for the first two
+— the share count *is* printed in the filings, and what is true is only that no filings lens
+reads it. So it is measured rather than asserted: every scan reports the realised rank
+correlation between the three families. On a real IDX30 sweep they read **+0.07 to +0.10**
+against each other, which is what the equal weighting assumes and what this measurement
+exists to check.
+
+**Bandarmology, and what it actually needs.** The Indonesian practice reads the exchange's
+**broker summary** — which broker codes net-bought today, and how much was foreign. That
+file *is* the method, it sits behind a bot check, and no provider this app can reach
+redistributes it. So `tape.py` does not claim to do bandarmology. It computes the OHLCV
+shadow of the one question that survives the missing data: *on the days when the most shares
+changed hands, who finished in control?* A session's close inside its own high-low range says
+who won it; averaged over a year's heaviest sessions and compared against its ordinary ones,
+it says whether size arrives to buy or to sell. It cannot say who, and every surface that
+renders it says so.
+
+It is also *measured*, and the measurement is the interesting part. Tested against each
+market's own median — not against zero, which called the median stock an accumulation
+candidate until `scripts/calibrate_tape.py` existed — the test fires on **13.3% of 188
+Indonesian listings** against 5% expected by chance, and on **4.2% of 120 US large caps**,
+which *is* chance. This is an emerging-market phenomenon, exactly the shape you would expect
+if thin books let one operator leave a footprint and deep ones do not. Two consequences ship
+with it: on US listings the component is measuring nothing and says so, and even on IDX
+roughly two in five hits are false positives — a count the scan prints against the count
+chance predicts.
+
+Volume concentration rides along and deliberately **never scores**. A stock that traded a
+quarter of its year in five sessions is not thereby good or bad, it is unsizeable — so it
+gates rather than costing points.
+
+**Chart patterns, and the finding nobody expected.** `swing.py` has always declined
+head-and-shoulders, flags, wedges and cups *by name*, on three arguments: two honest
+implementations disagree, a fixed-threshold matcher fires on noise, and Lo, Mamaysky & Wang
+(2000) found distributional information rather than an edge. All three are answerable, and
+`patterns.py` answers them rather than waving them away.
+
+*Reproducibility* is answered by using LMW's own method — kernel-regression smoothing, then
+each shape defined as inequalities on five consecutive extrema. Nothing there is a judgement
+call. *Noise-firing* and *no edge* are measurable, so `scripts/calibrate_patterns.py`
+measures both: how often each formation appears in a quarter, and what happened next.
+
+Detection runs in a **rolling window with a confirmation lag**, because a kernel regression
+is two-sided — smoothing a whole series and finding a shape in the middle of it builds the
+pattern partly out of the returns it is about to claim to predict. Nothing at day *t* uses a
+price from day *t+1*.
+
+The measurement went through three wrong answers before it produced a right one, and each is
+recorded in the script: pooled observations turned a handful of market episodes into
+hundreds of "independent" ones; a null of zero ignored that the unconditional 63-day excess
+return in the sample was **+13.4%**, which made every pattern look brilliant; and a firing
+rate measured over six years said 97% where the quarter that actually matters said 22%.
+
+What survived, on both markets, is the opposite of the chart books:
+
+> **Every formation that survived correction predicted UNDERperformance** — a
+> head-and-shoulders and its bullish mirror image measured the same, around −3% abnormal over
+> a quarter on IDX and −1% on US large caps. A five-point pattern needs five turning points
+> in thirty-five sessions, which only a stock going nowhere provides. The shape is a marker
+> of chop, not a forecast.
+
+So the scanner scores the *presence* of a formation by the measured sign and ignores the
+textbook one, which it carries beside it as the claim the data declined to support. Flags,
+pennants, wedges and cup-and-handle remain refused — LMW never defined them either.
+
+**Where the trade is wrong.** A scanner that says BUY and stops has answered half the
+question: the same name reads identically whether it is sitting on support just defended or
+two percent under a ceiling it has failed at three times. `structure.py` reports the nearest
+support below and resistance above, both from levels the market actually defended, and the
+reward-to-risk between them. It is deliberately **not a scoring component** — the score
+answers "is this worth owning" and this answers "is now a sensible moment", and blending
+them would let a tidy entry make a poor company look better. It feeds a gate when the
+ceiling is three times closer than the floor **or when the floor is more than 35% below**,
+and the numbers, and nothing else.
+
+A reward-to-risk figure is also **withheld entirely** when the floor it divides by sits
+within half an average daily range of the price. That is not fastidiousness: on the same
+sweep, 40 of 251 names had a floor that close, their ratios ran to a median of 7.2 and a
+maximum of 84 to 1 against a median of 0.73 for everyone else, and **all twelve of the
+highest ratios in the market were among those 40**. The ratio divides by the distance to
+the floor, so it grows as the stop becomes more fragile — ranking by it returns almost
+exactly the list of names whose stops cannot be used. The setup itself is not condemned
+and nothing gates: buying a defended level is real, and it is only the arithmetic
+flattering it that is refused.
+
+That second clause was missing until a full sweep exposed it. `_band` returns the first
+state that matches and tests the risk *distance* before the ratio, so `riskTooWide` and
+`bad` are mutually exclusive labels rather than points on a scale — and the gate read only
+`bad`. The result was that the worst entry state was the one state that did not gate: the
+top-scoring name in the market read STRONG_BUY with its only defended floor 35% beneath
+it, which is not a stop but a second opinion about the whole thesis.
+
+**The market the list was produced in.** Every score here is cross-sectional, so the top of a
+falling market is still a top — and a ranked table produced during a 27% drawdown looks
+identical to one produced at a high. The benchmark's own regime prints at the top of every
+report. It scores nothing and gates nothing: market timing is a claim nobody here has
+measured.
+
+**Reporting soon.** The next scheduled results date rides along free with the share-register
+fetch. Buying inside a fortnight of a report makes the position partly a bet on an
+announcement nothing here has read. Context, not points.
+
+**The chart, with the analysis already on it.** Every reading above arrives as prose: a
+formation completed on a date, a stop belongs under a level, the heaviest sessions closed
+high in their range. Each of those is a claim about a *shape*, which is the one kind of
+claim a reader can check at a glance and cannot evaluate at all from a sentence — whether
+a 0.31 lift is a tendency across fifty sessions or one index-rebalance print is visible on
+a chart and invisible in a mean. So `chartlayers.py` positions what the other modules
+already measured and `AnnotatedChart.tsx` draws it: candles, the three averages, the
+Bollinger band, every defended level **with its touch count**, the stop and first ceiling
+as a shaded band, each formation's five extrema with its neckline, the volume with the
+heavy sessions marked, and a pane showing where each of those closed against the mean the
+Welch test actually compared them to.
+
+It computes nothing new, and it refuses two things it would be easy to draw. It never
+smooths with hindsight — a two-sided kernel fitted over the whole series traces a pattern
+built partly from prices that came after it, so each formation's curve is refitted on the
+window that existed when it completed and stops on the detection bar. And it never
+projects a target: the measured direction of these shapes contradicted the textbook one,
+so the arrow every chart book ends with would assert something this app's own study
+declined. The measured excess and the textbook bias sit side by side instead, labelled,
+and where they disagree the panel says so.
+
+**Where the trade happened, which is not where the price turned.** Every level in this
+app came from one mechanism: prices the market *turned* at, clustered and counted. A sweep
+showed what that costs — 46 of 251 tradeable names had no usable floor, either none at all
+or one so close that the reward-to-risk ratio is withheld. `volumeprofile.py` adds the
+other mechanism, volume at price, from the OHLCV already in hand.
+
+Then it was measured, and the measurement said no. Across 250 names, six years and 64,969
+touches, price arriving at a high-volume band held 69.4% of the time against 68.0% at an
+ordinary band the same distance away; further out the gap widens, but **no distance bucket
+survives a false-discovery correction** and the nearest bucket — the only one where a level
+could serve as a stop — flipped sign between a 60-name sample and a 250-name one.
+
+Then the same test was run on the US market, and it came out the **other way**: pooled,
+a US shelf holds 1.4 points *less* often than an ordinary band, against +2.9 on IDX, with
+the 2–5 ATR bucket at −3.7 points. Two independent markets, opposite signs, nothing
+significant on either. That is what no effect looks like.
+
+So the profile draws and nothing reads it. The point of control, the value area and the
+shelves are shaded on the chart as a description of where the year's positions were
+opened, every level is a band rather than a price because daily bars cannot support more,
+and `structure.py` finds its levels the way it always has. The gap that motivated the
+module is still open, and the module says so.
+
+**The report draws its own charts.** Every directional row — buy, reduce or avoid, a
+hundred of them on a full Indonesian sweep — carries an inline SVG of the last nine
+months: candles, the defended levels with their touch counts, the stop and first ceiling
+as shaded bands, the latest formation's window, and the volume bands. It is rendered in
+Python from the same `chartlayers.build()` geometry the app's interactive chart consumes,
+so there is one source of every level and two renderers rather than two opinions. The
+file stays self-contained and opens from disk with no server.
+
+**The results are in the app, not only in a file.** The scan is a script because a whole
+exchange takes about an hour and the serverless function has sixty seconds — that
+constraint is real. But the RESULT is a JSON file that already exists, and for a week the
+only way to read it was to open a seven-megabyte HTML report by hand. `GET
+/api/scan/latest` serves the last local scan, trimmed to what a table needs (481KB for 775
+names, against 35MB with the chart geometry), and `ScanPanel` renders it on the landing
+page above the other two market-level panels. It runs nothing.
+
+It is local by construction: `reports/` is gitignored and never deployed, so the published
+app gets `available: false` and the panel says which command to run. That is the same
+privacy boundary the scanner already had, not a new one.
+
+**What the company actually does — and an industry label is not it.** Everything above
+judges a business without ever naming it. `field.py` carries the data source's own
+description of what each company sells, and the scan panel searches it. The label alone
+cannot find a specialist: KETR.JK is filed under *Communication Equipment*, which it
+shares with radio makers and handset distributors, and the phrase that identifies it —
+"sells submarine and terrestrial fiber optic cable systems" — exists only in the prose,
+at **character 361** of a 673-character summary against a 320-character display trim. So
+the full text travels and the client clamps; shipping the trimmed version would have saved
+60% of the payload and broken the one query the feature exists to answer. The search also
+ignores the action filter, because a specialist is almost always a *Hold* — the premise of
+the screen next door — and intersecting the two would hide the answer silently.
+
+**The words that identify a company, where the label cannot.** `field.distinctive_terms`
+reports the terms common in a company's own description and rare across the market's —
+for KETR, *cable, optic, fiber*. Each is a chip that runs the full-text search, and
+clicking "cable" on the 771-name Indonesian sweep returns 24 names: KETR, MTEL, IKBI,
+INET, DATA and nineteen others, sitting in at least three different industry labels. That
+is the competitive set the label could not produce, and it is the point. The search then
+names the largest three of the match by revenue — for "cable" that is TOWR, MTEL and MDIY,
+not KETR — while refusing the word *field*, because a text match is a set of companies
+that use a word and nothing has checked that they compete.
+
+It is **word frequency, not a classification**. A company's own name is excluded, which is
+most of the cleanup: without it Blue Bird returns *blue, bird* and Telkom returns
+*telekomunikasi*. A term can still mislead — MAHA returns *hauling, mover* because "prime
+mover trucks" tokenises into separate words. Below fifty descriptions the function refuses
+outright: the "too common" ceiling is a share of the corpus and the floor is a count, so on
+a 45-name scan the two cross and almost nothing survives, which looked like a working
+feature returning an empty answer.
+
+**Where it stands among the names doing the same thing.** `field.standings` ranks the
+scanned names inside each industry label by **revenue, never market capitalisation** — the
+same argument the neglect screen rests on, since market cap is the quantity the screen
+suspects of being wrong, and ranking a cheap champion by it means the more underrated it
+is the smaller it looks. "Leads its field" costs rank 1, three or more measured peers and
+twice the runner-up's revenue: a bare rank-1 test calls **97 of 97** Indonesian fields
+won, at 1.5x it is 42 and at 2x it is 31. At that threshold the US standings return AAPL,
+AMZN, MSFT, NVDA, PM and HCA for their industries, which says the arithmetic is not broken
+and nothing more.
+
+It is **not market share**, and the caveat ships inside the payload as `basis` so a client
+cannot render a rank without it — design rule 10 fails the build on one that tries. Private
+companies, foreign listings and names whose revenue could not be read are all missing from
+the denominator. A field missing its largest member crowns the runner-up and looks no
+different from a correct one, so `unplaced` is reported beside every count.
+
+*A quarter of the exchange files nothing the provider carries.* 215 of 770 cached
+Indonesian records have no statements at all. This was put down to throttling until it was
+measured: re-asked unhurried six weeks later, 47 of 47 came back empty again while four
+large listings asked in between came back complete. The provider's summary does carry a
+trailing year's revenue for all 215, and agrees with the filed year where both exist
+(median ratio 1.04 on 104 names), so a listing with no statements is now ranked on it — never
+in place of a filed year, and with the reading saying so wherever a field compares the two.
+Re-ranking the September sweep places 725 names instead of 526. KETR.JK's two unmeasured
+rivals turn out to be smaller (it leads them at 2.4×), MHKI.JK leaves the specialist
+shortlist to a recycler on 3.3× its revenue that could not be read before, and one lead that
+held only on mixed kinds of figure (DIVA.JK, 2.05× one way and 1.85× the other) is no longer
+named. Measuring more also exposed a hole in the specialist screen: it could select a
+company with no measured rival or the named leader of three, but never the larger of two,
+so reading one small rival was enough to remove a company. It now selects any company with
+no measured rival within twice its revenue — nothing that qualified before falls out.
+RESEARCH_ROADMAP §18.9 has the measurement.
+
+*A wrong currency label manufactures a champion.* The first run of the standings crowned
+RIGS.JK with 99.4% of Indonesian marine shipping and 456 times the runner-up. It is a small
+tug and barge operator whose rupiah statements the provider labels USD, so converting at
+the boundary multiplied a correct figure by about 16,300 — and the output was not a crash,
+it was a confident market leader. A converted figure whose implied price-to-sales ratio is
+implausible where the unconverted one is not is now refused; across all 388 cached records
+whose currencies differ it catches exactly two, and says plainly that 283 involve a rate
+near 1 where it cannot tell. The first version of that guard ran on every name and refused
+71, nearly all of them companies that are simply expensive.
+
+*A closed-end fund is not a company, and nothing available can tell.* On the US
+market "Asset Management" holds Brookfield, BlackRock, a row of business development
+companies and about three dozen closed-end trusts, whose "revenue" is investment income.
+Three signals were tested on the 99 cached US names carrying the label and none separates
+them: `quoteType` reads EQUITY for a BlackRock term trust exactly as for Apple; headcount
+is absent for the trusts and absent for Ares Management and Main Street Capital too; and a
+name test for "Trust" catches 36 trusts and also Northern Trust, a bank with 23,600 staff.
+`Gross Profit` comes closest — it appears on 0 of 38 fund-named income statements, so its
+presence rules a fund out — but it is missing from 36 of the 62 others, so its absence
+rules nothing in.
+
+**The signal that works is the one that was not available when those four were tried.**
+Every name in question had come back empty from a throttled fetch, so there was no
+description to read; once 216 of them were refetched, BTX turned out to describe itself as
+"a mutual fund launched by BlackRock". Measured on 3,359 described US names: of the 138
+labelled Asset Management, **57 say they are a fund** — Guggenheim, Brookfield, BlackRock,
+Eaton Vance, Gabelli, Nuveen, PIMCO — the 81 that do not are operating firms including
+Ares, AllianceBernstein and the business development companies, and it fires on **zero**
+of the other 3,221 names. Those entities are now left unplaced with that reason, because a
+fund is not a company competing in a field and its investment income is not the quantity
+the rest of its label is ranked on. It remains the provider's claim rather than a
+classification this app makes, which is the same footing as the industry label beside it.
+
+*A "niche" flag was built, measured and dropped.* The obvious companion to "leads its
+field" is "and the field is small", measured as the field's share of scanned revenue.
+Across the fields with a clear leader the median holds 0.5% of it — which is 1/97 restated,
+an artifact of how many labels the provider uses rather than a measure of narrowness.
+
+**What the filings say it has done.** `trackrecord.py` reports profits, cash, growth and
+borrowings over the years the statements cover, and its first finding is that its own
+headline flag is worthless alone: **350 of 523** Indonesian listings with three or more
+years — 67% — are profitable in *every* year. A flag admitting two thirds of a market is
+not a distinction, so it ships as description and the narrowing is the conjunction, each
+step carrying its base rate: 67% profitable every year, 58% also cash-backed, 14% also
+growing revenue at or above the market's own top quartile (14.8%, hence the 15% threshold).
+
+Four annual columns is the median history. That does not span a cycle and on this exchange
+those years were a commodity upswing, so every consistency figure carries the window.
+
+Negative free cash flow is **reported, never penalised**. KETR is profitable in all four
+years and grew revenue 28.6% a year while free cash flow was negative in three of them,
+because it was laying cable — a screen that demoted it for that would have been wrong
+about the one company it was built to find, and one that ignored the figure would hide the
+main thing to ask about. Borrowings get the same treatment: 39% of non-financial IDX names
+carry net cash, and of those that borrow the **median is 3.0x EBITDA**, which is exactly
+where the textbook draws "levered" — so no flag ships and the ratio is quoted against that
+median instead. Free cash flow and net debt are both withheld for lenders, whose borrowings
+*are* the business.
+
+**The shortlist, which is the point of the other three.** `_specialists_summary` intersects
+them: the largest **or the only** scanned name in its field, compounding, and uncovered.
+Sole listing counts because `leads` correctly refuses a one-member field — being the
+largest of one is not a position — while having no listed rival *is* the signature of a
+niche, and requiring `leads` would have missed the case this was built for.
+
+Measured on 729 cached Indonesian records before it was built: 4.3% lead a field, 3.6% are
+alone in theirs, 10.0% compound, and **66.5% are uncovered** — the loosest of the three by
+a distance, which is why each ingredient's base rate ships with the list. All three
+together select **five names**, and the top by growth is KETR.JK at 28.6% a year on an
+18.5% net margin. That is evidence the screen finds what it was described, and nothing at
+all about returns: industry labels and the share register arrive as a snapshot with no
+history, so this cannot be backtested even in principle. `scanlog.py` records what each
+screen selected on the day it selected it — which it had been cited for doing, in two
+docstrings, without doing it.
+
+**Scanning a whole exchange, across days.** The scan's own cache is keyed by calendar
+day, which is right for the four legs derived from price and wrong for the statements
+underneath them: filings move quarterly and were being refetched every morning. For 837
+Indonesian names that was waste. For the 9,997 US listings it was disqualifying — one pass
+is about twelve hours at the rate the provider tolerates, so a sweep that expired at
+midnight could never finish one.
+
+`market_data` now keeps the slow-moving half on disk for `--fundamentals-days` (7 by
+default), and two things are deliberately **re-derived on every hit**: the price, because a
+valuation compares a model against today's number, and the FX rate, because thirteen of
+the forty-six names in the IDX30 and LQ45 report in dollars and trade in rupiah. The disk
+therefore holds *unconverted* statements. Measured on live data: 1.52s a name cold against
+0.19s warm, 12KB a name on disk, and the statements come back byte-identical.
+
+That makes a full sweep resumable rather than merely faster — widen the slice each session
+and the earlier names are already paid for:
+
+```bash
+python scripts/scan_market.py --market US --limit 2000 --deepen all --workers 1
+python scripts/scan_market.py --market US --limit 5000 --deepen all --workers 1
+python scripts/scan_market.py --market US --deepen all --workers 1
+```
+
+It is off by default, because the deployed app is serverless with no persistent disk and a
+cache that silently does nothing is worse than no cache. The scan opts in; nothing else
+does.
+
+**Is the buy list one bet?** The scanner ranks each name on its own merits and then sizes
+them by inverse volatility — the right arithmetic for *independent* positions. Whether
+they are independent is a property of the set, invisible from any row, and
+`scripts/scan_market.py` now measures it.
+
+It caught an error of mine on its first run. A sixteen-name IDX buy list contained three
+palm oil producers, a coal miner, a nickel miner and four more commodity names; reading
+those labels, the obvious conclusion is that sixteen tickets are one bet in disguise.
+Measured, those names span about **eight independent bets** — mean pairwise correlation
++0.23, highest pair +0.58, the two palm oil producers at 0.53. Real overlap, and nowhere
+near what the labels implied. Half the list's length is repetition and half is genuine
+diversification.
+
+Quoted on **weekly** returns, because non-synchronous trading attenuates daily
+correlations between thin names and would flatter exactly the concentration the
+measurement exists to find — the same list reads 9.2 bets daily against 7.8 weekly. The
+diversification ratio sits beside it: how much of the available spread the weights
+actually capture.
+
+**What a round trip costs.** The measured effects here are small — the pattern study's
+−3% over a quarter, the tape's less — and a round trip on a thin Indonesian listing can be
+more than that. Every row now carries the estimated cost of crossing the spread twice,
+and where the estimate sits at the estimator's own noise floor it says *unmeasured*
+rather than *cheap*.
+
+**Against its own sector.** A coal miner in the top decile of a coal rally and one in the
+top decile of the whole market are different findings. Sectors with fewer than eight
+scanned names get no percentile at all, because ranking four names produces a number that
+looks like the others and means far less.
+
+**And what the blend is worth.** `provenance()` has always carried the backtest of the
+seven-signal price composite — one component of nine — and admitted that the blend itself
+had never been tested. `scripts/backtest_verdict.py` closes as much of that as the data
+allows: a monthly walk-forward that reconstructs the score from truncated history, ranks
+the universe, and measures the information coefficient and quintile spread against what
+happened next, corrected across horizons.
+
+It covers **about 40% of the score's intended evidence**, and the artifact says so in
+every field. Four components can be reconstructed without reading the future — price rank,
+tape, formations, share issuance. Five cannot, and the two that matter are *unobtainable*
+rather than expensive: this data source publishes no point-in-time filings, so
+reconstructing a discounted cash flow or a Piotroski score on a 2023 date would read
+numbers published in 2026.
+
+Two things that would have made it wrong are guarded and named in the script: the tape's
+baseline is recomputed from the cross-section available at each date rather than borrowed
+from today's calibration, and the pattern component is scored by presence with a fixed
+sign rather than by the study's surviving patterns — which were selected using the whole
+sample, so feeding them back would be circular.
+
+Where a surviving coefficient is contradicted by its own quintile spread, the report says
+so. A rank correlation that lives in the middle of the distribution while the top and
+bottom fifths go the other way is not a finding anybody can act on.
+
+**Everything is quoted gross until it is quoted net — and the cost cannot be measured
+well, which is itself the finding.** A quintile spread is gross, and a personal account
+pays the spread on every rebalance. The obvious move is to subtract a measured cost; that
+was tried and it does not survive scrutiny. `microstructure` resolves a spread only where
+its estimate clears its own noise floor, which happens for the *widest* names and almost
+nowhere else — on 200 Indonesian listings it resolved for **eleven**. The median of those
+eleven is the median of the eleven widest, not of the market, and deducting it turned a
++2.19% monthly gross spread into −3.31% net on the strength of a badly selected sample.
+
+So the artifact reports a **breakeven** instead: the round trip at which each gross spread
+reaches zero. That is a number this data can support. The 21-day spread survives if a
+round trip costs under about 2.2%; the reader's own dealing costs settle it. Whether the
+result lives or dies turns on a quantity nobody here can pin down, and saying that plainly
+is more useful than a confident deduction from eleven names.
+
+**And the half that cannot be backtested at all** is written down instead. Every scan
+appends what it said — ticker, action, score, conviction, the price on the day — to a
+local, gitignored log. `scanlog.summarise` refuses to compute a hit rate under thirty
+resolved observations, because the first ten resolved calls of anything are noise and
+reading them is how a method gets abandoned or trusted for no reason. An observation is a
+name over one 63-session window, not a row: the scanner names the same company scan after
+scan, and the first Indonesian log's 74 buy calls are 23 companies. What its first read in
+December will report, and what will count as a null, were fixed before any call resolved;
+see RESEARCH_ROADMAP §21. It is a slow instrument and produces nothing for months; it is
+also the only honest way the value and quality components will ever be measured.
+
+**Then it is shrunk toward 50 by how much evidence there actually was.** Families that
+disagree, a family that never read, components that were missing — each pulls the result
+toward neutral instead of being silently dropped. A 78 from two agreeing families and a 78
+from one family with three gaps are different claims and must not print the same. Nothing is
+ever imputed: a lens that did not return has its weight removed, not filled with a 50.
+
+**Gates are facts, not opinions, and they override the score.** Below the turnover floor,
+resting on the exchange's Rp 50 tick, fewer than two components reading, Altman distress
+alongside flagged accruals — each returns *no action* whatever the score, and the score is
+still shown so you can see what you would be overriding.
+
+**Every report opens with the null result.** `backtest_results.json` reports that this app's
+own price ranking showed no relationship to subsequent returns surviving correction for
+multiple testing. That paragraph is the first and largest block on the page, above the table,
+because the table means something different depending on it. Where the artifact is missing
+the warning gets *louder*, not quieter.
+
+Click any row in the HTML report for the arithmetic: nine components with their evidence
+grades, all three family readings and how much of a vote each one earned, the shrinkage,
+where the trade is wrong, every pre-trade flag with its measured firing rate, and every gate. A score with no decomposition cannot be argued with, which is exactly
+why `technical.long_term_view` refuses to ship one.
+
+`GET /api/verdict?ticker=BBCA&market=ID` does the same for a single name in about ten
+seconds, and the **Score it** tab renders it. **The published single-company view is untouched** — `/api/confluence` has no score
+and no ordering, and `tests/test_verdict.py` asserts by AST that neither `explain` nor
+`pretrade` can import the scoring module at all.
+
+---
+
 ## Why these particular models
 
 The short version: every number in the app should be traceable to something published, and
@@ -433,7 +1079,7 @@ where a constant was invented, it got replaced by an estimator.
 | `returns[returns < 0].std()` for Sortino | **The published root-mean-square shortfall** | They are different statistics. The old one ran 0.85x on ordinary returns, 1.44x where losses are rare and large, and exactly zero when every loss is the same size — where Sortino came back as 4.7e14. See RESEARCH_ROADMAP §13 |
 | A journal that tells you whether you were right | **One that shows what you wrote, and what has moved** | Grading its own entries would be a backtest of one, on a self-selected sample, with no control for the theses never written down. Movement is reported as movement |
 | Asserting that four lenses are two independent readings | **Cohen's κ between the families' actual verdicts** | Two lenses with skewed habits agree most of the time while sharing nothing: one that calls 70% of companies cheap and one that calls 70% sound land on the same label 58% of the time by construction. Chance-corrected, the price record and the filings come out at κ = +0.03 across 168 names — so the cross-check is earned. The same run found the pair the app declares REDUNDANT agrees no more than that |
-| Sizing on a correlation because it seems reasonable | **Measuring whether correlations persist first** | One year's pairwise correlations rank-correlate 0.50-0.65 with the next year's across four universes, where the ranking's information coefficient was indistinguishable from zero. That gap is the whole licence for the portfolio panel, and a test fails if a re-measurement removes it |
+| Sizing on a correlation because it seems reasonable | **Measuring whether correlations persist first** | One year's pairwise correlations rank-correlate 0.48-0.68 with the next year's across four universes, where the ranking's information coefficient was indistinguishable from zero. That gap is the whole licence for the portfolio panel, and a test fails if a re-measurement removes it |
 | A bare screen flag | **Bayes on the screen's published error rates** | A screen that catches most manipulators on a population where manipulation is rare still produces mostly false alarms. The prevalence decides the answer and nobody can measure it, so it is a control — and the conclusion holds across every value the literature supports |
 | An accounting score with no provenance | **The published sample, on the axes that can be checked** | Piotroski was fitted on US value stocks in 1976-1996, Altman on 1960s manufacturers, Beneish on 1980s SEC cases. Every use today is outside all three, which is provenance rather than a defect — so it is stated, never coloured, and never counted into a fit score |
 | A pre-trade flag on its own | **The flag plus its measured firing rate** | "Altman says distress" is unreadable without knowing how often Altman says distress. Measured across four index universes: the conditions that turned out to fire on most of the market are demoted to base conditions rather than presented as findings, and an uncalibrated check is withheld |
@@ -448,9 +1094,16 @@ Full reasoning, effect sizes, and the validation results are in
 ## How it's built
 
 ```
-app/          Next.js App Router pages, error boundaries
-components/   One panel per lens + shared UI primitives
+app/          Next.js App Router routes: / , stock/[symbol], markets, compare, journal
+components/   One panel per lens + shared UI primitives (ui/), the app shell (shell/),
+              the palette, the stock workspace, company, compare, markets, journal
 lib/          API client, wire types, CSV export, formatting
+              palette.ts  Every colour, and the only place one is written down
+              url.ts      What the address bar means; symbols.ts mirrors symbols.py
+              session.ts  Results kept per symbol for the tab, so navigation restores
+              cache.ts    Confluence payloads shared across views for five minutes
+              watchlist.ts, shortcuts.ts, commands.ts, compare.ts, redact.ts — pure,
+                          and pinned by the frontend assertions
               journal.ts  The thesis journal — client-only by design, so its
                           logic is tested by scripts/check_frontend.mjs
 api/
@@ -485,6 +1138,36 @@ api/
               symbols.py        Ticker → Yahoo symbol, resolved once
               news.py           Google News RSS
               jsonsafe.py       NaN/inf → null before serialising
+
+              — the private scanner, reachable from GET /api/verdict and
+                scripts/scan_market.py, and from nowhere the published
+                single-company view can see (PRODUCT.md constraint 1) —
+              verdict.py        Nine components, three families, one score and
+                                one action, shipped with its own null result
+              listings.py       The whole-market universe, dated
+              tape.py           Who wins the heavy sessions — the OHLCV shadow
+                                of bandarmology, and explicitly not it
+              ownership.py      Free float and share-count trend
+              patterns.py       Lo-Mamaysky-Wang chart formations, scored by
+                                their measured sign and never the textbook one
+              structure.py      Where the trade is wrong: nearest floor, first
+                                ceiling, reward-risk, round-trip cost
+              volumeprofile.py  Where the year's trade actually happened, as
+                                bands. Measured and found NOT to be support,
+                                so it draws and nothing reads it
+              chartlayers.py    Those readings positioned for drawing
+              chartsvg.py       The same geometry as a standalone SVG, for
+                                the scan report — one source, two renderers
+              artifacts.py      Merging one market's measurement into a
+                                stamped file without deleting another's
+              (market_data also keeps statements on disk across days, so a
+                 multi-day whole-market sweep reuses what it paid for. Price
+                 and FX are never cached.)
+              (chartlayers computes nothing new: it refits each formation's
+                 curve on the window that existed when it completed, and
+                 projects no target)
+              basket.py         How many independent bets a buy list actually is
+              scanlog.py        What the scanner said, and what happened next
 docs/
   field-manual.html   Beginner's guide; glossary generated from _lib/explain.py
 scripts/
@@ -497,7 +1180,29 @@ scripts/
                       Do the four lenses actually carry separate
                       information? The measurement behind the rail's
                       "two independent sources"
-tests/        1,100 offline tests
+  refresh_listings.py Fetches the whole-market universe — dated, from a
+                      source that maintains one, never recited
+  calibrate_tape.py   The per-market baselines the heavy-session test is
+                      tested against, and the firing rate that says
+                      whether the signal exists in that market at all
+  calibrate_patterns.py
+                      Do the chart formations predict anything? An event
+                      study on every detection, corrected across all of
+                      them. Every survivor came out NEGATIVE
+  calibrate_volume_profile.py
+                      Does price hold at a volume shelf better than at an
+                      ordinary band the same distance away? Paired within
+                      month, corrected across distance buckets. It does not
+  backtest_verdict.py A monthly walk-forward on the blended score, over
+                      the four components that can be reconstructed
+                      without reading the future. Scope stated, not implied,
+                      and every spread quoted net of its own trading costs
+  review_scanlog.py   What the scanner said and what happened since —
+                      the prospective half, which needs months to speak
+  scan_market.py      The private scanner: sweep a market, score every
+                      tradeable name, write a report
+  render_scan.py      That report as one self-contained HTML file
+tests/        1,690 offline tests (pytest), plus 59 frontend assertions
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -519,20 +1224,30 @@ receives the resolved symbol.
 
 ## API
 
-Everything the UI does is a plain `GET`, with one deliberate exception noted below.
+Everything the UI does is a plain `GET`, except the three routes whose input is personal —
+a holdings list, a reader's own list to rank, and the watchlist whose report dates the
+calendar shows — which are `POST` with `no-store`.
 Interactive docs at `/api/docs`.
 
 | Endpoint | What it returns |
 |---|---|
-| `GET /api/confluence` | **All four lenses in one call, plus the synthesis and the pre-trade checks** — what the UI actually uses |
+| `GET /api/confluence` | **All four lenses in one call, plus the synthesis, the pre-trade checks and the company block** — what the UI actually uses |
+| `GET /api/company` | **What the company is**: profile, listing, statements year by year, dividends, next report. The same block confluence carries |
+| `GET /api/symbols` | **Listings matching a name or ticker**, for the command palette. Reads the committed listing files; no provider call |
+| `GET /api/markets/today` | **What moved the markets**: 22 instruments, each move against its own past year, the unusual ones named, the base rate, and what the source cannot supply. Takes no parameters; five minutes at the edge |
+| `GET /api/markets/calendar` | **The dates that move markets** for the next 90 days, with each exchange's hours and closures, each source's coverage, and what is not published yet. Takes no parameters; an hour at the edge |
+| `POST /api/markets/earnings` | **The next report date for each name on a reader's watchlist** (up to 20), in a body, `no-store` |
+| `GET /api/markets/headlines` | **The past day's headlines** for a market (`market=US\|ID`) and up to four declared `topics` (market, rates, dollar, rupiah, oil, gas, gold, silver, copper, bitcoin). A feed that failed says so |
 | `GET /api/isolation-forest` | Flow: anomalies, accumulation regimes, liquidity profile |
 | `GET /api/technical-analysis` | Trend: indicators, levels, signals, narrative |
-| `GET /api/intrinsic-value` | Value: DCF / DDM / RI with Monte Carlo percentiles |
+| `GET /api/intrinsic-value` | Value: DCF / DDM / RI with Monte Carlo percentiles and the sensitivity grid |
 | `GET /api/quality` | Quality: F-Score, Z''-score, M-Score |
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
-| `GET /api/rank/universes` | The predefined lists, each with its as-of date |
-| `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. The one POST, and the one `no-store` |
+| `GET /api/rank/universes` | The predefined lists and the fetched whole-market lists, each with its as-of date |
+| `GET /api/verdict` | **The private scanner's score and action for one name** — nine components across three families, the tape reading and the chart-formation study with their market-wide firing rates, the share register, where the trade is wrong, what a round trip costs, the market regime, the shrinkage, the gates, and the two backtests that calibrate all of it |
+| `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. `no-store` |
+| `POST /api/rank/list` | **Rank a reader's own list** — the watchlist, or one pasted in. Same engine and caps as `/api/rank`, in a body, `no-store` |
 | `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
 | `GET /api/rank/deepen` | Quality + valuation for a shortlist of up to 8 |
 | `GET /api/exposure` | **What a whole universe moves with** — every name against the factors whose betas were measured to persist, as a cross-section. Needs no ticker |
@@ -548,9 +1263,12 @@ curl "http://localhost:8000/api/confluence?ticker=BBCA.JK&market=ID"
 Each leg of `/api/confluence` reports its own success or failure, so a company with no
 dividend history still returns its other three panels.
 
-**Limits.** Per-IP rate limiting (40/min default; 3/min for the screener and the ranking
-scan; 2/min for shortlist deepening, which is the one route that does *not* batch; 6/min for
-the event study). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
+**Limits.** Per-IP rate limiting (40/min default; 3/min for the screener, the ranking scan
+and the verdict, which runs a universe scan *and* four lenses; 2/min for shortlist deepening,
+which is the one route that does *not* batch; 6/min for the event study; 120/min for the
+symbol finder, which reads two files already in memory and has to keep up with typing; 30/min
+for the market board, its calendar and 20/min for its headlines, most of which the edge
+cache answers; 3/min for the watchlist's report dates, one provider call per name). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
 8. These exist because each of those requests fans out to upstream calls — the caps are sized
 to what actually batches.
 
@@ -609,6 +1327,23 @@ for every name in four universes, which is why it is a script rather than a requ
 .venv/bin/python scripts/measure_lens_agreement.py
 ```
 
+The chart formations score nothing at all until they have been measured, and the
+measurement is the point rather than a formality — it came out backwards from every chart
+book. Re-run it after changing the window, the confirmation lag, or any pattern definition:
+
+```bash
+.venv/bin/python scripts/calibrate_patterns.py
+```
+
+The tape reading has no null to test against until its baselines are measured, and without
+one it reports no direction at all rather than guessing. Re-run it after changing the heavy
+threshold, the window, or the statistic itself — and read the output, because the firing rate
+it prints is the honest answer to whether the signal exists in that market:
+
+```bash
+.venv/bin/python scripts/calibrate_tape.py
+```
+
 The field manual's glossary is generated, so regenerate it after touching the explanation
 layer — CI fails if you forget:
 
@@ -640,6 +1375,10 @@ that did not require relaxing anything:
   many of the four lenses succeeded. *Which* companies someone looks up is behavioural data
   about an individual — a watchlist is one of the more revealing things a person can tell
   you — and this app has no business collecting it.
+- **Route templates, not paths.** Once a ticker could appear in the address, the stock
+  analytics wrapper would have reported it on every page view. A page view now reports
+  `/stock/[symbol]` and never a query string, through an allowlist where any unknown path is
+  `/other`; the build fails if an event gains a key beyond `market` and `lenses`.
 
 It renders in production only, so local development neither pollutes the numbers nor trips
 the CSP on the debug script. `track()` is a no-op off Vercel, so a self-hosted copy sends
@@ -714,12 +1453,13 @@ thresholds that would fire on noise. Calendar effects
 (January, Halloween) are where the multiple-testing critique bites hardest. Headline
 sentiment would need full article text and a lexicon that covers Indonesian.
 
-**No state.** No accounts, no saved watchlists, no persistence on any server. The reading mode,
-the holding horizon, the holdings list and the thesis journal live in your own browser's storage
-and go no further — the journal never crosses the wire at all, and the build fails if it starts
-to;
-every session starts empty on a new machine. The portfolio route is the one place personal
-input crosses the wire, and what that does and does not cost is set out on the panel itself.
+**No state.** No accounts and no persistence on any server. The reading mode, the holding
+horizon, the holdings list, the watchlist, recent tickers and the thesis journal live in your
+own browser's storage and go no further — the journal never crosses the wire at all, and the
+build fails if the request layer can so much as import it or the watchlist. Every session starts
+empty on a new machine. Holdings cross the wire to answer the portfolio question, and the
+watchlist when you press "rank these"; both in a request body, and what that costs is set out
+where you press the button.
 
 ---
 

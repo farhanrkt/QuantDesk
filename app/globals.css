@@ -28,18 +28,18 @@
   h2 { @apply text-h2 font-semibold tracking-tight text-chalk; }
   h3 { @apply text-h3 font-semibold text-chalk; }
 
-  ::selection { background: rgba(53,196,168,0.28); color: #E7EEF5; }
+  ::selection { background: rgba(53,196,168,0.28); color: theme(colors.chalk); }
   :focus-visible { @apply outline-none ring-2 ring-tech/70 ring-offset-2 ring-offset-ink; }
 
   /* Browser surfaces belong to the design system too. */
-  html { caret-color: #6B9BFF; scrollbar-color: #2A3948 #080C10; scrollbar-width: thin; }
+  html { caret-color: theme(colors.tech); scrollbar-color: theme(colors.ruleStrong) theme(colors.ink); scrollbar-width: thin; }
   ::-webkit-scrollbar { width: 11px; height: 11px; }
-  ::-webkit-scrollbar-track { background: #080C10; }
+  ::-webkit-scrollbar-track { background: theme(colors.ink); }
   ::-webkit-scrollbar-thumb {
-    background: #2A3948; border-radius: 99px; border: 3px solid #080C10;
+    background: theme(colors.ruleStrong); border-radius: 99px; border: 3px solid theme(colors.ink);
   }
-  ::-webkit-scrollbar-thumb:hover { background: #3A4C5E; }
-  ::-webkit-scrollbar-corner { background: #080C10; }
+  ::-webkit-scrollbar-thumb:hover { background: theme(colors.ruleHover); }
+  ::-webkit-scrollbar-corner { background: theme(colors.ink); }
   a { text-underline-offset: 0.2em; text-decoration-thickness: 1px; }
 }
 
@@ -75,5 +75,39 @@
 }
 
 /* Recharts overrides — the library's defaults are light-theme. */
-.recharts-cartesian-grid line { stroke: #1E2A36; }
-.recharts-text { fill: #8496A9; font-size: 11px; }
+.recharts-cartesian-grid line { stroke: theme(colors.grid); }
+.recharts-text { fill: theme(colors.ash); font-size: 11px; }
+
+/* ------------------------------------------------------------------------
+   PRINT: a tearsheet of the page you are on.
+   The screen is dark on purpose; paper is not. Every ground prints white and
+   every text and tone token maps to its print equivalent from lib/palette.ts,
+   so a figure keeps its meaning (a "bad" reading still prints red) at a
+   contrast a printer can hold. Chrome, controls and the private score are
+   `print:hidden`; collapsed explanations are opened by the stock page before
+   printing and restored after.
+   ------------------------------------------------------------------------ */
+@media print {
+  @page { margin: 14mm 12mm; }
+  html { color-scheme: light; }
+  body { background: #fff !important; background-image: none !important; color: theme(colors.printBody) !important; }
+  .bg-ink, .bg-panel, .bg-raised, .bg-sunken,
+  [class*="bg-ink/"], [class*="bg-panel/"], [class*="bg-raised/"], [class*="bg-sunken/"] {
+    background: #fff !important; box-shadow: none !important; backdrop-filter: none !important;
+  }
+  .text-chalk { color: theme(colors.printText) !important; }
+  .text-body { color: theme(colors.printBody) !important; }
+  .text-ash, .text-faint, .eyebrow { color: theme(colors.printMuted) !important; }
+  .text-acc { color: theme(colors.printAcc) !important; }
+  .text-dist { color: theme(colors.printDist) !important; }
+  .text-warn { color: theme(colors.printWarn) !important; }
+  /* Identity hues are tuned for the dark ground and fall to 2-2.7:1 on white.
+     On paper the words carry the identity; colours set inline are mapped by the
+     plugin in tailwind.config.ts. */
+  .text-tech, .text-flow { color: theme(colors.printText) !important; }
+  .border-rule, .border-ruleSoft, .border-ruleStrong, [class*="border-"] { border-color: theme(colors.printRule) !important; }
+  .sticky { position: static !important; }
+  .animate-rise, .animate-pulseline { animation: none !important; }
+  section, .rounded-lg, .rounded-xl { break-inside: avoid-page; }
+  a { color: inherit !important; text-decoration: none !important; }
+}
