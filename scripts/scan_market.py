@@ -746,12 +746,27 @@ def deepen(symbol: str, market: str, day: str, use_cache: bool = True) -> dict:
             raise RuntimeError("429 no sector returned — rate limited, not refused")
         return payload
 
+    def valuation_leg():
+        # THE SAME THROTTLE, ON THE VALUATION SIDE. Since the November audit the
+        # engine declines a company whose sector did not arrive rather than
+        # valuing a possible bank as an ordinary company — and a decline stored
+        # as an answer would drop the lens from the blend for the day, which
+        # raises the score. Raising puts it on the retry path, as `quality_leg`
+        # does for the identical signal.
+        try:
+            return valuation_payload(symbol, **_valuation_kwargs(market=market))
+        except Exception as exc:
+            detail = getattr(exc, "detail", None)
+            if isinstance(detail, dict) and detail.get("cause") == "unknown-sector":
+                raise RuntimeError("429 no sector returned — rate limited, "
+                                   "not refused") from exc
+            raise
+
     legs = {
         "anomaly": leg(lambda: whale_payload(symbol, period="2y")),
         "technical": leg(lambda: technical_payload(symbol, range_key="2y",
                                                    market_code=market)),
-        "valuation": leg(lambda: valuation_payload(
-            symbol, **_valuation_kwargs(market=market))),
+        "valuation": leg(valuation_leg),
         "quality": leg(quality_leg),
         # WHAT THE COMPANY SELLS, AND HOW MUCH OF IT. Immediately after the
         # quality leg, and that ordering is the whole design: `quality_payload`

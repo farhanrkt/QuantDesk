@@ -714,3 +714,11 @@ def test_for_long_term_covers_the_panel_and_nothing_is_uncoloured():
                 "timeUnderWaterDays", "relativeExcess.36m", "rollingWorst.3"):
         assert key in built, f"{key} has no explanation"
         assert built[key]["tone"] in ("good", "bad", "warn", "neutral", "none")
+
+
+def test_the_one_year_change_blames_the_range_on_screen_not_the_company():
+    """It told a reader of Apple it "needs a year of history" in the November
+    audit: the one-year view holds about 250 sessions and this needs 253."""
+    out = E.explain("roc252", None)
+    assert "253 trading days" in out["reading"]
+    assert "needs a year of history" not in out["reading"]

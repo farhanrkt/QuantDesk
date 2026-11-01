@@ -669,3 +669,17 @@ def test_no_close_rival_contains_both_flags_the_screen_used_before(rows, ticker,
     assert place["noCloseRival"] is expected
     if place["leads"] or place["onlyRanked"]:
         assert place["noCloseRival"] is True
+
+
+def test_a_coin_is_described_as_what_it_is_not_as_a_throttled_fetch():
+    """BTC-USD's What-it-is tab blamed a throttle for a description no fetch will
+    ever return. Found in the November 2026 audit."""
+    out = F.profile({"quote_type": "CRYPTOCURRENCY", "business_summary": "",
+                     "sector": "", "industry": ""})
+    assert out["summaryState"] == "not a company"
+    assert "a cryptocurrency, not a company" in out["reading"]
+    assert "throttled" not in out["reading"]
+    # A fund that IS described keeps its description.
+    fund = F.profile({"quote_type": "ETF", "business_summary": "Tracks the S&P 500.",
+                      "sector": "", "industry": ""})
+    assert fund["summaryState"] == "described"

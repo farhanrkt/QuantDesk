@@ -271,3 +271,44 @@ def test_a_measured_rival_under_half_its_size_does_not_disqualify(scan):
     out = scan._specialists_summary([pair, close])
     assert out["selected"] == 1
     assert [r["ticker"] for r in out["gated"] + out["tradeable"]] == ["KETR.JK"]
+
+
+def test_the_scan_retries_a_valuation_declined_for_a_missing_sector(scan, monkeypatch, tmp_path):
+    """Since the November audit the valuation declines a company whose sector
+    did not arrive. Stored as an answer, that would drop the lens from the blend
+    for the day and lift the score, so the sweep retries it as the throttle it
+    is, exactly as the quality leg does — and a decline that is FINAL, a coin or
+    a fund, is not retried."""
+    from fastapi import HTTPException
+
+    calls: list = []
+
+    def valuation(symbol, **kwargs):
+        calls.append(symbol)
+        if len(calls) == 1:
+            raise HTTPException(status_code=422, detail={
+                "message": "No sector or industry came back", "cause": "unknown-sector"})
+        return {"engine": "DCF", "baseCase": {"impliedPrice": 10.0}}
+
+    for name in ("whale_payload", "technical_payload"):
+        monkeypatch.setattr(scan, name, lambda *a, **k: {})
+    monkeypatch.setattr(scan, "quality_payload", lambda *a, **k: {"applicable": True})
+    monkeypatch.setattr(scan, "read_profile", lambda *a, **k: {"available": False})
+    monkeypatch.setattr(scan.market_data, "share_register", lambda *a, **k: {})
+    monkeypatch.setattr(scan, "valuation_payload", valuation)
+    monkeypatch.setattr(scan, "RETRY_PAUSE", 0.0)
+    monkeypatch.setattr(scan, "CACHE_DIR", tmp_path)
+
+    legs = scan.deepen("JPM", "US", "2026-11-01", use_cache=False)
+    assert legs["valuation"]["ok"] is True and len(calls) == 2
+
+    calls.clear()
+
+    def final(symbol, **kwargs):
+        calls.append(symbol)
+        raise HTTPException(status_code=422, detail={
+            "message": "BTC-USD is a cryptocurrency, not a company.", "cause": "not-a-company"})
+
+    monkeypatch.setattr(scan, "valuation_payload", final)
+    legs = scan.deepen("BTC-USD", "US", "2026-11-01", use_cache=False)
+    assert legs["valuation"]["ok"] is False and len(calls) == 1

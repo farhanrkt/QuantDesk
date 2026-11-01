@@ -259,6 +259,7 @@ from typing import Optional
 
 import pandas as pd
 
+from . import market_data
 from .valuation import _get_row
 
 # How many measured names a field needs before a rank in it means anything.
@@ -342,8 +343,14 @@ def profile(company: Optional[dict]) -> dict:
 
     has_key = "business_summary" in record
     summary = (record.get("business_summary") or "").strip() if has_key else ""
+    # A coin or an index has no business to describe, and saying so is a fact
+    # about the listing — the branch below called BTC-USD's empty description
+    # the signature of a throttled fetch. Found in the November 2026 audit.
+    kind = market_data.non_company(record)
     if summary:
         state = "described"
+    elif kind:
+        state = "not a company"
     elif not has_key:
         state = "not fetched"
     elif not industry and not sector:
@@ -373,14 +380,18 @@ def profile(company: Optional[dict]) -> dict:
         "employees": int(employees) if employees is not None and employees > 0 else None,
         "country": (record.get("country") or "").strip() or None,
         "website": (record.get("website") or "").strip() or None,
-        "reading": _profile_reading(industry, sector, summary, state),
+        "reading": _profile_reading(industry, sector, summary, state, kind),
     }
 
 
-def _profile_reading(industry: str, sector: str, summary: str, state: str) -> str:
+def _profile_reading(industry: str, sector: str, summary: str, state: str,
+                     kind: Optional[str] = None) -> str:
     where = industry or sector
     if state == "described":
         return (f"Classified as {where}. " if where else "") + _trim(summary)
+    if state == "not a company":
+        return (f"This listing is {kind}, not a company, so there is no business for the "
+                f"data source to describe and no sector or industry to file it under.")
     if state == "none published":
         return (f"Classified as {where}, and the data source publishes no description "
                 f"of what it does beyond that label.")

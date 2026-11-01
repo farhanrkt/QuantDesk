@@ -741,7 +741,13 @@ def _roc252(value, **_):
     label = "One-year price change"
     what = "How much the price has moved over the last twelve months, as a percentage."
     if not _known(value):
-        return unavailable(label, what, "needs a year of history")
+        # NOT "NEEDS A YEAR OF HISTORY", which it said of Apple in the November
+        # audit: the one-year view holds about 250 sessions and this needs 253,
+        # so the missing year was the range on screen, not the company's.
+        return unavailable(label, what,
+                           "it needs 253 trading days of the range on screen, and a one-year "
+                           "range holds about 250 — choose two years or more, unless the "
+                           "listing itself is younger than a year")
     return make(label, what,
                 f"{value:+.1f}% over the past year. That is the whole twelve months including "
                 f"the most recent weeks, so it is a plainer number than the 12-1 momentum "

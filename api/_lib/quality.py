@@ -48,6 +48,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from . import market_data
 from . import posterior as posterior_lib
 from . import screendomain
 from .valuation import _get_row, _safe_float
@@ -400,6 +401,21 @@ def analyze(company: dict, symbol: Optional[str] = None,
     income = company.get("income")
     balance = company.get("balance")
     cashflow = company.get("cashflow")
+
+    # A COIN, A FUND OR AN INDEX IS NOT A COMPANY WITH A MISSING SECTOR. The
+    # branch below told a reader of BTC-USD and SPY that "a repeat fetch will
+    # usually resolve it", which no fetch ever will. Found in the November audit.
+    kind = market_data.non_company(company, symbol)
+    if kind:
+        return {
+            "applicable": False,
+            "cause": "not-a-company",
+            "reason": (f"This listing is {kind}, not a company, so there are no "
+                       f"financial statements for Piotroski, Altman or Beneish to "
+                       f"read. That is what the listing is, not a gap in the data."),
+            "sector": None, "industry": None,
+            "piotroski": None, "altman": None, "beneish": None,
+        }
 
     # AN UNKNOWN SECTOR IS NOT A NON-FINANCIAL SECTOR, and the difference is a
     # wrong answer rather than a missing one.

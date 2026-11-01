@@ -256,7 +256,8 @@ export interface QualityResponse {
    * wants to know what the lender does.
    *
    * `summaryState` is `described`, `none published`, `not returned` (nothing
-   * descriptive came back at all — a throttle signature) or `not fetched`.
+   * descriptive came back at all — a throttle signature), `not fetched`, or
+   * `not a company` (a coin, fund or index, which has no business to describe).
    */
   business?: {
     sector: string | null; industry: string | null;
@@ -285,7 +286,7 @@ export interface QualityResponse {
   /** Where the three numbers came from. Absent when the lens refused to score. */
   domains?: ValidationDomains;
   /** Machine-readable reason the lens declined, when it did. */
-  cause?: "financial" | "no-statements" | "unknown-sector";
+  cause?: "financial" | "no-statements" | "unknown-sector" | "not-a-company";
   explain?: ExplainMap;
 }
 

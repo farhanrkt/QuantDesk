@@ -75,6 +75,7 @@ import datetime as dt
 import email.utils
 import os
 import pickle
+import re
 import threading
 import time
 from pathlib import Path
@@ -636,6 +637,39 @@ def _fundamentals_load(kind: str, ticker: str) -> Optional[dict]:
     return payload if isinstance(payload, dict) else None
 
 
+# WHAT A LISTING IS WHEN IT IS NOT A COMPANY, in the words a sentence needs.
+# A coin, a fund or an index has no sector, no statements and no business, and
+# that is what it IS — a lens that says "no sector came back, a refetch will
+# usually resolve it" about BTC-USD is reporting a fact as a gap. Found in the
+# November audit on BTC-USD and SPY, where every fundamental lens said so.
+NON_COMPANY = {
+    "CRYPTOCURRENCY": "a cryptocurrency",
+    "ETF": "an exchange-traded fund",
+    "MUTUALFUND": "a mutual fund",
+    "INDEX": "a market index",
+    "CURRENCY": "a currency pair",
+    "FUTURE": "a futures contract",
+}
+
+# A coin quoted against a currency, the form `symbols` tells readers to type.
+# Used only when `.info` did not say what the listing is.
+_COIN_PAIR = re.compile(r"^[A-Z0-9]{2,10}-(USD|USDT|USDC|EUR|GBP|JPY|IDR|BTC|ETH)$")
+
+
+def non_company(record: Optional[dict], symbol: Optional[str] = None) -> Optional[str]:
+    """"a cryptocurrency", "an exchange-traded fund" … — or None for a company.
+
+    None also when nothing says: an empty `quote_type` on an ordinary symbol is
+    a lookup that did not arrive, and is left to the lenses' own gap handling.
+    """
+    kind = ((record or {}).get("quote_type") or "").upper()
+    if kind in NON_COMPANY:
+        return NON_COMPANY[kind]
+    if not kind and symbol and _COIN_PAIR.match(symbol.strip().upper()):
+        return NON_COMPANY["CRYPTOCURRENCY"]
+    return None
+
+
 def _company_info_arrived(payload: dict, ticker: str) -> bool:
     """Whether `.info` actually returned, as opposed to returning empty.
 
@@ -699,6 +733,21 @@ _COMPANY_CACHE: dict[tuple[str, str], dict] = {}
 # fetch would serialise unrelated symbols.
 _COMPANY_GUARD = threading.Lock()
 _COMPANY_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+
+# When a record cached without its `.info` stops being served. See `company`.
+_COMPANY_EXPIRES: dict[tuple[str, str], float] = {}
+COMPANY_GAP_TTL_SECONDS = 120
+
+
+def _cached_for(key: tuple[str, str]) -> Optional[dict]:
+    """The day's cached record, unless it was a gap whose few minutes are up."""
+    with _COMPANY_GUARD:
+        expires = _COMPANY_EXPIRES.get(key)
+        if expires is not None and time.monotonic() >= expires:
+            _COMPANY_CACHE.pop(key, None)
+            _COMPANY_EXPIRES.pop(key, None)
+            return None
+        return _COMPANY_CACHE.get(key)
 
 
 def _company_lock(key: tuple[str, str]) -> threading.Lock:
@@ -802,13 +851,13 @@ def company(ticker: str) -> dict:
     """
     key = (ticker.upper(), dt.date.today().isoformat())
 
-    cached = _COMPANY_CACHE.get(key)
+    cached = _cached_for(key)
     if cached is not None:
         return dict(cached)
 
     with _company_lock(key):
         # Re-read: whoever held this lock before us has already filled it in.
-        cached = _COMPANY_CACHE.get(key)
+        cached = _cached_for(key)
         if cached is not None:
             return dict(cached)
 
@@ -828,7 +877,19 @@ def company(ticker: str) -> dict:
         with _COMPANY_GUARD:
             if len(_COMPANY_CACHE) > 128:
                 _COMPANY_CACHE.clear()
+                _COMPANY_EXPIRES.clear()
             _COMPANY_CACHE[key] = result
+            # A RECORD WHOSE `.info` DID NOT ARRIVE IS KEPT FOR MINUTES, NOT THE
+            # DAY. The disk cache has refused to store one since September; this
+            # cache kept it for the rest of the day. Found in the November audit:
+            # one throttled lookup left JPM with no sector, so the valuation took
+            # it for an ordinary company until midnight. Minutes, not zero,
+            # because the legs of one request share the record, and refetching
+            # it for each of them is what gets a lookup throttled.
+            if _company_info_arrived(result, ticker):
+                _COMPANY_EXPIRES.pop(key, None)
+            else:
+                _COMPANY_EXPIRES[key] = time.monotonic() + COMPANY_GAP_TTL_SECONDS
 
     return dict(result)
 
@@ -854,7 +915,7 @@ def cached_company(ticker: str) -> Optional[dict]:
     at most one call per currency pair for a whole sweep.
     """
     key = (ticker.upper(), dt.date.today().isoformat())
-    cached = _COMPANY_CACHE.get(key)
+    cached = _cached_for(key)
     if cached is not None:
         return dict(cached)
     stored = _fundamentals_load("company", ticker)
@@ -1005,6 +1066,10 @@ def _company_uncached(ticker: str, convert: bool = True) -> dict:
         # Where it lists, in the provider's words ("NasdaqGS", "Jakarta"). Optional
         # for consumers: records cached before this key existed lack it.
         "exchange": info.get("fullExchangeName") or info.get("exchange") or "",
+        # WHAT KIND OF LISTING THIS IS: EQUITY, ETF, CRYPTOCURRENCY, INDEX. Read by
+        # `non_company`, so a lens can say a fund or a coin is not a company
+        # instead of reporting a missing sector as a fetch to retry.
+        "quote_type": (info.get("quoteType") or "").upper(),
         "price": price,
         "shares": shares,
         "beta": _safe_float(info.get("beta")),
