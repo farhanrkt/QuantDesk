@@ -56,6 +56,19 @@ def test_upcoming_is_a_window_and_carries_what_each_kind_is():
     assert any(e["kind"] == "fomc" and e["date"] == "2026-12-09" for e in events)
 
 
+def test_the_payload_carries_the_whole_month_and_says_where_it_ends():
+    """A month view needs the month. On 20 November the jobs report (6 Nov) and
+    CPI (10 Nov) have happened and are still November's; the window says where
+    the data stops so a later day is never drawn as an empty one."""
+    payload = C.payload(dt.date(2026, 11, 20))
+    assert payload["window"] == {"from": "2026-10-31", "through": "2027-02-18"}
+    dates = {(e["kind"], e["date"]) for e in payload["events"]}
+    assert ("jobs", "2026-11-06") in dates and ("cpi", "2026-11-10") in dates
+    assert all("2026-10-31" <= e["date"] <= "2027-02-18" for e in payload["events"])
+    # The exchange clock still reads only what is ahead of it.
+    assert all(c["date"] >= "2026-11-20" for c in payload["exchanges"]["US"]["closures"])
+
+
 def test_the_exchanges_carry_their_hours_and_closures():
     payload = C.payload(dt.date(2026, 11, 1))
     assert payload["exchanges"]["ID"]["sessions"]["fri"][0] == ["09:00", "11:30"]

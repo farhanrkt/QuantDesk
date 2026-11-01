@@ -52,7 +52,9 @@ its own column beside every page from 1280px (a band of the same tiles above
 the page below that). 22 instruments, each move set against that instrument's
 own past year (api/_lib/marketboard.py). A calendar of FOMC, CPI, jobs, PCE,
 GDP, Bank Indonesia and exchange closures (api/_lib/econcalendar.py, a
-committed file; scripts/refresh_calendar.py re-checks it), with each event's
+committed file; scripts/refresh_calendar.py re-checks it) — shown as a list,
+as a month grid in the panel and on Today, and as a seven-day strip in the
+band (components/markets/CalendarWidgets.tsx) — with each event's
 past occurrences counted against the half any day shows — all nine pairs are
 within chance. US headlines from Yahoo with thumbnails through next/image; the
 Indonesian press from Google News as text. Tone-neutral, declared order, no

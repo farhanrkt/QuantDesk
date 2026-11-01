@@ -4,13 +4,14 @@ import { ArrowRight, PanelRightClose, PanelRightOpen } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarList } from "@/components/markets/CalendarList";
+import { CalendarMonth } from "@/components/markets/CalendarWidgets";
 import { ExchangeStatusLine } from "@/components/markets/ExchangeStatus";
 import { NewsCompact } from "@/components/markets/NewsList";
 import { MarketSwitch, PriceTile } from "@/components/markets/PriceTile";
 import { useMarketBoard } from "@/components/shell/marketboard";
 import { Button } from "@/components/ui/button";
 import { ScrollRegion } from "@/components/ui/scroll";
-import { earningsEvents, upcoming } from "@/lib/calendar";
+import { byDay, dayHeading, earningsEvents, todayIn, upcoming } from "@/lib/calendar";
 import { clockText, marksFor, relatedFirst, stripFor } from "@/lib/marketboard";
 import type { CalendarEvent, Market } from "@/lib/types";
 import { marketsHref } from "@/lib/url";
@@ -24,7 +25,9 @@ export function eventsFor(
 
 /**
  * The markets panel: prices, the calendar and the day's headlines, in a column
- * of its own beside every page on a screen 1280px or wider.
+ * of its own beside every page on a screen 1280px or wider. The calendar is a
+ * month with the dates written in, over the fortnight ahead as a list; choosing
+ * a day in the month puts that day in the list instead.
  *
  * ON THE SIDE, CHOSEN BY THE OWNER. The first placement was a 44px bar at the
  * foot of the page, and it was too small to read. A column holds large price
@@ -62,14 +65,17 @@ export function MarketRail() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const events = useMemo(() => {
+  const month = useMemo(() => {
     if (calendar.status !== "ready") return [];
     const reports = earningsEvents(
       focus?.earnings ? { symbol: focus.symbol, date: focus.earnings } : null,
       earnings.status === "ready" ? earnings.data.items : [],
     );
-    return upcoming(eventsFor([...calendar.data.events, ...reports], market), new Date(now), 14);
-  }, [calendar, earnings, focus, market, now]);
+    return eventsFor([...calendar.data.events, ...reports], market);
+  }, [calendar, earnings, focus, market]);
+  const events = useMemo(() => upcoming(month, new Date(now), 14), [month, now]);
+  const [picked, setPicked] = useState<string | null>(null);
+  const list = picked ? byDay(month).get(picked) ?? [] : events;
 
   if (fullBoard) return null;
 
@@ -142,11 +148,27 @@ export function MarketRail() {
           </section>
 
           <section aria-labelledby="rail-calendar" className="space-y-2">
-            <h3 id="rail-calendar" className="text-meta font-semibold text-chalk">Next 14 days</h3>
+            <h3 id="rail-calendar" className="text-meta font-semibold text-chalk">Calendar</h3>
             {calendar.status === "ready" ? (
-              events.length > 0
-                ? <CalendarList events={events} kinds={calendar.data.kinds} board={board} compact />
-                : <p className="text-meta text-ash">Nothing on the calendar in the next fortnight.</p>
+              <>
+                <CalendarMonth events={month} today={todayIn(new Date(now))}
+                               from={calendar.data.window?.from} through={calendar.data.window?.through}
+                               selected={picked} onSelect={setPicked} />
+                <div className="flex min-h-[24px] items-center justify-between gap-2 border-t border-ruleSoft pt-2">
+                  <p aria-live="polite" className="text-micro text-ash">
+                    {picked ? `Showing ${dayHeading(picked)}` : "The next 14 days"}
+                  </p>
+                  {picked && (
+                    <button type="button" onClick={() => setPicked(null)}
+                            className="inline-flex min-h-[24px] items-center text-micro text-tech hover:underline">
+                      Back to the next 14 days
+                    </button>
+                  )}
+                </div>
+                {list.length > 0
+                  ? <CalendarList events={list} kinds={calendar.data.kinds} board={board} compact />
+                  : <p className="text-meta text-ash">Nothing on the calendar in the next fortnight.</p>}
+              </>
             ) : (
               <p className="text-meta text-ash" role="status">
                 {calendar.status === "error" ? "The calendar did not load." : "Fetching the calendar…"}

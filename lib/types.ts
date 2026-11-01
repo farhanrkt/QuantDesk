@@ -2103,7 +2103,10 @@ export interface ExchangeInfo {
 
 export interface MarketCalendar {
   verifiedOn: string;
+  /** From the day before this month began, so a month view is whole, to 90 days ahead. */
   events: CalendarEvent[];
+  /** The dates `events` covers. A day outside it is not loaded, which is not the same as empty. */
+  window?: { from: string; through: string };
   kinds: Record<string, { label: string; about: string }>;
   exchanges: Record<Market, ExchangeInfo>;
   coverage: Record<string, string>;

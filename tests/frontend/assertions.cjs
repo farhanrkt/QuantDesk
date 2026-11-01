@@ -683,6 +683,43 @@ t("fired conditions are listed, never counted", () => {
     assert.deepEqual(out.map((e) => [e.ticker, e.date, e.market, e.origin]),
       [["ITMG.JK", "2026-11-20", "ID", "stock"], ["AAPL", "2027-01-28", "US", "watchlist"]]);
   });
+  t("a month is whole weeks, Monday first, with the days either side marked", () => {
+    const nov = CAL.monthGrid("2026-11");                    // 1 November 2026 is a Sunday
+    assert.equal(nov.length, 6);
+    assert.deepEqual(nov[0].map((c) => c.day), ["2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29",
+      "2026-10-30", "2026-10-31", "2026-11-01"]);
+    assert.deepEqual(nov[0].map((c) => c.inMonth), [false, false, false, false, false, false, true]);
+    assert.equal(nov[5][0].day, "2026-11-30");
+    assert.equal(nov[5][1].inMonth, false);
+    const feb = CAL.monthGrid("2027-02");                    // starts on a Monday, 28 days
+    assert.equal(feb.length, 4, "no empty week either side");
+    assert.ok(feb.flat().every((c) => c.inMonth));
+  });
+  t("dates move by the calendar, across months, years and clock changes", () => {
+    assert.equal(CAL.addDays("2026-12-31", 1), "2027-01-01");
+    assert.equal(CAL.addDays("2026-03-08", 1), "2026-03-09", "a US clock change does not skip a day");
+    assert.equal(CAL.addDays("2026-11-01", -6), "2026-10-26");
+    assert.equal(CAL.shiftMonth("2026-12", 1), "2027-01");
+    assert.equal(CAL.shiftMonth("2027-01", -1), "2026-12");
+    assert.equal(CAL.monthHeading("2026-11"), "November 2026");
+    assert.equal(CAL.dayLong("2026-11-10"), "Tuesday 10 November 2026");
+    assert.equal(CAL.todayIn(at("2026-11-01T18:00:00Z"), "Asia/Jakarta"), "2026-11-02", "01:00 in Jakarta");
+    assert.equal(CAL.todayIn(at("2026-11-01T18:00:00Z"), "America/New_York"), "2026-11-01");
+  });
+  t("a day's events sit under the reader's day, in time order, with a short name that fits a cell", () => {
+    const fomc = ev({ kind: "fomc", date: "2026-12-09", time: "14:00", utc: "2026-12-09T19:00:00Z", label: "FOMC decision" });
+    const jobs = ev({ kind: "jobs", date: "2026-12-10", time: "08:30", utc: "2026-12-10T13:30:00Z" });
+    const days = CAL.byDay([jobs, fomc], "Asia/Jakarta");
+    assert.deepEqual([...days.keys()], ["2026-12-10"], "02:00 and 20:30 in Jakarta are the same day");
+    assert.deepEqual(days.get("2026-12-10").map((e) => e.kind), ["fomc", "jobs"]);
+    assert.deepEqual([...CAL.byDay([jobs, fomc], "America/New_York").keys()], ["2026-12-09", "2026-12-10"]);
+    assert.equal(CAL.cellLabel(fomc), "FOMC");
+    assert.equal(CAL.cellLabel(ev({ kind: "holiday", label: "Exchange holiday" })), "Closed");
+    assert.equal(CAL.cellLabel(ev({ kind: "earnings", ticker: "BBCA.JK", label: "Earnings report" })), "BBCA");
+    assert.equal(CAL.relativeDay("2026-11-06", "2026-11-01"), "in 5 days");
+    assert.equal(CAL.relativeDay("2026-11-02", "2026-11-01"), "tomorrow");
+    assert.equal(CAL.relativeDay("2026-10-31", "2026-11-01"), "yesterday");
+  });
   t("the panel's history line is history, and says when it is within chance", () => {
     assert.equal(MB.historyShort({ name: "S&P 500", available: true, events: 17, above: 7, p: 0.63 }),
       "S&P 500: bigger than a median day on 7 of the last 17 (half expected), within chance");

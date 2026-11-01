@@ -260,15 +260,15 @@ highlight, no totals, and says when the currencies differ.
 
 **Where it lives.**
 - **Markets → Today** is the whole board, and the view `/markets` opens on: the table, 60
-  days of the calendar with filters, what past event days were like, and the headlines with
-  thumbnails.
+  days of the calendar with filters and a month beside them, what past event days were like,
+  and the headlines with thumbnails.
 - **The markets panel** is a 352px column beside every other page, from 1280px. It scrolls
   on its own, can be hidden (remembered in this browser), steps aside on Today, and is never
   printed. The page keeps its own 1280px measure inside its column, so hiding the panel
   widens nothing.
 - **Below 1280px**, the panel becomes a band at the top of the page: the same tiles in one
   row that scrolls sideways, the exchanges' status, the measured relation in words, and the
-  next two dates.
+  next seven days as a strip.
 - **Why the side.** The first version was a 44px bar of 13px chips fixed to the foot of the
   page, and the owner's verdict was that it was too small to read. The side was the owner's
   choice. A column holds large tiles, a fortnight of dates and the news one above the other,
@@ -286,6 +286,15 @@ under it, two to a row in the panel and 160px wide in the band.
   the `.ics` in the browser.
 - **Exchange status:** computed from the hours and closures every half minute. It shows a
   filled dot for open and a hollow one otherwise, a state rather than a colour.
+- **The month and the strip** (`CalendarWidgets.tsx`) write each event's short name into its
+  day — FOMC, CPI, Jobs, BI, Closed, a ticker for a report. Monday first. Today is a filled
+  disc, a chosen day a tech-tinted hairline. Only a day with something on it is a button, so a
+  keyboard walks a month in a handful of stops, and its name carries the date, how far off it
+  is, and every event. Every event day looks the same: the history says event days were mostly
+  ordinary, so nothing is drawn as bigger. A closure reads in `ash` because the market is
+  shut, a state rather than a weight. A day past the 90 days loaded is drawn dashed and says
+  "not loaded yet", never as an empty day, and the server sends the whole current month so
+  its first weeks are not blank either.
 
 **Thumbnails come through our own origin.** `next/image` fetches them from the two hosts
 `next.config.mjs` allows, so the CSP stays `img-src 'self'`. Their `alt` is empty, because

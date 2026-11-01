@@ -174,17 +174,33 @@ def coverage(doc: Optional[dict] = None) -> dict[str, str]:
     return out
 
 
-def upcoming(today: dt.date, days: int = 90, doc: Optional[dict] = None) -> list[dict]:
-    """Events from `today` through `days` ahead, each with its UTC instant and kind text."""
+def between(first: dt.date, last: dt.date, doc: Optional[dict] = None) -> list[dict]:
+    """Events dated `first` through `last`, each with its UTC instant and kind text."""
     doc = doc or load()
-    last = (today + dt.timedelta(days=days)).isoformat()
-    first = today.isoformat()
     out = []
     for event in doc["events"]:
-        if first <= event["date"] <= last:
+        if first.isoformat() <= event["date"] <= last.isoformat():
             out.append({**event, "utc": instant(event), "allDay": not event.get("time"),
                         "label": KINDS[event["kind"]]["label"]})
     return out
+
+
+def upcoming(today: dt.date, days: int = 90, doc: Optional[dict] = None) -> list[dict]:
+    """Events from `today` through `days` ahead."""
+    return between(today, today + dt.timedelta(days=days), doc)
+
+
+def window(today: dt.date, days: int = 90) -> tuple[dt.date, dt.date]:
+    """The dates the payload carries: this month so far, and `days` ahead.
+
+    FROM THE START OF THE MONTH, NOT FROM TODAY, because the panel draws a month
+    and a month whose first three weeks are blank reads as three quiet weeks.
+    ONE DAY EARLIER STILL: a release on the last evening of the previous month in
+    New York is the first morning of this one in Jakarta, and the browser files
+    every timed event under the reader's own day. The lists show only what is
+    still ahead; they filter by the reader's clock, not by this window.
+    """
+    return today.replace(day=1) - dt.timedelta(days=1), today + dt.timedelta(days=days)
 
 
 def past_dates(kind: str, through: dt.date, doc: Optional[dict] = None) -> list[dt.date]:
@@ -197,9 +213,13 @@ def past_dates(kind: str, through: dt.date, doc: Optional[dict] = None) -> list[
 def payload(today: dt.date, days: int = 90) -> dict:
     """Everything the panel needs, none of it about the reader."""
     doc = load()
+    first, last = window(today, days)
     return {
         "verifiedOn": doc.get("verifiedOn"),
-        "events": upcoming(today, days, doc),
+        "events": between(first, last, doc),
+        # Said, so the month view can mark a day past `through` as not loaded
+        # rather than drawing it as a day with nothing on it.
+        "window": {"from": first.isoformat(), "through": last.isoformat()},
         "kinds": KINDS,
         "exchanges": {code: {**info, "closures": [
             {"date": e["date"], "kind": e["kind"], "time": e.get("time"), "detail": e.get("detail")}

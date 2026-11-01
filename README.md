@@ -301,10 +301,13 @@ the day's headlines.
 wider. It scrolls on its own and can be hidden.
 - **Prices:** eight large price tiles, each with a three-month sparkline.
 - **Exchange status:** whether NYSE and IDX are open, ticking on your clock.
-- **Calendar:** the next 14 days.
+- **Calendar:** a month with the dates written into their days, and the next 14 days as a
+  list. Choosing a day in the month lists that day instead.
 - **Headlines:** with thumbnails.
 
-Narrower screens get a band of the same tiles at the top of the page, with the next two dates.
+Narrower screens get a band of the same tiles at the top of the page, with the next seven days
+as a strip; a tap on a day lists what is on it. Markets → Today has a larger month beside the
+full 60-day list, and its filters apply to both.
 
 **Calibrated, not coloured.** A day's move has no good or bad: crude falling helps an airline
 and hurts a coal miner. So nothing is red or green. Each move is set against **that

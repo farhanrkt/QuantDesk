@@ -3,6 +3,7 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CalendarList } from "@/components/markets/CalendarList";
+import { CalendarMonth } from "@/components/markets/CalendarWidgets";
 import { eventsFor } from "@/components/markets/MarketRail";
 import { NewsCard } from "@/components/markets/NewsList";
 import { MarketSwitch } from "@/components/markets/PriceTile";
@@ -13,7 +14,7 @@ import { Explain } from "@/components/ui/explain";
 import { ScrollRegion } from "@/components/ui/scroll";
 import { Sparkline } from "@/components/ui/sparkline";
 import { StateCard } from "@/components/ui/state";
-import { earningsEvents, upcoming } from "@/lib/calendar";
+import { byDay, dayHeading, earningsEvents, todayIn, upcoming } from "@/lib/calendar";
 import { clockText, dayText, levelText, rowsFor, sinceText } from "@/lib/marketboard";
 import type { BoardRow, CalendarKind, Market, MarketBoard } from "@/lib/types";
 import { cn, ordinal } from "@/lib/utils";
@@ -232,7 +233,9 @@ const CALENDAR_FILTERS: { key: string; label: string; kinds: CalendarKind[] }[] 
 /**
  * Sixty days of the dates that move markets, filterable by kind, each with what
  * it is and — for FOMC, CPI, jobs and Bank Indonesia — every instrument's line
- * on how its past occurrences went. Closures are the market in view's own.
+ * on how its past occurrences went. Closures are the market in view's own. A
+ * month beside the list shows the same dates as a calendar, and the filters
+ * apply to both; choosing a day there puts that day in the list.
  */
 function FullCalendar({ board, market }: { board: MarketBoard; market: Market }) {
   const { calendar, earnings } = useMarketBoard();
@@ -242,13 +245,19 @@ function FullCalendar({ board, market }: { board: MarketBoard; market: Market })
     const timer = window.setInterval(() => setNow(Date.now()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
-  const events = useMemo(() => {
+  const month = useMemo(() => {
     if (calendar.status !== "ready") return [];
     const kinds = new Set(CALENDAR_FILTERS.filter((f) => shown.has(f.key)).flatMap((f) => f.kinds));
     const reports = earningsEvents(null, earnings.status === "ready" ? earnings.data.items : []);
-    return upcoming(eventsFor([...calendar.data.events, ...reports], market), new Date(now), 60)
-      .filter((e) => kinds.has(e.kind));
-  }, [calendar, earnings, market, shown, now]);
+    return eventsFor([...calendar.data.events, ...reports], market).filter((e) => kinds.has(e.kind));
+  }, [calendar, earnings, market, shown]);
+  const events = useMemo(() => upcoming(month, new Date(now), 60), [month, now]);
+  const [picked, setPicked] = useState<string | null>(null);
+  const days = byDay(month);
+  // A filter can take away everything on the chosen day; the list then goes
+  // back to the sixty days rather than showing an empty day.
+  const list = picked && days.has(picked) ? days.get(picked) ?? [] : events;
+  const showing = picked && days.has(picked) ? picked : null;
 
   const toggle = (key: string) => setShown((current) => {
     const next = new Set(current);
@@ -272,9 +281,29 @@ function FullCalendar({ board, market }: { board: MarketBoard; market: Market })
       <CardBody className="space-y-4">
         {calendar.status === "ready" ? (
           <>
-            {events.length > 0
-              ? <CalendarList events={events} kinds={calendar.data.kinds} board={board} />
-              : <p className="text-meta text-ash">Nothing of the kinds chosen in the next 60 days.</p>}
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
+              <div>
+                <CalendarMonth events={month} today={todayIn(new Date(now))} size="full"
+                               from={calendar.data.window?.from} through={calendar.data.window?.through}
+                               selected={showing} onSelect={setPicked} />
+              </div>
+              <div className="min-w-0 space-y-2">
+                <div className="flex min-h-[24px] items-center justify-between gap-2">
+                  <p aria-live="polite" className="text-micro text-ash">
+                    {showing ? `Showing ${dayHeading(showing)}` : "The next 60 days"}
+                  </p>
+                  {showing && (
+                    <button type="button" onClick={() => setPicked(null)}
+                            className="inline-flex min-h-[24px] items-center text-micro text-tech hover:underline">
+                      Back to the next 60 days
+                    </button>
+                  )}
+                </div>
+                {list.length > 0
+                  ? <CalendarList events={list} kinds={calendar.data.kinds} board={board} />
+                  : <p className="text-meta text-ash">Nothing of the kinds chosen in the next 60 days.</p>}
+              </div>
+            </div>
             <p className="prose-col text-micro leading-snug text-ash">
               Times are on your clock. Transcribed from the{" "}
               {Object.values(calendar.data.sources).map((source, i, all) => (

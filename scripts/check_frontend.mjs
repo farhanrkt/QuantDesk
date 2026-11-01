@@ -751,6 +751,7 @@ const BOARD_FILES = [
   "components/markets/MarketBand.tsx", "components/markets/PriceTile.tsx",
   "components/markets/NewsList.tsx", "components/markets/CalendarList.tsx",
   "components/markets/ExchangeStatus.tsx", "components/landing/MarketsToday.tsx",
+  "components/markets/CalendarWidgets.tsx",
 ];
 const BOARD_FORBIDDEN = [
   [/\.sort\(|\btoSorted\(/, "sorts"],
