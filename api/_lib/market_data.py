@@ -1631,6 +1631,7 @@ def _register_uncached(ticker: str) -> dict:
         "institutionsFloatPercentHeld": None,
         "institutionsCount": None,
         "shares": None,
+        "splits": None,
         "recommendations": None,
         "earningsSurprises": None,
         "nextEarnings": None,
@@ -1678,6 +1679,28 @@ def _register_uncached(ticker: str) -> dict:
                 records.append({"date": date, "count": float(count)})
             if records:
                 out["shares"] = records
+    except Exception:
+        pass
+
+    # The splits that series runs across, as dated records for the same reason.
+    # The provider does not restate its share counts for them, so a 10-for-1
+    # split arrives as a +900% step; `ownership.split_adjusted` restates the
+    # counts, and needs each ex-date and ratio (new shares per old) to do it.
+    try:
+        splits = handle.splits
+        if splits is not None and len(splits) > 0:
+            records = []
+            for stamp, ratio in splits.items():
+                ratio = _safe_float(ratio, default=None)
+                if ratio is None or ratio <= 0 or ratio == 1.0:
+                    continue
+                try:
+                    date = pd.Timestamp(stamp).date().isoformat()
+                except (TypeError, ValueError):
+                    continue
+                records.append({"date": date, "ratio": ratio})
+            if records:
+                out["splits"] = records
     except Exception:
         pass
 
