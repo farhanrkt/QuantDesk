@@ -774,6 +774,30 @@ def test_heavy_issuance_gates_at_hold_however_good_the_rest_is():
     assert result["action"] not in {"BUY", "STRONG_BUY"}
 
 
+def test_a_split_alone_never_fires_the_heavy_issuance_gate():
+    """End to end from the raw register. NVDA's 10-for-1 of June 2024 fired this
+    gate as "the largest single step was +900%" on a company that had issued
+    almost nothing, because the provider's counts are not restated for splits."""
+    import datetime as dt
+
+    from _lib import ownership
+
+    ex = dt.date(2024, 6, 10)
+    shares = []
+    for days in range(0, 1096, 14):
+        when = dt.date(2023, 9, 1) + dt.timedelta(days=days)
+        shares.append({"date": when.isoformat(),
+                       "count": 2.46e9 * (10.0 if when >= ex - dt.timedelta(days=2) else 1.0)})
+    raw = {"ok": True, "insidersPercentHeld": 0.04, "shares": shares}
+    split = {"date": ex.isoformat(), "ratio": 10.0}
+
+    unrestated = scored(register_result=ownership.read(raw))
+    restated = scored(register_result=ownership.read({**raw, "splits": [split]}))
+    assert any(g["id"] == "heavyIssuance" for g in unrestated["gates"])
+    assert not any(g["id"] == "heavyIssuance" for g in restated["gates"])
+    assert restated["score"] > unrestated["score"]
+
+
 def test_a_micro_float_gates_at_hold_rather_than_being_refused():
     """It describes the instrument, not the business. Refusing outright would
     say something about the company that the float does not support."""

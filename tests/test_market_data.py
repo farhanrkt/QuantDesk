@@ -1205,3 +1205,30 @@ def test_concurrent_downloads_never_hand_one_symbol_anothers_prices(monkeypatch)
     for t in threads:
         t.join()
     assert not errors, errors
+
+
+def test_the_register_carries_splits_beside_the_share_counts(monkeypatch):
+    """The provider's share counts are not restated for splits, so the register
+    hands `ownership` the splits to restate them with — as dated records, for
+    the same cache-and-wire reason as the counts. A ratio of exactly 1 is noise."""
+    class FakeTicker:
+        def __init__(self, symbol):
+            self.splits = pd.Series(
+                [4.0, 10.0, 1.0],
+                index=pd.DatetimeIndex(["2021-07-20", "2024-06-10", "2025-01-02"],
+                                       tz="America/New_York"))
+
+        def get_shares_full(self, start=None):
+            return pd.Series([2.46e9, 24.6e9],
+                             index=pd.DatetimeIndex(["2024-06-01", "2024-06-12"]))
+
+        def __getattr__(self, name):
+            raise AttributeError(name)
+
+    monkeypatch.setattr(MD.yf, "Ticker", FakeTicker)
+    out = MD._register_uncached("NVDA")
+
+    assert out["splits"] == [{"date": "2021-07-20", "ratio": 4.0},
+                             {"date": "2024-06-10", "ratio": 10.0}]
+    assert out["shares"] == [{"date": "2024-06-01", "count": 2.46e9},
+                             {"date": "2024-06-12", "count": 24.6e9}]

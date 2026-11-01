@@ -68,6 +68,7 @@ Amihud, Y., Mendelson, H., & Uno, J. (1999). "Number of Shareholders and Stock
 from __future__ import annotations
 
 import datetime as dt
+from fractions import Fraction
 from typing import Optional
 
 import numpy as np
@@ -148,6 +149,120 @@ def _share_series(records) -> Optional[pd.Series]:
     if not counts:
         return None
     return pd.Series(counts, index=pd.DatetimeIndex(dates)).sort_index()
+
+
+# --------------------------------------------------------------------------- #
+# Splits
+#
+# A SPLIT MULTIPLIES THE SHARE COUNT AND ISSUES NOTHING, and the provider's
+# series is not restated for them. NVDA's 10-for-1 of June 2024 arrived as a
+# +900% step, which read as a share count growing 121% a year and fired the
+# heavy-issuance gate on a company that had issued almost nothing; a 1-for-10
+# consolidation would read as a buyback. So every count is restated in today's
+# shares before any trend is read from it.
+#
+# WHERE THE STEP LANDS IS NOT THE EX-DATE. Measured on 1 November 2026: two days
+# before it for NVDA and AVGO, one day before for CMG, one day after for WMT —
+# and on NVDA's step day the series carries both units, 2.46bn and 24.6bn. A
+# date cannot say which unit a count near a split is in; its size can. Beyond
+# this many days of the ex-date the date decides, and inside them each count
+# joins whichever side's level it is nearer.
+# --------------------------------------------------------------------------- #
+SPLIT_WINDOW_DAYS = 30
+# How many counts beyond the window stand for the level on that side.
+SPLIT_REFERENCE_POINTS = 5
+# NOT EVERY "SPLIT" THE PROVIDER FILES IS ONE. It files spin-offs as splits too,
+# with the price-adjustment factor as the ratio: Honeywell's series carries
+# 1.061 on 30 October 2025 and 0.9535 on 29 June 2026, and its share count does
+# not move across either (635m either side of the first, 317m either side of
+# the second). A split exchanges whole shares, p for q, so only a ratio that is
+# one — both terms at most this — restates anything.
+SPLIT_MAX_TERM = 100
+
+
+def _split_events(splits) -> list[tuple[pd.Timestamp, float]]:
+    """(ex-date, ratio) pairs from the boundary's dated records, oldest first.
+
+    The ratio is new shares per old: 10 for a 10-for-1 split, 0.1 for a
+    1-for-10 consolidation. Anything unreadable, non-positive, exactly 1 or not
+    a whole-share exchange is dropped rather than guessed at.
+    """
+    if not isinstance(splits, list):
+        return []
+    events = []
+    for entry in splits:
+        if not isinstance(entry, dict):
+            continue
+        try:
+            when = pd.Timestamp(entry.get("date"))
+            ratio = float(entry.get("ratio"))
+        except (TypeError, ValueError):
+            continue
+        if pd.isna(when) or not np.isfinite(ratio) or ratio <= 0 or ratio == 1.0:
+            continue
+        share = Fraction(ratio).limit_denominator(SPLIT_MAX_TERM)
+        if (share.numerator > SPLIT_MAX_TERM
+                or abs(ratio - share.numerator / share.denominator) > 1e-9 * ratio):
+            continue
+        events.append((when, ratio))
+    return sorted(events)
+
+
+def split_adjusted(series: pd.Series, splits) -> tuple[pd.Series, list[dict]]:
+    """Every count restated in today's shares, and the splits that were applied.
+
+    A split the series does not show is left alone. Where a provider has already
+    restated its history, multiplying the early counts again would invent the
+    very step this exists to remove. The series shows a split when the level
+    after it is nearer the level before it times the ratio than the level before
+    it unmoved.
+    """
+    events = _split_events(splits)
+    if series is None or not len(series) or not events:
+        return series, []
+
+    window = pd.Timedelta(days=SPLIT_WINDOW_DAYS)
+    tz = getattr(series.index, "tz", None)
+    adjusted = series.astype(float)
+    applied = []
+    # Latest first: once every later split is applied, the counts after this one
+    # are in today's shares, which is the unit everything before it is restated in.
+    for when, ratio in reversed(events):
+        if tz is not None:
+            when = when.tz_localize(tz) if when.tzinfo is None else when.tz_convert(tz)
+        stamps = adjusted.index
+        early = adjusted[stamps < when - window]
+        late = adjusted[stamps > when + window]
+        if len(early) and len(late):
+            before = float(early.tail(SPLIT_REFERENCE_POINTS).median())
+            after = float(late.head(SPLIT_REFERENCE_POINTS).median())
+            moved = np.log(after / before)
+            if abs(moved - np.log(ratio)) >= abs(moved):
+                continue
+            level = after
+        elif len(late):
+            level = float(late.head(SPLIT_REFERENCE_POINTS).median())
+        elif len(early):
+            level = float(early.tail(SPLIT_REFERENCE_POINTS).median()) * ratio
+        else:
+            continue
+
+        values = adjusted.to_numpy()
+        near = (stamps >= when - window) & (stamps <= when + window)
+        counted_before = (np.abs(np.log(values * ratio / level))
+                          < np.abs(np.log(values / level)))
+        factor = np.where(stamps < when - window, ratio, 1.0)
+        factor = np.where(near & counted_before, ratio, factor)
+        adjusted = adjusted * factor
+        applied.append({"date": str(when.date()), "ratio": ratio})
+    return adjusted, applied[::-1]
+
+
+def _split_name(ratio: float) -> str:
+    """"10-for-1 split", "3-for-2 split", "1-for-10 consolidation"."""
+    share = Fraction(ratio).limit_denominator(SPLIT_MAX_TERM)
+    return (f"{share.numerator}-for-{share.denominator} "
+            f"{'split' if ratio > 1 else 'consolidation'}")
 
 
 # Inside this many sessions, a scheduled report is close enough that buying now
@@ -297,7 +412,8 @@ def issuance(register: Optional[dict],
 
     The series arrives irregularly — filing dates, not a calendar — so the
     annualisation divides by the actual elapsed time rather than assuming
-    evenly spaced points.
+    evenly spaced points. It also arrives in the units of its day, so it is
+    restated for splits first (see `split_adjusted`).
     """
     clean = _share_series((register or {}).get("shares"))
     if clean is None or len(clean) < MIN_SHARE_POINTS:
@@ -305,6 +421,7 @@ def issuance(register: Optional[dict],
         return {"available": False,
                 "reason": (f"needs {MIN_SHARE_POINTS} share-count observations to read a "
                            f"trend; this has {have}")}
+    clean, splits = split_adjusted(clean, (register or {}).get("splits"))
 
     try:
         cutoff = clean.index.max() - pd.Timedelta(days=window_days)
@@ -361,6 +478,17 @@ def issuance(register: Optional[dict],
                    f"{years:.1f} years{step} — every per-share figure elsewhere is "
                    f"measured against a moving denominator.")
 
+    # Name the splits the trend was read across, so a reader comparing this with
+    # a raw share count can see where the two part company.
+    reach = pd.Timedelta(days=SPLIT_WINDOW_DAYS)
+    restated = [split for split in splits
+                if windowed.index[0] - reach <= pd.Timestamp(split["date"]).tz_localize(
+                    windowed.index.tz) <= windowed.index[-1] + reach]
+    if restated:
+        named = " and ".join(f"the {_split_name(split['ratio'])} of {split['date']}"
+                             for split in restated)
+        reading += f" Counts from before {named} are restated in today's shares."
+
     return {
         "score": _clamp(50.0 + contribution * ISSUANCE_SWING),
         "reading": reading,
@@ -374,6 +502,7 @@ def issuance(register: Optional[dict],
         "largestStep": largest,
         "largestStepAt": largest_at,
         "band": band,
+        "splitsRestated": restated,
     }
 
 

@@ -21,7 +21,12 @@ WHAT THESE TESTS PROTECT, IN ORDER OF HOW BADLY IT WOULD HURT TO LOSE IT
 5. INSTITUTIONAL OWNERSHIP NEVER SCORES. "Somebody professional owns this" is an
    argument from authority and the holders are mostly index funds.
 
-The wording is free to change. Those five are not.
+6. A SPLIT IS NOT AN ISSUE. The provider's counts are not restated for splits,
+   so NVDA's 10-for-1 read as a 900% issue and fired the heavy-issuance gate.
+   Counts are restated in today's shares, wherever near the ex-date the
+   provider's own step happens to land.
+
+The wording is free to change. Those six are not.
 """
 
 from __future__ import annotations
@@ -252,3 +257,139 @@ def test_institutional_ownership_does_not_move_any_score():
     heavily_held = O.read(register(institutions=0.90))
     assert none_held["float"]["score"] == heavily_held["float"]["score"]
     assert none_held["issuance"]["score"] == heavily_held["issuance"]["score"]
+
+
+# ============================================================================ #
+# 6. A split is not an issue
+# ============================================================================ #
+SPLIT_DAY = dt.date(2024, 6, 10)
+
+
+def split_records(ratio: float = 10.0, offset_days: int = 0,
+                  both_units_on_step_day: bool = False,
+                  annual_growth: float = 0.0, start: float = 2.46e9):
+    """Three years of share counts across one split, unrestated, as the provider
+    sends them: fortnightly, plus daily in the fortnight around the ex-date.
+
+    Counts before the provider's step are in the old units. The step lands
+    `offset_days` from the ex-date, because that is what was measured: two days
+    before it for NVDA and AVGO, one before for CMG, one after for WMT.
+    `both_units_on_step_day` repeats the step day in the old units as well, as
+    NVDA's own series does.
+    """
+    first = dt.date(2023, 9, 1)
+    ex = (SPLIT_DAY - first).days
+    offsets = sorted(set(range(0, 1096, 14)) | set(range(ex - 7, ex + 8)))
+    step = SPLIT_DAY + dt.timedelta(days=offset_days)
+    records = []
+    for offset in offsets:
+        when = first + dt.timedelta(days=offset)
+        count = start * (1.0 + annual_growth) ** (offset / 365.25)
+        if when == step and both_units_on_step_day:
+            records.append({"date": when.isoformat(), "count": count})
+        records.append({"date": when.isoformat(),
+                        "count": count * ratio if when >= step else count})
+    return records
+
+
+def with_split(records, ratio: float = 10.0) -> dict:
+    return {"ok": True, "insidersPercentHeld": 0.04, "shares": records,
+            "splits": [{"date": SPLIT_DAY.isoformat(), "ratio": ratio}]}
+
+
+def test_a_split_alone_reads_as_a_flat_share_count():
+    """NVDA's 10-for-1 read as a share count growing 121% a year."""
+    result = O.issuance(with_split(split_records()))
+    assert result["band"] == "flat"
+    assert result["annualised"] == pytest.approx(0.0, abs=1e-9)
+    assert result["largestStep"] == pytest.approx(0.0, abs=1e-9)
+    assert result["latestCount"] == pytest.approx(24.6e9), "counts are in today's shares"
+    assert "10-for-1 split of 2024-06-10" in result["reading"]
+
+
+def test_unrestated_the_same_counts_read_as_a_nine_hundred_percent_issue():
+    """The fault itself, kept in view: without the split, the step is an issue."""
+    result = O.issuance({"shares": split_records()})
+    assert result["band"] == "severe"
+    assert result["largestStep"] == pytest.approx(9.0)
+
+
+@pytest.mark.parametrize("offset_days", [-2, -1, 0, 1])
+def test_the_providers_step_need_not_land_on_the_ex_date(offset_days):
+    result = O.issuance(with_split(split_records(offset_days=offset_days)))
+    assert result["band"] == "flat"
+    assert result["largestStep"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_both_units_on_the_step_day_are_each_restated():
+    """A date cannot say which unit a count near the split is in; its size can."""
+    records = split_records(offset_days=-2, both_units_on_step_day=True)
+    result = O.issuance(with_split(records))
+    assert result["band"] == "flat"
+    assert result["largestStep"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_a_consolidation_is_not_a_buyback():
+    result = O.issuance(with_split(split_records(ratio=0.1), ratio=0.1))
+    assert result["band"] == "flat"
+    assert "1-for-10 consolidation" in result["reading"]
+
+
+def test_real_dilution_survives_the_restatement():
+    """Restating the units must not erase an issue that also happened."""
+    result = O.issuance(with_split(split_records(annual_growth=0.30)))
+    assert result["band"] == "severe"
+    assert result["annualised"] == pytest.approx(0.30, abs=0.01)
+    assert result["largestStep"] < 0.05
+
+
+def test_a_series_already_restated_is_left_alone():
+    """Multiplying its early counts again would invent the step this removes."""
+    already = split_records(offset_days=-5000)
+    result = O.issuance(with_split(already))
+    assert result["band"] == "flat"
+    assert result["splitsRestated"] == []
+    assert result["latestCount"] == pytest.approx(24.6e9)
+
+
+@pytest.mark.parametrize("ratio", [1.061, 0.9535, 1.032])
+def test_a_spin_off_filed_as_a_split_restates_nothing(ratio):
+    """The provider files spin-offs as splits, with the price-adjustment factor
+    as the ratio (Honeywell: 1.061 on 30 October 2025, 0.9535 on 29 June 2026),
+    and a spin-off changes no share count. Not a whole-share exchange, not a split."""
+    flat = split_records(ratio=1.0)
+    result = O.issuance({"ok": True, "shares": flat,
+                         "splits": [{"date": SPLIT_DAY.isoformat(), "ratio": ratio}]})
+    assert result["splitsRestated"] == []
+    assert result["latestCount"] == pytest.approx(2.46e9)
+
+
+@pytest.mark.parametrize("ratio,name", [(1.5, "3-for-2 split"), (1 / 15, "1-for-15 consolidation"),
+                                        (50.0, "50-for-1 split")])
+def test_whole_share_exchanges_are_splits_and_are_named_as_written(ratio, name):
+    result = O.issuance(with_split(split_records(ratio=ratio), ratio=ratio))
+    assert result["band"] == "flat"
+    assert name in result["reading"]
+
+
+def test_junk_split_records_restate_nothing():
+    register = with_split(split_records())
+    register["splits"] = [{"date": "nope", "ratio": 10.0}, {"date": "2024-06-10", "ratio": None},
+                          {"date": "2024-06-10", "ratio": 1.0}, {"date": "2024-06-10", "ratio": -2},
+                          "x"]
+    assert O.issuance(register)["splitsRestated"] == []
+
+
+def test_splits_survive_a_json_round_trip():
+    import json
+
+    payload = with_split(split_records(annual_growth=0.08))
+    reloaded = json.loads(json.dumps(payload))
+    assert O.issuance(reloaded)["annualised"] == pytest.approx(
+        O.issuance(payload)["annualised"], abs=1e-12)
+
+
+def test_shares_outstanding_from_the_history_is_in_todays_shares():
+    """The float arithmetic reads the last count; it must be post-split."""
+    result = O.read(with_split(split_records()), median_volume=1.0e8)
+    assert result["sharesOutstanding"] == pytest.approx(24.6e9)

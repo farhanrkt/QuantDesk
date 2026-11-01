@@ -241,7 +241,7 @@ def issuance_scores(registers: dict, upto_date: dt.date) -> dict:
                    if r.get("date") and r["date"] <= upto_date.isoformat()]
         if len(records) < ownership.MIN_SHARE_POINTS:
             continue
-        result = ownership.issuance({"shares": records})
+        result = ownership.issuance({"shares": records, "splits": register.get("splits")})
         if result.get("available") and result.get("score") is not None:
             scores[symbol] = float(result["score"])
     return scores
