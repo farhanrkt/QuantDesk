@@ -1238,9 +1238,12 @@ def latest_scan(market: str = Query("ID", pattern="^(US|ID|us|id)$")):
         return private_ok({
             "available": False,
             "market": market,
-            "reason": (f"No scan of the {market} market has been run on this machine. "
-                       f"Run scripts/scan_market.py --market {market} — it takes about "
-                       f"an hour for a whole exchange and writes the report this reads."),
+            # Read on the deployed app as well as on a checkout, where "run this
+            # on this machine" was an instruction no visitor could follow.
+            "reason": (f"No scan of the {market} market is on this server. The scanner "
+                       f"runs locally — scripts/scan_market.py --market {market}, about "
+                       f"an hour for a whole exchange — and writes the report this view "
+                       f"reads, so a deployed copy of the app never has one."),
         })
 
     try:

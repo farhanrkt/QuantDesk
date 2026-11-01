@@ -573,8 +573,10 @@ refusal is right for that surface and it is not an answer to a different questio
 Indonesian listings, which forty deserve an hour this week?* You cannot answer that without
 ordering, and there is no honest way to order without a score.
 
-So there is a second, private tier — not linked from the app, writing to a gitignored
-`reports/` directory — that sweeps a whole market and scores every name it can reach.
+So there is a second, private tier — drawn behind a "Private" divider where it appears in
+the app (the **Score it** tab and **Latest local scan** on /markets), and writing to a
+gitignored `reports/` directory — that sweeps a whole market and scores every name it can
+reach. A deployed copy has no report to show; PRODUCT.md constraint 1 records the scoping.
 
 ```bash
 python scripts/refresh_listings.py --market ID     # once, then when it goes stale
