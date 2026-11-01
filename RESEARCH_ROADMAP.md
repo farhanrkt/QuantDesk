@@ -669,7 +669,7 @@ them to inform position size where a return forecast may not. A test asserts the
 measurement still supports it, so a future re-measurement that found otherwise would fail the
 build rather than let the panel quietly carry on.
 
-Re-measured on 1 November 2026 with each name on its own sessions (§21): **0.48 to 0.68**, at
+Re-measured on 1 November 2026 with each name on its own sessions (§22): **0.48 to 0.68**, at
 t-statistics from +8.5 to +14.2. The calendar change moved no figure past the fourth decimal; the
 difference from the table above is two more months of data.
 
@@ -679,7 +679,7 @@ In the worst quarter of quarters for those markets the mean pairwise correlation
 **+0.06 higher** than in the rest — up to +0.12 on the LQ45. A correlation measured over an
 ordinary year is therefore a **floor** on how correlated these positions will be in the stretch
 a holder actually needs the diversification. The panel says so beside the numbers. On 1 November
-2026 the same figure read **+0.14**, and §21.4 shows why neither number is precise: where the
+2026 the same figure read **+0.14**, and §22.4 shows why neither number is precise: where the
 quarters are cut moves it more than two months of data did.
 
 ### A measurement mistake worth recording
@@ -1981,7 +1981,7 @@ days on which only one instrument could cross its line, and the first live run r
    padded with a hundred zeros pushes every real move up the percentiles.
    `ohlcv_batch(own_sessions=True)` drops rows on which a symbol has no field at all. The
    default is unchanged, because the portfolio and exposure measurements were taken on it.
-   Those two have since moved to their own sessions, with both studies re-run; see §21.
+   Those two have since moved to their own sessions, with both studies re-run; see §22.
 2. **USDIDR=X printed on a Saturday.** Open, high, low and close were all 18,120 with no
    volume: an indicative quote on a closed market, which read as a +0.27% rupiah move.
    Instruments that do not trade at weekends now drop weekend prints.
@@ -2190,13 +2190,13 @@ It does not say the ordering works. No significance test or interval is quoted.
 
 ---
 
-## 21. Each holding on its own sessions
+## 22. Each holding on its own sessions
 
 Found while building §20 (§20.3, item 1) and fixed on 1 November 2026. Every figure below was
 measured twice on the same recorded downloads, once through the old code and once through the
 new, so a difference is the change and not the data.
 
-### 21.1 What the shared calendar did
+### 22.1 What the shared calendar did
 
 `ohlcv_batch` downloads a batch in one call. yfinance aligns every symbol onto the union of
 their dates and `normalise` forward-fills, so a day one symbol traded and another did not
@@ -2215,7 +2215,7 @@ The fix is `ohlcv_batch(own_sessions=True)` in `portfolio.analyse` and `exposure
 returns differenced per symbol before aligning (`exposure.log_returns`), so the move across a
 holiday lands on the first day back instead of becoming NaN.
 
-### 21.2 What removing it changed
+### 22.2 What removing it changed
 
 Two effects, separated by also measuring the zero-free returns on the old window's dates:
 
@@ -2239,7 +2239,7 @@ gives 0.33. The shared calendar had hidden that, because its zero days understat
 about as much. `overlapDays` now counts days both names traded: 234 for a US–IDX pair, 175 for a
 stock against bitcoin.
 
-### 21.3 Weekly figures
+### 22.3 Weekly figures
 
 A zero adds nothing to a week, so wherever a market traded in a week the weekly sums are the
 same either way: to 1e-12 across all 77,442 name-weeks of the exposure study. The portfolio
@@ -2255,7 +2255,7 @@ driver read identically on every book measured. Two things did differ:
   closes, so the exposure study's oil series read **+52.6%** for the week to 24 April 2020 rather
   than −7.6%. `scan`'s window does not reach 2020, so the panel never showed it.
 
-### 21.4 The two studies, re-run
+### 22.4 The two studies, re-run
 
 Both scripts now fetch with `own_sessions=True` and take returns from the same function their
 panel reads. Both artifacts were re-stamped on 1 November 2026.
@@ -2275,7 +2275,7 @@ panel reads. Both artifacts were re-stamped on 1 November 2026.
   2020 week. The other factors moved by at most 0.017: gold +0.100 to +0.095, copper +0.146 to
   +0.129, the dollar +0.060 to +0.054.
 
-### 21.5 What it does not settle
+### 22.5 What it does not settle
 
 - **Cross-market persistence is unmeasured.** The correlation study measures four universes of
   one market each, so the persistence of a US–IDX pair, or of a stock against bitcoin, has not
@@ -2300,8 +2300,8 @@ panel reads. Both artifacts were re-stamped on 1 November 2026.
 | IDX fundamentals curation | The durable moat, and the largest single effort |
 | Single-name exposure betas | §16 ships the portfolio half, which is descriptive. "This stock moves 0.7x as hard as its sector" invites forward use, so it is gated on a stability study — do this period's betas predict next period's — mirroring `measure_correlation_stability.py`. A four-year probe gives year-over-year rank correlations of +0.29 to +0.66, inside the band that licensed the portfolio feature, on three transitions where that study had six. Eight blocks are available; MBMA, NCKL and TAPG cannot supply them and must be excluded by name rather than quietly run on fewer |
 | Track-record base rates for the US | §19 stops the reading quoting the Indonesian ones under a US company; nothing has measured what "profitable every year" or "a median of 3.0x" looks like on a US sample, so the US reading reports its figures bare. A measurement over the US listings file would let it say how ordinary each one is |
-| The worst-quarter rise, as a number | §21.4: where the quarters are cut moves it between +0.01 and +0.23, and the panel prints it in its headline. Averaging the study over offsets would give a figure that does not depend on the start date. That changes what the stamp reports, so it is a re-measurement, not an edit |
-| Cross-market correlation persistence | §21.5: every universe the study measures is one market, so a US–IDX pair, or a stock against bitcoin, has no persistence figure of its own. Measuring one needs a universe spanning two calendars, with enough names for a cross-section in every block |
+| The worst-quarter rise, as a number | §22.4: where the quarters are cut moves it between +0.01 and +0.23, and the panel prints it in its headline. Averaging the study over offsets would give a figure that does not depend on the start date. That changes what the stamp reports, so it is a re-measurement, not an edit |
+| Cross-market correlation persistence | §22.5: every universe the study measures is one market, so a US–IDX pair, or a stock against bitcoin, has no persistence figure of its own. Measuring one needs a universe spanning two calendars, with enough names for a cross-section in every block |
 | Fundamental exposure — revenue against commodity prices | **Rejected on feasibility, not deferred.** `market_data` fetches annual statements only, five columns, and yfinance's quarterlies for these names return five or six with gaps — ADRO and PTBA are both missing 2025-09-30. Five irregular observations is not a weak estimate, it is not an estimate. Consequence: the reverse DCF's implied growth cannot be restated as an implied commodity path |
 
 **Corrected while writing this:** README quoted the price-implied growth rate moving across
