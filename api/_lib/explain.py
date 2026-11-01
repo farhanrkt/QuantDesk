@@ -4518,18 +4518,21 @@ def _size_phrase(percentile: float) -> str:
 
 
 @metric("eventDayMove")
-def _event_day_move(value, events=None, **_):
+def _event_day_move(value, events=None, p=None, **_):
     label = "How past event days compare"
     what = ("On the days a given event happened — an FOMC decision, a CPI release — how often "
-            "an instrument moved more than on its median day. On any day, half do, so a share "
-            "near one half means event days looked like ordinary days.")
+            "an instrument moved more than on its median day. On any day, half do, and how far "
+            "from one half a share must be before it means anything depends on how many event "
+            "days there were.")
     if not _known(value):
         return unavailable(label, what, "too few of these events in the history held")
     count = f" of {int(events)} event days" if _known(events) else ""
-    reading = f"Moved more than on its median day on {_pct(value, 0)}{count}"
-    reading += (", about what any day shows." if 0.4 <= value <= 0.6 else
-                ", more often than an ordinary day." if value > 0.6 else
-                ", less often than an ordinary day.")
+    reading = f"Moved more than on its median day on {_pct(value, 0)}{count}; on any day, half do."
+    # Worded by the binomial test the history line uses, never by how far the
+    # share sits from one half: 15 of 22 is 68%, and still within chance.
+    if _known(p):
+        reading += (" A gap this size is within what chance produces." if p > 0.05 else
+                    " A gap this size is more than chance alone usually produces.")
     return make(label, what, reading, CONTEXT_NOT_TRIGGER, "context", "none",
                 value_text=_pct(value, 0))
 
@@ -4560,7 +4563,8 @@ def history_reading(kind: str, row: dict) -> str:
     if row["p"] > 0.05:
         text += " A gap this size is within what chance produces over that many days."
     else:
-        text += f" That is more often than chance alone usually produces over {row['events']} days."
+        # A gap, not "more often": the test is two-sided, and the count already says which way.
+        text += f" A gap this size is more than chance alone usually produces over {row['events']} days."
     text += (f" Its median move on those days was {_size_text(row['eventMedian'], row['change'])}, "
              f"against {_size_text(row['allMedian'], row['change'])} on all days.")
     return text
@@ -4676,7 +4680,7 @@ def for_market_board(board: dict) -> dict:
         }
     history = {kind: {row["key"]: {"reading": history_reading(kind, row),
                                    "share": (explain("eventDayMove", row.get("share"),
-                                                     events=row.get("events"))
+                                                     events=row.get("events"), p=row.get("p"))
                                              if row.get("available") else None)}
                       for row in rows_}
                for kind, rows_ in (board.get("eventHistory") or {}).items()}

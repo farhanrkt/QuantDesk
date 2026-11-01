@@ -320,6 +320,29 @@ def test_an_ordinary_result_is_said_to_be_within_chance():
     assert "forecast" not in reading and "will" not in reading
 
 
+def test_the_explanation_and_the_line_agree_about_chance():
+    """15 of 22 is 68%, the S&P 500 on jobs days, and within chance (p = 0.13).
+
+    The explanation beside the line once said "more often than an ordinary day"
+    for it, from how far the share sat from one half, while the line said the
+    gap was within chance. Both now go by the test. And a gap below one half
+    that chance would not produce is not "more often" either.
+    """
+    share = explain.explain("eventDayMove", 15 / 22, events=22, p=B.binomial_p(15, 22))
+    assert "within what chance produces" in share["reading"]
+    assert "more often" not in share["reading"]
+    rare = {"available": True, "key": "sp500", "name": "S&P 500", "change": "pct",
+            "events": 20, "above": 3, "share": 0.15, "p": B.binomial_p(3, 20),
+            "eventMedian": 0.004, "allMedian": 0.006}
+    line = explain.history_reading("jobs", rare)
+    assert rare["p"] < 0.05 and "more than chance alone usually produces" in line
+    assert "more often" not in line
+    board = {"eventHistory": {"jobs": [{**rare, "above": 15, "events": 22, "share": 15 / 22,
+                                        "p": B.binomial_p(15, 22)}]}}
+    held = explain.for_market_board(board)["eventHistory"]["jobs"]["sp500"]["share"]
+    assert "within what chance produces" in held["reading"], "the board passes p through"
+
+
 def test_the_binomial_is_two_sided_and_exact():
     assert B.binomial_p(5, 10) == pytest.approx(1.0)
     assert B.binomial_p(10, 10) == pytest.approx(2 / 1024)
