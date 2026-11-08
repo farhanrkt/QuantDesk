@@ -193,6 +193,33 @@ So: the battery does not cover the page. Open it. The browser pane works.
 
 WHAT THE LAST SESSIONS DID
 ==========================
+THE NOVEMBER 2026 ANALYSIS (8 November, RESEARCH_ROADMAP §24), on
+claude/gallant-davinci-l5qtd5. An outside read of the whole app, run with the
+data provider blocked — which is what a Yahoo throttle looks like here. Fixed,
+each with tests that plant the failure:
+  - The PRIVATE TIER was public: /api/verdict served a score, an action and a
+    position size on every deployment and the stock page drew the Score tab.
+    `private_tier_enabled` now refuses both private routes on any Vercel
+    deployment; the page asks /api/capabilities. Local runs need no setting
+    (QUANTDESK_PRIVATE_TIER overrides). .vercelignore excludes reports/.
+  - PIOTROSKI banded the raw count, so 3 of 3 checks read "weak —
+    deteriorating" and voted bearish. Bands now read the share, unknown below
+    six computable checks. RE-RUN calibrate_checks.py AND
+    measure_lens_agreement.py when the network allows — both stamps predate it.
+  - PROVIDER OUTAGES told readers their ticker was wrong, inside a 200 the edge
+    kept for six minutes. Now named via the market's own index, held 15s.
+  - The JOURNAL lost entries across tabs (reproduced in a browser). Writes now
+    apply to what is stored at that moment, and other tabs' writes sync in.
+  - Rate limiter: forwarded address trusted only on Vercel, unrouted paths
+    share one bucket, stale buckets evicted instead of clearing the table.
+  - Dividends: a lapsed dividend no longer counts as trailing; 350-day window;
+    the DDM's bases read complete years. Throttled register and earnings
+    lookups are kept for minutes and never on disk. Weekend-trading series are
+    annualised over their own year. The news panel can now say a feed failed.
+NOT DONE, deliberately: the Beneish `(x or 0)` NaN case and the `ebit` alias
+that can substring-match EBITDA (both move a calibrated screen; measure first);
+technical.py's 252-bar indicator windows for crypto; the global yf.download lock.
+
 THE NOVEMBER 2026 AUDIT (RESEARCH_ROADMAP §23), on branch claude/full-audit,
 which merges every finished branch (the market board and calendar widgets,
 §18.9's summary revenue, §21's forward log, §22's per-holding sessions). Every

@@ -573,8 +573,16 @@ refusal is right for that surface and it is not an answer to a different questio
 Indonesian listings, which forty deserve an hour this week?* You cannot answer that without
 ordering, and there is no honest way to order without a score.
 
-So there is a second, private tier — not linked from the app, writing to a gitignored
-`reports/` directory — that sweeps a whole market and scores every name it can reach.
+So there is a second, private tier — writing to a gitignored `reports/` directory — that
+sweeps a whole market and scores every name it can reach.
+
+**It runs where you run the app, and nowhere public.** On any Vercel deployment, previews
+included, `/api/verdict` and `/api/scan/latest` refuse before running anything, and the page
+draws neither the **Score it** tab nor the local-scan view — the client asks
+`/api/capabilities`, which answers from the same function that guards the routes. Locally both
+appear with no setting. `QUANTDESK_PRIVATE_TIER=1` turns the tier on where it would be off, and
+`=0` turns it off locally. Until November 2026 this was a description rather than a fence: the
+score and a position size were served to any visitor of a deployment.
 
 ```bash
 python scripts/refresh_listings.py --market ID     # once, then when it goes stale
@@ -1202,7 +1210,7 @@ scripts/
   scan_market.py      The private scanner: sweep a market, score every
                       tradeable name, write a report
   render_scan.py      That report as one self-contained HTML file
-tests/        1,690 offline tests (pytest), plus 59 frontend assertions
+tests/        1,894 offline tests (pytest), plus 85 frontend assertions
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -1245,7 +1253,9 @@ Interactive docs at `/api/docs`.
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
 | `GET /api/rank/universes` | The predefined lists and the fetched whole-market lists, each with its as-of date |
-| `GET /api/verdict` | **The private scanner's score and action for one name** — nine components across three families, the tape reading and the chart-formation study with their market-wide firing rates, the share register, where the trade is wrong, what a round trip costs, the market regime, the shrinkage, the gates, and the two backtests that calibrate all of it |
+| `GET /api/verdict` | **The private scanner's score and action for one name** — nine components across three families, the tape reading and the chart-formation study with their market-wide firing rates, the share register, where the trade is wrong, what a round trip costs, the market regime, the shrinkage, the gates, and the two backtests that calibrate all of it. **Local runs only**, and `no-store` |
+| `GET /api/scan/latest` | **The last local scan report**, trimmed for the table. Local runs only |
+| `GET /api/capabilities` | **What this deployment serves**: whether the private tier is on, so the page draws only what the routes will answer |
 | `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. `no-store` |
 | `POST /api/rank/list` | **Rank a reader's own list** — the watchlist, or one pasted in. Same engine and caps as `/api/rank`, in a body, `no-store` |
 | `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
@@ -1270,7 +1280,15 @@ symbol finder, which reads two files already in memory and has to keep up with t
 for the market board, its calendar and 20/min for its headlines, most of which the edge
 cache answers; 3/min for the watchlist's report dates, one provider call per name). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
 8. These exist because each of those requests fans out to upstream calls — the caps are sized
-to what actually batches.
+to what actually batches. The client is identified by the forwarded address only on Vercel,
+whose edge writes it; anywhere else by the connection, as uvicorn resolves it for the proxies it
+trusts. Paths no route answers share one bucket, so a client cannot mint buckets to flush the
+table.
+
+**A provider failure is said and not kept.** When both price lenses fail, the app asks the
+provider for the market's own index: if that fails too, every lens says the provider is not
+answering — not that the symbol is wrong — and the response is held at the edge for fifteen
+seconds instead of six minutes. An empty ranking, scan or headline feed gets the same short life.
 
 **Market conventions** are configured per market — US uses a 4.2% risk-free rate, 5.5%
 equity risk premium, 21% tax and `^GSPC` as benchmark; IDX uses 6.5%, 7.0%, 22% and

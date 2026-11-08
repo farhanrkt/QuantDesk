@@ -531,14 +531,22 @@ four files (AnomalyPanel 2, EventStudyPanel 1, LongTermPanel 3, TechnicalPanel
 2) — the event study lost one when its card stopped colouring itself by the
 sign of a mean.
 
-Beside the design rules the same script holds three structural checks:
+Beside the design rules the same script holds structural checks:
 `lib/api.ts` may not import the journal or watchlist stores or touch browser
 storage; every analytics `track(` carries only `market` and `lenses`;
 `lib/symbols.ts` must resolve tickers with the same pattern and suffix map as
 the Python; `cn()` must know every font size the config defines; the market board's
 requests carry no ticker: the board and the calendar take no parameters at all, the
 headlines take a market and declared topic keys, and the watchlist's report dates go only in
-a POST body; and the news image hosts in `next.config.mjs` equal the Python allowlist.
+a POST body; the news image hosts in `next.config.mjs` equal the Python allowlist; and
+the private tier is drawn only behind its capability — `VerdictPanel` and `ScanPanel` must
+sit inside a `privateTier && (...)` block, the request layer must ask `/api/capabilities`,
+and both private routes must call `private_tier_enabled()`.
+
+**What the rail says while lenses run.** A lens still running casts no vote: the headline is
+built from the lenses that have answered, reads "Awaiting data" while none has, and "No lens
+returned a reading" once all have settled without one. It used to count a running lens's "…"
+as a neutral reading, so a half-loaded rail could headline "Mixed signals".
 
 Comments are stripped before the greps — rule 7 fired on its own explanation the
 first time it ran, because `LongTermPanel`'s docstring quotes the expression it

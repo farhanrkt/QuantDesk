@@ -9,6 +9,11 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job here only reads the repository. Stated, so the token a workflow
+# run carries cannot write to it whatever the repository's default is.
+permissions:
+  contents: read
+
 jobs:
   python:
     name: Python — pytest + ruff

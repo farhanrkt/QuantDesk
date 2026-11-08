@@ -120,6 +120,17 @@ These are durable product facts. Future work preserves them; none is a style pre
      **Score it** tab — both behind a "Private" divider, never the default, never printed,
      and never read by the compare view. (This line used to say the scanner was not linked
      from the app, which stopped being true the day the landing panel and the tab shipped.)
+
+     *Enforced 8 November 2026.* "Locally" was a description, not a fence: `/api/verdict`
+     computes live, so every deployment served the score, the action and a position size to
+     any visitor, and the stock page offered the tab. Now `private_tier_enabled` in
+     `api/index.py` refuses both private routes on any Vercel deployment, previews included,
+     and the page draws neither panel unless `/api/capabilities` — answered by the same
+     function — says the tier is on. Locally it is on with no setting;
+     `QUANTDESK_PRIVATE_TIER` overrides either way. `tests/test_private_tier.py` holds the
+     routes and a structural check in `scripts/check_frontend.mjs` holds the page.
+     `.vercelignore` now also excludes `reports/` and both caches, because a command-line
+     deploy uploads what is on disk.
    - **The annotated chart is part of the private surface, not the published one.**
      `api/_lib/chartlayers.py` and `components/AnnotatedChart.tsx` draw the scanner's
      readings — defended levels with their touch counts, the detected formations, the
