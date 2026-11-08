@@ -900,7 +900,7 @@ def assess(payload: dict, calibration=_LOAD_FROM_DISK,
         "notChecked": not_checked,
         "uncalibrated": uncalibrated,
         "calibration": ({"measuredOn": calibration.get("measuredOn"),
-                         "universeLabel": calibration.get("universeLabel"),
+                         "universeLabel": names(calibration.get("universeLabel")),
                          "universes": calibration.get("universes"),
                          "market": (market or "").upper() or None,
                          "baseRateMax": BASE_RATE_MAX}

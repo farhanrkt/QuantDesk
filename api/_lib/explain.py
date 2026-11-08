@@ -54,7 +54,7 @@ from typing import Callable, Optional, Sequence
 
 import numpy as np
 
-from .lang import Bilingual, month_abbr, tr
+from .lang import Bilingual, month_abbr, names, tr
 
 # --------------------------------------------------------------------------- #
 # Bands and tone
@@ -85,6 +85,9 @@ TONE_FOR_BAND: dict[str, str] = {
 # How strongly the published evidence supports acting on a signal. Shown on the
 # panel so a reader can tell a documented effect from folklore.
 EVIDENCE = ("strong", "moderate", "weak", "none")
+# The evidence words where a sentence names them, in Bahasa Indonesia; the codes
+# themselves never change.
+_EVIDENCE_ID = {"strong": "kuat", "moderate": "sedang", "weak": "lemah", "none": "tidak ada"}
 
 
 def _clip(text, limit: int = 220) -> str:
@@ -4008,7 +4011,7 @@ def _composite(value, coverage=None, available=None, total=None, **_):
 @metric("signalRank")
 def _signal_rank(value, signal=None, raw=None, raw_text=None, **_):
     from . import ranking
-    definition = ranking.SIGNAL_BY_KEY.get(signal or "", {})
+    definition = ranking.signal_text(signal or "")
     label = definition.get("label", "Signal")
     what = f"{definition.get('question', '')} {definition.get('detail', '')}".strip()
     if not _known(value):
@@ -4080,7 +4083,7 @@ def for_ranking(result: dict) -> dict:
     from . import ranking
 
     out: dict = {}
-    for signal in result.get("signals") or ranking.SIGNALS:
+    for signal in result.get("signals") or ranking.signals():
         key = signal["key"]
         # A definition-level explanation for the column header, independent of
         # any one row: the table needs to explain its columns before a reader
@@ -4097,7 +4100,7 @@ def for_ranking(result: dict) -> dict:
                      + tr(f" Weighted {signal['weight']:.1f} in the composite, because the "
                           f"published evidence for it is {signal['evidence']}.",
                           f" Berbobot {signal['weight']:.1f} dalam skor gabungan, karena bukti "
-                          f"terbitan untuknya {signal['evidence']}.")),
+                          f"terbitan untuknya {_EVIDENCE_ID.get(signal['evidence'], signal['evidence'])}.")),
             action=(tr("One column among several. Sort by it to see the ranking that signal alone "
                        "would produce.",
                        "Satu kolom di antara beberapa. Urutkan menurut kolom ini untuk melihat "
@@ -4114,8 +4117,8 @@ def for_ranking(result: dict) -> dict:
     for pair in (correlation.get("pairs") or []):
         explanation = explain(
             "signalOverlap", pair["correlation"],
-            a=ranking.SIGNAL_BY_KEY.get(pair["a"], {}).get("label", pair["a"]),
-            b=ranking.SIGNAL_BY_KEY.get(pair["b"], {}).get("label", pair["b"]))
+            a=ranking.signal_text(pair["a"]).get("label", pair["a"]),
+            b=ranking.signal_text(pair["b"]).get("label", pair["b"]))
         if explanation:
             out[f"signalOverlap.{pair['a']}.{pair['b']}"] = explanation
 
@@ -4447,7 +4450,7 @@ def _warrant(measured: Optional[dict]) -> str:
     families = measured["families"]
     kappa, n = families["kappa"], families["n"]
     where = tr(f"across {n} names in {measured['scope']}",
-               f"di {n} saham dalam {measured['scope']}")
+               f"di {n} saham dalam {names(measured['scope'])}")
 
     if not families.get("excludesZero"):
         return (tr(f"and that is measured rather than assumed: {where}, the two reach the "

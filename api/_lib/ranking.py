@@ -79,6 +79,7 @@ from . import market_data
 from . import indicators as ind
 from . import longterm as lt
 from . import riskmodel
+from .lang import tr
 
 TRADING_DAYS = 252
 
@@ -220,6 +221,76 @@ SIGNALS: list[dict] = [
 SIGNAL_KEYS = [signal["key"] for signal in SIGNALS]
 SIGNAL_BY_KEY = {signal["key"]: signal for signal in SIGNALS}
 
+# Each signal's words in Bahasa Indonesia. SIGNALS is read at import for keys,
+# weights and directions; a reader's request asks `signals()` or `signal_text()`
+# for the version in its own language.
+_SIGNAL_TEXT_ID: dict[str, dict[str, str]] = {
+    "momentum": {
+        "label": "Momentum", "short": "Momentum",
+        "question": "Apakah harganya naik selama setahun terakhir?",
+        "detail": ("Imbal hasil selama dua belas bulan yang berakhir sebulan lalu. Bulan "
+                   "terakhir dilewati karena pergerakan jangka sangat pendek cenderung berbalik "
+                   "dan akan mengotori pembacaan."),
+    },
+    "trend": {
+        "label": "Tren", "short": "Tren",
+        "question": "Apakah rata-rata jangka panjangnya sendiri sedang naik?",
+        "detail": ("Seberapa cepat rata-rata 200 hari naik selama kuartal terakhir, sebagai laju "
+                   "tahunan. Harga di atas rata-rata yang TURUN adalah pantulan; di atas "
+                   "rata-rata yang naik adalah tren."),
+    },
+    "nearHigh": {
+        "label": "Dekat puncaknya", "short": "Dekat puncak",
+        "question": "Apakah ia dekat dengan harga terbaiknya setahun terakhir?",
+        "detail": ("Jarak dari puncak 52 minggu, dengan nol berarti tepat di puncak. Kedekatan "
+                   "dengan puncak 52 minggu adalah variabel momentum yang terdokumentasi."),
+    },
+    "lowVolatility": {
+        "label": "Ketenangan", "short": "Tenang",
+        "question": "Apakah ia sampai ke sana tanpa ayunan liar?",
+        "detail": ("Volatilitas tahunan, diperingkatkan sehingga yang LEBIH TENANG mendapat skor "
+                   "lebih baik. Saham bervolatilitas rendah secara historis memberi imbal hasil "
+                   "yang disesuaikan risiko lebih baik daripada yang dikatakan buku teks."),
+    },
+    "shallowDrawdown": {
+        "label": "Ketahanan dipegang", "short": "Tahan dipegang",
+        "question": "Seberapa menyakitkan memilikinya?",
+        "detail": ("Penurunan terburuk dari puncak ke dasar dalam periode yang dipindai, "
+                   "diperingkatkan sehingga penurunan yang LEBIH DANGKAL mendapat skor lebih "
+                   "baik. Ini tentang apakah Anda sanggup bertahan, bukan tentang imbal hasilnya "
+                   "nanti."),
+    },
+    "relativeStrength": {
+        "label": "Dibandingkan indeks", "short": "Vs indeks",
+        "question": "Apakah ia mengalahkan pasarnya sendiri?",
+        "detail": ("Imbal hasil enam bulan dikurangi imbal hasil indeks dalam rentang yang sama. "
+                   "Alternatif yang sebenarnya tidak pernah kas — melainkan reksa dana indeks."),
+    },
+    "flow": {
+        "label": "Arus uang", "short": "Arus",
+        "question": "Apakah hari-hari terakhir ditutup kuat dengan dukungan volume?",
+        "detail": ("Arus uang Chaikin: apakah hari-hari terakhir ditutup dekat puncak rentangnya "
+                   "dengan volume di baliknya. Buktinya lemah — dimasukkan karena ini satu-"
+                   "satunya sinyal berbasis volume yang bisa dihitung secara massal, dan bobotnya "
+                   "disesuaikan."),
+    },
+}
+
+
+def _localised(signal: dict) -> dict:
+    words = _SIGNAL_TEXT_ID.get(signal["key"], {})
+    return {**signal, **{field: tr(signal[field], text) for field, text in words.items()}}
+
+
+def signals() -> list[dict]:
+    """SIGNALS with their words in this request's language."""
+    return [_localised(signal) for signal in SIGNALS]
+
+
+def signal_text(key: str) -> dict:
+    """One signal's definition in this request's language, or {} for an unknown key."""
+    return _localised(SIGNAL_BY_KEY[key]) if key in SIGNAL_BY_KEY else {}
+
 
 def _finite(value) -> Optional[float]:
     try:
@@ -355,7 +426,9 @@ def signal_correlation(rows: list[dict]) -> dict:
     usable = [key for key in SIGNAL_KEYS if frame[key].notna().sum() >= 5]
     if len(usable) < 2:
         return {"available": False,
-                "reason": "Too few names with complete signals to measure overlap."}
+                "reason": tr("Too few names with complete signals to measure overlap.",
+                             "Terlalu sedikit saham dengan sinyal lengkap untuk mengukur tumpang "
+                             "tindih.")}
 
     matrix = frame[usable].corr(method="spearman")
     pairs = []
@@ -401,20 +474,34 @@ def signal_correlation(rows: list[dict]) -> dict:
 def _overlap_reading(strongest: Optional[dict], effective: Optional[float],
                      measured: int) -> str:
     if strongest is None:
-        return "No pair of signals could be compared on this scan."
-    text = (f"The most overlapping pair is {SIGNAL_BY_KEY[strongest['a']]['label']} and "
-            f"{SIGNAL_BY_KEY[strongest['b']]['label']}, correlated at "
-            f"{strongest['correlation']:+.2f} across this scan. ")
-    text += ("They are measuring close to the same thing, so the composite is counting that "
-             "fact more than once. "
+        return tr("No pair of signals could be compared on this scan.",
+                  "Tidak ada pasangan sinyal yang bisa dibandingkan pada pemindaian ini.")
+    text = (tr(f"The most overlapping pair is {signal_text(strongest['a'])['label']} and "
+               f"{signal_text(strongest['b'])['label']}, correlated at "
+               f"{strongest['correlation']:+.2f} across this scan. ",
+               "Pasangan yang paling tumpang tindih adalah "
+               f"{signal_text(strongest['a'])['label']} dan "
+               f"{signal_text(strongest['b'])['label']}, berkorelasi "
+               f"{strongest['correlation']:+.2f} di sepanjang pemindaian ini. "))
+    text += (tr("They are measuring close to the same thing, so the composite is counting that "
+                "fact more than once. ",
+                "Keduanya mengukur hal yang nyaris sama, jadi skor gabungan menghitung "
+                "fakta itu lebih dari sekali. ")
              if abs(strongest["correlation"]) > 0.7 else
-             "Nothing here is duplicating another signal badly. ")
+             tr("Nothing here is duplicating another signal badly. ",
+                "Tidak ada di sini yang menduplikasi sinyal lain secara parah. "))
     if effective is not None:
-        text += (f"Across all of them, the {measured} signals carry about "
-                 f"{effective:.1f} signals' worth of independent information — "
-                 + ("so the table is closer to one opinion than to a consensus of many."
+        text += (tr(f"Across all of them, the {measured} signals carry about "
+                    f"{effective:.1f} signals' worth of independent information — ",
+                    f"Secara keseluruhan, {measured} sinyal itu membawa informasi independen "
+                    f"senilai sekitar {effective:.1f} sinyal — ")
+                 + (tr("so the table is closer to one opinion than to a consensus of many.",
+                       "jadi tabelnya lebih mirip satu pendapat daripada konsensus banyak "
+                       "pendapat.")
                     if effective < measured * 0.5 else
-                    "which is a fair spread for measures built from the same price series."))
+                    tr("which is a fair spread for measures built from the same price series.",
+                       "sebaran yang wajar untuk ukuran yang dibangun dari deret harga yang "
+                       "sama.")))
     return text
 
 
@@ -432,9 +519,10 @@ def rank_universe(frames: dict[str, pd.DataFrame],
 
     symbols = sorted(raw)
     if not symbols:
-        return {"rows": [], "signals": SIGNALS, "weights": active,
+        return {"rows": [], "signals": signals(), "weights": active,
                 "correlation": {"available": False,
-                                "reason": "No symbol had enough history to rank."}}
+                                "reason": tr("No symbol had enough history to rank.",
+                                             "Tidak ada simbol yang punya riwayat cukup untuk diperingkatkan.")}}
 
     ranks: dict[str, list[Optional[float]]] = {}
     for key in SIGNAL_KEYS:
@@ -482,7 +570,7 @@ def rank_universe(frames: dict[str, pd.DataFrame],
 
     return {
         "rows": rows,
-        "signals": SIGNALS,
+        "signals": signals(),
         "weights": active,
         "correlation": signal_correlation(rows),
     }

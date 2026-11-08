@@ -84,6 +84,7 @@ from _lib import (accumulation, chartlayers, econcalendar, eventstudy, explain, 
                   universes, valuation, verdict, volumeprofile)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
+from _lib.lang import tr
 
 app = FastAPI(title="QuantDesk API", version="1.1.0", docs_url="/api/docs")
 
@@ -373,9 +374,11 @@ async def rate_limit(request: Request, call_next):
             retry_after = max(1, int(window - (now - hits[0])) + 1)
             return JSONResponse(
                 status_code=429,
-                content={"detail": f"Rate limit reached for this endpoint "
-                                   f"({limit} requests per {window}s). "
-                                   f"Try again in {retry_after}s."},
+                content={"detail": tr(f"Rate limit reached for this endpoint "
+                                      f"({limit} requests per {window}s). "
+                                      f"Try again in {retry_after}s.",
+                                      f"Batas permintaan untuk endpoint ini tercapai ({limit} permintaan per "
+                                      f"{window} detik). Coba lagi dalam {retry_after} detik.")},
                 headers={"Retry-After": str(retry_after),
                          "Cache-Control": "no-store"},
             )
@@ -468,8 +471,10 @@ def parse_ticker_list(tickers: str, market: str) -> list[str]:
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                   f"{'...' if len(bad) > 5 else ''}.")
+            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}.",
+                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}."))
     return list(dict.fromkeys(resolved(t, market) for t in raw))
 
 
@@ -707,17 +712,23 @@ def screener(
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                   f"{'...' if len(bad) > 5 else ''}.",
+            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}.",
+                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}."),
         )
     universe = list(dict.fromkeys(resolved(t, market) for t in raw))
     if not universe:
-        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+        raise HTTPException(status_code=400, detail=tr("Provide at least one ticker.",
+                                                       "Masukkan setidaknya satu ticker."))
     if len(universe) > SCREENER_MAX_UNIVERSE:
         raise HTTPException(
             status_code=400,
-            detail=f"Universe too large. Limit the scan to {SCREENER_MAX_UNIVERSE} symbols — "
-                   f"each one costs an upstream fetch and a model fit.",
+            detail=tr(f"Universe too large. Limit the scan to {SCREENER_MAX_UNIVERSE} symbols — "
+                      f"each one costs an upstream fetch and a model fit.",
+                      f"Semesta terlalu besar. Batasi pemindaian hingga {SCREENER_MAX_UNIVERSE} "
+                      "simbol — masing-masing butuh satu pengambilan data dan satu pencocokan "
+                      "model."),
         )
     # Walk-forward is roughly an order of magnitude more expensive per ticker
     # than the other modes even with the fit budget applied, so a large universe
@@ -726,9 +737,13 @@ def screener(
     if mode == "walkforward" and len(universe) > SCREENER_MAX_WALKFORWARD:
         raise HTTPException(
             status_code=400,
-            detail=f"Walk-forward refits per step and cannot scan {len(universe)} symbols "
-                   f"inside the request limit. Use at most {SCREENER_MAX_WALKFORWARD} symbols "
-                   f"on this mode, or scan with Threshold or Robust (MAD).",
+            detail=tr(f"Walk-forward refits per step and cannot scan {len(universe)} symbols "
+                      f"inside the request limit. Use at most {SCREENER_MAX_WALKFORWARD} symbols "
+                      f"on this mode, or scan with Threshold or Robust (MAD).",
+                      "Walk-forward mencocokkan ulang di setiap langkah dan tidak bisa "
+                      f"memindai {len(universe)} simbol dalam batas waktu permintaan. Gunakan "
+                      f"paling banyak {SCREENER_MAX_WALKFORWARD} simbol pada mode ini, atau "
+                      "pindai dengan Threshold atau Robust (MAD)."),
         )
 
     config = AnalysisConfig(
@@ -841,7 +856,8 @@ def rank(
         if entry is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Unknown universe '{universe}'. See /api/rank/universes.")
+                detail=tr(f"Unknown universe '{universe}'. See /api/rank/universes.",
+                          f"Semesta '{universe}' tidak dikenal. Lihat /api/rank/universes."))
         symbols_list = entry["tickers"]
         market_code = entry["market"]
         label = entry["name"]
@@ -850,10 +866,11 @@ def rank(
         if not tickers:
             raise HTTPException(
                 status_code=400,
-                detail="Provide either a `universe` id or a `tickers` list.")
+                detail=tr("Provide either a `universe` id or a `tickers` list.",
+                          "Masukkan id `universe` atau daftar `tickers`."))
         symbols_list = parse_ticker_list(tickers, market)
         market_code = market.upper()
-        label = "Custom list"
+        label = tr("Custom list", "Daftar khusus")
         as_of = None
 
     payload = _ranked(symbols_list, market_code, label, as_of, universe)
@@ -865,13 +882,17 @@ def _ranked(symbols_list: list, market_code: str, label: str,
             as_of: Optional[str], universe: Optional[str]) -> dict:
     """The ranking payload for a resolved list — shared by the GET and the POST."""
     if not symbols_list:
-        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+        raise HTTPException(status_code=400, detail=tr("Provide at least one ticker.",
+                                                       "Masukkan setidaknya satu ticker."))
     if len(symbols_list) > RANK_MAX_UNIVERSE:
         raise HTTPException(
             status_code=400,
-            detail=f"Universe too large. The ranking tier scans up to "
-                   f"{RANK_MAX_UNIVERSE} symbols per request; this one has "
-                   f"{len(symbols_list)}. Split it, or narrow the list.")
+            detail=tr(f"Universe too large. The ranking tier scans up to "
+                      f"{RANK_MAX_UNIVERSE} symbols per request; this one has "
+                      f"{len(symbols_list)}. Split it, or narrow the list.",
+                      "Semesta terlalu besar. Tingkat peringkat memindai hingga "
+                      f"{RANK_MAX_UNIVERSE} simbol per permintaan; yang ini punya "
+                      f"{len(symbols_list)}. Pecah, atau persempit daftarnya."))
 
     result = ranking.scan(symbols_list, market_code=market_code)
     # THE PANEL THAT PRESENTS A RANKING CARRIES THE FINDING ABOUT WHETHER THAT
@@ -912,7 +933,7 @@ class RankListRequest(BaseModel):
 def rank_list(body: RankListRequest):
     """Rank a reader's own list. Same engine and caps as `/api/rank`."""
     symbols_list = parse_ticker_list(",".join(body.tickers), body.market)
-    return private_ok(_ranked(symbols_list, body.market.upper(), "Your list", None, None))
+    return private_ok(_ranked(symbols_list, body.market.upper(), tr("Your list", "Daftar Anda"), None, None))
 
 
 @app.get("/api/peers")
@@ -950,24 +971,32 @@ def peers(
         if entry is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Unknown peer group '{universe}'. See /api/rank/universes.")
+                detail=tr(f"Unknown peer group '{universe}'. See /api/rank/universes.",
+                          f"Kelompok sejenis '{universe}' tidak dikenal. Lihat /api/rank/universes."))
     elif candidates:
         entry = universes.get(candidates[0]["id"])
     else:
         raise HTTPException(
             status_code=404,
-            detail=f"{symbol} is not in any of the predefined universes, so there is no "
-                   f"peer group to place it against. Pass `universe` explicitly, or use "
-                   f"the Scan & rank tab with a list of your own.")
+            detail=tr(f"{symbol} is not in any of the predefined universes, so there is no "
+                      f"peer group to place it against. Pass `universe` explicitly, or use "
+                      f"the Scan & rank tab with a list of your own.",
+                      f"{symbol} tidak termasuk semesta mana pun yang sudah ditentukan, jadi "
+                      "tidak ada kelompok sejenis untuk menempatkannya. Teruskan `universe` "
+                      "secara eksplisit, atau gunakan tab Pindai & peringkat dengan daftar "
+                      "Anda sendiri."))
 
     result = ranking.scan(entry["tickers"], market_code=entry["market"])
     row = next((r for r in result["rows"] if r["ticker"] == symbol), None)
     if row is None:
         raise HTTPException(
             status_code=422,
-            detail=f"{symbol} could not be ranked against {entry['name']}: it needs at "
-                   f"least {ranking.MIN_BARS} trading days of history, and either the "
-                   f"fetch failed or the listing is too recent.")
+            detail=tr(f"{symbol} could not be ranked against {entry['name']}: it needs at "
+                      f"least {ranking.MIN_BARS} trading days of history, and either the "
+                      f"fetch failed or the listing is too recent.",
+                      f"{symbol} tidak bisa diperingkatkan terhadap {entry['name']}: ia butuh "
+                      f"riwayat setidaknya {ranking.MIN_BARS} hari perdagangan, dan pengambilan "
+                      "datanya gagal atau sahamnya terlalu baru."))
 
     context = {"id": entry["id"], "name": entry["name"], "market": entry["market"],
                "asOf": entry["asOf"], "count": entry["count"],
@@ -1044,7 +1073,8 @@ async def name_verdict(
         if entry is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Unknown peer group '{universe}'. See /api/rank/universes.")
+                detail=tr(f"Unknown peer group '{universe}'. See /api/rank/universes.",
+                          f"Kelompok sejenis '{universe}' tidak dikenal. Lihat /api/rank/universes."))
     else:
         candidates = universes.containing(symbol)
         if candidates:
@@ -1506,23 +1536,28 @@ def exposure_scan(
         if entry is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Unknown universe '{universe}'. See /api/rank/universes.")
+                detail=tr(f"Unknown universe '{universe}'. See /api/rank/universes.",
+                          f"Semesta '{universe}' tidak dikenal. Lihat /api/rank/universes."))
         symbols_list, market_code = entry["tickers"], entry["market"]
         label, as_of = entry["name"], entry["asOf"]
     elif tickers:
         symbols_list = parse_ticker_list(tickers, market)
-        market_code, label, as_of = market.upper(), "Your list", None
+        market_code, label, as_of = market.upper(), tr("Your list", "Daftar Anda"), None
     else:
         raise HTTPException(status_code=400,
-                            detail="Pass either `universe` or `tickers`.")
+                            detail=tr("Pass either `universe` or `tickers`.",
+                                      "Masukkan `universe` atau `tickers`."))
 
     if not symbols_list:
-        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+        raise HTTPException(status_code=400, detail=tr("Provide at least one ticker.",
+                                                       "Masukkan setidaknya satu ticker."))
     if len(symbols_list) > RANK_MAX_UNIVERSE:
         raise HTTPException(
             status_code=400,
-            detail=f"This scans up to {RANK_MAX_UNIVERSE} names at a time; "
-                   f"this list has {len(symbols_list)}.")
+            detail=tr(f"This scans up to {RANK_MAX_UNIVERSE} names at a time; "
+                      f"this list has {len(symbols_list)}.",
+                      f"Ini memindai hingga {RANK_MAX_UNIVERSE} saham sekaligus; daftar ini "
+                      f"punya {len(symbols_list)}."))
 
     result = exposure.scan(symbols_list, market_code=market_code)
     return ok({
@@ -1550,17 +1585,24 @@ def rank_deepen(
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                   f"{'...' if len(bad) > 5 else ''}.")
+            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}.",
+                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}."))
     shortlist = list(dict.fromkeys(resolved(t, market) for t in raw))
     if not shortlist:
-        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+        raise HTTPException(status_code=400, detail=tr("Provide at least one ticker.",
+                                                       "Masukkan setidaknya satu ticker."))
     if len(shortlist) > DEEPEN_MAX:
         raise HTTPException(
             status_code=400,
-            detail=f"Deepening runs the filings-based lenses one symbol at a time and "
-                   f"cannot do {len(shortlist)} inside the request limit. Pick at most "
-                   f"{DEEPEN_MAX} from the ranking above.")
+            detail=tr(f"Deepening runs the filings-based lenses one symbol at a time and "
+                      f"cannot do {len(shortlist)} inside the request limit. Pick at most "
+                      f"{DEEPEN_MAX} from the ranking above.",
+                      "Pendalaman menjalankan lensa berbasis laporan keuangan satu simbol demi "
+                      f"satu simbol dan tidak bisa mengerjakan {len(shortlist)} dalam batas "
+                      f"waktu permintaan. Pilih paling banyak {DEEPEN_MAX} dari peringkat di "
+                      "atas."))
 
     rows = []
     for symbol in shortlist:
@@ -1581,9 +1623,13 @@ def rank_deepen(
 
     return ok({
         "rows": rows,
-        "caveat": ("Quality and valuation are computed one symbol at a time because the "
-                   "filings behind them cannot be fetched in batch. That is why they are "
-                   "a shortlist step rather than a column in the ranking table."),
+        "caveat": (tr("Quality and valuation are computed one symbol at a time because the "
+                      "filings behind them cannot be fetched in batch. That is why they are "
+                      "a shortlist step rather than a column in the ranking table.",
+                      "Kualitas dan valuasi dihitung satu simbol demi satu simbol karena "
+                      "laporan keuangan di baliknya tidak bisa diambil secara massal. Itulah "
+                      "sebabnya keduanya menjadi langkah daftar pendek, bukan kolom di tabel "
+                      "peringkat.")),
     })
 
 
@@ -1660,16 +1706,19 @@ def _validated_weights(raw: dict) -> dict:
         symbol = str(ticker).strip().upper()
         if not TICKER_RE.match(symbol):
             raise HTTPException(status_code=400,
-                                detail=f"Not a valid ticker symbol in weights: {symbol!r}.")
+                                detail=tr(f"Not a valid ticker symbol in weights: {symbol!r}.",
+                                          f"Bukan simbol ticker yang valid dalam bobot: {symbol!r}."))
         try:
             weight = float(value)
         except (TypeError, ValueError) as exc:
             raise HTTPException(
                 status_code=400,
-                detail=f"Weight for {symbol} must be a number.") from exc
+                detail=tr(f"Weight for {symbol} must be a number.",
+                          f"Bobot untuk {symbol} harus berupa angka.")) from exc
         if not (weight > 0) or not math.isfinite(weight):
             raise HTTPException(status_code=400,
-                                detail=f"Weight for {symbol} must be above zero.")
+                                detail=tr(f"Weight for {symbol} must be above zero.",
+                                          f"Bobot untuk {symbol} harus di atas nol."))
         out[symbol] = weight
     return out
 
@@ -1701,10 +1750,13 @@ def portfolio_context(body: PortfolioRequest):
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                   f"{'...' if len(bad) > 5 else ''}.")
+            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}.",
+                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}."))
     if not raw:
-        raise HTTPException(status_code=400, detail="Provide at least one holding.")
+        raise HTTPException(status_code=400, detail=tr("Provide at least one holding.",
+                                                       "Masukkan setidaknya satu kepemilikan."))
 
     market = body.market
     # THE MARKET FOLLOWS THE SYMBOL, NOT THE DROPDOWN, and this route needed it
@@ -1719,13 +1771,17 @@ def portfolio_context(body: PortfolioRequest):
     if not book:
         raise HTTPException(
             status_code=400,
-            detail="Provide at least one holding other than the candidate itself.")
+            detail=tr("Provide at least one holding other than the candidate itself.",
+                      "Masukkan setidaknya satu kepemilikan selain kandidat itu sendiri."))
     if len(book) > PORTFOLIO_MAX_HOLDINGS:
         raise HTTPException(
             status_code=400,
-            detail=f"This compares up to {PORTFOLIO_MAX_HOLDINGS} holdings at a time; "
-                   f"this list has {len(book)}. A correlation matrix that size is also "
-                   f"more than anyone reads.")
+            detail=tr(f"This compares up to {PORTFOLIO_MAX_HOLDINGS} holdings at a time; "
+                      f"this list has {len(book)}. A correlation matrix that size is also "
+                      f"more than anyone reads.",
+                      f"Ini membandingkan hingga {PORTFOLIO_MAX_HOLDINGS} kepemilikan "
+                      f"sekaligus; daftar ini punya {len(book)}. Matriks korelasi sebesar itu "
+                      "juga lebih dari yang akan dibaca siapa pun."))
 
     result = portfolio.analyse(symbol, book, weights=_validated_weights(body.weights),
                                market_code=market)
@@ -1908,9 +1964,12 @@ def _dividend_record(company: dict) -> dict:
     price = _finite_or_none(company.get("price"))
     if not isinstance(history, pd.DataFrame) or history.empty:
         return {"available": False, "perShare": [],
-                "reading": ("No dividend payments in the provider's record for this listing. "
-                            "That is either a company that does not pay one or a record that "
-                            "is incomplete; the data cannot say which.")}
+                "reading": (tr("No dividend payments in the provider's record for this listing. "
+                               "That is either a company that does not pay one or a record that "
+                               "is incomplete; the data cannot say which.",
+                               "Tidak ada pembayaran dividen dalam catatan penyedia data untuk saham "
+                               "ini. Itu bisa perusahaan yang tidak membagikan dividen atau catatan "
+                               "yang tidak lengkap; datanya tidak bisa membedakan keduanya."))}
     this_year = str(dt.date.today().year)
     rows = []
     for _, row in history.iloc[::-1].iterrows():
@@ -1923,18 +1982,26 @@ def _dividend_record(company: dict) -> dict:
     low, high = valuation.PLAUSIBLE_YIELD_BAND
     if complete and price and not (low <= complete[-1]["amount"] / price <= high):
         return {"available": False, "perShare": [],
-                "reading": (f"The provider's dividend record implies a "
-                            f"{complete[-1]['amount'] / price * 100:.3g}% yield against "
-                            f"today's price, which is a units problem rather than a dividend, "
-                            f"so the series is withheld.")}
+                "reading": (tr(f"The provider's dividend record implies a "
+                               f"{complete[-1]['amount'] / price * 100:.3g}% yield against "
+                               f"today's price, which is a units problem rather than a dividend, "
+                               f"so the series is withheld.",
+                               "Catatan dividen penyedia data menyiratkan imbal hasil "
+                               f"{complete[-1]['amount'] / price * 100:.3g}% terhadap harga hari ini, "
+                               "yang merupakan masalah satuan, bukan dividen, jadi deretnya ditahan."))}
     paid = len(complete)
-    reading = (f"Paid in each of the {paid} complete calendar year{'' if paid == 1 else 's'} the "
-               f"record covers" if paid else "No complete calendar year in the record")
-    reading += ("; the current year is year to date." if any(r["partial"] for r in rows) else ".")
+    reading = (tr(f"Paid in each of the {paid} complete calendar year{'' if paid == 1 else 's'} the "
+                  f"record covers",
+                  f"Dibayarkan di setiap {paid} tahun kalender lengkap yang dicakup "
+                  "catatannya") if paid else tr("No complete calendar year in the record",
+                                                "Tidak ada tahun kalender lengkap dalam catatannya"))
+    reading += (tr("; the current year is year to date.",
+                   "; tahun berjalan dihitung sejak awal tahun.") if any(r["partial"] for r in rows) else ".")
     return {
         "available": bool(rows),
         "perShare": rows,
-        "basis": "calendar year, as paid, in the trading currency",
+        "basis": tr("calendar year, as paid, in the trading currency",
+                    "tahun kalender, sesuai pembayaran, dalam mata uang perdagangan"),
         "ttm": _finite_or_none(company.get("ttm_dividend")),
         "reading": reading,
     }
@@ -1958,7 +2025,9 @@ def company_payload(symbol: str) -> dict:
     if not company.get("ok"):
         raise HTTPException(
             status_code=404,
-            detail=f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+            detail=tr(f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+                      f"Tidak ada data perusahaan yang kembali untuk '{symbol}'. "
+                      f"{symbols.hint(symbol)}"),
         )
     market_code = symbols.market_of(symbol)
     record = trackrecord.read(company, market_code)
@@ -1982,9 +2051,12 @@ def company_payload(symbol: str) -> dict:
             "trading": trading,
             "reporting": reporting,
             "fxRate": fx_rate,
-            "note": (f"The statements are in {reporting} and were converted to {trading} at "
-                     f"today's rate, so the history carries the currency's moves as well as "
-                     f"the company's." if fx_rate and reporting and reporting != trading
+            "note": (tr(f"The statements are in {reporting} and were converted to {trading} at "
+                        f"today's rate, so the history carries the currency's moves as well as "
+                        f"the company's.",
+                        f"Laporan keuangannya dalam {reporting} dan dikonversi ke {trading} "
+                        "dengan kurs hari ini, jadi riwayatnya membawa pergerakan mata uang "
+                        "selain pergerakan perusahaan.") if fx_rate and reporting and reporting != trading
                      else None),
         },
         "history": trackrecord.series(company),
@@ -1992,10 +2064,14 @@ def company_payload(symbol: str) -> dict:
         "nextEarnings": {
             "date": calendar["next"],
             "past": calendar["past"],
-            "source": "the data source's earnings calendar",
-            "reading": ("The provider's date for the next report. It is often an estimate "
-                        "until the company confirms it." if calendar["next"] else
-                        "No upcoming report date in the provider's calendar."),
+            "source": tr("the data source's earnings calendar",
+                         "kalender laporan laba dari sumber data"),
+            "reading": (tr("The provider's date for the next report. It is often an estimate "
+                           "until the company confirms it.",
+                           "Tanggal laporan berikutnya menurut penyedia data. Tanggal ini sering "
+                           "kali perkiraan sampai perusahaan mengonfirmasinya.") if calendar["next"] else
+                        tr("No upcoming report date in the provider's calendar.",
+                           "Tidak ada tanggal laporan mendatang di kalender penyedia data.")),
         },
         "record": record,
         "explain": explain.for_company(record, market_code),
@@ -2018,7 +2094,9 @@ def quality_payload(symbol: str) -> dict:
     if not company.get("ok"):
         raise HTTPException(
             status_code=404,
-            detail=f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+            detail=tr(f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+                      f"Tidak ada data perusahaan yang kembali untuk '{symbol}'. "
+                      f"{symbols.hint(symbol)}"),
         )
     # The symbol reaches the lens only so the validation-domain block can say
     # whether THIS use sits inside each screen's published sample. No score
@@ -2099,8 +2177,10 @@ def event_study(
     if market_history is None:
         raise HTTPException(
             status_code=503,
-            detail=f"Could not fetch {index_symbol}, so abnormal returns cannot "
-                   f"be measured against a market model.",
+            detail=tr(f"Could not fetch {index_symbol}, so abnormal returns cannot "
+                      f"be measured against a market model.",
+                      f"Tidak bisa mengambil {index_symbol}, jadi imbal hasil abnormal tidak "
+                      "bisa diukur terhadap model pasar."),
         )
 
     # No timezone stripping here any more. Three frames used to be localised by
@@ -2157,8 +2237,11 @@ def find_symbols(
         "market": market.upper() if market else None,
         "results": results,
         "listings": status,
-        "note": ("The provider's equity listings as of these dates. Funds, indices, crypto "
-                 "and recent listings are not in them; type a full symbol to open it anyway."),
+        "note": (tr("The provider's equity listings as of these dates. Funds, indices, crypto "
+                    "and recent listings are not in them; type a full symbol to open it anyway.",
+                    "Daftar saham dari penyedia data per tanggal-tanggal ini. Reksa dana, "
+                    "indeks, kripto, dan saham yang baru tercatat tidak ada di dalamnya; "
+                    "ketik simbol lengkap untuk tetap membukanya.")),
     }), headers={"Cache-Control": SYMBOLS_CACHE})
 
 
@@ -2191,10 +2274,11 @@ def markets_today():
     # readings written onto it below are in this request's language — written
     # onto the shared one, a concurrent reader in the other language could be
     # serialised with them.
-    board = dict(marketboard.fetch())
+    board = marketboard.localise(dict(marketboard.fetch()))
     if not any(row.get("available") for row in board["rows"]):
         raise HTTPException(status_code=502,
-                            detail="The price provider returned nothing for the board just now.")
+                            detail=tr("The price provider returned nothing for the board just now.",
+                                      "Penyedia harga tidak mengembalikan apa pun untuk papan ini barusan."))
     board["explain"] = explain.for_market_board(board)
     return JSONResponse(content=clean(board),
                         headers={"Cache-Control": BOARD_CACHE, "CDN-Cache-Control": BOARD_CDN_CACHE})
@@ -2244,8 +2328,10 @@ def markets_earnings(body: EarningsRequest):
         items = list(pool.map(lang.carry(one), symbols_list))
     return private_ok({
         "items": items,
-        "note": ("The data provider's dates. A date is often an estimate until the company "
-                 "confirms it."),
+        "note": (tr("The data provider's dates. A date is often an estimate until the company "
+                    "confirms it.",
+                    "Tanggal dari penyedia data. Tanggal sering kali perkiraan sampai "
+                    "perusahaan mengonfirmasinya.")),
     })
 
 
@@ -2267,8 +2353,10 @@ def market_headlines(
     unknown = [key for key in keys if key not in news.HEADLINE_TOPICS]
     if unknown:
         raise HTTPException(status_code=422,
-                            detail=f"Unknown topic {', '.join(unknown)}. Known: "
-                                   f"{', '.join(news.HEADLINE_TOPICS)}.")
+                            detail=tr(f"Unknown topic {', '.join(unknown)}. Known: "
+                                      f"{', '.join(news.HEADLINE_TOPICS)}.",
+                                      f"Topik {', '.join(unknown)} tidak dikenal. Yang dikenal: "
+                                      f"{', '.join(news.HEADLINE_TOPICS)}."))
     code = market.upper()
     with ThreadPoolExecutor(max_workers=HEADLINE_TOPICS_MAX) as pool:
         # `carry`: a bare pool does not inherit the request's language, and a
