@@ -33,7 +33,8 @@ imply otherwise.
 **New to any of this?** Start with the **QuantDesk Field Manual** —
 [read it online](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009) or open
 [`docs/field-manual.html`](docs/field-manual.html) locally. Every lens and every term explained
-from scratch, no prior finance assumed.
+from scratch, no prior finance assumed. In Bahasa Indonesia:
+[`docs/field-manual.id.html`](docs/field-manual.id.html).
 
 ---
 
@@ -306,7 +307,8 @@ either language, with the same numbers. Some things stay as written, deliberatel
   weekdays follow the language.
 - **Names**: tickers, published models (Piotroski F-Score, Altman Z, DCF), citations, and
   third-party text — company descriptions, headlines, the provider's industry labels.
-- **The field manual** and **the private scanner tier** are English.
+- **The field manual** has an Indonesian edition, built from the English page, and the app
+  opens the one in your language. **The private scanner tier** is English.
 - **The first paint is English**, for a moment, before the browser's choice is known; the
   requests already ask for Indonesian, so no figure or sentence is fetched twice.
 
@@ -1209,6 +1211,8 @@ api/
               scanlog.py        What the scanner said, and what happened next
 docs/
   field-manual.html   Beginner's guide; glossary generated from _lib/explain.py
+  field-manual.id.html  The same guide in Bahasa Indonesia, BUILT from the English
+                      page and field-manual.id.json (its Indonesian, block by block)
 scripts/
   build_glossary.py   Regenerates that glossary, and CI's drift check
   calibrate_checks.py How often each pre-trade check fires, measured offline
@@ -1394,7 +1398,9 @@ it prints is the honest answer to whether the signal exists in that market:
 ```
 
 The field manual's glossary is generated, so regenerate it after touching the explanation
-layer — CI fails if you forget:
+layer — CI fails if you forget. The same run builds the Indonesian manual from the English one,
+so an edit to the English manual also needs its Indonesian in `docs/field-manual.id.json`;
+`--missing` lists the blocks still to translate:
 
 ```bash
 .venv/bin/python scripts/build_glossary.py
@@ -1451,7 +1457,7 @@ as well as the company's. The data source is not internally consistent about whi
 dividend fields follows which currency, so every dividend figure is checked against the share
 price it will be compared with before it is used.
 
-**Language.** Bahasa Indonesia covers the published app; the field manual, the private
+**Language.** Bahasa Indonesia covers the published app and the field manual; the private
 scanner tier and the page metadata are English, numbers keep English separators in both
 languages, and the first paint is English until the browser's choice is read. The Indonesian
 was written for this app, not by a translator, and has not yet been read by a native-speaking
@@ -1523,7 +1529,8 @@ where you press the button.
 - **[docs/field-manual.html](docs/field-manual.html)** — a beginner's guide to the whole app
   ([published copy](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009)). All four
   lenses, the synthesis that reads them together, the statistics that decide whether to believe any
-  of it, and every one of the 85 metrics in a searchable glossary. Assumes no prior finance.
+  of it, and every one of the 95 metrics in a searchable glossary. Assumes no prior finance.
+  In Bahasa Indonesia: **[docs/field-manual.id.html](docs/field-manual.id.html)**.
 
   Its glossary is **generated**, not transcribed: `scripts/build_glossary.py` injects the same
   strings `_lib/explain.py` puts on screen, and CI fails if a metric is added without regenerating.

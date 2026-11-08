@@ -331,6 +331,8 @@ These are durable product facts. Future work preserves them; none is a style pre
   so a session cannot be circled on one and uncounted by the other.
 - `docs/field-manual.html` — beginner's guide; its glossary is **generated** from
   `api/_lib/explain.py` and CI fails if a metric is added without regenerating.
+  `docs/field-manual.id.html` is the same guide in Bahasa Indonesia, **built** from the English
+  page and `docs/field-manual.id.json`; CI fails if an English block has no Indonesian.
 - Twelve network scripts in `scripts/` deliberately outside CI. Re-run after touching what
   they measure; a stale stamped number is worse than none. Two arrived with the market
   scanner: `refresh_listings.py` fetches the whole-market universe, and
@@ -394,8 +396,9 @@ decision behind a choice.
   the server's sentences, the interface and the CSV exports write numbers one way, and
   switching one surface without the others would put "1.708" on a screen meaning two
   different numbers. Doing it properly means the server formats numbers per language too.
-- Translating the field manual, which is still English. Part of it is generated from
-  `explain.py`'s definitions, which already carry their Indonesian.
+- ~~Translating the field manual~~ **Done, November 2026.** It is built from the English
+  page block by block, so the two cannot drift: an English edit without its Indonesian fails
+  the build.
 - Whether Guided and Full eventually become two genuinely distinct designs rather than one
   design with elements hidden. Not now; v2 keeps one design with Guided as the default.
 - IDX fundamentals curation — the largest single effort, and blocked on an architectural

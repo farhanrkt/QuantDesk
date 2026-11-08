@@ -675,8 +675,17 @@ the one that did not fit (see The shell), and is the one layout that changed.
   their sources wrote them. *Citations and proper names*: Piotroski (2000), The Fed, the
   Bureau of Labor Statistics. *Published models*: Piotroski F-Score, Altman Z, Beneish M, DCF —
   an Indonesian reader searches for them under those names.
-- *The field manual, the page's metadata and the private scanner tier* are English. The
-  private tier runs only on the owner's machine.
+- *The page's metadata and the private scanner tier* are English. The private tier runs
+  only on the owner's machine.
+
+**The field manual is in both languages, and only one of them is written.**
+`docs/field-manual.id.html` is built from the English page by `scripts/build_glossary.py`: each
+block of the English — the text between two block-level tags, inline links and emphasis
+included — is replaced by its Indonesian from `docs/field-manual.id.json`, and the glossary
+inside it is `explain.py`'s own Indonesian. The build fails on an English block with no
+Indonesian, on an entry that matches no block, and on a translation whose markup differs from
+its English, so an edit to the English cannot leave a stale Indonesian page behind. Each page
+links to the other, and the app opens the reader's (`MANUAL_HREF` in `lib/url.ts`).
 
 **The words were chosen once** and both halves use them; the list heads `lib/i18n-id.ts`. Lens
 is *lensa*, and the four are *Arus*, *Tren*, *Nilai*, *Kualitas*; Guided and Full are *Terpandu*
