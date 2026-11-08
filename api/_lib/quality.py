@@ -62,6 +62,21 @@ _FINANCIAL_KEYWORDS = ("bank", "insurance", "insurer", "capital markets",
 # Beneish score. Below this many, the module declines to report one.
 _MIN_BENEISH_INDICES = 6
 
+# THE PIOTROSKI BANDS, AS SHARES OF THE CHECKS THAT COULD BE COMPUTED. The
+# lower edge of mixed, solid and strong. On a full nine they are exactly the
+# counts the bands always used — 4, 6 and 8 — and on eight computable checks
+# they band every score as the counts did, so nothing scored on complete or
+# nearly complete filings moves. `explain._piotroski` reads the same three edges,
+# so the metric's sentence and the band that votes cannot disagree again.
+PIOTROSKI_CUTS = (4 / 9, 6 / 9, 8 / 9)
+
+# Fewer computable checks than this and no band is called. Six of the nine
+# compare this year with last, so one year of statements leaves three level
+# tests — profitable, cash-generating, cash above profit — which say nothing
+# about a TREND, and the F-score is a trend reading. Same floor, for the same
+# reason, as Beneish's six of eight.
+PIOTROSKI_MIN_SIGNALS = 6
+
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -100,6 +115,26 @@ def _nullable(value) -> Optional[float]:
 # --------------------------------------------------------------------------- #
 # Piotroski F-Score
 # --------------------------------------------------------------------------- #
+def piotroski_band(score: int, computable: int) -> tuple[str, str]:
+    """The band, and its sentence, for `score` passes out of `computable` checks."""
+    if computable <= 0:
+        return "unknown", "No usable statement history."
+    if computable < PIOTROSKI_MIN_SIGNALS:
+        return "unknown", (f"Only {computable} of the nine checks could be computed from these "
+                           f"filings, too few to call a direction: most of them compare this "
+                           f"year with last.")
+    share = score / computable
+    mixed, solid, strong = PIOTROSKI_CUTS
+    # The tolerance only absorbs float error at an exact edge such as 6/9.
+    if share >= strong - 1e-9:
+        return "strong", "Fundamentals improving on almost every axis."
+    if share >= solid - 1e-9:
+        return "solid", "More improving than deteriorating."
+    if share >= mixed - 1e-9:
+        return "mixed", "No clear fundamental direction."
+    return "weak", "Deteriorating on most axes Piotroski measures."
+
+
 def piotroski_f_score(income, balance, cashflow) -> dict:
     """Nine binary fundamental signals, scored 0-9.
 
@@ -108,6 +143,15 @@ def piotroski_f_score(income, balance, cashflow) -> dict:
     from nine tests reads differently from a 5/7 built from seven. Awarding a
     point for missing data would be the easy bug here and it inflates every
     thin-coverage listing.
+
+    THE BAND READS THE SHARE OF COMPUTABLE CHECKS, NOT THE RAW COUNT. It used
+    to band the count as if nine had always been computed, so the opposite bug
+    shipped instead: a company with one year of statements, passing all three
+    checks that year allows, banded "weak — deteriorating on most axes", the
+    Quality lens voted bearish, and the pre-trade panel printed "3 of 3
+    fundamental checks passed — deteriorating". Found in the November 2026
+    analysis. Below PIOTROSKI_MIN_SIGNALS the band is `unknown`, which every
+    reader already treats as "could not be assessed".
     """
     signals: list[dict] = []
 
@@ -193,17 +237,7 @@ def piotroski_f_score(income, balance, cashflow) -> dict:
 
     scored = [s for s in signals if s["passed"] is not None]
     score = sum(1 for s in scored if s["passed"])
-
-    if not scored:
-        band, reading = "unknown", "No usable statement history."
-    elif score >= 8:
-        band, reading = "strong", "Fundamentals improving on almost every axis."
-    elif score >= 6:
-        band, reading = "solid", "More improving than deteriorating."
-    elif score >= 4:
-        band, reading = "mixed", "No clear fundamental direction."
-    else:
-        band, reading = "weak", "Deteriorating on most axes Piotroski measures."
+    band, reading = piotroski_band(score, len(scored))
 
     return {
         "score": int(score),

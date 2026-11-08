@@ -85,6 +85,23 @@ TONE_FOR_BAND: dict[str, str] = {
 EVIDENCE = ("strong", "moderate", "weak", "none")
 
 
+def _clip(text, limit: int = 220) -> str:
+    """Shorten a quoted message at a sentence or a word, and say it was shortened.
+
+    A hard slice used to end mid-word, so a blind spot read "…rather than a
+    company with no sector, a Everything below is missing that lens".
+    """
+    text = " ".join(str(text).split())
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    stop = head.rfind(". ")
+    if stop >= limit // 2:
+        return head[:stop + 1]
+    space = head.rfind(" ")
+    return (head[:space] if space > 0 else head).rstrip(",;:—- ") + "…"
+
+
 def _ladder(value: float, steps: Sequence[tuple[Optional[float], str]]) -> str:
     """Pick a band from thresholds written in ASCENDING order of `value`.
 
@@ -1356,9 +1373,19 @@ def _piotroski(value, maxScore=9, **_):
         return unavailable(label, what, "the filings needed are not available")
     total = int(maxScore) if _known(maxScore) and maxScore else 9
     score = int(value)
+    # THE SAME EDGES AS THE BAND THAT VOTES, read from the module that owns it.
+    # This ladder had its own (0.45, 0.70, 0.89), so 4, 6 and 8 of 9 read
+    # "weak side", "middling" and "solid" here beside a band that said mixed,
+    # solid and strong — and below the minimum it praised three checks of nine.
+    from .quality import PIOTROSKI_CUTS, PIOTROSKI_MIN_SIGNALS
+    if total < PIOTROSKI_MIN_SIGNALS:
+        return unavailable(label, what,
+                           f"only {total} of the nine checks could be computed from these "
+                           f"filings, too few to call a direction")
     ratio = score / total if total else 0.0
-    band = _ladder(ratio, ((0.25, "bad"), (0.45, "poor"), (0.70, "fair"),
-                           (0.89, "good"), (None, "excellent")))
+    mixed, solid, strong = PIOTROSKI_CUTS
+    band = _ladder(ratio, ((0.25, "bad"), (mixed - 1e-9, "poor"), (solid - 1e-9, "fair"),
+                           (strong - 1e-9, "good"), (None, "excellent")))
     reading = f"{score} out of {total} checks passed. "
     reading += {
         "bad": "That is a weak score — the business is going backwards on most of the axes "
@@ -3392,7 +3419,7 @@ def _blind_spots(payload: dict, readings: dict) -> list[dict]:
             if isinstance(detail, dict):
                 detail = detail.get("message") or "the engine could not run"
             out.append({"title": f"{label} did not run", "text": (
-                f"{str(detail)[:220]} Everything below is missing that lens, so the "
+                f"{_clip(detail)} Everything below is missing that lens, so the "
                 f"cross-check is weaker than it looks.")})
 
     if readings.get("quality") and readings["quality"]["tone"] == "none":

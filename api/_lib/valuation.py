@@ -17,6 +17,7 @@ arguments carrying the SAME default values the widgets had. Nothing else.
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Optional
 
 import numpy as np
@@ -497,6 +498,22 @@ def resolve_dividend(data: dict, price: float):
             return y * price, "derived from dividend yield"
 
     return np.nan, "unavailable"
+
+
+def complete_years(div_history) -> pd.DataFrame:
+    """The dividend record's whole calendar years, newest first — never this one.
+
+    `dividend_history` sums payments by calendar year, so the current year is a
+    year to date. The DDM's "Last full year" basis used to take the SECOND row
+    on the assumption that the first was always that partial year — which picked
+    the year before last whenever nothing had been paid yet this year — and the
+    "3-year average" averaged the partial year in, understating the base (0.90
+    against 1.05 for a semi-annual payer one instalment into the year).
+    """
+    if not isinstance(div_history, pd.DataFrame) or div_history.empty:
+        return pd.DataFrame(columns=["Year", "Dividend / Share"])
+    years = pd.to_numeric(div_history["Year"], errors="coerce")
+    return div_history[years < dt.date.today().year].reset_index(drop=True)
 
 
 def bank_diagnostics(data: dict, dps: float, price: float, shares: float) -> dict:
@@ -1428,6 +1445,7 @@ def analyze(
     else:
         auto_dps, dps_source = resolve_dividend(data, price)
         div_history = data.get("dividend_history", pd.DataFrame())
+        complete = complete_years(div_history)
 
         manual_base_f = _safe_float(manual_base)
         suggested_dps = (float(auto_dps) if np.isfinite(auto_dps) and auto_dps > 0
@@ -1454,11 +1472,11 @@ def analyze(
                     suggested={"base": suggested_dps, "price": _nullable(price),
                                "payout": 0.40},
                 )
-            if dps_basis == "Last full year" and len(div_history) >= 2:
-                base_value = float(div_history["Dividend / Share"].iloc[1])
-                dps_source = f"FY{div_history['Year'].iloc[1]} declared"
-            elif dps_basis == "3-year average" and len(div_history) >= 3:
-                base_value = float(div_history["Dividend / Share"].iloc[:3].mean())
+            if dps_basis == "Last full year" and len(complete) >= 1:
+                base_value = float(complete["Dividend / Share"].iloc[0])
+                dps_source = f"FY{complete['Year'].iloc[0]} declared"
+            elif dps_basis == "3-year average" and len(complete) >= 3:
+                base_value = float(complete["Dividend / Share"].iloc[:3].mean())
                 dps_source = "3-year average of declared dividends"
             else:
                 base_value = float(auto_dps)
@@ -1499,15 +1517,17 @@ def analyze(
             {"period": row["Year"], "dividendPerShare": fmt_dps(row["Dividend / Share"], market)}
             for _, row in div_history.iterrows()
         ] if isinstance(div_history, pd.DataFrame) and not div_history.empty else []
-        if sd_growth is None and isinstance(div_history, pd.DataFrame) and not div_history.empty:
-            declared = list(div_history["Dividend / Share"].astype(float))[::-1]
+        # Complete years only: a year to date read as a year is a dividend cut,
+        # and one of those among three observations sets the fan's whole width.
+        if sd_growth is None and not complete.empty:
+            declared = list(complete["Dividend / Share"].astype(float))[::-1]
             sd_growth_calibrated = riskmodel.shrunk_growth_volatility(declared)
             sd_g = sd_growth_calibrated["sd"]
 
         basis_options = ["Trailing 12 months"]
-        if len(div_history) >= 2:
+        if len(complete) >= 1:
             basis_options.append("Last full year")
-        if len(div_history) >= 3:
+        if len(complete) >= 3:
             basis_options.append("3-year average")
 
         manual_defaults = {

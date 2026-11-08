@@ -439,6 +439,22 @@ def currency(symbol: str, default: str = "USD") -> str:
 
 _EARNINGS_CACHE: dict[tuple[str, str], dict] = {}
 _EARNINGS_GUARD = threading.Lock()
+# When a calendar fetched during a throttle stops being served. See `earnings_calendar`.
+_EARNINGS_EXPIRES: dict[tuple[str, str], float] = {}
+
+
+def _transient(exc: BaseException) -> bool:
+    """Whether a failed fetch is one a later request could succeed at.
+
+    Throttled, refused, reset or timed out — as opposed to a lookup that ran
+    and found nothing. Only the first kind may be kept for minutes rather than
+    the day, and never written to disk: a throttled moment cached as a fact is
+    the bug class `_company_info_arrived` was written for.
+    """
+    name = type(exc).__name__
+    module = type(exc).__module__ or ""
+    return ("RateLimit" in name or isinstance(exc, OSError)
+            or module.startswith(("curl_cffi", "requests", "urllib3")))
 
 
 def earnings_calendar(symbol: str) -> dict:
@@ -469,16 +485,22 @@ def earnings_calendar(symbol: str) -> dict:
     today = dt.date.today()
     key = (symbol.upper(), today.isoformat())
     with _EARNINGS_GUARD:
+        expires = _EARNINGS_EXPIRES.get(key)
+        if expires is not None and time.monotonic() >= expires:
+            _EARNINGS_CACHE.pop(key, None)
+            _EARNINGS_EXPIRES.pop(key, None)
         hit = _EARNINGS_CACHE.get(key)
     if hit is not None:
         return {**hit, "dates": list(hit["dates"])}
     handle = None
+    throttled = False
     try:
         handle = yf.Ticker(symbol)
         table = handle.earnings_dates
         dates = list(table.index) if table is not None else []
-    except Exception:
+    except Exception as exc:
         dates = []
+        throttled = _transient(exc)
     fallback_next = None
     if not dates and handle is not None:
         try:
@@ -503,7 +525,16 @@ def earnings_calendar(symbol: str) -> dict:
     with _EARNINGS_GUARD:
         if len(_EARNINGS_CACHE) > 256:
             _EARNINGS_CACHE.clear()
+            _EARNINGS_EXPIRES.clear()
         _EARNINGS_CACHE[key] = out
+        # A THROTTLED TABLE WITH NOTHING TO STAND IN FOR IT IS KEPT FOR MINUTES.
+        # It used to be kept until midnight, so one throttled moment told the
+        # company tab "no upcoming report date" and stopped the event study's
+        # earnings tag for the rest of the day on that instance.
+        if throttled and fallback_next is None:
+            _EARNINGS_EXPIRES[key] = time.monotonic() + COMPANY_GAP_TTL_SECONDS
+        else:
+            _EARNINGS_EXPIRES.pop(key, None)
     return {**out, "dates": list(dates)}
 
 
@@ -783,6 +814,14 @@ def _epoch_date(value) -> Optional[str]:
         return None
 
 
+# How long after its last payment a dividend stops counting as current. Fifteen
+# months: an annual payer whose next payment is a quarter late is still paying,
+# and one that has missed a whole year is not. A lapsed dividend leaves the
+# trailing figure empty, so the valuation falls through to the provider's own
+# trailing and forward rates — which for a late payer carry its rate, and for a
+# suspended one carry nothing, sending a financial to residual income instead.
+DIVIDEND_LAPSED_DAYS = 456
+
 # Rows on a financial statement that are COUNTS rather than money. Scaling a
 # share count by an exchange rate would be meaningless; every consumer uses them
 # only in ratios, where uniform scaling is harmless, but excluding them keeps the
@@ -1018,8 +1057,22 @@ def _company_uncached(ticker: str, convert: bool = True) -> dict:
             if divs is not None and len(divs):
                 divs = divs.copy()
                 divs.index = pd.to_datetime(divs.index, utc=True).tz_localize(None)
-                cutoff = divs.index.max() - pd.Timedelta(days=365)
-                ttm_dividend = float(divs[divs.index > cutoff].sum())
+                last_paid = divs.index.max()
+                # 350 DAYS, NOT 365. A payment a year before the last one sits on
+                # a 365-day boundary, and payment dates drift by days, so a
+                # semi-annual payer whose instalments landed 364 days apart
+                # counted three of them — the dividend half again. 350 keeps one
+                # year's payments for annual, semi-annual, quarterly and monthly
+                # payers alike.
+                cutoff = last_paid - pd.Timedelta(days=350)
+                # A YEAR'S PAYMENTS, BUT ONLY IF THEY ARE STILL BEING MADE. The
+                # window is anchored on the last payment, which counts a full
+                # year for a semi-annual payer whatever the month; it also kept
+                # counting a dividend suspended years ago, labelled "trailing
+                # 12m payments (actual)" and accepted by the valuation as a
+                # current dividend. Found in the November 2026 analysis.
+                if (pd.Timestamp(dt.date.today()) - last_paid).days <= DIVIDEND_LAPSED_DAYS:
+                    ttm_dividend = float(divs[divs.index > cutoff].sum())
                 annual = divs.groupby(divs.index.year).sum().sort_index(ascending=False)
                 div_history = pd.DataFrame(
                     {"Year": annual.index.astype(str), "Dividend / Share": annual.values}
@@ -1320,6 +1373,47 @@ def last_close(symbol: str, period: str = "5d") -> Optional[float]:
 
 
 # --------------------------------------------------------------------------- #
+# Is the provider answering anybody?
+# --------------------------------------------------------------------------- #
+# A FAILED FETCH FOR ONE SYMBOL HAS TWO CAUSES THAT LOOK IDENTICAL FROM THAT
+# SYMBOL: it does not exist, or the provider is not answering anyone. Every
+# engine above reports the first, because it is the only one it can see — so in
+# the November 2026 analysis, with the provider unreachable, AAPL was told that
+# "non-US listings need their exchange suffix". The market's own benchmark index
+# is the yardstick: if the provider will not return the S&P 500 either, the
+# symbol is not the problem.
+#
+# Asked only when a symbol's price lenses have already failed, and held for a
+# minute either way, so an outage costs one extra request per instance per
+# minute rather than one per page.
+CANARY = {"US": ("^GSPC", "the S&P 500"), "ID": ("^JKSE", "the Jakarta Composite")}
+CANARY_TTL_SECONDS = 60
+_CANARY_CACHE: dict[str, tuple[float, bool]] = {}
+_CANARY_GUARD = threading.Lock()
+
+
+def provider_answering(market_code: str = "US") -> bool:
+    """Whether the price provider returns this market's benchmark index right now."""
+    symbol, _ = CANARY.get((market_code or "").strip().upper(), CANARY["US"])
+    with _CANARY_GUARD:
+        held = _CANARY_CACHE.get(symbol)
+        if held and time.monotonic() - held[0] < CANARY_TTL_SECONDS:
+            return held[1]
+    answering = last_close(symbol) is not None
+    with _CANARY_GUARD:
+        _CANARY_CACHE[symbol] = (time.monotonic(), answering)
+    return answering
+
+
+def provider_outage_message(symbol: str) -> str:
+    """What a reader is told when the provider, not the symbol, is the problem."""
+    _, name = CANARY.get(symbols.market_of(symbol), CANARY["US"])
+    return (f"The market-data provider is not answering right now — it did not return even "
+            f"{name} — so nothing about {symbol} could be fetched. This is not a problem "
+            f"with the symbol; running the lenses again in a few minutes usually resolves it.")
+
+
+# --------------------------------------------------------------------------- #
 # Foreign exchange
 # --------------------------------------------------------------------------- #
 _FX_CACHE: dict[tuple[str, str, str], float] = {}
@@ -1554,6 +1648,8 @@ def listed_equities(market_code: str = "ID") -> list[dict]:
 _REGISTER_CACHE: dict[tuple[str, str], dict] = {}
 _REGISTER_GUARD = threading.Lock()
 _REGISTER_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+# When a register fetched during a throttle stops being served. See `share_register`.
+_REGISTER_EXPIRES: dict[tuple[str, str], float] = {}
 
 # How far back the share-count series is pulled. Four years covers three or four
 # annual reporting points on a listing that files them, which is the minimum for
@@ -1584,26 +1680,50 @@ def share_register(ticker: str) -> dict:
     """
     key = (ticker.upper(), dt.date.today().isoformat())
 
-    cached = _REGISTER_CACHE.get(key)
+    cached = _register_cached(key)
     if cached is not None:
         return dict(cached)
 
     with _register_lock(key):
-        cached = _REGISTER_CACHE.get(key)
+        cached = _register_cached(key)
         if cached is not None:
             return dict(cached)
         result = _fundamentals_load("register", ticker)
+        throttled = False
         if result is None:
             result = _register_uncached(ticker)
-            _fundamentals_store("register", ticker, result)
+            throttled = bool(result.pop("_throttled", False))
+            # A THROTTLED REGISTER IS NEVER WRITTEN TO DISK. The disk keeps a
+            # record for a week, and the free-float and issuance gates read
+            # this one: a throttled moment stored as "no data" turned both off
+            # for that name for seven days, the bug `_company_info_arrived`
+            # closed for the company record in September.
+            if not throttled:
+                _fundamentals_store("register", ticker, result)
         # No price lives in here — ownership, share counts and analyst counts
         # all move on a filing cycle — so a hit needs no refreshing.
         with _REGISTER_GUARD:
             if len(_REGISTER_CACHE) > 128:
                 _REGISTER_CACHE.clear()
+                _REGISTER_EXPIRES.clear()
             _REGISTER_CACHE[key] = result
+            if throttled:
+                _REGISTER_EXPIRES[key] = time.monotonic() + COMPANY_GAP_TTL_SECONDS
+            else:
+                _REGISTER_EXPIRES.pop(key, None)
 
     return dict(result)
+
+
+def _register_cached(key: tuple[str, str]) -> Optional[dict]:
+    """The day's register, unless it was fetched during a throttle and its minutes are up."""
+    with _REGISTER_GUARD:
+        expires = _REGISTER_EXPIRES.get(key)
+        if expires is not None and time.monotonic() >= expires:
+            _REGISTER_CACHE.pop(key, None)
+            _REGISTER_EXPIRES.pop(key, None)
+            return None
+        return _REGISTER_CACHE.get(key)
 
 
 def _holder_value(frame, label: str) -> Optional[float]:
@@ -1635,9 +1755,13 @@ def _register_uncached(ticker: str) -> dict:
         "earningsSurprises": None,
         "nextEarnings": None,
     }
+    # Any sub-fetch that failed in a way a later request could fix. Popped
+    # by `share_register` before the record is cached or returned.
+    throttled = False
     try:
         handle = yf.Ticker(ticker)
-    except Exception:
+    except Exception as exc:
+        out["_throttled"] = _transient(exc)
         return out
 
     try:
@@ -1647,8 +1771,8 @@ def _register_uncached(ticker: str) -> dict:
         out["institutionsFloatPercentHeld"] = _holder_value(
             holders, "institutionsFloatPercentHeld")
         out["institutionsCount"] = _holder_value(holders, "institutionsCount")
-    except Exception:
-        pass
+    except Exception as exc:
+        throttled = throttled or _transient(exc)
 
     # The share-count series, as DATED RECORDS rather than a pandas Series.
     #
@@ -1678,8 +1802,8 @@ def _register_uncached(ticker: str) -> dict:
                 records.append({"date": date, "count": float(count)})
             if records:
                 out["shares"] = records
-    except Exception:
-        pass
+    except Exception as exc:
+        throttled = throttled or _transient(exc)
 
     # Analyst counts by period, as records for the same round-trip reason as the
     # share series above. `period` is the provider's own relative label — "0m"
@@ -1693,8 +1817,8 @@ def _register_uncached(ticker: str) -> dict:
                  for key, value in record.items()}
                 for record in rows.to_dict("records")
             ]
-    except Exception:
-        pass
+    except Exception as exc:
+        throttled = throttled or _transient(exc)
 
     # Earnings surprises. `earnings_dates` mixes future scheduled dates, which
     # carry no actual, with past ones; the surprise column only means anything
@@ -1730,10 +1854,12 @@ def _register_uncached(ticker: str) -> dict:
                     upcoming.append(when)
             if upcoming:
                 out["nextEarnings"] = min(upcoming).date().isoformat()
-    except Exception:
-        pass
+    except Exception as exc:
+        throttled = throttled or _transient(exc)
 
     out["ok"] = any(out[field] is not None for field in (
         "insidersPercentHeld", "institutionsPercentHeld", "shares",
         "recommendations", "earningsSurprises", "nextEarnings"))
+    if throttled:
+        out["_throttled"] = True
     return out

@@ -68,6 +68,37 @@ def _finite(value) -> Optional[float]:
     return out if np.isfinite(out) else None
 
 
+def sessions_per_year(index) -> float:
+    """How many bars make a year of THIS series, read off its own dates.
+
+    252 for anything that trades on weekdays — the convention every stamped
+    measurement in this app was taken under, and within about 5% of the IDX's
+    239-245. A series that also prints at weekends is a different instrument:
+    bitcoin trades 365 days a year, so 252 of its bars are about eight months.
+    Its "one-year" holding period was an eight-month one, its 52-week range
+    covered 36 weeks, and its volatility was understated by about a sixth.
+    Found in the November 2026 analysis; `portfolio.py` had already made the
+    same correction for its own annualisation.
+    """
+    if index is None or len(index) < 30:
+        return float(TRADING_DAYS)
+    dates = pd.DatetimeIndex(index)
+    if float(np.mean(dates.dayofweek >= 5)) < 0.10:
+        return float(TRADING_DAYS)
+    span_days = (dates[-1] - dates[0]).days
+    return float((len(dates) - 1) * 365.25 / span_days) if span_days > 0 else float(TRADING_DAYS)
+
+
+def _bars(days_at_252: int, per_year: float) -> int:
+    """A window written in weekday sessions, in this series' own bars.
+
+    Exactly `days_at_252` for any weekday series, so nothing measured moves.
+    """
+    if per_year == TRADING_DAYS:
+        return int(days_at_252)
+    return round(days_at_252 * per_year / TRADING_DAYS)
+
+
 # ============================================================================ #
 # Drawdown
 # ============================================================================ #
@@ -152,7 +183,8 @@ def cagr(close: pd.Series) -> Optional[float]:
     return float((prices.iloc[-1] / prices.iloc[0]) ** (1.0 / years) - 1.0)
 
 
-def downside_deviation_of(returns: pd.Series, target: float = 0.0) -> float:
+def downside_deviation_of(returns: pd.Series, target: float = 0.0,
+                          per_year: float = TRADING_DAYS) -> float:
     """Sortino & Price's downside deviation: RMS shortfall below `target`.
 
         DD = sqrt( mean( min(r - target, 0)^2 ) ) * sqrt(252)
@@ -190,7 +222,7 @@ def downside_deviation_of(returns: pd.Series, target: float = 0.0) -> float:
     shortfall = np.minimum(values - target, 0.0)
     if not np.any(shortfall < 0):
         return float("nan")
-    return float(np.sqrt(np.mean(shortfall ** 2)) * np.sqrt(TRADING_DAYS))
+    return float(np.sqrt(np.mean(shortfall ** 2)) * np.sqrt(per_year))
 
 
 def risk_metrics(close: pd.Series, risk_free: float = 0.0) -> dict:
@@ -207,9 +239,10 @@ def risk_metrics(close: pd.Series, risk_free: float = 0.0) -> dict:
         return {"usable": False}
 
     annual_return = cagr(prices)
-    volatility = float(returns.std(ddof=1) * np.sqrt(TRADING_DAYS))
+    per_year = sessions_per_year(prices.index)
+    volatility = float(returns.std(ddof=1) * np.sqrt(per_year))
 
-    downside_deviation = downside_deviation_of(returns)
+    downside_deviation = downside_deviation_of(returns, per_year=per_year)
 
     excess = (annual_return - risk_free) if annual_return is not None else np.nan
     sharpe = excess / volatility if volatility > 0 and np.isfinite(excess) else np.nan
@@ -249,6 +282,7 @@ def risk_metrics(close: pd.Series, risk_free: float = 0.0) -> dict:
         "worstDay": _finite(worst_day),
         "riskFree": risk_free,
         "observations": len(returns),
+        "sessionsPerYear": per_year,
     }
 
 
@@ -285,9 +319,10 @@ def rolling_returns(close: pd.Series,
     sitting in the oldest table in the app.
     """
     prices = close.dropna()
+    per_year = sessions_per_year(prices.index)
     out = []
     for horizon in years:
-        window = int(horizon * TRADING_DAYS)
+        window = int(horizon * per_year)
         needed = window + MIN_WINDOWS
         if len(prices) < needed:
             short_by = needed - len(prices)
@@ -346,7 +381,7 @@ def monthly_seasonality(close: pd.Series) -> dict:
     can see the shape of the history, not so anyone trades January.
     """
     prices = close.dropna()
-    if len(prices) < TRADING_DAYS:
+    if len(prices) < _bars(TRADING_DAYS, sessions_per_year(prices.index)):
         return {"usable": False, "months": []}
 
     monthly = prices.resample("ME").last().pct_change(fill_method=None).dropna()
@@ -390,14 +425,17 @@ def time_series_momentum(close: pd.Series) -> dict:
     12-month return as "momentum" quietly mixes two opposing effects.
     """
     prices = close.dropna()
+    per_year = sessions_per_year(prices.index)
     result: dict = {}
-    for label, days in (("1m", 21), ("3m", 63), ("6m", 126),
-                        ("12m", 252), ("36m", 756)):
+    for label, weekdays in (("1m", 21), ("3m", 63), ("6m", 126),
+                            ("12m", 252), ("36m", 756)):
+        days = _bars(weekdays, per_year)
         result[label] = (float(prices.iloc[-1] / prices.iloc[-1 - days] - 1.0)
                          if len(prices) > days else None)
 
-    if len(prices) > 252:
-        result["momentum12_1"] = float(prices.iloc[-22] / prices.iloc[-253] - 1.0)
+    month, year = _bars(21, per_year), _bars(252, per_year)
+    if len(prices) > year:
+        result["momentum12_1"] = float(prices.iloc[-1 - month] / prices.iloc[-1 - year] - 1.0)
     else:
         result["momentum12_1"] = None
 
@@ -420,7 +458,7 @@ def price_position(close: pd.Series, high: pd.Series, low: pd.Series) -> dict:
         return {"usable": False}
 
     latest = float(prices.iloc[-1])
-    window = min(len(prices), TRADING_DAYS)
+    window = min(len(prices), _bars(TRADING_DAYS, sessions_per_year(prices.index)))
     year_high = float(high.dropna().tail(window).max())
     year_low = float(low.dropna().tail(window).min())
     span = year_high - year_low
@@ -453,7 +491,7 @@ def faber_timing(close: pd.Series) -> dict:
     a long-term holder stays invested at all.
     """
     prices = close.dropna()
-    if len(prices) < TRADING_DAYS:
+    if len(prices) < _bars(TRADING_DAYS, sessions_per_year(prices.index)):
         return {"usable": False}
 
     monthly = prices.resample("ME").last().dropna()
@@ -513,8 +551,12 @@ def relative_strength(close: pd.Series, benchmark: pd.Series,
     ratio = joined["stock"] / joined["benchmark"]
     normalised = ratio / ratio.iloc[0]
 
+    # On the JOINED dates, which are the benchmark's sessions, so a coin against
+    # the S&P 500 is measured on weekdays and keeps the weekday windows.
+    per_year = sessions_per_year(joined.index)
     periods = {}
-    for label, days in (("3m", 63), ("6m", 126), ("12m", 252), ("36m", 756)):
+    for label, weekdays in (("3m", 63), ("6m", 126), ("12m", 252), ("36m", 756)):
+        days = _bars(weekdays, per_year)
         if len(joined) > days:
             stock_return = float(joined["stock"].iloc[-1] / joined["stock"].iloc[-1 - days] - 1)
             index_return = float(joined["benchmark"].iloc[-1] / joined["benchmark"].iloc[-1 - days] - 1)
@@ -523,7 +565,7 @@ def relative_strength(close: pd.Series, benchmark: pd.Series,
         else:
             periods[label] = None
 
-    recent = normalised.tail(min(len(normalised), TRADING_DAYS))
+    recent = normalised.tail(min(len(normalised), _bars(TRADING_DAYS, per_year)))
     x = np.arange(len(recent), dtype=float)
     slope = float(np.polyfit(x, recent.to_numpy(), 1)[0]) if len(recent) > 10 else np.nan
 

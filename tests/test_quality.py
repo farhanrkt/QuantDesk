@@ -142,6 +142,62 @@ def test_piotroski_reports_the_denominator_it_actually_used(healthy):
     assert result["score"] <= result["maxScore"]
 
 
+def test_one_year_of_statements_calls_no_direction_and_raises_no_concern(healthy):
+    """The bug this guards: three checks passed out of three computable banded
+    'weak', the lens voted bearish and the pre-trade panel printed '3 of 3
+    fundamental checks passed — deteriorating'."""
+    from _lib import explain, pretrade
+    income, balance, cashflow = (frame[[YEARS[0]]] for frame in healthy)
+    company = {"sector": "Industrials", "industry": "Machinery", "income": income,
+               "balance": balance, "cashflow": cashflow, "quote_type": "EQUITY"}
+    result = Q.analyze(company, symbol="FAKE.JK", market_code="ID")
+    piotroski = result["piotroski"]
+    assert (piotroski["score"], piotroski["maxScore"]) == (3, 3)
+    assert piotroski["band"] == "unknown"
+    assert "too few to call a direction" in piotroski["reading"]
+    assert result["verdict"] != "CONCERNS"
+    assert explain.for_quality(result)["piotroski"]["band"] == "unavailable"
+    check = pretrade._piotroski_weak({"quality": {"ok": True, "data": result}})
+    assert check["state"] == "unchecked"
+
+
+def test_a_band_reads_the_share_of_computable_checks(healthy):
+    """Seven of seven computable checks passing is every axis that could be
+    asked, and reads strong — the raw count banded it as a seven of nine."""
+    income, balance, cashflow = healthy
+    balance = balance.drop(index=["Current Assets", "Current Liabilities",
+                                  "Ordinary Shares Number"])
+    result = Q.piotroski_f_score(income, balance, cashflow)
+    assert (result["score"], result["maxScore"]) == (7, 7)
+    assert result["band"] == "strong"
+
+
+@pytest.mark.parametrize("score", range(10))
+def test_complete_filings_band_exactly_as_the_counts_always_did(score):
+    old = "strong" if score >= 8 else "solid" if score >= 6 else "mixed" if score >= 4 else "weak"
+    assert Q.piotroski_band(score, 9)[0] == old
+
+
+@pytest.mark.parametrize("computable", range(Q.PIOTROSKI_MIN_SIGNALS, 10))
+def test_the_metric_sentence_and_the_band_never_disagree(computable):
+    """Two readers of one score, held to one set of edges. The metric's ladder
+    had its own, so 4, 6 and 8 of 9 read 'weak side', 'middling' and 'solid'
+    beside bands of mixed, solid and strong."""
+    from _lib import explain
+    agree = {"weak": {"bad", "poor"}, "mixed": {"fair"}, "solid": {"good"},
+             "strong": {"excellent"}}
+    for score in range(computable + 1):
+        band = Q.piotroski_band(score, computable)[0]
+        sentence = explain.explain("piotroski", score, maxScore=computable)["band"]
+        assert sentence in agree[band], (score, computable, band, sentence)
+
+
+@pytest.mark.parametrize("computable", range(1, Q.PIOTROSKI_MIN_SIGNALS))
+def test_too_few_computable_checks_is_unknown_whatever_they_scored(computable):
+    for score in range(computable + 1):
+        assert Q.piotroski_band(score, computable)[0] == "unknown"
+
+
 # --------------------------------------------------------------------------- #
 # Altman Z''-EM
 # --------------------------------------------------------------------------- #

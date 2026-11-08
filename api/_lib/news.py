@@ -147,10 +147,17 @@ def _items(root: ET.Element, limit: Optional[int] = None) -> list[dict]:
             title, _, source = title.rpartition(" - ")
         source = source or "Financial Media"
 
+        # HTTPS OR NOTHING, the rule the Yahoo path in `market_data.news_search`
+        # already applies. The link becomes an anchor's href; a feed is
+        # third-party text, and a `javascript:` or `data:` URL is not a story.
+        link = _text(item, "link")
+        if link and not link.startswith("https://"):
+            continue
+
         items.append({
             "title": title,
             "source": source,
-            "link": _text(item, "link"),
+            "link": link,
             "published": _text(item, "pubDate"),
         })
         if limit is not None and len(items) >= limit:
@@ -158,12 +165,31 @@ def _items(root: ET.Element, limit: Optional[int] = None) -> list[dict]:
     return items
 
 
-def fetch_news(symbol: str, limit: int = MAX_ITEMS) -> list[dict]:
-    """Recent headlines for `symbol`. Returns [] on any network or parse failure."""
+class NewsUnavailable(Exception):
+    """The feed could not be read — which is not the same as there being no news."""
+
+
+NEWS_UNAVAILABLE = ("The news feed could not be read just now, which is not the same as "
+                    "there being no news.")
+
+
+def fetch_news(symbol: str, limit: int = MAX_ITEMS, strict: bool = False) -> list[dict]:
+    """Recent headlines for `symbol`. Returns [] on any network or parse failure,
+    unless `strict`, when the failure raises `NewsUnavailable` instead.
+
+    STRICT IS WHAT THE PAGE ASKS FOR. `NewsPanel` has said since the overhaul
+    that a failed feed and a quiet company are different facts and renders each
+    differently, but this function answered both with an empty list, so the
+    panel's "did not load" state could never be reached and a blocked feed read
+    as "no recent headlines" for AAPL. The board's headlines already report
+    `available: false`; the stock page now gets the same distinction.
+    """
     try:
         root = _parse_feed(_fetch_feed(_feed_url(symbol)))
-    except Exception:
-        # Network error, timeout, DNS failure, malformed XML -> no news, no crash.
+    except Exception as exc:
+        # Network error, timeout, DNS failure, malformed XML.
+        if strict:
+            raise NewsUnavailable(NEWS_UNAVAILABLE) from exc
         return []
     return _items(root, limit)
 

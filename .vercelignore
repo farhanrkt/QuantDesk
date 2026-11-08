@@ -12,3 +12,14 @@ tests
 docs/*
 !docs/field-manual.html
 scripts
+# The private scanner's output and both of its caches. They are gitignored, but
+# a command-line deploy uploads what is on disk and reads THIS file, not
+# .gitignore — and the Python function bundles the project tree, so a report
+# uploaded here would be served by /api/scan/latest to anyone.
+reports
+.scan_cache
+.fundamentals_cache
+# Never deploy a local secrets file either; deployed values belong in the
+# platform's environment variables.
+.env
+.env.*

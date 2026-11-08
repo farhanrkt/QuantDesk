@@ -23,22 +23,38 @@ request value BBCA.JK while charting the BBCA ETF. See `_lib/symbols.py`.
 
 Endpoints
 ---------
-GET /api/health                     liveness + engine inventory
-GET /api/isolation-forest           Engine 1 — whale / anomaly detection
-GET /api/technical-analysis         Engine 2 — QuantDash technicals
-GET /api/intrinsic-value            Engine 3 — INTRINSIC DCF/DDM + Monte Carlo
-GET /api/intrinsic-value/simulation Engine 3 — full Monte Carlo draw set as CSV
-GET /api/screener                   Engine 1 — multi-ticker watchlist scan
-GET /api/quality                    Engine 4 — Piotroski / Altman / Beneish
-GET /api/event-study                abnormal returns after each anomaly
-GET /api/news                       contextual catalyst headlines
-GET /api/confluence                 every lens at once, in ONE invocation
+GET  /api/health                     liveness + engine inventory
+GET  /api/capabilities               what this deployment serves (the private tier)
+GET  /api/confluence                 every lens at once, in ONE invocation
+GET  /api/isolation-forest           Engine 1 — whale / anomaly detection
+GET  /api/technical-analysis         Engine 2 — QuantDash technicals
+GET  /api/intrinsic-value            Engine 3 — INTRINSIC DCF/DDM + Monte Carlo
+GET  /api/intrinsic-value/simulation Engine 3 — full Monte Carlo draw set as CSV
+GET  /api/quality                    Engine 4 — Piotroski / Altman / Beneish
+GET  /api/company                    what the company is, year by year
+GET  /api/event-study                abnormal returns after each anomaly
+GET  /api/news                       contextual catalyst headlines
+GET  /api/symbols                    the command palette's listing search
+GET  /api/screener                   Engine 1 — multi-ticker watchlist scan
+GET  /api/rank, /api/rank/universes  rank a universe on price signals
+POST /api/rank/list                  rank a reader's own list
+GET  /api/rank/deepen                quality and valuation for a shortlist
+GET  /api/peers                      one ticker placed among its index
+GET  /api/exposure                   what a universe moves with
+POST /api/portfolio                  a candidate against a book of holdings
+GET  /api/markets/today              what moved the markets
+GET  /api/markets/calendar           the dates that move markets
+POST /api/markets/earnings           report dates for a reader's watchlist
+GET  /api/markets/headlines          the past day's market headlines
+GET  /api/verdict                    the PRIVATE scanner's score — local runs only
+GET  /api/scan/latest                the last local scan report — local runs only
 """
 
 from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import functools
 import io
 import math
 import os
@@ -89,6 +105,53 @@ def _allowed_origins() -> list[str]:
     return [] if os.environ.get("VERCEL_ENV") == "production" else ["*"]
 
 
+def on_vercel(request: Optional[Request] = None) -> bool:
+    """Whether the app is running on Vercel, judged two ways, either enough.
+
+    The system environment variables exist at runtime only when the project has
+    "Enable access to System Environment Variables" turned on, so they cannot be
+    the only signal. The edge also adds `x-vercel-id` to every request it routes
+    to a function, which covers a project that has the setting off. Off Vercel a
+    client could send that header itself; the most that buys is the forwarded-
+    address trust this app gave every request before November 2026.
+    """
+    if os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"):
+        return True
+    return bool(request is not None and request.headers.get("x-vercel-id"))
+
+
+def private_tier_enabled(request: Optional[Request] = None) -> bool:
+    """Whether this deployment serves the private scanner's score and report.
+
+    THE SCANNER WAS PRIVATE BY DESCRIPTION ONLY. PRODUCT.md constraint 1 keeps a
+    composite buy/hold/sell off the published single-company view and says the
+    per-name score and the local report live "locally". Nothing enforced the
+    second half: `/api/verdict` computed a score, an action and a position size
+    for any ticker on any deployment, the stock page offered it as the "Score
+    it" tab, and the only fence was that `reports/` is gitignored — which hides
+    a FILE, not a route that computes live. Found in the November 2026 analysis.
+
+    So the tier is ON where the owner runs the app and OFF on a deployment, and
+    neither needs a setting. "A deployment" is any Vercel build, previews
+    included, because a preview URL is as public as production. Set
+    QUANTDESK_PRIVATE_TIER=1 to turn it on where it would be off, or =0 to turn
+    it off locally.
+
+    Read per request rather than at import, so a test can flip it and so the
+    routes it guards and `/api/capabilities` can never disagree.
+    """
+    raw = (os.environ.get("QUANTDESK_PRIVATE_TIER") or "").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return not on_vercel(request)
+
+
+PRIVATE_TIER_OFF = ("The private scanner is not served by this deployment. It runs where its "
+                    "owner runs the app, and the published views never carry a score.")
+
+
 # POST is permitted for exactly one route. `/api/portfolio` takes a body rather
 # than a query string so that a reader's holdings never enter a URL — see the
 # route itself. Everything else in this app is still a plain GET.
@@ -116,6 +179,16 @@ app.add_middleware(
 # header.
 CACHE = "public, max-age=0, must-revalidate, s-maxage=60"
 CDN_CACHE = "public, s-maxage=60, stale-while-revalidate=300"
+
+# A RESPONSE CARRYING A PROVIDER FAILURE IS HELD FOR SECONDS, NOT MINUTES. Every
+# such response used to go out under the two lines above, so a ten-second
+# throttle at Yahoo became up to six minutes of "no data" served by the edge to
+# every reader of that URL — after the provider had recovered. Fifteen seconds
+# with no stale window still absorbs a burst of identical requests, which is the
+# part of caching worth keeping during an outage. `lib/cache.ts` already refuses
+# to keep a failure in the browser; this is the same rule at the edge.
+CACHE_FAILED = "public, max-age=0, must-revalidate, s-maxage=15"
+CDN_CACHE_FAILED = "public, s-maxage=15"
 
 # The wire cap for daily series. `period=max` on a long-listed US name is ~11k
 # rows x 10 fields, which is megabytes of JSON and as many Recharts points.
@@ -220,11 +293,25 @@ def client_ip(request: Request) -> str:
     `x-forwarded-for` is only trustworthy behind a proxy that sets it, which is
     the case on Vercel — the platform edge overwrites it. The FIRST entry is the
     original client; the rest are hops.
+
+    NOWHERE ELSE, because anywhere else the client writes it. Off Vercel this
+    read the header anyway, so rotating it gave every request a fresh bucket —
+    measured in the November 2026 analysis, eight of eight rotated requests
+    passed a limit of three. Uvicorn already resolves `request.client` from the
+    header for proxies it trusts (`--forwarded-allow-ips`, 127.0.0.1 by
+    default, which covers the Next dev proxy), so that is what is read instead.
     """
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    if on_vercel(request):
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+@functools.lru_cache(maxsize=1)
+def _known_paths() -> frozenset:
+    """Every path a route is registered at, read once all routes exist."""
+    return frozenset(getattr(route, "path", None) for route in app.routes)
 
 
 @app.middleware("http")
@@ -266,12 +353,19 @@ async def rate_limit(request: Request, call_next):
         return await call_next(request)
 
     limit, window = RATE_LIMITS.get(path, RATE_LIMITS[None])
-    key = (client_ip(request), path)
+    # EVERY PATH NO ROUTE ANSWERS SHARES ONE BUCKET. Keyed by the raw path, each
+    # made-up URL got a bucket of its own, so one client could mint ten
+    # thousand of them in a minute — every one under the default limit — and the
+    # full reset below then wiped every client's count, its own included. In the
+    # November 2026 analysis a client already refused at `/api/screener` was
+    # served again after 10,050 such 404s.
+    bucket = path if path in _known_paths() else "(unrouted)"
+    key = (client_ip(request), bucket)
     now = time.monotonic()
 
     with _RATE_LOCK:
         if len(_RATE_HITS) > _RATE_MAX_KEYS:
-            _RATE_HITS.clear()
+            _evict_rate_keys(now)
         hits = _RATE_HITS[key]
         while hits and now - hits[0] >= window:
             hits.popleft()
@@ -290,17 +384,39 @@ async def rate_limit(request: Request, call_next):
     return await call_next(request)
 
 
-def ok(payload: dict) -> JSONResponse:
+def _evict_rate_keys(now: float) -> None:
+    """Make room in the bucket table without forgetting anyone still counting.
+
+    It used to be cleared outright when full, which handed every limited client
+    a fresh budget at once. Now the buckets whose last request is older than the
+    longest window go first — they no longer count anything — and only if the
+    table is still full, during a flood from thousands of addresses, do the
+    least recently active go after them. Called under `_RATE_LOCK`.
+    """
+    horizon = now - max(window for _, window in RATE_LIMITS.values())
+    for stale in [key for key, hits in _RATE_HITS.items() if not hits or hits[-1] <= horizon]:
+        del _RATE_HITS[stale]
+    excess = len(_RATE_HITS) - _RATE_MAX_KEYS
+    if excess > 0:
+        for key in sorted(_RATE_HITS, key=lambda k: _RATE_HITS[k][-1])[:excess]:
+            del _RATE_HITS[key]
+
+
+def ok(payload: dict, *, failed: bool = False) -> JSONResponse:
     # Cache at the edge: quotes move, but not within 60s, and every engine
     # re-runs a network fetch that we do not want to pay for on each keystroke.
-    return JSONResponse(content=clean(payload),
-                        headers={"Cache-Control": CACHE, "CDN-Cache-Control": CDN_CACHE})
+    # `failed` marks a payload that carries a TRANSIENT failure — see
+    # CACHE_FAILED — and is never set for one that is about the symbol itself.
+    return JSONResponse(content=clean(payload), headers={
+        "Cache-Control": CACHE_FAILED if failed else CACHE,
+        "CDN-Cache-Control": CDN_CACHE_FAILED if failed else CDN_CACHE})
 
 
 def private_ok(payload: dict) -> JSONResponse:
     """A response that no cache anywhere may keep a copy of.
 
-    THE ONLY ROUTE IN THIS APP WHOSE INPUT IS PERSONAL. Every other request says
+    FOR THE ROUTES WHOSE INPUT IS PERSONAL — holdings, a reader's own list, the
+    watchlist's report dates — and for the private score. Every other request says
     "tell me about this company"; the portfolio route says "here is what I own",
     which is a different kind of fact about the person asking.
 
@@ -379,6 +495,18 @@ def health():
                     "quality"],
         "extras": ["screener", "news", "simulation-csv", "event-study"],
     })
+
+
+@app.get("/api/capabilities")
+def capabilities(request: Request):
+    """What this deployment serves, so the client draws only what it can reach.
+
+    The client hides the Score tab and the local-scan view when `privateTier`
+    is false, rather than drawing a tab whose only possible answer is a refusal.
+    The same function decides the flag and guards the two routes, so the page
+    and the server cannot disagree about it.
+    """
+    return ok({"privateTier": private_tier_enabled(request)})
 
 
 # --------------------------------------------------------------------------- #
@@ -623,7 +751,7 @@ def screener(
         "config": {"period": period, "mode": mode},
         "rows": significance["rows"],
         "significance": {k: v for k, v in significance.items() if k != "rows"},
-    })
+    }, failed=not significance["rows"])
 
 
 # --------------------------------------------------------------------------- #
@@ -712,7 +840,9 @@ def rank(
         label = "Custom list"
         as_of = None
 
-    return ok(_ranked(symbols_list, market_code, label, as_of, universe))
+    payload = _ranked(symbols_list, market_code, label, as_of, universe)
+    # Nothing ranked is a fetch that failed, not a universe with no names in it.
+    return ok(payload, failed=not payload.get("ranked"))
 
 
 def _ranked(symbols_list: list, market_code: str, label: str,
@@ -860,6 +990,7 @@ def peers(
 # --------------------------------------------------------------------------- #
 @app.get("/api/verdict")
 async def name_verdict(
+    request: Request,
     ticker: str = Query(..., pattern=TICKER_PATTERN),
     market: str = Query("US", pattern="^(US|ID|us|id)$"),
     universe: Optional[str] = Query(
@@ -881,7 +1012,14 @@ async def name_verdict(
     Every response carries `provenance`: the measured finding that this app's
     price ranking showed no detectable relationship to subsequent returns. A
     caller rendering the score without it is misrepresenting what it is.
+
+    REFUSED BEFORE ANYTHING RUNS where the private tier is off — see
+    `private_tier_enabled` — and never cached anywhere when it is on: a score
+    and a position size are the most advice-shaped thing this app produces, and
+    a shared edge copy of one is a copy nobody chose to publish.
     """
+    if not private_tier_enabled(request):
+        raise HTTPException(status_code=404, detail=PRIVATE_TIER_OFF)
     symbol, market = resolved_with_market(ticker, market)
 
     entry = None
@@ -934,6 +1072,24 @@ async def name_verdict(
     )
     legs = dict(results)
 
+    # EVERYTHING AFTER THE LENSES RUNS IN ONE WORKER THREAD, IN ORDER. It ran on
+    # the event loop itself: a blocking two-year price fetch, the share register
+    # and the benchmark, plus the tape, formation, profile and chart arithmetic —
+    # about a third of a second of CPU on a planted two-year frame before any
+    # network — during which this process could answer nothing else, the command
+    # palette's symbol search included. Still strictly sequential, for the reason
+    # the universe scan above is: nothing here may overlap another yfinance call.
+    return private_ok(await asyncio.to_thread(
+        _verdict_reading, symbol, entry, scan, legs, risk_budget, max_weight))
+
+
+def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], legs: dict,
+                     risk_budget: float, max_weight: float) -> dict:
+    """The rest of `/api/verdict`, once the universe scan and the four lenses are in.
+
+    Synchronous on purpose, and called through `asyncio.to_thread` by the route:
+    every fetch below is sequential, which the route's comments explain.
+    """
     row = None
     universe_context = None
     if scan is not None and entry is not None:
@@ -1000,7 +1156,7 @@ async def name_verdict(
     # a batched yfinance call runs beside the per-symbol ones.
     try:
         register_result = ownership.read(
-            await asyncio.to_thread(market_data.share_register, symbol),
+            market_data.share_register(symbol),
             median_volume=(float(frame["Volume"].tail(21).median())
                            if frame is not None else None))
     except Exception:
@@ -1027,12 +1183,12 @@ async def name_verdict(
     try:
         benchmark_symbol = riskmodel.MARKET_INDEX.get(symbols.market_of(symbol), "^GSPC")
         market_regime = structure.regime(
-            await asyncio.to_thread(market_data.ohlcv, benchmark_symbol, period="2y"),
+            market_data.ohlcv(benchmark_symbol, period="2y"),
             symbol=benchmark_symbol)
     except Exception:
         pass
 
-    return ok({
+    return {
         **scored,
         "rank": (row or {}).get("rank"),
         "universe": universe_context,
@@ -1070,7 +1226,7 @@ async def name_verdict(
         "provenance": verdict.provenance(),
         "blendBacktest": verdict.blend_validation(symbols.market_of(symbol)),
         "preTrade": checks,
-    })
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -1225,14 +1381,21 @@ def _latest_scan(market: str) -> Optional[Path]:
 
 
 @app.get("/api/scan/latest")
-def latest_scan(market: str = Query("ID", pattern="^(US|ID|us|id)$")):
+def latest_scan(request: Request, market: str = Query("ID", pattern="^(US|ID|us|id)$")):
     """The most recent local scan for this market, trimmed to a listable shape.
 
     Returns `available: false` rather than a 404 when there is no scan: a
     missing report is the normal state on a fresh checkout and on the deployed
     app, and the panel says so in words instead of rendering an error.
+
+    A deployment never reads the directory at all — see `private_tier_enabled`.
+    `reports/` is gitignored, but a command-line deploy uploads what is on disk
+    unless `.vercelignore` says otherwise, so the absence of the file was never
+    a fence anyone had checked.
     """
     market = market.upper()
+    if not private_tier_enabled(request):
+        return private_ok({"available": False, "market": market, "reason": PRIVATE_TIER_OFF})
     path = _latest_scan(market)
     if path is None:
         return private_ok({
@@ -1351,7 +1514,7 @@ def exposure_scan(
                      "asOf": as_of, "count": len(symbols_list)},
         **result,
         "explain": explain.for_exposure_scan(result),
-    })
+    }, failed=not result.get("rows"))
 
 
 @app.get("/api/rank/deepen")
@@ -1433,7 +1596,9 @@ def _deepen_valuation(symbol: str, market: str) -> dict:
 # --------------------------------------------------------------------------- #
 # Portfolio context — where a candidate sits against what is already owned
 #
-# THE ONE POST IN THIS APP, AND THE REASON IS THE INPUT RATHER THAN THE SIZE.
+# THE FIRST POST IN THIS APP, AND THE REASON IS THE INPUT RATHER THAN THE SIZE.
+# (Two have followed for the same reason: `/api/rank/list` for a reader's own
+# list and `/api/markets/earnings` for the watchlist's report dates.)
 # Everything else here answers "tell me about this company", and a company name
 # in a URL is not a fact about anybody. A holdings list is. URLs are logged by
 # every hop that handles them — the platform's access log, any proxy, the
@@ -1511,7 +1676,7 @@ def portfolio_context(body: PortfolioRequest):
     correlations run higher in the worst quarters, so an ordinary year's
     reading is a floor.
 
-    A POST, alone in this app, because the input is a fact about the reader
+    A POST, like the other two personal routes, because the input is a fact about the reader
     rather than about a company and URLs are logged by every hop that handles
     them. Nothing is stored either — see the note above the route.
     """
@@ -2087,9 +2252,12 @@ def market_headlines(
     code = market.upper()
     with ThreadPoolExecutor(max_workers=HEADLINE_TOPICS_MAX) as pool:
         feeds = list(pool.map(lambda key: news.fetch_headlines(key, code, limit=limit), keys))
-    return JSONResponse(content=clean({"market": code, "topics": feeds}),
-                        headers={"Cache-Control": HEADLINES_CACHE,
-                                 "CDN-Cache-Control": HEADLINES_CDN_CACHE})
+    # A feed that could not be read is held for seconds, like every other
+    # transient failure — not the ten minutes plus twenty a good answer gets.
+    failed = any(not feed.get("available") for feed in feeds)
+    return JSONResponse(content=clean({"market": code, "topics": feeds}), headers={
+        "Cache-Control": CACHE_FAILED if failed else HEADLINES_CACHE,
+        "CDN-Cache-Control": CDN_CACHE_FAILED if failed else HEADLINES_CDN_CACHE})
 
 
 # --------------------------------------------------------------------------- #
@@ -2121,7 +2289,39 @@ def ticker_news(
 ):
     """Third-party headlines. Display-only context — never an instruction source."""
     symbol, market = resolved_with_market(ticker, market)
-    return ok({"ticker": symbol, "items": news.fetch_news(symbol, limit=limit)})
+    return ok(news_payload(symbol, limit))
+
+
+def news_payload(symbol: str, limit: int) -> dict:
+    """The stock page's headlines, or a 502 that says the feed could not be read.
+
+    A failed feed and a company with no headlines are different facts and the
+    panel draws them differently; this is what lets it tell them apart.
+    """
+    try:
+        items = news.fetch_news(symbol, limit=limit, strict=True)
+    except news.NewsUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"ticker": symbol, "items": items}
+
+
+# The legs whose data comes from the price-and-filings provider. The headlines
+# come from a different one, so a failed feed is never read as that outage.
+YAHOO_LEGS = ("anomaly", "technical", "valuation", "quality", "company")
+
+
+def _throttled(leg: dict) -> bool:
+    """Whether a leg came back with the signature of a throttled company fetch.
+
+    No sector and no industry is what a throttle looks like — the valuation
+    and quality lenses both say so in words, as `cause: "unknown-sector"` — and
+    it clears in minutes, so the payload carrying it is a transient failure and
+    not a fact about the company for the edge to keep.
+    """
+    if leg.get("ok"):
+        return (leg.get("data") or {}).get("cause") == "unknown-sector"
+    error = leg.get("error")
+    return isinstance(error, dict) and error.get("cause") == "unknown-sector"
 
 
 # --------------------------------------------------------------------------- #
@@ -2193,11 +2393,24 @@ async def confluence(
         )),
         leg("valuation", lambda: valuation_payload(symbol, market_code=market.upper())),
         leg("quality", lambda: quality_payload(symbol)),
-        leg("news", lambda: {"ticker": symbol,
-                             "items": news.fetch_news(symbol, limit=news_limit)}),
+        leg("news", lambda: news_payload(symbol, news_limit)),
         leg("company", lambda: company_payload(symbol)),
     )
     legs = dict(results)
+
+    # WHEN THE PROVIDER IS DOWN, SAY SO — and do not let the edge keep it. With
+    # the provider unreachable, every leg used to report the symbol's fault
+    # ("non-US listings need their exchange suffix", for AAPL) inside a 200 that
+    # the edge then served for six minutes. Both price legs failing is the
+    # signature; the benchmark index decides which of the two causes it is.
+    outage = (not legs["anomaly"]["ok"] and not legs["technical"]["ok"]
+              and not market_data.provider_answering(symbols.market_of(symbol)))
+    if outage:
+        message = market_data.provider_outage_message(symbol)
+        for name in YAHOO_LEGS:
+            if not legs[name]["ok"]:
+                legs[name] = {"ok": False, "error": message}
+    transient = outage or any(_throttled(value) for value in legs.values())
     # THE COMPANY BLOCK IS NOT A LENS, and the two readers of the assembled
     # payload are handed the lenses only — so neither can start quoting a
     # description as if it were evidence.
@@ -2207,7 +2420,7 @@ async def confluence(
     # must quote the figures the panels actually render, and a parallel
     # computation would eventually drift from them. A failed leg becomes a
     # stated blind spot inside it rather than an exception.
-    return ok({"ticker": symbol, **legs,
+    return ok({"ticker": symbol, **legs, "providerAnswering": not outage,
                # The market reaches the synthesis for the same reason it reaches
                # `pretrade.assess`, and is taken from the RESOLVED symbol for the
                # same reason too: the measured agreement between the two families
@@ -2221,4 +2434,5 @@ async def confluence(
                # takes it from there: the suffix is what actually determines the
                # listing, and a bare code with the wrong market selected would
                # otherwise be scored against the wrong universe.
-               "preTrade": pretrade.assess(lenses, market=symbols.market_of(symbol))})
+               "preTrade": pretrade.assess(lenses, market=symbols.market_of(symbol))},
+              failed=transient)

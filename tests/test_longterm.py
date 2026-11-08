@@ -410,3 +410,53 @@ def test_downside_deviation_never_exceeds_total_volatility():
         r = np.random.default_rng(seed).normal(0.0004, 0.012, 800)
         m = L.risk_metrics(price_path(100 * np.cumprod(1 + r)))
         assert m["downsideDeviation"] <= m["volatility"] + 1e-12, seed
+
+
+# --------------------------------------------------------------------------- #
+# A year is a year of THIS series' bars
+# --------------------------------------------------------------------------- #
+def _seven_day(n=1500, daily_log=0.0005, sigma=0.0, seed=4):
+    """A series that prints every calendar day, as a coin does."""
+    rng = np.random.default_rng(seed)
+    steps = daily_log + (rng.normal(0.0, sigma, n) if sigma else np.zeros(n))
+    index = pd.date_range(end=pd.Timestamp.today().normalize(), periods=n, freq="D")
+    return pd.Series(100.0 * np.exp(np.cumsum(steps)), index=index)
+
+
+def test_a_weekday_series_keeps_the_252_convention_exactly():
+    """Every stamped measurement was taken on weekday equities, so nothing about
+    them may move: the window and the annualisation are what they were."""
+    close = pd.Series(100.0 * np.exp(np.cumsum(np.full(900, 0.0004))),
+                      index=pd.bdate_range("2022-01-03", periods=900))
+    assert L.sessions_per_year(close.index) == L.TRADING_DAYS
+    one_year = next(r for r in L.rolling_returns(close) if r["years"] == 1)
+    assert one_year["windows"] == 900 - L.TRADING_DAYS
+
+
+def test_a_coins_one_year_holding_period_is_a_calendar_year():
+    """252 of a coin's bars are about eight months, so its 'one-year' row used to
+    describe an eight-month hold. Constant growth makes the right answer exact."""
+    daily_log = 0.0005
+    close = _seven_day(daily_log=daily_log)
+    assert 364 < L.sessions_per_year(close.index) < 366
+    one_year = next(r for r in L.rolling_returns(close) if r["years"] == 1)
+    per_year = L.sessions_per_year(close.index)
+    assert one_year["median"] == pytest.approx(np.exp(daily_log * int(per_year)) - 1, rel=1e-9)
+    assert one_year["median"] > np.exp(daily_log * 300) - 1, "still an eight-month window"
+
+
+def test_a_coins_volatility_is_annualised_over_its_own_year():
+    sigma = 0.02
+    close = _seven_day(n=3000, daily_log=0.0, sigma=sigma, seed=9)
+    risk = L.risk_metrics(close)
+    assert risk["volatility"] == pytest.approx(sigma * np.sqrt(365.25), rel=0.06)
+    assert risk["sessionsPerYear"] > 360
+
+
+def test_relative_strength_reads_the_benchmarks_sessions():
+    """A coin against the S&P 500 is compared on the days both traded, which are
+    weekdays, so the weekday windows are the right ones there."""
+    coin = _seven_day(n=900)
+    index = coin[coin.index.dayofweek < 5] * 0.5
+    result = L.relative_strength(coin, index, "^GSPC")
+    assert result["usable"] and result["periods"]["12m"] is not None
