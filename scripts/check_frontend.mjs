@@ -820,13 +820,79 @@ if (boardSources.length !== BOARD_FILES.length + 1) {
        "Point BOARD_FILES at the board's new home rather than deleting the rule.");
 }
 
+// 20. EVERY WRAPPED STRING HAS ITS BAHASA INDONESIA, AND NOTHING ELSE DOES. A
+//     string wrapped in `t("…")` but missing from lib/i18n-id.ts shows English
+//     to a reader who chose Indonesian, silently — the page still renders, so no
+//     other check would notice. So wrapping a string and translating it are one
+//     change: a missing entry fails here, an entry whose `{placeholders}` differ
+//     from its key's fails (a dropped `{n}` loses the number from the sentence),
+//     and an entry no component uses any more fails so the catalog cannot rot
+//     into a list of sentences the app no longer says. Keys must be literals —
+//     `t(\`…\`)` would make the key whatever the template evaluates to, which no
+//     catalog can hold.
+const catalogSource = readFileSync(join(ROOT, "lib/i18n-id.ts"), "utf8");
+const catalogBody = catalogSource.match(/export const ID: Record<string, string> = \{([\s\S]*)\};\s*$/);
+let catalog = null;
+if (!catalogBody) {
+  fail("lib/i18n-id.ts", "The Indonesian catalog is not in the shape rule 20 reads.",
+       "Keep `export const ID: Record<string, string> = { … };` as the file's last statement.");
+} else {
+  const body = catalogBody[1].replace(/^\s*\/\/.*$/gm, "").replace(/,\s*$/, "");
+  try {
+    catalog = JSON.parse(`{${body}}`);
+  } catch (error) {
+    fail("lib/i18n-id.ts", "The Indonesian catalog is not plain JSON inside its braces.",
+         `${error.message}. Double-quoted strings, one entry per line, comments on their own lines.`);
+  }
+  const declared = [...body.matchAll(/^\s*("(?:[^"\\]|\\.)*")\s*:/gm)].map((m) => JSON.parse(m[1]));
+  const seen = new Set();
+  for (const key of declared) {
+    if (seen.has(key)) fail("lib/i18n-id.ts", `"${key}" has two entries.`, "Keep one.");
+    seen.add(key);
+  }
+}
+const decode = (literal) => (literal.startsWith("'")
+  ? JSON.parse(`"${literal.slice(1, -1).replace(/\\'/g, "'").replace(/"/g, '\\"')}"`)
+  : JSON.parse(literal));
+const placeholders = (text) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(",");
+const libFiles = readdirSync(join(ROOT, "lib")).filter((f) => /\.tsx?$/.test(f) && !f.startsWith("i18n"))
+  .map((f) => [`lib/${f}`, stripComments(readFileSync(join(ROOT, "lib", f), "utf8"))]);
+const wrapped = new Map();
+for (const [file, src] of [...uiFiles, ...libFiles]) {
+  for (const m of src.matchAll(/\b(?:t|msg)\(\s*`/g)) {
+    fail(file, `A translated string is a template literal (${m[0]}…).`,
+         "Pass a plain literal and fill it with `{name}` placeholders: t(\"{n} lenses\", { n }).");
+  }
+  for (const m of src.matchAll(/\b(?:t|msg)\(\s*("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')/g)) {
+    const key = decode(m[1]);
+    if (!wrapped.has(key)) wrapped.set(key, file);
+  }
+}
+if (catalog) {
+  for (const [key, file] of wrapped) {
+    if (!Object.prototype.hasOwnProperty.call(catalog, key)) {
+      fail(file, `"${key}" has no Bahasa Indonesia.`, "Add it to lib/i18n-id.ts.");
+    } else if (placeholders(key) !== placeholders(catalog[key])) {
+      fail("lib/i18n-id.ts", `"${key}" and its Indonesian name different placeholders.`,
+           `English has {${placeholders(key)}}, Indonesian has {${placeholders(catalog[key])}}.`);
+    }
+  }
+  for (const key of Object.keys(catalog)) {
+    if (!wrapped.has(key)) {
+      fail("lib/i18n-id.ts", `"${key}" is translated but no component says it any more.`,
+           "Remove the entry, or wrap the string where it is shown.");
+    }
+  }
+}
+
 if (designFailures.length) {
   console.error("\nDesign-system rules broken (see DESIGN.md):\n");
   console.error(designFailures.join("\n\n"));
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 19 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 20 checked across ${uiFiles.length} UI files`);
+console.log(`  translation: ${wrapped.size} interface strings, every one with Bahasa Indonesia`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));

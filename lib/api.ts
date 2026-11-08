@@ -3,6 +3,7 @@
 import { track } from "@vercel/analytics";
 import { useCallback, useEffect, useRef } from "react";
 import { createTtlCache } from "./cache";
+import { getLang, useLang } from "./i18n";
 import { readSession, useSessionState, writeSession } from "./session";
 import type { RunTuning } from "./url";
 import type {
@@ -57,12 +58,24 @@ async function unwrap<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/**
+ * THE READING LANGUAGE RIDES ON EVERY REQUEST, and only when it is not English.
+ * The server writes its own prose in it (api/_lib/lang.py); leaving it off for
+ * English keeps every English URL — and so every edge-cache entry — exactly as
+ * it was. It is a language, never a fact about what the reader looked at, so
+ * the board and the calendar still name nothing.
+ */
+function withLang<P extends Record<string, unknown>>(params: P): P {
+  const lang = getLang();
+  return lang === "en" ? params : { ...params, lang };
+}
+
 async function get<T>(
   path: string,
   params: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<T> {
-  return unwrap<T>(await fetch(`${path}?${queryString(params as never)}`, { signal }));
+  return unwrap<T>(await fetch(`${path}?${queryString(withLang(params) as never)}`, { signal }));
 }
 
 /**
@@ -87,7 +100,8 @@ async function post<T>(
   body: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
-  return unwrap<T>(await fetch(path, {
+  const lang = getLang();
+  return unwrap<T>(await fetch(lang === "en" ? path : `${path}?lang=${lang}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -140,7 +154,11 @@ const IDLE = { status: "idle" } as const;
  * same key, and written back under the key it was STARTED with, so a late
  * answer can never land under another company's header.
  */
-function useRequest<P, T>(key: string, fetcher: (params: P, signal: AbortSignal) => Promise<T>) {
+function useRequest<P, T>(name: string, fetcher: (params: P, signal: AbortSignal) => Promise<T>) {
+  // Per language as well as per subject: an answer is written in one language,
+  // and switching must not leave the other one on screen as if it were current.
+  const lang = useLang();
+  const key = lang === "en" ? name : `${name}@${lang}`;
   const [state] = useSessionState<Engine<T>>(key, IDLE);
   const fetchRef = useRef(fetcher);
   fetchRef.current = fetcher;
@@ -239,7 +257,9 @@ const ALL_LENSES: Lens[] = ["anomaly", "technical", "valuation", "quality", "new
 const confluenceCache = createTtlCache<ConfluenceResponse>({ ttlMs: 300_000, max: 8 });
 
 export function confluenceKey(o: RunOptions): string {
-  return queryString(confluenceParams({ ...o, ticker: o.ticker.trim().toUpperCase() }));
+  // The language is part of the read: the same company in Indonesian is a
+  // different payload, so it is a different entry and a different run.
+  return queryString(withLang(confluenceParams({ ...o, ticker: o.ticker.trim().toUpperCase() })));
 }
 
 /** One company's full read, through the shared cache. Used by the compare view. */

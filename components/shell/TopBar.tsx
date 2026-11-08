@@ -4,9 +4,11 @@ import { BookOpen, Columns3, LayoutGrid, Menu, NotebookPen, Search, X } from "lu
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
+import { LanguageToggle } from "@/components/shell/LanguageToggle";
 import { usePreferences } from "@/components/shell/preferences";
 import { DetailToggle } from "@/components/ui/explain";
 import { Kbd } from "@/components/ui/kbd";
+import { msg, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,14 +28,15 @@ import { cn } from "@/lib/utils";
  * about is the dashboard habit this app exists to refuse.
  */
 const NAV = [
-  { href: "/markets", label: "Markets", icon: LayoutGrid, match: "/markets" },
-  { href: "/compare", label: "Compare", icon: Columns3, match: "/compare" },
-  { href: "/journal", label: "Journal", icon: NotebookPen, match: "/journal" },
+  { href: "/markets", label: msg("Markets"), icon: LayoutGrid, match: "/markets" },
+  { href: "/compare", label: msg("Compare"), icon: Columns3, match: "/compare" },
+  { href: "/journal", label: msg("Journal"), icon: NotebookPen, match: "/journal" },
 ];
 
 export function TopBar({ onSearch }: { onSearch: () => void }) {
   const pathname = usePathname() ?? "/";
-  const { detail, setDetail } = usePreferences();
+  const t = useT();
+  const { detail, setDetail, language, setLanguage } = usePreferences();
   const menu = useRef<HTMLDialogElement>(null);
 
   // A route change closes the phone menu; leaving it open over the page the
@@ -52,7 +55,7 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
               extra,
             )}>
         <Icon aria-hidden className="h-4 w-4" />
-        {item.label}
+        {t(item.label)}
       </Link>
     );
   };
@@ -61,13 +64,13 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
     <header className="sticky top-0 z-40 border-b border-rule bg-ink/90 backdrop-blur
                        supports-[backdrop-filter]:bg-ink/75 print:hidden">
       <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
-        <Link href="/" aria-label="QuantDesk home"
+        <Link href="/" aria-label={t("QuantDesk home")}
               className="mr-1 rounded font-mono text-meta font-semibold tracking-[0.16em] text-chalk
                          focus:outline-none focus-visible:ring-2 focus-visible:ring-tech">
           QUANTDESK
         </Link>
 
-        <nav aria-label="Main" className="hidden items-center gap-1 md:flex">
+        <nav aria-label={t("Main")} className="hidden items-center gap-1 md:flex">
           {NAV.map((item) => link(item))}
         </nav>
 
@@ -78,21 +81,24 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
                              hover:text-chalk focus:outline-none focus-visible:ring-2
                              focus-visible:ring-tech sm:min-w-[13rem]">
             <Search aria-hidden className="h-4 w-4" />
-            <span className="hidden sm:inline">Search or jump to…</span>
-            <span className="sr-only sm:hidden">Search</span>
+            <span className="hidden sm:inline">{t("Search or jump to…")}</span>
+            <span className="sr-only sm:hidden">{t("Search")}</span>
             <Kbd keys={["mod", "K"]} className="ml-auto hidden sm:inline-flex" />
           </button>
           <div className="hidden md:block">
             <DetailToggle level={detail} onChange={setDetail} />
+          </div>
+          <div className="hidden md:block">
+            <LanguageToggle value={language} onChange={setLanguage} />
           </div>
           <a href="/docs/field-manual.html"
              className="hidden h-9 items-center gap-1.5 rounded-lg px-2.5 text-meta text-ash
                         transition-colors hover:text-chalk focus:outline-none focus-visible:ring-2
                         focus-visible:ring-tech lg:inline-flex">
             <BookOpen aria-hidden className="h-4 w-4" />
-            Field manual
+            {t("Field manual")}
           </a>
-          <button type="button" aria-label="Open menu" onClick={() => menu.current?.showModal()}
+          <button type="button" aria-label={t("Open menu")} onClick={() => menu.current?.showModal()}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ash
                              hover:bg-raised hover:text-chalk focus:outline-none
                              focus-visible:ring-2 focus-visible:ring-tech md:hidden">
@@ -104,30 +110,32 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
       {/* A native dialog: focus is trapped and returned, Escape closes it, and
           the page behind is inert — all for free, which a hand-rolled drawer
           would have had to re-implement and would have got wrong somewhere. */}
-      <dialog ref={menu} aria-label="Menu"
+      <dialog ref={menu} aria-label={t("Menu")}
               className="m-0 ml-auto h-full max-h-none w-[min(20rem,85vw)] border-l border-rule bg-panel
                          p-0 text-body backdrop:bg-ink/70 open:animate-rise">
         <div className="flex h-14 items-center justify-between border-b border-rule px-4">
           <span className="font-mono text-meta font-semibold tracking-[0.16em] text-chalk">QUANTDESK</span>
-          <button type="button" aria-label="Close menu" onClick={() => menu.current?.close()}
+          <button type="button" aria-label={t("Close menu")} onClick={() => menu.current?.close()}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ash
                              hover:text-chalk focus:outline-none focus-visible:ring-2 focus-visible:ring-tech">
             <X aria-hidden className="h-5 w-5" />
           </button>
         </div>
-        <nav aria-label="Main" className="flex flex-col gap-1 p-3">
+        <nav aria-label={t("Main")} className="flex flex-col gap-1 p-3">
           {NAV.map((item) => link(item, "w-full"))}
           <a href="/docs/field-manual.html"
              className="inline-flex min-h-[36px] items-center gap-2 rounded-lg px-3 text-meta font-medium
                         text-ash hover:bg-raised/60 hover:text-chalk focus:outline-none
                         focus-visible:ring-2 focus-visible:ring-tech">
             <BookOpen aria-hidden className="h-4 w-4" />
-            Field manual
+            {t("Field manual")}
           </a>
         </nav>
         <div className="border-t border-rule p-4">
-          <div className="eyebrow mb-2">Reading mode</div>
+          <div className="eyebrow mb-2">{t("Reading mode")}</div>
           <DetailToggle level={detail} onChange={setDetail} />
+          <div className="eyebrow mb-2 mt-4">{t("Language")}</div>
+          <LanguageToggle value={language} onChange={setLanguage} />
         </div>
       </dialog>
     </header>

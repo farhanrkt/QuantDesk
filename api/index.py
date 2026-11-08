@@ -78,7 +78,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from _lib import (accumulation, chartlayers, econcalendar, eventstudy, explain, exposure,
-                  field, listings, market_data, marketboard, microstructure, news,
+                  field, lang, listings, market_data, marketboard, microstructure, news,
                   ownership, patterns, portfolio, pretrade, quality, ranking,
                   riskmodel, structure, symbols, tape, technical, trackrecord,
                   universes, valuation, verdict, volumeprofile)
@@ -400,6 +400,22 @@ def _evict_rate_keys(now: float) -> None:
     if excess > 0:
         for key in sorted(_RATE_HITS, key=lambda k: _RATE_HITS[k][-1])[:excess]:
             del _RATE_HITS[key]
+
+
+@app.middleware("http")
+async def language(request: Request, call_next):
+    """Answer this request in the language it asked for — `lang=id` or English.
+
+    Registered after the rate limiter, so it wraps it and even a refusal is
+    worded in the reader's language. The value lives in a contextvar for the
+    life of the request; see `_lib/lang.py` for how it reaches worker threads.
+    The parameter is in the URL, so the edge keeps one copy per language.
+    """
+    token = lang.use(request.query_params.get("lang"))
+    try:
+        return await call_next(request)
+    finally:
+        lang.reset(token)
 
 
 def ok(payload: dict, *, failed: bool = False) -> JSONResponse:
@@ -2171,7 +2187,11 @@ def markets_today():
     matched in the browser from the Trend tab's exposure figures, so no ticker
     is ever sent for it. See `_lib/marketboard.py`.
     """
-    board = marketboard.fetch()
+    # A copy: `fetch` hands back the board its process cache holds, and the
+    # readings written onto it below are in this request's language — written
+    # onto the shared one, a concurrent reader in the other language could be
+    # serialised with them.
+    board = dict(marketboard.fetch())
     if not any(row.get("available") for row in board["rows"]):
         raise HTTPException(status_code=502,
                             detail="The price provider returned nothing for the board just now.")
@@ -2221,7 +2241,7 @@ def markets_earnings(body: EarningsRequest):
                 "available": bool(calendar.get("available"))}
 
     with ThreadPoolExecutor(max_workers=4) as pool:
-        items = list(pool.map(one, symbols_list))
+        items = list(pool.map(lang.carry(one), symbols_list))
     return private_ok({
         "items": items,
         "note": ("The data provider's dates. A date is often an estimate until the company "
@@ -2251,7 +2271,10 @@ def market_headlines(
                                    f"{', '.join(news.HEADLINE_TOPICS)}.")
     code = market.upper()
     with ThreadPoolExecutor(max_workers=HEADLINE_TOPICS_MAX) as pool:
-        feeds = list(pool.map(lambda key: news.fetch_headlines(key, code, limit=limit), keys))
+        # `carry`: a bare pool does not inherit the request's language, and a
+        # feed's "could not be read" is a sentence the reader reads.
+        feeds = list(pool.map(lang.carry(lambda key: news.fetch_headlines(key, code, limit=limit)),
+                              keys))
     # A feed that could not be read is held for seconds, like every other
     # transient failure — not the ten minutes plus twenty a good answer gets.
     failed = any(not feed.get("available") for feed in feeds)

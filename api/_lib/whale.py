@@ -70,7 +70,7 @@ import numpy as np
 import pandas as pd
 
 from . import indicators as ind
-from . import market_data, symbols
+from . import lang, market_data, symbols
 
 try:
     from sklearn.ensemble import IsolationForest
@@ -600,7 +600,9 @@ class WhaleTracker:
 
         max_workers = max(1, min(self.config.max_workers, len(tickers) or 1))
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
-            futures = {pool.submit(work, tk): tk for tk in tickers}
+            # `carry`: a bare pool does not inherit the request's language, and
+            # each row's tag is prose the reader sees.
+            futures = {pool.submit(lang.carry(work), tk): tk for tk in tickers}
             for fut in as_completed(futures):
                 row = fut.result()
                 if row:

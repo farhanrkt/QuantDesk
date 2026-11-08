@@ -4,6 +4,7 @@ import {
   createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState,
 } from "react";
 import { ArrowDown, ArrowUp, Info, X } from "lucide-react";
+import { useT } from "@/lib/i18n";
 import type { Explanation, ExplainMap } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { palette } from "@/lib/palette";
@@ -131,6 +132,7 @@ export function useDetailLevel(): [DetailLevel, (v: DetailLevel) => void] {
 export function DetailToggle({
   level, onChange,
 }: { level: DetailLevel; onChange: (v: DetailLevel) => void }) {
+  const t = useT();
   const options = ["simple", "detailed"] as const;
   const move = (event: React.KeyboardEvent) => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
@@ -138,7 +140,7 @@ export function DetailToggle({
     onChange(level === "simple" ? "detailed" : "simple");
   };
   return (
-    <div role="radiogroup" aria-label="Reading mode"
+    <div role="radiogroup" aria-label={t("Reading mode")}
          className="inline-flex rounded-lg border border-rule bg-raised p-1">
       {options.map((option) => (
         <button
@@ -158,7 +160,7 @@ export function DetailToggle({
               : "text-ash hover:text-chalk",
           )}
         >
-          {option === "simple" ? "Guided" : "Full"}
+          {option === "simple" ? t("Guided") : t("Full")}
         </button>
       ))}
     </div>

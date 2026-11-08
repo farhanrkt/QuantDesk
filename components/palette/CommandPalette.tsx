@@ -13,6 +13,7 @@ import { HORIZONS } from "@/components/ui/horizon";
 import { Kbd } from "@/components/ui/kbd";
 import { searchSymbols, useCapabilities } from "@/lib/api";
 import { rankCommands, type CommandGroup } from "@/lib/commands";
+import { LANG_NAME, msg, useT } from "@/lib/i18n";
 import { isTicker, marketOf, resolveSymbol } from "@/lib/symbols";
 import type { SymbolSearch } from "@/lib/types";
 import { compareHref, marketsHref, stockHref } from "@/lib/url";
@@ -41,6 +42,12 @@ const ICONS: Record<CommandGroup, typeof Search> = {
   Settings: Settings2,
 };
 
+// The group is an identifier (lib/commands.ts orders by it); this is its name.
+const GROUP_LABEL: Record<CommandGroup, string> = {
+  Open: msg("Open"), Recent: msg("Recent"), Watchlist: msg("Watchlist"), "Go to": msg("Go to"),
+  Actions: msg("Actions"), Settings: msg("Settings"),
+};
+
 const QUERY_OK = /^[A-Za-z0-9 .&'\-^=,()]{1,40}$/;
 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -54,7 +61,8 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const [found, setFound] = useState<SymbolSearch | null>(null);
   const [searching, setSearching] = useState(false);
   const { watchlist, recent } = useWorkspace();
-  const { detail, setDetail, horizon, setHorizon } = usePreferences();
+  const t = useT();
+  const { detail, setDetail, horizon, setHorizon, language, setLanguage } = usePreferences();
   const { privateTier } = useCapabilities();
   const pageCommands = usePageCommands();
 
@@ -103,15 +111,15 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     const list: RunnableCommand[] = [];
     if (typed && isTicker(typed)) {
       const asTyped = resolveSymbol(typed, "US");
-      list.push({ id: `open:${asTyped}`, group: "Open", label: `Open ${asTyped}`,
-                  detail: "as typed", run: () => go(stockHref(asTyped)) });
+      list.push({ id: `open:${asTyped}`, group: "Open", label: t("Open {symbol}", { symbol: asTyped }),
+                  detail: t("as typed"), run: () => go(stockHref(asTyped)) });
       // A bare four-letter code is how IDX names are written everywhere but
       // Yahoo. Offer the suffixed form beside it rather than guessing: BBCA is a
       // US ETF and BBCA.JK a bank, and only the reader knows which they meant.
       if (/^[A-Za-z]{4}$/.test(typed)) {
         const idx = resolveSymbol(typed, "ID");
-        list.push({ id: `open:${idx}`, group: "Open", label: `Open ${idx}`,
-                    detail: "Indonesia (IDX)", run: () => go(stockHref(idx)) });
+        list.push({ id: `open:${idx}`, group: "Open", label: t("Open {symbol}", { symbol: idx }),
+                    detail: t("Indonesia (IDX)"), run: () => go(stockHref(idx)) });
       }
     }
     for (const hit of found?.results ?? []) {
@@ -132,41 +140,53 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     }
     list.push(...pageCommands);
     list.push(
-      { id: "go:home", group: "Go to", label: "Home", keywords: "landing start",
+      // Keywords carry both languages: they are what the reader might type,
+      // never shown, and a bilingual reader types either.
+      { id: "go:home", group: "Go to", label: t("Home"), keywords: "landing start beranda awal",
         run: () => go("/") },
-      { id: "go:today", group: "Go to", label: "Markets: what moved today",
-        keywords: "oil gold copper yields treasury dollar rupiah vix bitcoin commodities news",
+      { id: "go:today", group: "Go to", label: t("Markets: what moved today"),
+        keywords: "oil gold copper yields treasury dollar rupiah vix bitcoin commodities news "
+                  + "minyak emas tembaga obligasi komoditas berita pasar",
         run: () => go(marketsHref("today")) },
-      { id: "go:rank", group: "Go to", label: "Markets: rank a universe",
-        keywords: "scan ranking dow nasdaq idx30 lq45", run: () => go(marketsHref("rank")) },
-      { id: "go:screener", group: "Go to", label: "Markets: anomaly screener",
-        keywords: "unusual scan", run: () => go(marketsHref("screener")) },
-      { id: "go:exposure", group: "Go to", label: "Markets: what a universe moves with",
-        keywords: "exposure factors drivers beta", run: () => go(marketsHref("exposure")) },
+      { id: "go:rank", group: "Go to", label: t("Markets: rank a universe"),
+        keywords: "scan ranking dow nasdaq idx30 lq45 peringkat urutkan",
+        run: () => go(marketsHref("rank")) },
+      { id: "go:screener", group: "Go to", label: t("Markets: anomaly screener"),
+        keywords: "unusual scan penyaring anomali", run: () => go(marketsHref("screener")) },
+      { id: "go:exposure", group: "Go to", label: t("Markets: what a universe moves with"),
+        keywords: "exposure factors drivers beta eksposur faktor penggerak",
+        run: () => go(marketsHref("exposure")) },
       // Only where the owner runs the app, like the view it opens.
       ...(privateTier ? [{ id: "go:scan", group: "Go to" as const,
                            label: "Markets: latest local scan", keywords: "scanner report private",
                            run: () => go(marketsHref("scan")) }] : []),
-      { id: "go:compare", group: "Go to", label: "Compare companies",
-        keywords: "side by side columns", run: () => go(compareHref([])) },
-      { id: "go:journal", group: "Go to", label: "Thesis journal",
-        keywords: "notes entries", run: () => go("/journal") },
-      { id: "go:manual", group: "Go to", label: "Field manual", keywords: "help glossary guide learn",
+      { id: "go:compare", group: "Go to", label: t("Compare companies"),
+        keywords: "side by side columns bandingkan", run: () => go(compareHref([])) },
+      { id: "go:journal", group: "Go to", label: t("Thesis journal"),
+        keywords: "notes entries jurnal catatan tesis", run: () => go("/journal") },
+      { id: "go:manual", group: "Go to", label: t("Field manual"),
+        keywords: "help glossary guide learn panduan bantuan istilah",
         run: () => { onClose(); window.location.href = "/docs/field-manual.html"; } },
       { id: "set:mode", group: "Settings",
-        label: detail === "simple" ? "Switch to Full mode" : "Switch to Guided mode",
-        keywords: "reading detail guided full",
+        label: detail === "simple" ? t("Switch to Full mode") : t("Switch to Guided mode"),
+        keywords: "reading detail guided full mode baca terpandu lengkap",
         run: () => { setDetail(detail === "simple" ? "detailed" : "simple"); close(); } },
+      { id: "set:language", group: "Settings",
+        label: language === "en" ? t("Switch to Bahasa Indonesia") : t("Switch to English"),
+        detail: LANG_NAME[language], keywords: "language bahasa indonesia english inggris",
+        run: () => { setLanguage(language === "en" ? "id" : "en"); close(); } },
       ...HORIZONS.map((h) => ({
         id: `set:horizon:${h}`, group: "Settings" as const,
-        label: `Holding horizon: ${h} year${h === 1 ? "" : "s"}`,
-        detail: h === horizon ? "current" : undefined, keywords: "hold years",
+        label: h === 1 ? t("Holding horizon: {n} year", { n: h })
+                       : t("Holding horizon: {n} years", { n: h }),
+        detail: h === horizon ? t("current") : undefined,
+        keywords: "hold years jangka waktu kepemilikan tahun",
         run: () => { setHorizon(h); close(); },
       })),
     );
     return list;
   }, [query, found, recent, watchlist, pageCommands, go, onClose, close, detail, setDetail,
-      horizon, setHorizon, privateTier]);
+      horizon, setHorizon, privateTier, language, setLanguage, t]);
 
   const ranked = useMemo(() => {
     // Server results are already ordered by how they matched; ranking them
@@ -208,7 +228,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             onClick={(e) => { if (e.target === dialog.current) close(); }}
             className="mt-[12vh] w-[min(40rem,calc(100vw-2rem))] rounded-xl border border-rule bg-panel
                        p-0 text-body shadow-pop backdrop:bg-ink/70 open:animate-rise print:hidden">
-      <h2 id={`${listId}-title`} className="sr-only">Search and commands</h2>
+      <h2 id={`${listId}-title`} className="sr-only">{t("Search and commands")}</h2>
       <div className="flex items-center gap-3 border-b border-rule px-4">
         <Search aria-hidden className="h-4 w-4 shrink-0 text-ash" />
         <input
@@ -217,24 +237,24 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={onKeyDown}
           role="combobox"
-          aria-label="Company name, ticker, or a page to go to"
+          aria-label={t("Company name, ticker, or a page to go to")}
           aria-expanded={ranked.length > 0}
           aria-controls={listId}
           aria-activedescendant={ranked.length ? optionId(activeIndex) : undefined}
           aria-autocomplete="list"
           autoComplete="off" spellCheck={false}
-          placeholder="Company name or ticker, or a page to go to"
+          placeholder={t("Company name or ticker, or a page to go to")}
           className="h-14 min-w-0 flex-1 bg-transparent text-[1rem] text-chalk placeholder:text-faint
                      focus:outline-none sm:text-base"
         />
-        {searching && <span className="text-micro text-faint" aria-hidden>searching…</span>}
+        {searching && <span className="text-micro text-faint" aria-hidden>{t("searching…")}</span>}
         <Kbd keys={["esc"]} className="hidden sm:inline-flex" />
       </div>
-      <div id={listId} role="listbox" aria-label="Results"
+      <div id={listId} role="listbox" aria-label={t("Results")}
            className="max-h-[min(60vh,28rem)] overflow-y-auto p-2">
         {ranked.length === 0 && (
           <p className="px-3 py-6 text-center text-meta text-ash">
-            No listing or page matches. Type a full symbol — BTC-USD, ^GSPC — to open it as typed.
+            {t("No listing or page matches. Type a full symbol — BTC-USD, ^GSPC — to open it as typed.")}
           </p>
         )}
         {ranked.map((c, i) => {
@@ -243,7 +263,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
           return (
             <div key={c.id} role="presentation">
               {header && (
-                <div role="presentation" className="eyebrow px-3 pb-1 pt-3 first:pt-1">{header}</div>
+                <div role="presentation" className="eyebrow px-3 pb-1 pt-3 first:pt-1">{t(GROUP_LABEL[header])}</div>
               )}
               <div
                 id={optionId(i)} role="option" aria-selected={i === activeIndex}
@@ -263,11 +283,12 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         })}
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule px-4 py-2 text-micro text-faint">
-        <span className="inline-flex items-center gap-1.5"><Kbd keys={["up", "down"]} /> move</span>
-        <span className="inline-flex items-center gap-1.5"><Kbd keys={["enter"]} /> open</span>
+        <span className="inline-flex items-center gap-1.5"><Kbd keys={["up", "down"]} /> {t("move")}</span>
+        <span className="inline-flex items-center gap-1.5"><Kbd keys={["enter"]} /> {t("open")}</span>
         {found && (
           <span className="ml-auto">
-            Listings as of {found.listings.US?.asOf ?? "—"} (US) · {found.listings.ID?.asOf ?? "—"} (IDX)
+            {t("Listings as of {us} (US) · {id} (IDX)",
+               { us: found.listings.US?.asOf ?? "—", id: found.listings.ID?.asOf ?? "—" })}
           </span>
         )}
       </div>
