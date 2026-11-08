@@ -191,10 +191,20 @@ a:focus-visible, button:focus-visible, input:focus-visible {
 .rail a.on { color: var(--text); border-left-color: var(--accent, var(--muted)); }
 .rail .n { color: var(--dim); font-variant-numeric: tabular-nums; }
 .rail-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+  gap: 0.3rem 0.6rem;
   padding: 0 0.75rem 0.9rem;
   margin-bottom: 0.6rem;
   border-bottom: 1px solid var(--rule);
 }
+/* The other language's manual: the same page, built from this one. Not a
+   contents entry, so none of `.rail a`'s padding, border or flex layout. */
+.rail-head .lang {
+  display: inline; padding: 0; border-left: 0;
+  font-size: 0.68rem; color: var(--muted); text-decoration: underline;
+  text-underline-offset: 2px; text-decoration-color: var(--rule);
+}
+.rail-head .lang:hover { color: var(--text); }
 
 /* --- masthead ------------------------------------------------------------- */
 .masthead { padding: 4.5rem 0 2.5rem; border-bottom: 1px solid var(--rule); }
@@ -406,11 +416,12 @@ footer {
 html { scroll-behavior: smooth; }
 </style>
 
-<div class="shell">
+<div class="shell" lang="en">
 
 <nav class="rail" aria-label="Contents">
   <div class="rail-scroll">
-    <div class="rail-head"><span class="eyebrow">Field manual</span></div>
+    <div class="rail-head"><span class="eyebrow">Field manual</span>
+      <a class="lang" href="field-manual.id.html" hreflang="id" lang="id" translate="no">Bahasa Indonesia</a></div>
     <ol id="toc">
       <li class="plain"><a href="#start"><span class="n">00</span><span>Start here</span></a></li>
       <li class="plain"><a href="#words"><span class="n">01</span><span>Words before numbers</span></a></li>
@@ -1304,7 +1315,7 @@ html { scroll-behavior: smooth; }
   <p>
     Everything above examines one company. Professionals work in two tiers: a script ranks a large
     universe on cheap signals, then a human examines the top few in depth. QuantDesk's
-    <strong>Scan &amp; rank</strong> tab is the first tier.
+    <strong>Rank a universe</strong> view, under Markets, is the first tier.
   </p>
   <ul>
     <li><strong>Universe.</strong> The list of stocks you're comparing &mdash; the Dow 30, the Nasdaq-100,
@@ -1675,10 +1686,22 @@ const LENS_CLASS = {
   "value": "value", "quality": "quality", "rank": "rank",
   "pretrade": "pretrade", "provenance": "provenance", "portfolio": "portfolio",
 };
+/* Every word this script puts on the page, one per line, because
+   scripts/build_glossary.py translates these values for the Indonesian manual
+   the way it translates the prose. HTML entities are fine: each value is drawn
+   with innerHTML except the two counts, which carry none. */
+const TEXT = {
+  higher: "higher is better",
+  lower: "lower is better",
+  context: "context, not a verdict",
+  allTerms: "{n} terms",
+  someTerms: "{shown} of {n} terms",
+  noMatch: "Nothing matches &ldquo;{q}&rdquo;. Try a shorter word &mdash; the search looks at both the name and the definition.",
+};
 const DIR_TAG = {
-  high: '<span class="tag hi">higher is better</span>',
-  low:  '<span class="tag lo">lower is better</span>',
-  none: '<span class="tag no">context, not a verdict</span>',
+  high: `<span class="tag hi">${TEXT.higher}</span>`,
+  low:  `<span class="tag lo">${TEXT.lower}</span>`,
+  none: `<span class="tag no">${TEXT.context}</span>`,
 };
 
 const list = document.getElementById("glist");
@@ -1698,8 +1721,8 @@ function render() {
      r.k.toLowerCase().includes(q)));
 
   count.textContent = rows.length === GLOSSARY.length
-    ? `${GLOSSARY.length} terms`
-    : `${rows.length} of ${GLOSSARY.length} terms`;
+    ? TEXT.allTerms.replace("{n}", GLOSSARY.length)
+    : TEXT.someTerms.replace("{shown}", rows.length).replace("{n}", GLOSSARY.length);
 
   list.innerHTML = rows.length
     ? rows.map((r) => `
@@ -1710,7 +1733,8 @@ function render() {
           </div>
           <div class="gdef">${esc(r.d)}</div>
         </div>`).join("")
-    : `<p class="gempty">Nothing matches &ldquo;${esc(search.value)}&rdquo;. Try a shorter word \u2014 the search looks at both the name and the definition.</p>`;
+    // A function, so `$&` typed into the search is not read as a replacement pattern.
+    : `<p class="gempty">${TEXT.noMatch.replace("{q}", () => esc(search.value))}</p>`;
 }
 
 search.addEventListener("input", render);
