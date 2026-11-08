@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExposurePanel } from "@/components/ExposurePanel";
 import { RankingPanel } from "@/components/RankingPanel";
 import { ScanPanel } from "@/components/ScanPanel";
@@ -11,7 +11,7 @@ import { useRegisterCommands } from "@/components/palette/registry";
 import { Section } from "@/components/ui/card";
 import { Select } from "@/components/ui/input";
 import { TabPanel, Tabs, type Tab } from "@/components/ui/tabs";
-import { useExposureScan, useScan, useUniverses } from "@/lib/api";
+import { useCapabilities, useExposureScan, useScan, useUniverses } from "@/lib/api";
 import { palette } from "@/lib/palette";
 import { useSessionState } from "@/lib/session";
 import type { Market } from "@/lib/types";
@@ -36,6 +36,7 @@ const VIEWS: (Tab & { id: MarketView })[] = [
   { id: "rank", label: "Rank a universe", accent: palette.trend },
   { id: "screener", label: "Unusual activity", accent: palette.flow },
   { id: "exposure", label: "What it moves with", accent: palette.drivers },
+  // Only where the owner runs the app — see `useCapabilities`.
   { id: "scan", label: "Latest local scan", accent: palette.private, divider: "Private" },
 ];
 
@@ -45,6 +46,10 @@ export function MarketsView() {
   const parsed = parseMarketView(search?.get("view") ?? null);
   const [view, setViewState] = useState<MarketView>(parsed);
   useEffect(() => { setViewState(parsed); }, [parsed]);
+  const { privateTier } = useCapabilities();
+  const views = useMemo(() => (privateTier ? VIEWS : VIEWS.filter((v) => v.id !== "scan")),
+                        [privateTier]);
+  const active: MarketView = views.some((v) => v.id === view) ? view : "today";
 
   const setView = useCallback((next: string) => {
     setViewState(next as MarketView);
@@ -57,9 +62,9 @@ export function MarketsView() {
   const { state: exposure, scan: scanExposure } = useExposureScan();
   const [exposureMarket, setExposureMarket] = useSessionState<Market>("exposure:market", "ID");
   const [scanMarket, setScanMarket] = useSessionState<Market>("scan:market", "ID");
-  const { state: scan } = useScan(scanMarket);
+  const { state: scan } = useScan(scanMarket, privateTier);
 
-  useRegisterCommands("markets", VIEWS.map((v) => ({
+  useRegisterCommands("markets", views.map((v) => ({
     id: `markets:${v.id}`, group: "Go to" as const, label: `Markets: ${v.label}`, run: () => setView(v.id),
   })));
 
@@ -76,24 +81,24 @@ export function MarketsView() {
 
       <div className="sticky top-14 z-30 -mx-4 bg-ink/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-ink/80
                       sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        <Tabs tabs={VIEWS} active={view} onChange={setView} idPrefix="markets" label="Market tools" />
+        <Tabs tabs={views} active={active} onChange={setView} idPrefix="markets" label="Market tools" />
       </div>
 
-      <TabPanel id="today" active={view} idPrefix="markets">
+      <TabPanel id="today" active={active} idPrefix="markets">
         <Section title="What moved the markets"
                  question="Which of today's moves were unusual for the thing that made them?">
           <TodayView />
         </Section>
       </TabPanel>
 
-      <TabPanel id="rank" active={view} idPrefix="markets">
+      <TabPanel id="rank" active={active} idPrefix="markets">
         <Section title="Rank a universe"
                  question="Of these hundred, which few are worth opening four lenses on?">
           <RankingPanel onSelect={open} />
         </Section>
       </TabPanel>
 
-      <TabPanel id="screener" active={view} idPrefix="markets">
+      <TabPanel id="screener" active={active} idPrefix="markets">
         {/* The screener answers what the ranking cannot: has anything UNUSUAL
             just happened here? A one-off event rather than a standing trait, with
             its own multiple-testing correction. */}
@@ -103,7 +108,7 @@ export function MarketsView() {
         </Section>
       </TabPanel>
 
-      <TabPanel id="exposure" active={view} idPrefix="markets">
+      <TabPanel id="exposure" active={active} idPrefix="markets">
         <Section title="What a market moves with"
                  question="Which shared forces drive this list — and which of those were measured to persist?">
           <ExposurePanel universeState={universes} market={exposureMarket}
@@ -112,24 +117,26 @@ export function MarketsView() {
         </Section>
       </TabPanel>
 
-      <TabPanel id="scan" active={view} idPrefix="markets">
-        <Section
-          title="Latest local scan"
-          question="The private whole-market sweep, as last run on this machine."
-          aside={(
-            <label className="flex items-center gap-2 text-meta text-ash">
-              <span className="eyebrow">Market</span>
-              <Select value={scanMarket} onChange={(e) => setScanMarket(e.target.value as Market)}
-                      aria-label="Scan market" className="h-9">
-                <option value="ID">Indonesia (IDX)</option>
-                <option value="US">United States</option>
-              </Select>
-            </label>
-          )}
-        >
-          <ScanPanel state={scan} market={scanMarket} onSelect={open} />
-        </Section>
-      </TabPanel>
+      {privateTier && (
+        <TabPanel id="scan" active={active} idPrefix="markets">
+          <Section
+            title="Latest local scan"
+            question="The private whole-market sweep, as last run on this machine."
+            aside={(
+              <label className="flex items-center gap-2 text-meta text-ash">
+                <span className="eyebrow">Market</span>
+                <Select value={scanMarket} onChange={(e) => setScanMarket(e.target.value as Market)}
+                        aria-label="Scan market" className="h-9">
+                  <option value="ID">Indonesia (IDX)</option>
+                  <option value="US">United States</option>
+                </Select>
+              </label>
+            )}
+          >
+            <ScanPanel state={scan} market={scanMarket} onSelect={open} />
+          </Section>
+        </TabPanel>
+      )}
     </div>
   );
 }

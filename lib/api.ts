@@ -6,7 +6,8 @@ import { createTtlCache } from "./cache";
 import { readSession, useSessionState, writeSession } from "./session";
 import type { RunTuning } from "./url";
 import type {
-  AnomalyResponse, CompanyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
+  AnomalyResponse, Capabilities, CompanyResponse, ConfluenceResponse, DeepenResponse, Engine,
+  EngineFailure,
   ExposureScanResponse,
   Leg, ManualInputs, EventStudyResponse, Market, MarketBoard, MarketCalendar, MarketHeadlines,
   NewsResponse, QualityResponse, WatchlistEarnings,
@@ -66,7 +67,8 @@ async function get<T>(
 
 /**
  * POST, for the routes whose input is personal, and the reason is the INPUT
- * rather than the size. There are two: holdings (/api/portfolio) and a reader's
+ * rather than the size. There are three: the watchlist's report dates
+ * (/api/markets/earnings, below), holdings (/api/portfolio) and a reader's
  * own list to rank (/api/rank/list).
  *
  * Every other request here asks about a company, and a company name in a URL is
@@ -602,18 +604,39 @@ export function usePeers(symbol: string) {
  * `available: false` wherever no scan has been run — a fresh checkout, or the
  * deployed app, where `reports/` does not exist.
  */
-export function useScan(market: Market) {
+export function useScan(market: Market, enabled = true) {
   const key = `scan:${market}`;
   const { state, run } = useRequest(key,
     (m: Market, signal: AbortSignal) => get<ScanResponse>("/api/scan/latest", { market: m }, signal));
   // Loaded on mount and whenever the market changes, because it costs one read
   // of a local file and the alternative is a button nobody presses — which is
-  // how the scan results went unseen for a week.
+  // how the scan results went unseen for a week. Not at all where the private
+  // tier is off: there is nothing to read, and no panel to read it into.
   useEffect(() => {
+    if (!enabled) return;
     const current = readSession<Engine<ScanResponse>>(key);
     if (!current || current.status === "idle") run(market);
-  }, [key, market, run]);
+  }, [key, market, run, enabled]);
   return { state, reload: () => run(market) };
+}
+
+/**
+ * What this deployment serves, asked once per tab like the universe list.
+ *
+ * `privateTier` reads FALSE until the server says true, so a public deployment
+ * never flashes a Score tab it would only refuse; where the owner runs the app
+ * the tab appears a moment after the page. The server decides the flag with the
+ * same function that guards `/api/verdict` and `/api/scan/latest`, so the page
+ * cannot offer what the routes refuse.
+ */
+export function useCapabilities(): { privateTier: boolean } {
+  const { state, run } = useRequest("capabilities",
+    (_: void, signal: AbortSignal) => get<Capabilities>("/api/capabilities", {}, signal));
+  useEffect(() => {
+    const current = readSession<Engine<Capabilities>>("capabilities");
+    if (!current || current.status === "idle" || current.status === "error") run(undefined);
+  }, [run]);
+  return { privateTier: state.status === "ready" && state.data.privateTier === true };
 }
 
 /**

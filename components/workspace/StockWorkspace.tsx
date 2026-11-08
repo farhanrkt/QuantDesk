@@ -30,8 +30,8 @@ import { TabPanel, Tabs, type Tab } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toaster";
 import { Panel, PortfolioSignpost, PrintHeader, RunStatus, StockActions } from "@/components/workspace/parts";
 import {
-  confluenceKey, simulationCsvUrl, useEngines, useEventStudy, useExposureScan, usePeers,
-  usePortfolio, useUniverses, useVerdict, type RunOptions,
+  confluenceKey, simulationCsvUrl, useCapabilities, useEngines, useEventStudy, useExposureScan,
+  usePeers, usePortfolio, useUniverses, useVerdict, type RunOptions,
 } from "@/lib/api";
 import { palette } from "@/lib/palette";
 import { readSession, useSessionState } from "@/lib/session";
@@ -70,6 +70,9 @@ const TABS: (Tab & { id: StockTab })[] = [
   // one tab that returns a verdict rather than a description, and the page is
   // arranged so a reader meets the evidence before anything compresses it. Its
   // accent is outside the lens hues: it is an aggregate OF the lenses, not one.
+  // ONLY WHERE THE OWNER RUNS THE APP: the workspace drops it unless the server
+  // says the private tier is on (`useCapabilities`), and the route refuses it on
+  // any deployment whatever the page draws.
   { id: "score", label: "Score it", accent: palette.private, divider: "Private" },
 ];
 
@@ -110,7 +113,10 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
   // history with entries the back button would have to wade through.
   const [tab, setTabState] = useState<StockTab>(parsed.tab);
   useEffect(() => { setTabState(parsed.tab); }, [parsed.tab]);
-  const visible = TABS.some((t) => t.id === tab) ? tab : DEFAULT_TAB;
+  const { privateTier } = useCapabilities();
+  const tabs = useMemo(() => (privateTier ? TABS : TABS.filter((t) => t.id !== "score")),
+                       [privateTier]);
+  const visible = tabs.some((t) => t.id === tab) ? tab : DEFAULT_TAB;
   const setTab = useCallback((next: string) => {
     const id = next as StockTab;
     setTabState(id);
@@ -229,17 +235,17 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
   useEffect(() => {
     const onShortcut = (e: Event) => {
       const action = (e as CustomEvent<string>).detail;
-      const index = TABS.findIndex((t) => t.id === visible);
-      if (action === "prevTab") setTab(TABS[(index - 1 + TABS.length) % TABS.length].id);
-      else if (action === "nextTab") setTab(TABS[(index + 1) % TABS.length].id);
+      const index = tabs.findIndex((t) => t.id === visible);
+      if (action === "prevTab") setTab(tabs[(index - 1 + tabs.length) % tabs.length].id);
+      else if (action === "nextTab") setTab(tabs[(index + 1) % tabs.length].id);
       else if (action === "watch") onWatch();
     };
     window.addEventListener(SHORTCUT_EVENT, onShortcut);
     return () => window.removeEventListener(SHORTCUT_EVENT, onShortcut);
-  }, [visible, setTab, onWatch]);
+  }, [tabs, visible, setTab, onWatch]);
 
   const commands: RunnableCommand[] = [
-    ...TABS.map((t) => ({ id: `tab:${t.id}`, group: "Go to" as const,
+    ...tabs.map((t) => ({ id: `tab:${t.id}`, group: "Go to" as const,
                           label: `${symbol}: ${t.label}`, keywords: `tab ${t.id}`,
                           run: () => setTab(t.id) })),
     { id: "act:watch", group: "Actions", label: watched ? `Remove ${symbol} from watchlist` : `Add ${symbol} to watchlist`,
@@ -299,7 +305,7 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
         <div className="sticky top-14 z-30 -mx-4 bg-ink/95 px-4 backdrop-blur
                         supports-[backdrop-filter]:bg-ink/80 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8
                         print:hidden">
-          <Tabs tabs={TABS} active={visible} onChange={setTab} />
+          <Tabs tabs={tabs} active={visible} onChange={setTab} />
         </div>
         <div className="pt-6">
           <TabPanel id="company" active={visible}>
@@ -396,18 +402,20 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
               }}
             />
           </TabPanel>
-          <TabPanel id="score" active={visible}>
-            {/* THE PRIVATE SCORE NEVER LEAVES THE SCREEN. A printout travels
-                without its context, and a number on paper is the easiest thing
-                in this app to mistake for a recommendation. */}
-            <div className="print:hidden">
-              <VerdictPanel state={verdict} ticker={resolvedTicker}
-                            onScore={() => scoreVerdict({ ticker: symbol, market })} />
-            </div>
-            <p className="hidden text-meta text-ash print:block">
-              The private score is not printed.
-            </p>
-          </TabPanel>
+          {privateTier && (
+            <TabPanel id="score" active={visible}>
+              {/* THE PRIVATE SCORE NEVER LEAVES THE SCREEN. A printout travels
+                  without its context, and a number on paper is the easiest thing
+                  in this app to mistake for a recommendation. */}
+              <div className="print:hidden">
+                <VerdictPanel state={verdict} ticker={resolvedTicker}
+                              onScore={() => scoreVerdict({ ticker: symbol, market })} />
+              </div>
+              <p className="hidden text-meta text-ash print:block">
+                The private score is not printed.
+              </p>
+            </TabPanel>
+          )}
         </div>
       </div>
     </div>

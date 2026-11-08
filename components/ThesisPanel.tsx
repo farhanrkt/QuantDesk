@@ -10,8 +10,8 @@ import { ApplyButton, Field, PercentField } from "@/components/ui/controls";
 import { HorizonPicker } from "@/components/ui/horizon";
 import { useToast } from "@/components/ui/toaster";
 import {
-  JOURNAL_KEY, appendEntry, contradictions, drift, newId, readJournal,
-  type ThesisEntry, type ThesisSnapshot,
+  JOURNAL_KEY, appendEntry, applyChange, contradictions, drift, newId, readJournal, removeEntry,
+  type JournalChange, type ThesisEntry, type ThesisSnapshot,
 } from "@/lib/journal";
 import { palette } from "@/lib/palette";
 import { Textarea } from "@/components/ui/input";
@@ -67,13 +67,28 @@ export function ThesisPanel({
     try {
       setEntries(readJournal(window.localStorage.getItem(JOURNAL_KEY)));
     } catch { /* private mode — an empty journal is the right default */ }
+    // Another tab wrote: show what is stored now rather than a stale copy.
+    const sync = (e: StorageEvent) => {
+      if (e.key === JOURNAL_KEY || e.key === null) setEntries(readJournal(e.newValue));
+    };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
   }, []);
 
-  const persist = (next: ThesisEntry[]) => {
+  const persist = (change: JournalChange) => {
+    let stored: string | null = null;
+    let readable = true;
+    try { stored = window.localStorage.getItem(JOURNAL_KEY); } catch { readable = false; }
+    const next = readable ? applyChange(stored, change) : change(entries);
     setEntries(next);
     try {
       window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(next));
-    } catch { /* storage full or disabled; the entry stays on screen this session */ }
+    } catch {
+      // Storage full or disabled. The entry stays on screen for this session,
+      // and the reader is told so, rather than finding it gone next time.
+      toast({ message: "Not saved — this browser would not store it. Export the journal to keep it.",
+              tone: "error" });
+    }
   };
 
   const draft = useMemo(() => ({
@@ -89,7 +104,7 @@ export function ThesisPanel({
 
   const save = () => {
     const now = new Date();
-    persist(appendEntry(entries, {
+    const entry: ThesisEntry = {
       id: newId(now, ticker),
       ticker: ticker.toUpperCase(),
       written: now.toISOString(),
@@ -99,7 +114,8 @@ export function ThesisPanel({
       horizonYears: horizon,
       positionShare: size ?? null,
       snapshot,
-    }));
+    };
+    persist((current) => appendEntry(current, entry));
     setThesis("");
     setFalsifier("");
   };
@@ -214,9 +230,12 @@ export function ThesisPanel({
                        // ONE CLICK, AND UNDOABLE. Delete used to be immediate and
                        // final; the journal's whole value is that entries are
                        // kept, so the removal is offered back for a few seconds.
-                       const before = entries;
-                       persist(entries.filter((e) => e.id !== entry.id));
-                       toast({ message: "Entry deleted", action: { label: "Undo", onClick: () => persist(before) } });
+                       // Undo puts THIS entry back — it used to restore the whole
+                       // list as it was, undoing anything another tab wrote since.
+                       persist((current) => removeEntry(current, entry.id));
+                       toast({ message: "Entry deleted",
+                               action: { label: "Undo",
+                                         onClick: () => persist((current) => appendEntry(current, entry)) } });
                      }} />
             ))}
           </CardBody>

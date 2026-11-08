@@ -51,6 +51,24 @@ t("nothing live says Awaiting data", () => {
   assert.equal(a.independent, 0);
   assert.equal(a.headline, "Awaiting data");
 });
+t("every lens failed and none running is not 'awaiting'", () => {
+  const failed = (lens, family) => ({ ...R(lens, family, 0, "—"), failed: true });
+  const a = agreementOf([failed("Flow","price"), failed("Trend","price"),
+                         failed("Value","filings"), failed("Quality","filings")]);
+  assert.equal(a.headline, "No lens returned a reading");
+  const stillRunning = agreementOf([failed("Flow","price"),
+                                    { ...R("Trend","price",0,"…"), pending: true }]);
+  assert.equal(stillRunning.headline, "Awaiting data");
+});
+t("a lens still running casts no vote", () => {
+  const running = (lens, family) => ({ ...R(lens, family, 0, "…"), pending: true });
+  assert.equal(agreementOf([running("Flow","price"), running("Trend","price"),
+                            running("Value","filings"), running("Quality","filings")]).headline,
+               "Awaiting data");
+  const half = agreementOf([R("Trend","price",1), running("Value","filings")]);
+  assert.equal(half.lenses, 1);
+  assert.equal(half.independent, 1, "the filings family has not answered, so it is not counted");
+});
 t("one family alone never claims a cross-check", () => {
   const a = agreementOf([R("Value","filings",1), R("Quality","filings",1)]);
   assert.equal(a.independent, 1);
@@ -265,6 +283,33 @@ t("saving appends and never rewrites an existing entry", () => {
   const list = J.appendEntry([first], ENTRY({ id: "two" }));
   assert.deepEqual(list.map((e) => e.id), ["two", "one"]);
   assert.equal(list[1].thesis, "as written", "an earlier entry must survive untouched");
+});
+
+t("two tabs each locking a thesis keep both, in either order", () => {
+  // Both pages opened on the same stored journal; each writes after the other.
+  const opened = JSON.stringify([ENTRY({ id: "old", written: "2026-08-01T00:00:00.000Z" })]);
+  const aapl = ENTRY({ id: "aapl", ticker: "AAPL", written: "2026-11-01T10:00:00.000Z" });
+  const nvda = ENTRY({ id: "nvda", ticker: "NVDA", written: "2026-11-01T10:05:00.000Z" });
+  const afterA = JSON.stringify(J.applyChange(opened, (cur) => J.appendEntry(cur, aapl)));
+  const afterB = J.applyChange(afterA, (cur) => J.appendEntry(cur, nvda));
+  assert.deepEqual(afterB.map((e) => e.id), ["nvda", "aapl", "old"]);
+  const reversed = J.applyChange(
+    JSON.stringify(J.applyChange(opened, (cur) => J.appendEntry(cur, nvda))),
+    (cur) => J.appendEntry(cur, aapl));
+  assert.deepEqual(reversed.map((e) => e.id), ["nvda", "aapl", "old"], "newest first either way");
+});
+
+t("undoing a delete restores that entry and nothing older", () => {
+  const kept = ENTRY({ id: "kept", written: "2026-10-01T00:00:00.000Z" });
+  const gone = ENTRY({ id: "gone", written: "2026-09-01T00:00:00.000Z" });
+  const deleted = JSON.stringify(J.applyChange(JSON.stringify([kept, gone]),
+                                               (cur) => J.removeEntry(cur, "gone")));
+  // Another tab adds an entry while the toast is up...
+  const added = ENTRY({ id: "new", written: "2026-11-02T00:00:00.000Z" });
+  const meanwhile = JSON.stringify(J.applyChange(deleted, (cur) => J.appendEntry(cur, added)));
+  // ...and Undo puts back only what was deleted.
+  const undone = J.applyChange(meanwhile, (cur) => J.appendEntry(cur, gone));
+  assert.deepEqual(undone.map((e) => e.id), ["new", "kept", "gone"]);
 });
 
 t("ids carry the ticker and the instant, so two theses cannot collide", () => {

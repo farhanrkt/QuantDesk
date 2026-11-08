@@ -102,9 +102,16 @@ export function RunStatus({
   }, [busy]);
   const seconds = started ? Math.max(0, Math.round((now - started) / 1000)) : 0;
 
+  // EVERY LENS FAILING IS NOT A FETCH. The stamp below used to say "Fetched
+  // 12:19 · figures are as of the last close" over four failed lenses, which
+  // dates figures that do not exist.
+  const nothing = failed >= 4;
   const announce = busy
     ? `Reading ${symbol} through four lenses.`
-    : at ? `${symbol} loaded${failed ? `; ${failed} of four lenses did not answer` : ""}.` : "";
+    : !at ? ""
+      : nothing ? `No lens returned figures for ${symbol}.`
+        : `${symbol} loaded${failed ? `; ${failed} of four lenses did not answer` : ""}.`;
+  const time = at ? new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
 
   return (
     <>
@@ -120,8 +127,9 @@ export function RunStatus({
       )}
       {!busy && at && (
         <p className="text-micro text-faint">
-          Fetched {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          {" "}· figures are as of the last close the data source had
+          {nothing
+            ? <>Asked at {time} · no lens returned figures</>
+            : <>Fetched {time} · figures are as of the last close the data source had</>}
         </p>
       )}
     </>

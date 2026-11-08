@@ -224,8 +224,32 @@ export function readJournal(raw: string | null): ThesisEntry[] {
     return [];
   }
   if (!Array.isArray(parsed)) return [];
-  return parsed.filter(isEntry)
-    .sort((a, b) => (a.written < b.written ? 1 : -1));
+  return newestFirst(parsed.filter(isEntry));
+}
+
+const newestFirst = (entries: ThesisEntry[]): ThesisEntry[] =>
+  [...entries].sort((a, b) => (a.written < b.written ? 1 : -1));
+
+/** Something to do to the journal: add an entry, remove one, put one back. */
+export type JournalChange = (current: ThesisEntry[]) => ThesisEntry[];
+
+/**
+ * A change applied to what is stored NOW, never to the list a page read earlier.
+ *
+ * WHY THIS IS THE ONLY WAY TO WRITE. Each page read the journal once, when it
+ * opened, and saved by writing that list back with its own change on top. Two
+ * stock pages open in two tabs therefore each held a copy, and locking a thesis
+ * in the second deleted the one just locked in the first — reproduced in a
+ * browser in the November 2026 analysis. An undo wrote back an older copy
+ * still. Reading at the moment of writing makes every change compose with
+ * whatever another tab did in between.
+ */
+export function applyChange(stored: string | null, change: JournalChange): ThesisEntry[] {
+  return newestFirst(change(readJournal(stored)));
+}
+
+export function removeEntry(existing: ThesisEntry[], id: string): ThesisEntry[] {
+  return existing.filter((e) => e.id !== id);
 }
 
 /**

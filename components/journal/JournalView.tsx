@@ -9,7 +9,10 @@ import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/car
 import { Input } from "@/components/ui/input";
 import { StateCard } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toaster";
-import { JOURNAL_KEY, readJournal, type ThesisEntry } from "@/lib/journal";
+import {
+  JOURNAL_KEY, appendEntry, applyChange, readJournal, removeEntry,
+  type JournalChange, type ThesisEntry,
+} from "@/lib/journal";
 import { stockHref } from "@/lib/url";
 
 /**
@@ -40,11 +43,27 @@ export function JournalView() {
   useEffect(() => {
     try { setEntries(readJournal(window.localStorage.getItem(JOURNAL_KEY))); }
     catch { setEntries([]); }
+    // A thesis locked on a stock page in another tab appears here as it lands.
+    const sync = (e: StorageEvent) => {
+      if (e.key === JOURNAL_KEY || e.key === null) setEntries(readJournal(e.newValue));
+    };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
   }, []);
 
-  const persist = (next: ThesisEntry[]) => {
+  // Every change is applied to what is stored at the moment of writing, never
+  // to the copy this page read when it opened — see `applyChange`.
+  const persist = (change: JournalChange) => {
+    let stored: string | null = null;
+    let readable = true;
+    try { stored = window.localStorage.getItem(JOURNAL_KEY); } catch { readable = false; }
+    const next = readable ? applyChange(stored, change) : change(entries ?? []);
     setEntries(next);
-    try { window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(next)); } catch { /* full */ }
+    try {
+      window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(next));
+    } catch {
+      toast({ message: "Not saved — this browser would not store the change.", tone: "error" });
+    }
   };
 
   const groups = useMemo(() => {
@@ -114,10 +133,10 @@ export function JournalView() {
                 {list.map((entry) => (
                   <Entry key={entry.id} entry={entry} current={null}
                          onDelete={() => {
-                           const before = entries;
-                           persist(entries.filter((e) => e.id !== entry.id));
+                           persist((current) => removeEntry(current, entry.id));
                            toast({ message: `Entry on ${ticker} deleted`,
-                                   action: { label: "Undo", onClick: () => persist(before) } });
+                                   action: { label: "Undo",
+                                             onClick: () => persist((current) => appendEntry(current, entry)) } });
                          }} />
                 ))}
               </CardBody>

@@ -10,7 +10,7 @@ import { TickerBar } from "@/components/TickerBar";
 import { useWorkspace } from "@/components/shell/workspace";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Kbd } from "@/components/ui/kbd";
-import { useScan, type RunOptions } from "@/lib/api";
+import { useCapabilities, useScan, type RunOptions } from "@/lib/api";
 import { palette } from "@/lib/palette";
 import { marketOf, resolveSymbol } from "@/lib/symbols";
 import { RUN_DEFAULTS, compareHref, marketsHref, stockHref } from "@/lib/url";
@@ -74,10 +74,11 @@ export function Landing() {
   const router = useRouter();
   const { watchlist, recent, toggleWatch, clearRecent } = useWorkspace();
   const [opts, setOpts] = useState<RunOptions>({ ticker: "", market: "US", ...RUN_DEFAULTS });
-  // The local scan report, if this machine has one. On the deployed app the
-  // route answers `available: false` and the card simply does not appear.
-  const { state: scan } = useScan("ID");
-  const scanAvailable = scan.status === "ready" && scan.data.available;
+  // The local scan report, if this machine has one. On a deployment the private
+  // tier is off, nothing is asked for, and the card simply does not appear.
+  const { privateTier } = useCapabilities();
+  const { state: scan } = useScan("ID", privateTier);
+  const scanAvailable = privateTier && scan.status === "ready" && scan.data.available;
 
   const open = (next: RunOptions) => {
     const symbol = resolveSymbol(next.ticker, next.market);

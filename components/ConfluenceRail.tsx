@@ -38,6 +38,8 @@ interface Reading {
   color: string;
   /** Still running, as opposed to failed or absent. Drives the pulse only. */
   pending?: boolean;
+  /** The lens was asked and did not answer — not the same as not yet asked. */
+  failed?: boolean;
   /** -1 bearish, 0 neutral, +1 bullish. Used only for the agreement count. */
   vote: number;
   family: Family;
@@ -76,9 +78,18 @@ export interface Agreement {
  * deliberately coarse and it is stated on the panel.
  */
 export function agreementOf(readings: Reading[]): Agreement {
-  const live = readings.filter((r) => r.verdict !== "—" && r.verdict !== "n/a");
+  // A lens still running has not voted. Counting its "…" as a live neutral
+  // reading headlined a half-loaded rail "Mixed signals", or "1 of 2
+  // independent readings constructive" with one of the two not yet asked.
+  const live = readings.filter((r) => !r.pending && r.verdict !== "…"
+                                      && r.verdict !== "—" && r.verdict !== "n/a");
   if (live.length === 0) {
-    return { lenses: 0, independent: 0, headline: "Awaiting data",
+    // NOT "AWAITING" ONCE EVERYTHING HAS SETTLED. This said "Awaiting data"
+    // above four failed lenses, which reads as a page still loading when it
+    // has finished and found nothing. Pending or never asked still awaits.
+    const settledEmpty = readings.some((r) => r.failed) && !readings.some((r) => r.pending);
+    return { lenses: 0, independent: 0,
+             headline: settledEmpty ? "No lens returned a reading" : "Awaiting data",
              color: ASH, footnote: null };
   }
 
@@ -149,8 +160,9 @@ const blank = (lens: string, question: string, family: Family,
                state?: string): Reading => ({
   lens, question, family, color: ASH, vote: 0,
   pending: state === "loading",
+  failed: state === "error",
   verdict: state === "loading" ? "…" : "—",
-  detail: state === "loading" ? "running" : "no reading",
+  detail: state === "loading" ? "running" : state === "error" ? "did not run" : "no reading",
 });
 
 /**

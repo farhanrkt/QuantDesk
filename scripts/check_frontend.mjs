@@ -272,6 +272,50 @@ if (Object.keys(railFamilies).length < 4) {
   process.exit(1);
 }
 
+// THE PRIVATE TIER IS DRAWN ONLY WHERE THE SERVER SERVES IT. The Score tab and
+// the local-scan view render a composite buy/sell, which PRODUCT.md constraint 1
+// keeps off every published view, and until November 2026 both rendered on every
+// deployment. The routes now refuse outside a local run (`private_tier_enabled`
+// in api/index.py) and the page asks the server the same question before drawing
+// either panel. Checked here so a refactor cannot quietly un-gate one of them:
+// the panel must sit INSIDE the parentheses of a `privateTier && (` block, not
+// merely somewhere after one.
+{
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const insideGate = (src, tag) => {
+    for (const m of src.matchAll(/privateTier\s*&&\s*\(/g)) {
+      let depth = 1;
+      let i = m.index + m[0].length;
+      for (; i < src.length && depth > 0; i += 1) {
+        if (src[i] === "(") depth += 1;
+        else if (src[i] === ")") depth -= 1;
+      }
+      if (src.slice(m.index, i).includes(`<${tag}`)) return true;
+    }
+    return false;
+  };
+  const problems = [];
+  for (const [file, panel] of [["components/workspace/StockWorkspace.tsx", "VerdictPanel"],
+                               ["components/markets/MarketsView.tsx", "ScanPanel"]]) {
+    const src = strip(readFileSync(join(ROOT, file), "utf8"));
+    if (!/useCapabilities\(\)/.test(src) || !insideGate(src, panel)) {
+      problems.push(`${file} renders <${panel}> outside a \`privateTier && (...)\` block`);
+    }
+  }
+  if (!/export function useCapabilities/.test(strippedRequestLayer)
+      || !/"\/api\/capabilities"/.test(strippedRequestLayer)) {
+    problems.push("lib/api.ts no longer asks /api/capabilities");
+  }
+  if (!/def private_tier_enabled\(/.test(pyIndex)
+      || (pyIndex.match(/if not private_tier_enabled\(request\):/g) ?? []).length < 2) {
+    problems.push("api/index.py no longer guards /api/verdict and /api/scan/latest");
+  }
+  if (problems.length) {
+    console.error(`The private tier is not gated: ${problems.join("; ")}.`);
+    process.exit(1);
+  }
+}
+
 // --------------------------------------------------------------------------- //
 // The v2 design rules, encoded so they cannot come back
 // --------------------------------------------------------------------------- //

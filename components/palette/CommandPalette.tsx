@@ -11,7 +11,7 @@ import { usePreferences } from "@/components/shell/preferences";
 import { useWorkspace } from "@/components/shell/workspace";
 import { HORIZONS } from "@/components/ui/horizon";
 import { Kbd } from "@/components/ui/kbd";
-import { searchSymbols } from "@/lib/api";
+import { searchSymbols, useCapabilities } from "@/lib/api";
 import { rankCommands, type CommandGroup } from "@/lib/commands";
 import { isTicker, marketOf, resolveSymbol } from "@/lib/symbols";
 import type { SymbolSearch } from "@/lib/types";
@@ -55,6 +55,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const [searching, setSearching] = useState(false);
   const { watchlist, recent } = useWorkspace();
   const { detail, setDetail, horizon, setHorizon } = usePreferences();
+  const { privateTier } = useCapabilities();
   const pageCommands = usePageCommands();
 
   // Open and close the native dialog from the prop, remembering where focus was.
@@ -142,8 +143,10 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         keywords: "unusual scan", run: () => go(marketsHref("screener")) },
       { id: "go:exposure", group: "Go to", label: "Markets: what a universe moves with",
         keywords: "exposure factors drivers beta", run: () => go(marketsHref("exposure")) },
-      { id: "go:scan", group: "Go to", label: "Markets: latest local scan",
-        keywords: "scanner report private", run: () => go(marketsHref("scan")) },
+      // Only where the owner runs the app, like the view it opens.
+      ...(privateTier ? [{ id: "go:scan", group: "Go to" as const,
+                           label: "Markets: latest local scan", keywords: "scanner report private",
+                           run: () => go(marketsHref("scan")) }] : []),
       { id: "go:compare", group: "Go to", label: "Compare companies",
         keywords: "side by side columns", run: () => go(compareHref([])) },
       { id: "go:journal", group: "Go to", label: "Thesis journal",
@@ -163,7 +166,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     );
     return list;
   }, [query, found, recent, watchlist, pageCommands, go, onClose, close, detail, setDetail,
-      horizon, setHorizon]);
+      horizon, setHorizon, privateTier]);
 
   const ranked = useMemo(() => {
     // Server results are already ordered by how they matched; ranking them
