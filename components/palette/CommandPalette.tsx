@@ -13,10 +13,10 @@ import { HORIZONS } from "@/components/ui/horizon";
 import { Kbd } from "@/components/ui/kbd";
 import { searchSymbols, useCapabilities } from "@/lib/api";
 import { rankCommands, type CommandGroup } from "@/lib/commands";
-import { LANG_NAME, msg, useT } from "@/lib/i18n";
+import { LANG_NAME, getLang, msg, useT } from "@/lib/i18n";
 import { isTicker, marketOf, resolveSymbol } from "@/lib/symbols";
 import type { SymbolSearch } from "@/lib/types";
-import { compareHref, marketsHref, stockHref } from "@/lib/url";
+import { MANUAL_HREF, compareHref, marketsHref, stockHref } from "@/lib/url";
 import { cn } from "@/lib/utils";
 
 /**
@@ -166,7 +166,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         keywords: "notes entries jurnal catatan tesis", run: () => go("/journal") },
       { id: "go:manual", group: "Go to", label: t("Field manual"),
         keywords: "help glossary guide learn panduan bantuan istilah",
-        run: () => { onClose(); window.location.href = "/docs/field-manual.html"; } },
+        run: () => { onClose(); window.location.href = MANUAL_HREF[getLang()]; } },
       { id: "set:mode", group: "Settings",
         label: detail === "simple" ? t("Switch to Full mode") : t("Switch to Guided mode"),
         keywords: "reading detail guided full mode baca terpandu lengkap",

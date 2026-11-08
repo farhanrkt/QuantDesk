@@ -13,10 +13,10 @@ import { Kbd } from "@/components/ui/kbd";
 import { useCapabilities, useScan, type RunOptions } from "@/lib/api";
 import { palette } from "@/lib/palette";
 import { marketOf, resolveSymbol } from "@/lib/symbols";
-import { RUN_DEFAULTS, compareHref, marketsHref, stockHref } from "@/lib/url";
+import { MANUAL_HREF, RUN_DEFAULTS, compareHref, marketsHref, stockHref } from "@/lib/url";
 import { MarketsToday } from "@/components/landing/MarketsToday";
 import { WatchlistRank } from "@/components/landing/WatchlistRank";
-import { msg, useT } from "@/lib/i18n";
+import { msg, useLang, useT } from "@/lib/i18n";
 
 /**
  * The first screen, before a ticker.
@@ -67,6 +67,7 @@ const TOOLS = [
 
 export function Landing() {
   const t = useT();
+  const lang = useLang();
   const router = useRouter();
   const { watchlist, recent, toggleWatch, clearRecent } = useWorkspace();
   const [opts, setOpts] = useState<RunOptions>({ ticker: "", market: "US", ...RUN_DEFAULTS });
@@ -159,7 +160,7 @@ export function Landing() {
       <section aria-labelledby="how-title" className="space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="how-title">{t("How to read it")}</h2>
-          <a href="/docs/field-manual.html"
+          <a href={MANUAL_HREF[lang]}
              className="inline-flex items-center gap-1.5 text-meta text-tech hover:underline">
             <BookOpen aria-hidden className="h-4 w-4" />
             {t("The field manual assumes no finance at all")}

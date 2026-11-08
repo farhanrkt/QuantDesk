@@ -8,7 +8,8 @@ import { LanguageToggle } from "@/components/shell/LanguageToggle";
 import { usePreferences } from "@/components/shell/preferences";
 import { DetailToggle } from "@/components/ui/explain";
 import { Kbd } from "@/components/ui/kbd";
-import { msg, useT } from "@/lib/i18n";
+import { msg, useLang, useT } from "@/lib/i18n";
+import { MANUAL_HREF } from "@/lib/url";
 import { cn } from "@/lib/utils";
 
 /**
@@ -36,6 +37,7 @@ const NAV = [
 export function TopBar({ onSearch }: { onSearch: () => void }) {
   const pathname = usePathname() ?? "/";
   const t = useT();
+  const lang = useLang();
   const { detail, setDetail, language, setLanguage } = usePreferences();
   const menu = useRef<HTMLDialogElement>(null);
 
@@ -96,7 +98,7 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
           <div className="hidden lg:block">
             <LanguageToggle value={language} onChange={setLanguage} />
           </div>
-          <a href="/docs/field-manual.html"
+          <a href={MANUAL_HREF[lang]}
              className="hidden h-9 items-center gap-1.5 rounded-lg px-2.5 text-meta text-ash
                         transition-colors hover:text-chalk focus:outline-none focus-visible:ring-2
                         focus-visible:ring-tech xl:inline-flex">
@@ -130,7 +132,7 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
         </div>
         <nav aria-label={t("Main")} className="flex flex-col gap-1 p-3">
           {NAV.map((item) => link(item, "w-full"))}
-          <a href="/docs/field-manual.html"
+          <a href={MANUAL_HREF[lang]}
              className="inline-flex min-h-[36px] items-center gap-2 rounded-lg px-3 text-meta font-medium
                         text-ash hover:bg-raised/60 hover:text-chalk focus:outline-none
                         focus-visible:ring-2 focus-visible:ring-tech">

@@ -689,12 +689,19 @@ if (compareSources.length < 2) {
 // /docs/field-manual.html for months while production returned a 404: docs/
 // was excluded from the upload and nothing copied the file into public/. The
 // copy now happens in `prebuild`, and this checks the other half — that every
-// /docs/ path the UI links to names a file that exists to be copied.
-for (const [file, src] of uiFiles) {
+// /docs/ path the UI links to names a file that exists to be copied. lib/ is
+// read too: the links name the manual through `MANUAL_HREF` in lib/url.ts, one
+// page per language.
+const docsLinkSources = [
+  ...uiFiles,
+  ...readdirSync(join(ROOT, "lib")).filter((f) => /\.tsx?$/.test(f))
+    .map((f) => [`lib/${f}`, stripComments(readFileSync(join(ROOT, "lib", f), "utf8"))]),
+];
+for (const [file, src] of docsLinkSources) {
   for (const m of src.matchAll(/["'`](\/docs\/[^"'`#?]+)/g)) {
     if (!existsSync(join(ROOT, m[1].slice(1)))) {
       fail(file, `Links to ${m[1]}, which is not in docs/.`,
-           "prebuild copies docs/field-manual.html into public/docs/; a link to anything "
+           "prebuild copies the pages in docs/ into public/docs/; a link to anything "
            + "else under /docs/ will 404 in production.");
     }
   }
