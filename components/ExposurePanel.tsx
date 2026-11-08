@@ -13,6 +13,7 @@ import { num, pct } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { StateCard } from "@/components/ui/state";
 import { useSessionState } from "@/lib/session";
+import { useT } from "@/lib/i18n";
 
 /**
  * What a whole universe moves with, as a cross-section.
@@ -53,17 +54,17 @@ interface Point {
 function FactorTooltip({ active, payload }: {
   active?: boolean; payload?: { payload: Point }[];
 }) {
+  const t = useT();
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
   return (
     <div className="rounded-lg border border-rule bg-raised px-3 py-2 shadow-lg">
       <div className="font-mono text-meta font-semibold text-chalk">{p.ticker}</div>
       <div className="mt-1 text-micro text-ash">
-        moves <span className="num text-body">{num(p.x, 2)}x</span> ·{" "}
-        explains <span className="num text-body">{pct(p.y, 0)}</span>
+        {t("moves")}{" "}<span className="num text-body">{num(p.x, 2)}x</span>{" "}{t("· explains")}{" "}<span className="num text-body">{pct(p.y, 0)}</span>
       </div>
       {!p.material && (
-        <div className="mt-1 text-micro text-faint">below the reporting floor</div>
+        <div className="mt-1 text-micro text-faint">{t("below the reporting floor")}</div>
       )}
     </div>
   );
@@ -76,6 +77,7 @@ function FactorChart({ factor, rows, materialAt, highlight, yMax }: {
   highlight: string | null;
   yMax: number;
 }) {
+  const t = useT();
   const { points, span, named } = useMemo(() => {
     const all: Point[] = rows.flatMap((row) => {
       const load = row.loadings[factor.key];
@@ -130,7 +132,7 @@ function FactorChart({ factor, rows, materialAt, highlight, yMax }: {
             <XAxis type="number" dataKey="x" domain={[-span, span]}
                    tick={{ fill: AXIS, fontSize: 11 }} stroke={GRID}
                    tickFormatter={(v: number) => num(v, 1)}
-                   label={{ value: "moves this many times as hard", position: "insideBottom",
+                   label={{ value: t("moves this many times as hard"), position: "insideBottom",
                             offset: -16, fill: AXIS, fontSize: 11 }} />
             {/* ONE SCALE ACROSS ALL THREE CHARTS. Per-chart auto-scaling made a
                 14% loading on copper sit as high as a 31% loading on energy, so
@@ -140,7 +142,7 @@ function FactorChart({ factor, rows, materialAt, highlight, yMax }: {
                    tick={{ fill: AXIS, fontSize: 11 }} stroke={GRID}
                    tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
                    width={44}
-                   label={{ value: "share of its moves explained", angle: -90,
+                   label={{ value: t("share of its moves explained"), angle: -90,
                             position: "insideLeft", fill: AXIS, fontSize: 11,
                             style: { textAnchor: "middle" } }} />
             {/* Zero is the only meaningful vertical anchor: left of it the stock
@@ -178,7 +180,7 @@ function FactorChart({ factor, rows, materialAt, highlight, yMax }: {
       </div>
       {named === 0 && (
         <p className="mt-1 text-meta leading-relaxed text-ash">
-          Nothing in this list clears the floor on this one.
+          {t("Nothing in this list clears the floor on this one.")}
         </p>
       )}
       {/*
@@ -195,11 +197,11 @@ function FactorChart({ factor, rows, materialAt, highlight, yMax }: {
       */}
       <p className="sr-only">
         {factor.label}: {named === 0
-          ? "no name in this list clears the reporting floor."
-          : `${named} of ${points.length} names clear the reporting floor. ` +
+          ? t("no name in this list clears the reporting floor.")
+          : t("{named} of {total} names clear the reporting floor. ", { named, total: points.length }) +
             points.filter((p) => p.material)
-                  .map((p) => `${p.ticker} moves ${num(p.x, 2)} times as hard, ` +
-                              `explaining ${pct(p.y, 0)} of its weekly movement`)
+                  .map((p) => t("{ticker} moves {beta} times as hard, explaining {share} of its weekly movement",
+                                { ticker: p.ticker, beta: num(p.x, 2), share: pct(p.y, 0) }))
                   .join("; ") + "."}
       </p>
     </div>
@@ -222,6 +224,7 @@ export function ExposurePanel({
   onScan: (params: { universe?: string | null; tickers?: string; market: Market }) => void;
   highlight: string | null;
 }) {
+  const t = useT();
   const catalogue = universeState.status === "ready" ? universeState.data.universes : [];
   const [choice, setChoice] = useSessionState<string>("exposure:choice", "idx30");
 
@@ -229,25 +232,22 @@ export function ExposurePanel({
     <div className="space-y-4 animate-rise">
       <Card accent={EXPOSURE}>
         <CardHeader>
-          <CardTitle>What drives this market</CardTitle>
+          <CardTitle>{t("What drives this market")}</CardTitle>
         </CardHeader>
         <CardBody className="space-y-3">
           <p className="prose-col text-meta leading-relaxed">
-            A large part of any index is not a set of companies so much as a set of bets
-            on a few outside prices. This measures every name in a list against the
-            factors whose betas were shown to survive a year, and plots the whole
-            cross-section — because one beta on its own has no scale to be read against.
+            {t("A large part of any index is not a set of companies so much as a set of bets on a few outside prices. This measures every name in a list against the factors whose betas were shown to survive a year, and plots the whole cross-section — because one beta on its own has no scale to be read against.")}
           </p>
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Universe">
+            <Field label={t("Universe")}>
               <SelectField value={choice} onChange={setChoice}
                            options={catalogue.map((u) => ({
                              value: u.id, label: `${u.name} (${u.count})` }))} />
             </Field>
-            <Field label="Market">
+            <Field label={t("Market")}>
               <SelectField value={market} onChange={(v) => onMarketChange(v as Market)}
                            options={[{ value: "US", label: "US" },
-                                     { value: "ID", label: "IDX (.JK)" }]} />
+                                     { value: "ID", label: t("IDX (.JK)") }]} />
             </Field>
             <button type="button"
                     onClick={() => onScan({ universe: choice, market })}
@@ -255,21 +255,21 @@ export function ExposurePanel({
                     className="min-h-[2.25rem] rounded-lg border border-rule bg-raised px-4
                                text-meta font-medium text-chalk transition
                                hover:border-faint disabled:opacity-50">
-              {state.status === "loading" ? "Measuring…" : "Measure this universe"}
+              {state.status === "loading" ? t("Measuring…") : t("Measure this universe")}
             </button>
           </div>
         </CardBody>
       </Card>
 
       {state.status === "error" && (
-        <StateCard kind="error" title="The scan could not run">{state.failure.message}</StateCard>
+        <StateCard kind="error" title={t("The scan could not run")}>{state.failure.message}</StateCard>
       )}
 
       {state.status === "ready" && !state.data.usable && (
         <Card>
           <CardBody>
             <p className="prose-col text-meta leading-relaxed">
-              {state.data.reason ?? "Nothing measurable in this list."}
+              {state.data.reason ?? t("Nothing measurable in this list.")}
             </p>
           </CardBody>
         </Card>
@@ -281,7 +281,7 @@ export function ExposurePanel({
             <CardHeader>
               <CardTitle>{state.data.universe.name}</CardTitle>
               <span className="font-mono text-micro text-ash">
-                {state.data.scanned} names · {state.data.weeks} weeks
+                {t("{scanned} names · {weeks} weeks", { scanned: state.data.scanned, weeks: state.data.weeks })}
               </span>
             </CardHeader>
             {/* STACKED, NOT THREE ACROSS. At a third of the width the points
@@ -299,7 +299,7 @@ export function ExposurePanel({
 
           <Card>
             <CardHeader>
-              <CardTitle>How common each one is here</CardTitle>
+              <CardTitle>{t("How common each one is here")}</CardTitle>
             </CardHeader>
             <CardBody className="space-y-2">
               {state.data.factors.map((factor) => {
@@ -319,44 +319,25 @@ export function ExposurePanel({
           <Card>
             <CardBody className="space-y-3">
               <Note>
-                An empty chart is not a finding about diversification. It means none of
-                these factors explained these names, and the factor that does may not be
-                on the list — peer baskets of miners and plantations were built for this
-                and measured worse than the traded contracts, so they are not here.
+                {t("An empty chart is not a finding about diversification. It means none of these factors explained these names, and the factor that does may not be on the list — peer baskets of miners and plantations were built for this and measured worse than the traded contracts, so they are not here.")}
               </Note>
-              <Explainer summary="Five years, market removed, and no claim about the next five">
+              <Explainer summary={t("Five years, market removed, and no claim about the next five")}>
                 <p>
-                  Each name is measured against each factor over five years of weekly
-                  moves, with the local index taken out of BOTH sides first. That last
-                  part is what separates a real exposure from a stock and a commodity
-                  drifting with the same market — without it a packaged-food company
-                  reads as exposed to crude, which is what an earlier version of this
-                  chart reported.
+                  {t("Each name is measured against each factor over five years of weekly moves, with the local index taken out of BOTH sides first. That last part is what separates a real exposure from a stock and a commodity drifting with the same market — without it a packaged-food company reads as exposed to crude, which is what an earlier version of this chart reported.")}
                 </p>
                 <p className="mt-2">
-                  A point is filled once its loading clears three standard errors. The
-                  floor moves with the window: the same evidence needs an R-squared of
-                  about {num(state.data.materialAt ?? 0, 2)} here, and far more over a
-                  shorter one.
+                  {t("A point is filled once its loading clears three standard errors. The floor moves with the window: the same evidence needs an R-squared of about {value} here, and far more over a shorter one.", { value: num(state.data.materialAt ?? 0, 2) })}
                 </p>
                 <p className="mt-2">
-                  These describe what happened. Whether a loading persists was measured
-                  and could not be established — nine years of history holds fewer than
-                  two independent five-year windows, and at one year too few names clear
-                  the bar in any single year to compare one year against the next.
-                  Nothing here is a forecast, and the study that says so is stamped in
-                  the repository rather than summarised away.
+                  {t("These describe what happened. Whether a loading persists was measured and could not be established — nine years of history holds fewer than two independent five-year windows, and at one year too few names clear the bar in any single year to compare one year against the next. Nothing here is a forecast, and the study that says so is stamped in the repository rather than summarised away.")}
                 </p>
                 <p className="mt-2 text-micro text-faint">
-                  Price and volume only — nothing here knows what these businesses do,
-                  which is why an industrials company sitting among the miners is a
-                  question for the reader rather than an answer.
+                  {t("Price and volume only — nothing here knows what these businesses do, which is why an industrials company sitting among the miners is a question for the reader rather than an answer.")}
                 </p>
               </Explainer>
               {(state.data.missing ?? []).length > 0 && (
                 <p className="text-meta leading-relaxed text-ash">
-                  Not measured: {(state.data.missing ?? []).join(", ")} — too few weeks of
-                  history. Dropped rather than estimated.
+                  {t("Not measured: {value} — too few weeks of history. Dropped rather than estimated.", { value: (state.data.missing ?? []).join(", ") })}
                 </p>
               )}
             </CardBody>

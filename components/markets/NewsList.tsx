@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
 import { HeadlineList } from "@/components/ui/headlines";
 import { fetchMarketHeadlines } from "@/lib/api";
-import { TOPIC_LABEL, headlineTopics } from "@/lib/marketboard";
+import { headlineTopics, topicLabel } from "@/lib/marketboard";
 import type { Engine, Market, MarketBoard, MarketHeadlines } from "@/lib/types";
+import { t, useLang, useT } from "@/lib/i18n";
 
 /**
  * The past day's headlines that mention this market and each unusual mover.
@@ -17,6 +18,8 @@ import type { Engine, Market, MarketBoard, MarketHeadlines } from "@/lib/types";
  */
 export function useMarketHeadlines(market: Market, topics: string[]): Engine<MarketHeadlines> {
   const key = `${market}:${topics.join(",")}`;
+  // The headlines' notes are written in the reader's language, so a switch asks again.
+  const lang = useLang();
   const [state, setState] = useState<Engine<MarketHeadlines>>({ status: "idle" });
   // Keyed by a string, and the request rebuilt from it, so a new array with
   // the same topics on a re-render does not refetch.
@@ -28,36 +31,38 @@ export function useMarketHeadlines(market: Market, topics: string[]): Engine<Mar
       .then((data) => { if (!controller.signal.aborted) setState({ status: "ready", data }); })
       .catch((failure) => {
         if (!controller.signal.aborted) {
-          setState({ status: "error", failure: { message: failure?.message ?? "Headlines did not load." } });
+          setState({ status: "error", failure: { message: failure?.message ?? t("Headlines did not load.") } });
         }
       });
     return () => controller.abort();
-  }, [key]);
+  }, [key, lang]);
   return state;
 }
 
 function Feeds({
   state, market, limit, compact,
 }: { state: Engine<MarketHeadlines>; market: Market; limit?: number; compact?: boolean }) {
+  const t = useT();
   const now = Date.now();
   const pad = compact ? "text-meta text-ash" : "px-5 text-meta text-ash";
   if (state.status === "error") {
     return (
       <p className={pad}>
-        {state.failure.message} Nothing else here reads the news, so every figure is unaffected.
+        {t("{message} Nothing else here reads the news, so every figure is unaffected.", { message: state.failure.message })}
       </p>
     );
   }
   if (state.status !== "ready") {
-    return <p className={pad} role="status">Fetching headlines…</p>;
+    return <p className={pad} role="status">{t("Fetching headlines…")}</p>;
   }
   return (
     <div className="space-y-3">
       {state.data.topics.map((feed) => (
-        <section key={feed.topic} aria-label={`Headlines mentioning ${TOPIC_LABEL[feed.topic]?.[market] ?? feed.topic}`}>
+        <section key={feed.topic}
+                 aria-label={t("Headlines mentioning {topic}", { topic: topicLabel(feed.topic, market) })}>
           <h4 className={compact ? "mb-1 text-meta font-semibold text-chalk"
                                  : "px-5 pb-1 text-meta font-semibold text-chalk"}>
-            Mentioning {TOPIC_LABEL[feed.topic]?.[market] ?? feed.topic}
+            {t("Mentioning {value}", { value: topicLabel(feed.topic, market) })}
             <span className="ml-1.5 font-normal text-ash">· {feed.source}</span>
           </h4>
           {feed.items.length > 0
@@ -82,19 +87,19 @@ export function NewsCompact({
 export function NewsCard({
   board, market, topics: only, limit,
 }: { board: MarketBoard; market: Market; topics?: string[]; limit?: number }) {
+  const t = useT();
   const topics = useMemo(() => only ?? headlineTopics(board, market), [only, board, market]);
   const state = useMarketHeadlines(market, topics);
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Headlines from the past day</CardTitle>
+        <CardTitle>{t("Headlines from the past day")}</CardTitle>
       </CardHeader>
       <CardBody className="space-y-4 px-0">
         <Feeds state={state} market={market} limit={limit} />
         <div className="px-5">
           <Note>
-            Third-party headlines, matched by search and unverified. A headline that mentions oil
-            on a day oil fell is not evidence of why it fell.
+            {t("Third-party headlines, matched by search and unverified. A headline that mentions oil on a day oil fell is not evidence of why it fell.")}
           </Note>
         </div>
       </CardBody>

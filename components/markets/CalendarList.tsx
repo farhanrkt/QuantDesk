@@ -6,6 +6,7 @@ import { dayHeading, groupByDay, timeText, toIcs } from "@/lib/calendar";
 import { PRIMARY_HISTORY, historyShort } from "@/lib/marketboard";
 import type { CalendarEvent, MarketBoard } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /** Hand the reader one event as an .ics file. Built here; nothing reaches a server. */
 function download(event: CalendarEvent) {
@@ -67,15 +68,16 @@ function CalendarRow({
   compact?: boolean;
   timeZone?: string;
 }) {
+  const t = useT();
   const rows = board?.eventHistory?.[event.kind] ?? [];
   const readings = board?.explain.eventHistory?.[event.kind] ?? {};
   const shown = compact ? rows.filter((r) => r.key === PRIMARY_HISTORY[event.kind]) : rows;
   const flags = [
     event.market === "ID" ? "IDX" : "US",
-    event.projections ? "with projections" : null,
-    event.tentative ? "tentative" : null,
-    event.scheduled ? "scheduled" : null,
-    event.origin === "watchlist" ? "your watchlist" : event.origin === "stock" ? "this stock" : null,
+    event.projections ? t("with projections") : null,
+    event.tentative ? t("tentative") : null,
+    event.scheduled ? t("scheduled") : null,
+    event.origin === "watchlist" ? t("your watchlist") : event.origin === "stock" ? t("this stock") : null,
   ].filter(Boolean) as string[];
   return (
     <li className="flex gap-2 border-b border-ruleSoft py-2 last:border-0">
@@ -105,15 +107,15 @@ function CalendarRow({
         {about && (
           <details className="mt-0.5">
             <summary className="inline-flex min-h-[24px] cursor-pointer items-center text-micro text-ash hover:text-chalk">
-              What is this?
+              {t("What is this?")}
             </summary>
             <p className="text-micro leading-snug text-body">{about}</p>
           </details>
         )}
       </div>
       <Button variant="quiet" size="icon" className="h-8 w-8 shrink-0"
-              aria-label={`Add ${event.title} on ${dayHeading(event.date)} to your calendar`}
-              title="Add to your calendar" onClick={() => download(event)}>
+              aria-label={t("Add {title} on {day} to your calendar", { title: event.title, day: dayHeading(event.date) })}
+              title={t("Add to your calendar")} onClick={() => download(event)}>
         <CalendarPlus aria-hidden className="h-3.5 w-3.5" />
       </Button>
     </li>

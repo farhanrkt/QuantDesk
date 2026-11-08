@@ -43,11 +43,15 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
   // reader just asked for would hide the answer to their own click.
   useEffect(() => { menu.current?.close(); }, [pathname]);
 
-  const link = (item: (typeof NAV)[number], extra?: string) => {
+  // `compact` is the bar's own copy: icon only below `lg`, where the labels do
+  // not fit beside search and the two switches (measured: 157px over at 768 in
+  // Bahasa Indonesia). The label stays in the accessibility tree and the tooltip.
+  const link = (item: (typeof NAV)[number], extra?: string, compact = false) => {
     const active = pathname.startsWith(item.match);
     const Icon = item.icon;
     return (
       <Link key={item.href} href={item.href} aria-current={active ? "page" : undefined}
+            title={compact ? t(item.label) : undefined}
             className={cn(
               "inline-flex min-h-[36px] items-center gap-2 rounded-lg px-3 text-meta font-medium",
               "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-tech",
@@ -55,7 +59,7 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
               extra,
             )}>
         <Icon aria-hidden className="h-4 w-4" />
-        {t(item.label)}
+        <span className={compact ? "sr-only lg:not-sr-only" : undefined}>{t(item.label)}</span>
       </Link>
     );
   };
@@ -67,11 +71,11 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
         <Link href="/" aria-label={t("QuantDesk home")}
               className="mr-1 rounded font-mono text-meta font-semibold tracking-[0.16em] text-chalk
                          focus:outline-none focus-visible:ring-2 focus-visible:ring-tech">
-          QUANTDESK
+          {t("QUANTDESK")}
         </Link>
 
         <nav aria-label={t("Main")} className="hidden items-center gap-1 md:flex">
-          {NAV.map((item) => link(item))}
+          {NAV.map((item) => link(item, undefined, true))}
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
@@ -81,27 +85,30 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
                              hover:text-chalk focus:outline-none focus-visible:ring-2
                              focus-visible:ring-tech sm:min-w-[13rem]">
             <Search aria-hidden className="h-4 w-4" />
-            <span className="hidden sm:inline">{t("Search or jump to…")}</span>
+            <span className="hidden truncate sm:inline">{t("Search or jump to…")}</span>
             <span className="sr-only sm:hidden">{t("Search")}</span>
             <Kbd keys={["mod", "K"]} className="ml-auto hidden sm:inline-flex" />
           </button>
           <div className="hidden md:block">
             <DetailToggle level={detail} onChange={setDetail} />
           </div>
-          <div className="hidden md:block">
+          {/* Set once and left, so it is the first thing to move into the menu. */}
+          <div className="hidden lg:block">
             <LanguageToggle value={language} onChange={setLanguage} />
           </div>
           <a href="/docs/field-manual.html"
              className="hidden h-9 items-center gap-1.5 rounded-lg px-2.5 text-meta text-ash
                         transition-colors hover:text-chalk focus:outline-none focus-visible:ring-2
-                        focus-visible:ring-tech lg:inline-flex">
+                        focus-visible:ring-tech xl:inline-flex">
             <BookOpen aria-hidden className="h-4 w-4" />
             {t("Field manual")}
           </a>
+          {/* Until `xl` the menu also holds what the bar has no room for: the
+              field manual and, below `lg`, the language. */}
           <button type="button" aria-label={t("Open menu")} onClick={() => menu.current?.showModal()}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ash
+                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-ash
                              hover:bg-raised hover:text-chalk focus:outline-none
-                             focus-visible:ring-2 focus-visible:ring-tech md:hidden">
+                             focus-visible:ring-2 focus-visible:ring-tech xl:hidden">
             <Menu aria-hidden className="h-5 w-5" />
           </button>
         </div>
@@ -114,7 +121,7 @@ export function TopBar({ onSearch }: { onSearch: () => void }) {
               className="m-0 ml-auto h-full max-h-none w-[min(20rem,85vw)] border-l border-rule bg-panel
                          p-0 text-body backdrop:bg-ink/70 open:animate-rise">
         <div className="flex h-14 items-center justify-between border-b border-rule px-4">
-          <span className="font-mono text-meta font-semibold tracking-[0.16em] text-chalk">QUANTDESK</span>
+          <span className="font-mono text-meta font-semibold tracking-[0.16em] text-chalk">{t("QUANTDESK")}</span>
           <button type="button" aria-label={t("Close menu")} onClick={() => menu.current?.close()}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-ash
                              hover:text-chalk focus:outline-none focus-visible:ring-2 focus-visible:ring-tech">

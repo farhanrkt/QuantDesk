@@ -16,6 +16,7 @@ import { palette } from "@/lib/palette";
 import { useSessionState } from "@/lib/session";
 import type { Market } from "@/lib/types";
 import { marketsHref, parseMarketView, stockHref, type MarketView } from "@/lib/url";
+import { msg, useT } from "@/lib/i18n";
 
 /**
  * The tools that read a whole list of companies at once.
@@ -32,15 +33,16 @@ import { marketsHref, parseMarketView, stockHref, type MarketView } from "@/lib/
  */
 const VIEWS: (Tab & { id: MarketView })[] = [
   // Neutral, like the company tab: the board is orientation, not a model.
-  { id: "today", label: "Today", accent: palette.company },
-  { id: "rank", label: "Rank a universe", accent: palette.trend },
-  { id: "screener", label: "Unusual activity", accent: palette.flow },
-  { id: "exposure", label: "What it moves with", accent: palette.drivers },
+  { id: "today", label: msg("Today"), accent: palette.company },
+  { id: "rank", label: msg("Rank a universe"), accent: palette.trend },
+  { id: "screener", label: msg("Unusual activity"), accent: palette.flow },
+  { id: "exposure", label: msg("What it moves with"), accent: palette.drivers },
   // Only where the owner runs the app — see `useCapabilities`.
-  { id: "scan", label: "Latest local scan", accent: palette.private, divider: "Private" },
+  { id: "scan", label: msg("Latest local scan"), accent: palette.private, divider: msg("Private") },
 ];
 
 export function MarketsView() {
+  const t = useT();
   const router = useRouter();
   const search = useSearchParams();
   const parsed = parseMarketView(search?.get("view") ?? null);
@@ -65,35 +67,33 @@ export function MarketsView() {
   const { state: scan } = useScan(scanMarket, privateTier);
 
   useRegisterCommands("markets", views.map((v) => ({
-    id: `markets:${v.id}`, group: "Go to" as const, label: `Markets: ${v.label}`, run: () => setView(v.id),
+    id: `markets:${v.id}`, group: "Go to" as const, label: t("Markets: {view}", { view: t(v.label) }), run: () => setView(v.id),
   })));
 
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1>Markets</h1>
+        <h1>{t("Markets")}</h1>
         <p className="prose-col text-ash">
-          What moved today, and tools that read a whole list of companies at once. The board is
-          context; each tool produces a shortlist to open in the four lenses — not a verdict on
-          any name in it.
+          {t("What moved today, and tools that read a whole list of companies at once. The board is context; each tool produces a shortlist to open in the four lenses — not a verdict on any name in it.")}
         </p>
       </header>
 
       <div className="sticky top-14 z-30 -mx-4 bg-ink/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-ink/80
                       sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        <Tabs tabs={views} active={active} onChange={setView} idPrefix="markets" label="Market tools" />
+        <Tabs tabs={views} active={active} onChange={setView} idPrefix="markets" label={t("Market tools")} />
       </div>
 
       <TabPanel id="today" active={active} idPrefix="markets">
-        <Section title="What moved the markets"
-                 question="Which of today's moves were unusual for the thing that made them?">
+        <Section title={t("What moved the markets")}
+                 question={t("Which of today's moves were unusual for the thing that made them?")}>
           <TodayView />
         </Section>
       </TabPanel>
 
       <TabPanel id="rank" active={active} idPrefix="markets">
-        <Section title="Rank a universe"
-                 question="Of these hundred, which few are worth opening four lenses on?">
+        <Section title={t("Rank a universe")}
+                 question={t("Of these hundred, which few are worth opening four lenses on?")}>
           <RankingPanel onSelect={open} />
         </Section>
       </TabPanel>
@@ -102,15 +102,15 @@ export function MarketsView() {
         {/* The screener answers what the ranking cannot: has anything UNUSUAL
             just happened here? A one-off event rather than a standing trait, with
             its own multiple-testing correction. */}
-        <Section title="Scan for unusual activity"
-                 question="Has anything just happened in these names that their own history says is rare?">
+        <Section title={t("Scan for unusual activity")}
+                 question={t("Has anything just happened in these names that their own history says is rare?")}>
           <ScreenerPanel onSelect={open} />
         </Section>
       </TabPanel>
 
       <TabPanel id="exposure" active={active} idPrefix="markets">
-        <Section title="What a market moves with"
-                 question="Which shared forces drive this list — and which of those were measured to persist?">
+        <Section title={t("What a market moves with")}
+                 question={t("Which shared forces drive this list — and which of those were measured to persist?")}>
           <ExposurePanel universeState={universes} market={exposureMarket}
                          onMarketChange={setExposureMarket} state={exposure}
                          onScan={scanExposure} highlight={null} />
@@ -120,15 +120,15 @@ export function MarketsView() {
       {privateTier && (
         <TabPanel id="scan" active={active} idPrefix="markets">
           <Section
-            title="Latest local scan"
-            question="The private whole-market sweep, as last run on this machine."
+            title={t("Latest local scan")}
+            question={t("The private whole-market sweep, as last run on this machine.")}
             aside={(
               <label className="flex items-center gap-2 text-meta text-ash">
-                <span className="eyebrow">Market</span>
+                <span className="eyebrow">{t("Market")}</span>
                 <Select value={scanMarket} onChange={(e) => setScanMarket(e.target.value as Market)}
-                        aria-label="Scan market" className="h-9">
-                  <option value="ID">Indonesia (IDX)</option>
-                  <option value="US">United States</option>
+                        aria-label={t("Scan market")} className="h-9">
+                  <option value="ID">{t("Indonesia (IDX)")}</option>
+                  <option value="US">{t("United States")}</option>
                 </Select>
               </label>
             )}

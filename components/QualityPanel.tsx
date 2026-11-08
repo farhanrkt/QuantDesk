@@ -11,6 +11,7 @@ import type {
   DomainDimension, ExplainMap, ManipulationPosterior, QualityResponse,
 } from "@/lib/types";
 import { cn, num } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 
 /**
@@ -58,6 +59,7 @@ const VERDICT_WORD: Record<string, string> = {
 function FlagWorth({ data, explain }: {
   data: ManipulationPosterior; explain?: ExplainMap[string];
 }) {
+  const t = useT();
   const defaultIndex = Math.max(0, data.curve.findIndex((p) => p.isDefault));
   const [index, setIndex] = useState(defaultIndex);
   const point = data.curve[Math.min(index, data.curve.length - 1)] ?? data.curve[0];
@@ -67,10 +69,10 @@ function FlagWorth({ data, explain }: {
     <Card>
       <CardHeader>
         <CardTitle>
-          {data.flagged ? "What this flag is worth" : "What a clean reading is worth"}
+          {data.flagged ? t("What this flag is worth") : t("What a clean reading is worth")}
         </CardTitle>
         <span className="flex items-center gap-1.5 font-mono text-micro text-ash">
-          Beneish, cutoff {num(data.characteristics.cutoff)}
+          {t("Beneish, cutoff {cutoff}", { cutoff: num(data.characteristics.cutoff) })}
           <Explain explain={explain} />
         </span>
       </CardHeader>
@@ -80,45 +82,43 @@ function FlagWorth({ data, explain }: {
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="num text-base text-ash">{point.priorText}</span>
           <ArrowRight aria-hidden className="h-3.5 w-3.5 shrink-0 self-center text-ash" />
-          <span className="sr-only">to</span>
+          <span className="sr-only">{t("to")}</span>
           <span className="num text-h2 font-semibold text-chalk">{shown}</span>
           <span className="text-meta leading-relaxed text-ash">
             {data.flagged
-              ? `likely to be a real manipulator, so about ${point.falseAlarmText} of flags
-                 like this are false alarms`
-              : "chance of manipulation anyway — the screen moved a number that was already small"}
+              ? t("likely to be a real manipulator, so about {share} of flags like this are false alarms",
+                  { share: point.falseAlarmText })
+              : t("chance of manipulation anyway — the screen moved a number that was already small")}
           </span>
         </div>
 
         <div className="rounded border border-rule bg-raised px-4 py-3">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
             <span className="eyebrow">
-              How common is manipulation? {point.priorText} of companies
+              {t("How common is manipulation? {priorText} of companies", { priorText: point.priorText })}
             </span>
             {index !== defaultIndex && (
               <button type="button" onClick={() => setIndex(defaultIndex)}
                       className="eyebrow text-ash hover:text-chalk focus:outline-none
                                  focus-visible:ring-1 focus-visible:ring-tech">
-                reset
+                {t("reset")}
               </button>
             )}
           </div>
           <RangeField index={index} count={data.curve.length} onChange={setIndex}
-                      label="Assumed rate of earnings manipulation" />
+                      label={t("Assumed rate of earnings manipulation")} />
           <p className="mt-2 text-meta leading-relaxed text-ash">
             {point.label
               ? <>
                   <span className="text-body">{point.label}</span> — {point.source}
-                  {point.event ? `, counting ${point.event}` : ""}.
+                  {point.event ? t(", counting {event}", { event: point.event }) : ""}.
                   {point.extrapolated && (
                     <span className="text-warn">
-                      {" "}Beneish&apos;s error rates were never measured against that
-                      broader definition, so this stop brackets the range rather than
-                      answering the same question.
+                      {" "}{t("Beneish's error rates were never measured against that broader definition, so this stop brackets the range rather than answering the same question.")}
                     </span>
                   )}
                 </>
-              : "Between the published estimates. Move it to a labelled stop to see whose."}
+              : t("Between the published estimates. Move it to a labelled stop to see whose.")}
           </p>
         </div>
 
@@ -131,7 +131,7 @@ function FlagWorth({ data, explain }: {
         )}
 
         <p className="text-meta leading-relaxed text-ash">
-          {data.characteristics.note} {data.caveat} Source: {data.characteristics.citation}.
+          {t("{note} {caveat} Source: {citation}.", { note: data.characteristics.note, caveat: data.caveat, citation: data.characteristics.citation })}
         </p>
       </CardBody>
     </Card>
@@ -177,6 +177,7 @@ function Dimension({
  * mistake (`test_beneish_and_altman_point_opposite_ways`).
  */
 export function QualityPanel({ data }: { data: QualityResponse }) {
+  const t = useT();
   const detail = useDetail();
   const simple = detail === "simple";
   const ex: ExplainMap = data.explain ?? {};
@@ -185,7 +186,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
     return (
       <div className="space-y-4 animate-rise">
       <Card>
-        <CardHeader><CardTitle>Accounting quality</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("Accounting quality")}</CardTitle></CardHeader>
         <CardBody>
           <p className="text-base leading-relaxed text-ash">{data.reason}</p>
           {data.sector && (
@@ -213,7 +214,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
       {/* ---------------- the summary in plain English ---------------- */}
       <Card tone={verdictTone}>
         <CardHeader>
-          <CardTitle>What the filings say</CardTitle>
+          <CardTitle>{t("What the filings say")}</CardTitle>
           <span className="num text-meta font-semibold" style={{ color: TONE_HEX[verdictTone] }}>
             {data.verdict ?? "—"}
           </span>
@@ -221,8 +222,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
         <CardBody className="space-y-3">
           <p className="text-base leading-relaxed text-body">{data.headline}</p>
           <p className="prose-col text-meta text-ash">
-            Three published tests: is the business improving, is it far from running out of
-            money, do the numbers look massaged. All read the accounts, not the price.
+            {t("Three published tests: is the business improving, is it far from running out of money, do the numbers look massaged. All read the accounts, not the price.")}
           </p>
         </CardBody>
       </Card>
@@ -243,16 +243,15 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
       {data.domains && (
         <Card>
           <CardHeader>
-            <CardTitle>Where these numbers come from</CardTitle>
+            <CardTitle>{t("Where these numbers come from")}</CardTitle>
             <span className="font-mono text-micro text-ash">
-              scored on {data.domains.fiscalYear ?? "undated"} filings
+              {t("scored on {value} filings", { value: data.domains.fiscalYear ?? "undated" })}
             </span>
           </CardHeader>
           <CardBody className="px-0">
             <div className="px-5 pb-3">
               <p className="prose-col text-meta text-ash">
-                These samples ended between 1965 and 1996, so every use today is outside them.
-                That is provenance, not a warning.
+                {t("These samples ended between 1965 and 1996, so every use today is outside them. That is provenance, not a warning.")}
               </p>
             </div>
             {Object.entries(data.domains.screens).map(([key, screen]) => (
@@ -262,7 +261,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                   <span className="text-meta text-ash">{screen.citation}</span>
                 </div>
                 <p className="px-5 pb-2 text-meta leading-relaxed text-ash">
-                  Fitted on {screen.sample}.
+                  {t("Fitted on {sample}.", { sample: screen.sample })}
                 </p>
                 <ul>
                   {screen.dimensions.map((dimension) => (
@@ -273,8 +272,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
               </div>
             ))}
             <div className="border-t border-rule px-5 pb-1 pt-3">
-              <Note>No overall fit score: counting matching rows would be a reliability
-                rating none of these papers supports.</Note>
+              <Note>{t("No overall fit score: counting matching rows would be a reliability rating none of these papers supports.")}</Note>
             </div>
           </CardBody>
         </Card>
@@ -283,9 +281,9 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
       {piotroski && piotroski.signals.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>The nine health checks</CardTitle>
+            <CardTitle>{t("The nine health checks")}</CardTitle>
             <span className="font-mono text-micro text-ash">
-              {piotroski.signalsAvailable} of {piotroski.signalsTotal} computable
+              {t("{signalsAvailable} of {signalsTotal} computable", { signalsAvailable: piotroski.signalsAvailable, signalsTotal: piotroski.signalsTotal })}
             </span>
           </CardHeader>
           <CardBody className="px-0">
@@ -297,7 +295,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                                border-ruleSoft px-5 py-2 last:border-0">
                   <span className="mt-0.5 shrink-0">
                     {signal.passed === null
-                      ? <Minus aria-label="not computable" className="h-3.5 w-3.5 text-ash" />
+                      ? <Minus aria-label={t("not computable")} className="h-3.5 w-3.5 text-ash" />
                       : signal.passed
                         ? <Check aria-label="pass" className="h-3.5 w-3.5 text-acc" />
                         : <X aria-label="fail" className="h-3.5 w-3.5 text-dist" />}
@@ -316,8 +314,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
               ))}
             </ul>
             <p className="prose-col px-5 pt-3 text-meta text-ash">
-              A tick means improved on last year, or already healthy. Anything not computable
-              scores nothing — never a pass.
+              {t("A tick means improved on last year, or already healthy. Anything not computable scores nothing — never a pass.")}
             </p>
           </CardBody>
         </Card>
@@ -327,7 +324,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
         <div className="grid gap-4 lg:grid-cols-2">
           {altman && (
             <Card tone={ex.altman?.tone}>
-              <CardHeader><CardTitle>How far from running out of money</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t("How far from running out of money")}</CardTitle></CardHeader>
               <CardBody className="space-y-3">
                 <p className="text-base leading-relaxed text-body">{altman.reading}</p>
                 <dl className="space-y-1 text-micro">
@@ -344,15 +341,14 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                     );
                   })}
                 </dl>
-                <Note>Safe above 5.85, distress below 4.35; between them the model declines
-                  to call it. Emerging-market version, so IDX and US share a scale.</Note>
+                <Note>{t("Safe above 5.85, distress below 4.35; between them the model declines to call it. Emerging-market version, so IDX and US share a scale.")}</Note>
               </CardBody>
             </Card>
           )}
 
           {beneish && (
             <Card tone={ex.beneish?.tone}>
-              <CardHeader><CardTitle>Do the earnings look massaged?</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t("Do the earnings look massaged?")}</CardTitle></CardHeader>
               <CardBody className="space-y-3">
                 <p className="text-base leading-relaxed text-body">{beneish.reading}</p>
                 <dl className="space-y-1 text-micro">
@@ -369,8 +365,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
                     );
                   })}
                 </dl>
-                <Note>A screen, not a finding: most flags are false alarms. Every row is this
-                  year over last, so 1.00 means unchanged.</Note>
+                <Note>{t("A screen, not a finding: most flags are false alarms. Every row is this year over last, so 1.00 means unchanged.")}</Note>
               </CardBody>
             </Card>
           )}
@@ -378,7 +373,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
       )}
 
       <Note>
-        None of the three was built on banks or insurers, so none is reported for them.
+        {t("None of the three was built on banks or insurers, so none is reported for them.")}
       </Note>
     </div>
   );

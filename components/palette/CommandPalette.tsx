@@ -158,7 +158,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         run: () => go(marketsHref("exposure")) },
       // Only where the owner runs the app, like the view it opens.
       ...(privateTier ? [{ id: "go:scan", group: "Go to" as const,
-                           label: "Markets: latest local scan", keywords: "scanner report private",
+                           label: t("Markets: latest local scan"), keywords: "scanner report private",
                            run: () => go(marketsHref("scan")) }] : []),
       { id: "go:compare", group: "Go to", label: t("Compare companies"),
         keywords: "side by side columns bandingkan", run: () => go(compareHref([])) },

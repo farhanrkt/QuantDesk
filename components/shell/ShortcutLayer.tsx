@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Kbd } from "@/components/ui/kbd";
 import { matchShortcut, type ShortcutAction } from "@/lib/shortcuts";
+import { msg, useT } from "@/lib/i18n";
 
 /**
  * The app's keyboard shortcuts, and the one dialog that lists them.
@@ -16,17 +17,18 @@ import { matchShortcut, type ShortcutAction } from "@/lib/shortcuts";
 export const SHORTCUT_EVENT = "quantdesk:shortcut";
 
 const LIST: { keys: string[]; what: string }[] = [
-  { keys: ["mod", "K"], what: "Search companies, pages and settings" },
-  { keys: ["/"], what: "The same, without the modifier" },
-  { keys: ["["], what: "Previous tab on a stock page" },
-  { keys: ["]"], what: "Next tab on a stock page" },
-  { keys: ["w"], what: "Add or remove this stock from your watchlist" },
-  { keys: ["?"], what: "This list" },
+  { keys: ["mod", "K"], what: msg("Search companies, pages and settings") },
+  { keys: ["/"], what: msg("The same, without the modifier") },
+  { keys: ["["], what: msg("Previous tab on a stock page") },
+  { keys: ["]"], what: msg("Next tab on a stock page") },
+  { keys: ["w"], what: msg("Add or remove this stock from your watchlist") },
+  { keys: ["?"], what: msg("This list") },
 ];
 
 export function ShortcutLayer({
   onPalette, paletteOpen,
 }: { onPalette: () => void; paletteOpen: boolean }) {
+  const t = useT();
   const help = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -51,8 +53,8 @@ export function ShortcutLayer({
             className="mt-[14vh] w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-rule bg-panel
                        p-0 text-body shadow-pop backdrop:bg-ink/70 open:animate-rise print:hidden">
       <div className="flex items-center justify-between border-b border-rule px-5 py-3.5">
-        <h2 id="shortcut-help-title" className="text-h3">Keyboard shortcuts</h2>
-        <button type="button" aria-label="Close" onClick={() => help.current?.close()}
+        <h2 id="shortcut-help-title" className="text-h3">{t("Keyboard shortcuts")}</h2>
+        <button type="button" aria-label={t("Close")} onClick={() => help.current?.close()}
                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ash
                            hover:text-chalk focus:outline-none focus-visible:ring-2 focus-visible:ring-tech">
           <X aria-hidden className="h-4 w-4" />
@@ -61,13 +63,13 @@ export function ShortcutLayer({
       <ul className="divide-y divide-ruleSoft px-5 py-2">
         {LIST.map((row) => (
           <li key={row.what} className="flex items-center justify-between gap-4 py-2.5 text-meta">
-            <span>{row.what}</span>
+            <span>{t(row.what)}</span>
             <Kbd keys={row.keys} />
           </li>
         ))}
       </ul>
       <p className="border-t border-rule px-5 py-3 text-micro text-faint">
-        None of these fire while you are typing in a field.
+        {t("None of these fire while you are typing in a field.")}
       </p>
     </dialog>
   );

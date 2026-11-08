@@ -17,6 +17,8 @@ import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
 import { alpha, palette } from "@/lib/palette";
 import { SensitivityGrid } from "@/components/valuation/SensitivityGrid";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { useT } from "@/lib/i18n";
+import { label as wordFor } from "@/lib/labels";
 
 const DCF = palette.dcf;
 const DDM = palette.ddm;
@@ -32,6 +34,7 @@ export function ValuationPanel({
   busy: boolean;
   csvUrl: string;
 }) {
+  const t = useT();
   const detail = useDetail();
   const simple = detail === "simple";
   const ex: ExplainMap = data.explain ?? {};
@@ -49,10 +52,10 @@ export function ValuationPanel({
           discountFactor: r.discountFactor, presentValue: r.presentValueRaw,
         })),
         [
-          { key: "year", label: "Year" },
-          { key: "stream", label: data.streamLabel },
-          { key: "discountFactor", label: "Discount Factor" },
-          { key: "presentValue", label: "Present Value" },
+          { key: "year", label: t("Year") },
+          { key: "stream", label: wordFor(data.streamLabel) },
+          { key: "discountFactor", label: t("Discount Factor") },
+          { key: "presentValue", label: t("Present Value") },
         ]
       )
     );
@@ -96,42 +99,37 @@ export function ValuationPanel({
           be read as a price target, which is the one thing it cannot be. */}
       <Card accent={accent}>
         <CardHeader>
-          <CardTitle>What this is worth, and how sure the model is</CardTitle>
+          <CardTitle>{t("What this is worth, and how sure the model is")}</CardTitle>
           <span className="num text-meta font-semibold" style={{ color: verdictColor }}>
             {verdictLabel(data.verdict)}
           </span>
         </CardHeader>
         <CardBody className="space-y-3">
           <p className="text-base leading-relaxed text-body">
-            Today the market prices {data.ticker} at {data.priceLabel}. Projecting the
-            {data.engine === "DCF" ? " cash the business generates" :
-             data.engine === "DDM" ? " dividends the business pays" :
-             " profits earned above the cost of its capital"} forward and discounting them back
-            at {pct(data.discountRate, 1)} a year puts it nearer {mc.p50Label} — a range of
-            {" "}{mc.p25Label} to {mc.p75Label} once the assumptions are allowed to vary.
+            {t("Today the market prices {ticker} at {priceLabel}. Projecting the{value} forward and discounting them back at {discountRate} a year puts it nearer {p50Label} — a range of {p25Label} to {p75Label} once the assumptions are allowed to vary.", { ticker: data.ticker, priceLabel: data.priceLabel, value: data.engine === "DCF" ? t(" cash the business generates") :
+             data.engine === "DDM" ? t(" dividends the business pays") :
+             t(" profits earned above the cost of its capital"), discountRate: pct(data.discountRate, 1), p50Label: mc.p50Label, p25Label: mc.p25Label, p75Label: mc.p75Label })}
           </p>
           <Note tone="warn">
-            This is not a price forecast. It is what the business is worth <em>if</em> the growth
-            and discount rates below are right — and those are estimates. Which is why the answer
-            is a range, and why every input is yours to change.
+            {t("This is not a price forecast. It is what the business is worth")}{" "}<em>{t("if")}</em>{" "}{t("the growth and discount rates below are right — and those are estimates. Which is why the answer is a range, and why every input is yours to change.")}
           </Note>
         </CardBody>
       </Card>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label="Market price" value={data.priceLabel}
-              sub={data.priceAsOf ? `close of ${data.priceAsOf}`
+        <Stat label={t("Market price")} value={data.priceLabel}
+              sub={data.priceAsOf ? t("close of {date}", { date: data.priceAsOf })
                                   : data.priceSource ?? undefined} />
         {/* NO `tone` OVERRIDE. Colouring by the sign of `upside` painted a 5%
             gap bright green while `_upside` — which knows that gap is inside
             the noise of a model whose P25-P75 can span 60% — calls it neutral.
             `ExplainedStat` falls back to `explain.tone`, which is the whole
             point of deciding direction once, in Python. */}
-        <ExplainedStat label="Model's middle estimate" value={mc.p50Label}
+        <ExplainedStat label={t("Model's middle estimate")} value={mc.p50Label}
                        explain={ex.upside}
-                       sub={`${signedPct(mc.upside)} vs market`} />
+                       sub={t("{gap} vs market", { gap: signedPct(mc.upside) })} />
         <ExplainedStat explain={ex.valuationSpread}
-                       label="Pessimistic to optimistic"
+                       label={t("Pessimistic to optimistic")}
                        value={`${mc.p25Label} – ${mc.p75Label}`} />
         <ExplainedStat explain={ex.probUndervalued} />
         <ExplainedStat explain={ex.terminalShare} />
@@ -152,7 +150,7 @@ export function ValuationPanel({
               <div className="min-w-0 flex-1">
                 <div className="eyebrow mb-1.5 flex items-center gap-1.5">
                   <CornerUpLeft aria-hidden className="h-3 w-3" />
-                  Working the model backwards
+                  {t("Working the model backwards")}
                 </div>
                 <p className="prose-col text-base leading-relaxed text-body">
                   {ex.impliedGrowth.reading}
@@ -164,7 +162,7 @@ export function ValuationPanel({
               </div>
               <div className="shrink-0 text-right">
                 <div className="eyebrow mb-1 flex items-center justify-end gap-1.5">
-                  Implied growth
+                  {t("Implied growth")}
                   <Explain explain={ex.impliedGrowth} />
                 </div>
                 <div className={cn("num text-h2 font-semibold leading-none",
@@ -172,10 +170,10 @@ export function ValuationPanel({
                   {ex.impliedGrowth.valueText}
                 </div>
                 <div className="mt-1 text-meta text-ash">
-                  a year, for five years
+                  {t("a year, for five years")}
                 </div>
                 <div className="mt-2 border-t border-rule pt-2 text-micro text-ash">
-                  you assumed{" "}
+                  {t("you assumed")}{" "}
                   <span className="num text-body">{pct(data.baseCase.assumedGrowth)}</span>
                 </div>
               </div>
@@ -188,13 +186,13 @@ export function ValuationPanel({
 
       <Card accent={accent}>
         <CardHeader>
-          <CardTitle>Distribution of simulated fair value</CardTitle>
+          <CardTitle>{t("Distribution of simulated fair value")}</CardTitle>
           <div className="flex items-center gap-2">
             <Badge color={accent}>{data.engine}</Badge>
             <Badge color={verdictColor}>{verdictLabel(data.verdict)}</Badge>
             {/* The full draw set never crosses the wire, so this one is a
                 server round trip rather than a client-side export. */}
-            <DownloadButton href={csvUrl}>Simulation CSV</DownloadButton>
+            <DownloadButton href={csvUrl}>{t("Simulation CSV")}</DownloadButton>
           </div>
         </CardHeader>
         <CardBody>
@@ -210,8 +208,8 @@ export function ValuationPanel({
                 cursor={{ fill: "rgba(255,255,255,0.04)" }}
                 contentStyle={{ background: palette.ink, border: `1px solid ${palette.rule}`,
                                 borderRadius: 4, fontSize: 12 }}
-                labelFormatter={(v) => `Fair value ${num(Number(v))}`}
-                formatter={(v: number) => [`${v} iterations`, ""]} />
+                labelFormatter={(v) => t("Fair value {value}", { value: num(Number(v)) })}
+                formatter={(v: number) => [t("{count} iterations", { count: v }), ""]} />
               <ReferenceArea x1={mc.p25} x2={mc.p75} fill={UP} fillOpacity={0.06} />
               <Bar dataKey="count" fill={accent} fillOpacity={0.55} isAnimationActive={false} />
               <ReferenceLine x={data.price} stroke={MARKET} strokeWidth={2}
@@ -221,12 +219,7 @@ export function ValuationPanel({
             </BarChart>
           </ResponsiveContainer>
           <p className="mt-3 text-meta leading-relaxed text-ash">
-            {data.assumptions.iterations.toLocaleString()} iterations.{" "}
-            {data.engine === "DCF" ? "FCF growth" : "Dividend growth"} ~ N({pct(data.assumptions.growth)},{" "}
-            {pct(data.assumptions.sdGrowth)}), {data.rateName} ~ N({pct(data.discountRate, 2)},{" "}
-            {pct(data.assumptions.sdRate, 2)}), terminal growth ~ N({pct(data.assumptions.terminalGrowth, 2)},{" "}
-            {pct(data.assumptions.sdTerminal, 2)}). Display trimmed at the 0.5th/99.5th percentiles;
-            every statistic above uses the full sample.
+            {t("{iterations} iterations. {value} ~ N({growth}, {sdGrowth}), {rateName} ~ N({discountRate}, {sdRate}), terminal growth ~ N({terminalGrowth}, {sdTerminal}). Display trimmed at the 0.5th/99.5th percentiles; every statistic above uses the full sample.", { iterations: data.assumptions.iterations.toLocaleString(), value: data.engine === "DCF" ? t("FCF growth") : t("Dividend growth"), growth: pct(data.assumptions.growth), sdGrowth: pct(data.assumptions.sdGrowth), rateName: wordFor(data.rateName), discountRate: pct(data.discountRate, 2), sdRate: pct(data.assumptions.sdRate, 2), terminalGrowth: pct(data.assumptions.terminalGrowth, 2), sdTerminal: pct(data.assumptions.sdTerminal, 2) })}
           </p>
         </CardBody>
       </Card>
@@ -247,22 +240,22 @@ export function ValuationPanel({
         <Card className="min-w-0">
           <CardHeader>
             <CardTitle>
-              Base-case {data.engine === "DCF" ? "cash flow" : "dividend"} projection
+              {t("Base-case {value} projection", { value: data.engine === "DCF" ? t("cash flow") : "dividend" })}
             </CardTitle>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-micro text-ash">{data.assumptions.basis}</span>
-              <DownloadButton onClick={downloadSchedule}>CSV</DownloadButton>
+              <span className="font-mono text-micro text-ash">{wordFor(data.assumptions.basis)}</span>
+              <DownloadButton onClick={downloadSchedule}>{t("CSV")}</DownloadButton>
             </div>
           </CardHeader>
           <CardBody className="px-0">
-            <ScrollRegion label="Projection schedule">
+            <ScrollRegion label={t("Projection schedule")}>
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                    <th>Year</th>
-                    <th className="text-right">{data.streamLabel}</th>
-                    <th className="text-right">Discount factor</th>
-                    <th className="text-right">Present value</th>
+                    <th>{t("Year")}</th>
+                    <th className="text-right">{wordFor(data.streamLabel)}</th>
+                    <th className="text-right">{t("Discount factor")}</th>
+                    <th className="text-right">{t("Present value")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -281,9 +274,9 @@ export function ValuationPanel({
             {data.history.length > 0 && (
               <>
                 <div className="eyebrow px-5 pb-2 pt-5">
-                  {data.engine === "DCF" ? "Historical free cash flow" : "Declared dividend history"}
+                  {data.engine === "DCF" ? t("Historical free cash flow") : t("Declared dividend history")}
                 </div>
-                <ScrollRegion label={data.engine === "DCF" ? "Historical free cash flow" : "Declared dividend history"}>
+                <ScrollRegion label={data.engine === "DCF" ? t("Historical free cash flow") : t("Declared dividend history")}>
                   <table className="w-full text-left text-meta">
                     <tbody>
                       {data.history.map((row, i) => (
@@ -307,11 +300,11 @@ export function ValuationPanel({
           <Card accent={accent}>
             <CardHeader>
               <CardTitle>
-                {data.engine === "DCF" ? "Enterprise → equity bridge" : "Value composition"}
+                {data.engine === "DCF" ? t("Enterprise → equity bridge") : t("Value composition")}
               </CardTitle>
             </CardHeader>
             <CardBody className="px-0">
-              <ScrollRegion label={data.engine === "DCF" ? "Enterprise to equity bridge" : "Value composition"}>
+              <ScrollRegion label={data.engine === "DCF" ? t("Enterprise to equity bridge") : t("Value composition")}>
                 <table className="w-full text-left text-meta">
                   <tbody>
                     {data.bridge.map((row) => (
@@ -327,9 +320,9 @@ export function ValuationPanel({
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>Model diagnostics</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t("Model diagnostics")}</CardTitle></CardHeader>
             <CardBody className="px-0">
-              <ScrollRegion label="Model diagnostics">
+              <ScrollRegion label={t("Model diagnostics")}>
                 <table className="w-full text-left text-meta">
                   <tbody>
                     {data.diagnostics.map((row) => (
@@ -347,11 +340,8 @@ export function ValuationPanel({
       </div>
 
       <p className="text-meta leading-relaxed text-ash">
-        Routed to the {data.engine} because {data.routeReason}. The KPI strip reports the Monte
-        Carlo <b className="text-body">median</b>; the bridge reports the{" "}
-        <b className="text-body">base case</b>. They differ because the price distribution is
-        right-skewed in 1/(r − g). Data from Yahoo Finance, unaudited. A research tool, not
-        investment advice.
+        {t("Routed to the {engine} because {routeReason}. The KPI strip reports the Monte Carlo", { engine: data.engine, routeReason: data.routeReason })}{" "}<b className="text-body">{t("median")}</b>{t("; the bridge reports the")}{" "}
+        <b className="text-body">{t("base case")}</b>{t(". They differ because the price distribution is right-skewed in 1/(r − g). Data from Yahoo Finance, unaudited. A research tool, not investment advice.")}
       </p>
     </div>
   );

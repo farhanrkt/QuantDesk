@@ -3,7 +3,7 @@
 import { track } from "@vercel/analytics";
 import { useCallback, useEffect, useRef } from "react";
 import { createTtlCache } from "./cache";
-import { getLang, useLang } from "./i18n";
+import { requestLang, useLang } from "./i18n";
 import { readSession, useSessionState, writeSession } from "./session";
 import type { RunTuning } from "./url";
 import type {
@@ -66,7 +66,7 @@ async function unwrap<T>(res: Response): Promise<T> {
  * the board and the calendar still name nothing.
  */
 function withLang<P extends Record<string, unknown>>(params: P): P {
-  const lang = getLang();
+  const lang = requestLang();
   return lang === "en" ? params : { ...params, lang };
 }
 
@@ -100,7 +100,7 @@ async function post<T>(
   body: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
-  const lang = getLang();
+  const lang = requestLang();
   return unwrap<T>(await fetch(lang === "en" ? path : `${path}?lang=${lang}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -154,11 +154,19 @@ const IDLE = { status: "idle" } as const;
  * same key, and written back under the key it was STARTED with, so a late
  * answer can never land under another company's header.
  */
+/** Where a request's answer is kept: per subject, and per language it was written in. */
+function requestKey(name: string): string {
+  const lang = requestLang();
+  return lang === "en" ? name : `${name}@${lang}`;
+}
+
 function useRequest<P, T>(name: string, fetcher: (params: P, signal: AbortSignal) => Promise<T>) {
   // Per language as well as per subject: an answer is written in one language,
   // and switching must not leave the other one on screen as if it were current.
-  const lang = useLang();
-  const key = lang === "en" ? name : `${name}@${lang}`;
+  // Subscribed so a switch re-renders and re-keys; the key itself follows the
+  // language requests ask for, which is settled before the first fetch.
+  useLang();
+  const key = requestKey(name);
   const [state] = useSessionState<Engine<T>>(key, IDLE);
   const fetchRef = useRef(fetcher);
   fetchRef.current = fetcher;
@@ -514,7 +522,7 @@ export function useUniverses() {
   const { state, run } = useRequest("universes",
     (_: void, signal: AbortSignal) => get<UniversesResponse>("/api/rank/universes", {}, signal));
   useEffect(() => {
-    const current = readSession<Engine<UniversesResponse>>("universes");
+    const current = readSession<Engine<UniversesResponse>>(requestKey("universes"));
     if (!current || current.status === "idle" || current.status === "error") run(undefined);
   }, [run]);
   return { state, load: () => run(undefined) };
@@ -634,7 +642,7 @@ export function useScan(market: Market, enabled = true) {
   // tier is off: there is nothing to read, and no panel to read it into.
   useEffect(() => {
     if (!enabled) return;
-    const current = readSession<Engine<ScanResponse>>(key);
+    const current = readSession<Engine<ScanResponse>>(requestKey(key));
     if (!current || current.status === "idle") run(market);
   }, [key, market, run, enabled]);
   return { state, reload: () => run(market) };
@@ -653,7 +661,7 @@ export function useCapabilities(): { privateTier: boolean } {
   const { state, run } = useRequest("capabilities",
     (_: void, signal: AbortSignal) => get<Capabilities>("/api/capabilities", {}, signal));
   useEffect(() => {
-    const current = readSession<Engine<Capabilities>>("capabilities");
+    const current = readSession<Engine<Capabilities>>(requestKey("capabilities"));
     if (!current || current.status === "idle" || current.status === "error") run(undefined);
   }, [run]);
   return { privateTier: state.status === "ready" && state.data.privateTier === true };

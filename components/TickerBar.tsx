@@ -6,6 +6,7 @@ import { useDetail } from "@/components/ui/explain";
 import { Input, Select } from "@/components/ui/input";
 import type { RunOptions } from "@/lib/api";
 import { PRESETS } from "@/lib/url";
+import { useT } from "@/lib/i18n";
 
 
 /**
@@ -36,6 +37,7 @@ export function TickerBar({
   busy: boolean;
   autoFocus?: boolean;
 }) {
+  const t = useT();
   const guided = useDetail() === "simple";
 
   const set = <K extends keyof RunOptions>(key: K, value: RunOptions[K]) =>
@@ -49,64 +51,64 @@ export function TickerBar({
   const controls = (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
       <label className="flex items-center gap-2 text-ash">
-        <span className="eyebrow">Detection</span>
+        <span className="eyebrow">{t("Detection")}</span>
         <Select value={opts.mode} onChange={(e) => set("mode", e.target.value)} className="h-8">
-          <option value="threshold">Threshold</option>
-          <option value="mad">Robust (MAD)</option>
-          <option value="quota">Fixed quota</option>
-          <option value="walkforward">Walk-forward</option>
+          <option value="threshold">{t("Threshold")}</option>
+          <option value="mad">{t("Robust (MAD)")}</option>
+          <option value="quota">{t("Fixed quota")}</option>
+          <option value="walkforward">{t("Walk-forward")}</option>
         </Select>
       </label>
 
       {/* Each mode's own parameter, shown only when it does something. */}
       {opts.mode === "threshold" && (
         <label className="flex items-center gap-2 text-ash">
-          <span className="eyebrow">Cutoff</span>
+          <span className="eyebrow">{t("Cutoff")}</span>
           <input type="number" step={0.01} min={-0.5} max={0.5}
                  value={opts.scoreThreshold}
                  onChange={(e) => set("scoreThreshold", Number(e.target.value))}
-                 aria-label="Decision score cutoff"
+                 aria-label={t("Decision score cutoff")}
                  className="num h-9 w-24 rounded border border-rule bg-sunken px-2.5 text-meta
                             text-chalk focus:border-tech/60 focus:outline-none
                             focus-visible:ring-2 focus-visible:ring-tech" />
-          <span className="text-micro text-ash">more negative = stricter</span>
+          <span className="text-micro text-ash">{t("more negative = stricter")}</span>
         </label>
       )}
       {opts.mode === "quota" && (
         <label className="flex items-center gap-2 text-ash">
-          <span className="eyebrow">Quota</span>
+          <span className="eyebrow">{t("Quota")}</span>
           <input type="number" step={0.5} min={0.5} max={10}
                  value={+(opts.contamination * 100).toFixed(2)}
                  onChange={(e) => set("contamination", Number(e.target.value) / 100)}
-                 aria-label="Anomaly quota percent"
+                 aria-label={t("Anomaly quota percent")}
                  className="num h-9 w-24 rounded border border-rule bg-sunken px-2.5 text-meta
                             text-chalk focus:border-tech/60 focus:outline-none
                             focus-visible:ring-2 focus-visible:ring-tech" />
-          <span className="text-micro text-ash">% of days, forced</span>
+          <span className="text-micro text-ash">{t("% of days, forced")}</span>
         </label>
       )}
       {opts.mode === "mad" && (
         <label className="flex items-center gap-2 text-ash">
-          <span className="eyebrow">Tolerance</span>
+          <span className="eyebrow">{t("Tolerance")}</span>
           <input type="number" step={0.5} min={1} max={6}
                  value={opts.madK}
                  onChange={(e) => set("madK", Number(e.target.value))}
-                 aria-label="MAD tolerance"
+                 aria-label={t("MAD tolerance")}
                  className="num h-9 w-24 rounded border border-rule bg-sunken px-2.5 text-meta
                             text-chalk focus:border-tech/60 focus:outline-none
                             focus-visible:ring-2 focus-visible:ring-tech" />
-          <span className="text-micro text-ash">MADs below rolling median</span>
+          <span className="text-micro text-ash">{t("MADs below rolling median")}</span>
         </label>
       )}
 
       <label className="flex items-center gap-2 text-ash">
-        <span className="eyebrow">Anomaly window</span>
+        <span className="eyebrow">{t("Anomaly window")}</span>
         <Select value={opts.period} onChange={(e) => set("period", e.target.value)} className="h-8">
           {["6mo", "1y", "2y", "5y", "max"].map((p) => <option key={p} value={p}>{p}</option>)}
         </Select>
       </label>
       <label className="flex items-center gap-2 text-ash">
-        <span className="eyebrow">Chart range</span>
+        <span className="eyebrow">{t("Chart range")}</span>
         <Select value={opts.range} onChange={(e) => set("range", e.target.value)} className="h-8">
           {["3mo", "6mo", "1y", "2y", "5y", "10y", "max"].map((p) => <option key={p} value={p}>{p}</option>)}
         </Select>
@@ -122,25 +124,25 @@ export function TickerBar({
           <Input
             value={opts.ticker}
             onChange={(e) => set("ticker", e.target.value)}
-            placeholder="Ticker — AAPL, BBCA.JK, BTC-USD"
-            aria-label="Ticker symbol"
+            placeholder={t("Ticker — AAPL, BBCA.JK, BTC-USD")}
+            aria-label={t("Ticker symbol")}
             autoFocus={autoFocus}
             autoComplete="off"
             spellCheck={false}
             className="pl-9"
           />
         </div>
-        <Select value={opts.market} aria-label="Market"
+        <Select value={opts.market} aria-label={t("Market")}
                 onChange={(e) => set("market", e.target.value as "US" | "ID")}>
-          <option value="US">US market</option>
-          <option value="ID">IDX (.JK)</option>
+          <option value="US">{t("US market")}</option>
+          <option value="ID">{t("IDX (.JK)")}</option>
         </Select>
         {/* NO "n/4" COUNTER. A full run is one request, so the count went from
             0 straight to 4 and read "Running 0/4" for the whole wait — a
             progress bar that never moves. The run status under the bar says
             how long it has been instead, which is true. */}
         <Button type="submit" disabled={busy || !opts.ticker.trim()} aria-busy={busy || undefined}>
-          {busy ? "Running…" : "Run all lenses"}
+          {busy ? t("Running…") : t("Run all lenses")}
         </Button>
       </div>
 
@@ -148,11 +150,10 @@ export function TickerBar({
       {opts.market === "ID" && !opts.ticker.trim().toUpperCase().endsWith(".JK")
         && opts.ticker.trim() && (
         <p className="text-meta text-ash">
-          Will resolve to{" "}
+          {t("Will resolve to")}{" "}
           <span className="num rounded bg-sunken px-1.5 py-0.5 font-semibold text-chalk">
-            {opts.ticker.trim().toUpperCase()}.JK
-          </span>{" "}
-          for every engine.
+            {t("{ticker}.JK", { ticker: opts.ticker.trim().toUpperCase() })}
+          </span>{" "}{t("for every engine.")}
         </p>
       )}
 
@@ -163,7 +164,7 @@ export function TickerBar({
                               focus-visible:outline-none focus-visible:ring-2
                               focus-visible:ring-tech">
             <SlidersHorizontal aria-hidden className="h-4 w-4 shrink-0" />
-            Advanced settings (4)
+            {t("Advanced settings (4)")}
           </summary>
           <div className="mt-4 rounded-lg border border-ruleSoft bg-sunken px-4 py-3.5">
             {controls}
@@ -174,7 +175,7 @@ export function TickerBar({
       {/* Presets stay OUT of the disclosure in both modes. They are how a
           newcomer gets a first result without already knowing a ticker. */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-meta text-faint">Try:</span>
+        <span className="text-meta text-faint">{t("Try:")}</span>
         {PRESETS.map((preset) => (
           <Button key={preset} variant="chip" size="xs"
                   onClick={() => { const next = { ...opts, ticker: preset,

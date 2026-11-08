@@ -8,6 +8,7 @@ import { levelText, relationLabel, type Mark } from "@/lib/marketboard";
 import type { BoardRow, Market } from "@/lib/types";
 import { marketsHref } from "@/lib/url";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /**
  * One instrument as a tile: what it is, where it is, how far it moved, and the
@@ -33,11 +34,12 @@ export function PriceTile({
   onOpen?: () => void;
   className?: string;
 }) {
+  const t = useT();
   const related = marks.length > 0;
   const said = [
-    `${row.name}: ${row.available ? levelText(row) : "no recent price"}`,
+    `${row.name}: ${row.available ? levelText(row) : t("no recent price")}`,
     row.available && moveText ? moveText : null,
-    row.unusual ? "unusual for it" : null,
+    row.unusual ? t("unusual for it") : null,
     ...marks.map((m) => m.text),
   ].filter(Boolean).join(", ");
   return (
@@ -51,7 +53,7 @@ export function PriceTile({
           <span className={cn("truncate text-meta", related ? "text-chalk" : "text-ash")}>{row.short}</span>
           {row.unusual && (
             <span className="shrink-0 rounded-sm border border-ruleStrong px-1 text-micro leading-tight text-chalk">
-              unusual
+              {t("unusual")}
             </span>
           )}
         </div>
@@ -66,7 +68,7 @@ export function PriceTile({
             </div>
           </>
         ) : (
-          <div className="mt-1 text-micro text-ash">No recent price</div>
+          <div className="mt-1 text-micro text-ash">{t("No recent price")}</div>
         )}
         {related && (
           <div className="mt-1.5 flex items-center gap-1 text-micro text-ash">
@@ -83,12 +85,13 @@ export function PriceTile({
 export function MarketSwitch({
   market, onChange, className,
 }: { market: Market; onChange: (market: Market) => void; className?: string }) {
+  const t = useT();
   return (
-    <div role="group" aria-label="Which market's board" className={cn("flex gap-1", className)}>
+    <div role="group" aria-label={t("Which market's board")} className={cn("flex gap-1", className)}>
       {(["US", "ID"] as const).map((code) => (
         <Button key={code} variant="chip" size="xs" aria-pressed={market === code}
                 onClick={() => onChange(code)}>
-          {code === "ID" ? "IDX" : "US"}
+          {code === "ID" ? t("IDX") : t("US")}
         </Button>
       ))}
     </div>

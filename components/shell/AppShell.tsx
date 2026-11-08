@@ -10,6 +10,7 @@ import { ShortcutLayer } from "@/components/shell/ShortcutLayer";
 import { TopBar } from "@/components/shell/TopBar";
 import { WorkspaceProvider } from "@/components/shell/workspace";
 import { ToastProvider } from "@/components/ui/toaster";
+import { useT } from "@/lib/i18n";
 
 /**
  * Everything that is the same on every page: the reader's stated preferences,
@@ -21,6 +22,7 @@ import { ToastProvider } from "@/components/ui/toaster";
  * sent anywhere; the request layer cannot import it (check_frontend.mjs).
  */
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const t = useT();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
@@ -33,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <a href="#main"
              className="sr-only z-50 rounded-lg bg-tech px-4 py-2 font-semibold text-ink
                         focus:not-sr-only focus:fixed focus:left-4 focus:top-3">
-            Skip to content
+            {t("Skip to content")}
           </a>
           <TopBar onSearch={openPalette} />
           {/* THE PAGE AND THE MARKETS PANEL SIDE BY SIDE from 1280px. The page
@@ -54,8 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <footer className="border-t border-rule print:border-0">
             <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
               <p className="prose-col text-meta leading-relaxed text-faint">
-                Prices and filings from Yahoo Finance, unaudited and occasionally incomplete for IDX
-                listings. Educational and research use only — not investment advice.
+                {t("Prices and filings from Yahoo Finance, unaudited and occasionally incomplete for IDX listings. Educational and research use only — not investment advice.")}
               </p>
             </div>
           </footer>

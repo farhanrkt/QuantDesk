@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { DetailProvider, useDetailLevel, type DetailLevel } from "@/components/ui/explain";
 import { HorizonProvider, useHoldingHorizon, type Horizon } from "@/components/ui/horizon";
-import { setLang, type Lang } from "@/lib/i18n";
+import { resolveLanguage, setLang, storeLanguage, type Lang } from "@/lib/i18n";
 
 /**
  * The things a reader states once and every page reads: how much detail they
@@ -25,7 +25,6 @@ interface Preferences {
 }
 
 const PreferencesContext = createContext<Preferences | null>(null);
-const LANGUAGE_KEY = "quantdesk.language";
 
 export function usePreferences(): Preferences {
   const value = useContext(PreferencesContext);
@@ -42,24 +41,18 @@ export function usePreferences(): Preferences {
  */
 function useLanguagePreference(): [Lang, (l: Lang) => void] {
   const [language, setLanguageState] = useState<Lang>("en");
+  // Until this browser's choice is read, the "en" above is only the server's
+  // default; announcing it would point requests already in flight at English.
+  const [resolved, setResolved] = useState(false);
+  useEffect(() => { setLanguageState(resolveLanguage()); setResolved(true); }, []);
   useEffect(() => {
-    let initial: Lang = "en";
-    try {
-      const stored = window.localStorage.getItem(LANGUAGE_KEY);
-      if (stored === "en" || stored === "id") initial = stored;
-      else if ((navigator.language || "").toLowerCase().startsWith("id")) initial = "id";
-    } catch { /* private mode — fall back to the browser's language below */
-      if ((navigator.language || "").toLowerCase().startsWith("id")) initial = "id";
-    }
-    setLanguageState(initial);
-  }, []);
-  useEffect(() => {
+    if (!resolved) return;
     setLang(language);
     document.documentElement.lang = language;
-  }, [language]);
+  }, [language, resolved]);
   const update = useCallback((next: Lang) => {
     setLanguageState(next);
-    try { window.localStorage.setItem(LANGUAGE_KEY, next); } catch { /* ignore */ }
+    storeLanguage(next);
   }, []);
   return [language, update];
 }

@@ -6,6 +6,7 @@ import { ExplanationBody, TONE_TEXT } from "@/components/ui/explain";
 import { useState } from "react";
 import type { Engine, TechnicalResponse } from "@/lib/types";
 import { cn, pct, signedPct } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /**
  * What holders of this actually got, over the length the reader intends to hold.
@@ -34,6 +35,7 @@ export function HoldingHorizonBar({
   horizon: Horizon;
   onHorizon: (h: Horizon) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   if (state.status !== "ready") return null;
 
@@ -53,7 +55,7 @@ export function HoldingHorizonBar({
           {/* A real question at reading size. v1 asked it in 10.88px uppercase
               grey, which made the one control that changes what every number
               below means look like a table header. */}
-          <h2 className="text-h3">If you held this for</h2>
+          <h2 className="text-h3">{t("If you held this for")}</h2>
           <HorizonPicker value={horizon} onChange={onHorizon} available={available} />
         </div>
         {explain && (
@@ -66,7 +68,7 @@ export function HoldingHorizonBar({
                        hover:border-tech/50 hover:bg-tech/10 hover:text-tech
                        focus:outline-none focus-visible:ring-2 focus-visible:ring-tech"
           >
-            {open ? "Less" : "What this means"}
+            {open ? t("Less") : t("What this means")}
           </button>
         )}
       </div>
@@ -74,16 +76,14 @@ export function HoldingHorizonBar({
       <div className="border-t border-rule px-5 py-5">
         {!data.hasLongTerm ? (
           <p className="prose-col text-base leading-relaxed text-ash">
-            The chart range is too short for any holding-period history. Set it to 5y or
-            longer and this becomes the strongest evidence on the page.
+            {t("The chart range is too short for any holding-period history. Set it to 5y or longer and this becomes the strongest evidence on the page.")}
           </p>
         ) : !measured ? (
           <p className="prose-col text-base leading-relaxed text-ash">
             {row?.reason
-              ?? `No ${horizon}-year holding periods in the loaded history.`}{" "}
+              ?? t("No {horizon}-year holding periods in the loaded history.", { horizon })}{" "}
             <span className="text-body">
-              Nothing is known about {horizon}-year outcomes for this stock here — which is
-              not the same as nothing having gone wrong over one.
+              {t("Nothing is known about {horizon}-year outcomes for this stock here — which is not the same as nothing having gone wrong over one.", { horizon })}
             </span>
           </p>
         ) : (
@@ -96,34 +96,32 @@ export function HoldingHorizonBar({
                 genuinely does — Python said so, in `_rolling_worst`. */}
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="rounded-lg border border-ruleSoft bg-sunken px-4 py-3.5">
-                <div className="eyebrow mb-2">Worst any buyer did</div>
+                <div className="eyebrow mb-2">{t("Worst any buyer did")}</div>
                 <div className={cn("num text-figure font-semibold leading-none",
                                    explain ? TONE_TEXT[explain.tone] : "text-chalk")}>
                   {signedPct(row.worst)}
                 </div>
-                <div className="mt-2 text-micro text-ash">a year, at the unluckiest entry</div>
+                <div className="mt-2 text-micro text-ash">{t("a year, at the unluckiest entry")}</div>
               </div>
               <div className="rounded-lg border border-ruleSoft bg-sunken px-4 py-3.5">
-                <div className="eyebrow mb-2">Typical</div>
+                <div className="eyebrow mb-2">{t("Typical")}</div>
                 <div className="num text-figure font-semibold leading-none text-chalk">
                   {signedPct(row.median)}
                 </div>
-                <div className="mt-2 text-micro text-ash">a year, middle of the range</div>
+                <div className="mt-2 text-micro text-ash">{t("a year, middle of the range")}</div>
               </div>
               <div className="rounded-lg border border-ruleSoft bg-sunken px-4 py-3.5">
-                <div className="eyebrow mb-2">Made money</div>
+                <div className="eyebrow mb-2">{t("Made money")}</div>
                 <div className="num text-figure font-semibold leading-none text-chalk">
                   {pct(row.positiveShare, 0)}
                 </div>
                 <div className="mt-2 text-micro text-ash">
-                  of {row.windows} overlapping periods
+                  {t("of {windows} overlapping periods", { windows: row.windows })}
                 </div>
               </div>
             </div>
             <p className="prose-col mt-4 text-meta leading-relaxed text-ash">
-              Every {horizon}-year stretch in the loaded history, not the one that happened to
-              start when the chart does. The worst column is the one that sets position size —
-              a headline annual return quietly describes a single lucky start date.
+              {t("Every {horizon}-year stretch in the loaded history, not the one that happened to start when the chart does. The worst column is the one that sets position size — a headline annual return quietly describes a single lucky start date.", { horizon })}
             </p>
           </>
         )}

@@ -12,6 +12,7 @@ import { alpha, palette } from "@/lib/palette";
 import type { BusinessProfile, CompanyResponse, HistoryRow } from "@/lib/types";
 import { cn, compact, num } from "@/lib/utils";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { msg, useT } from "@/lib/i18n";
 
 /**
  * "What it is" — the company itself, before any lens reads it.
@@ -31,16 +32,16 @@ import { ScrollRegion } from "@/components/ui/scroll";
  * deciding what the server's own reading only describes.
  */
 const ROW_LABEL: Record<HistoryRow, string> = {
-  revenue: "Revenue",
-  operatingIncome: "Operating income",
-  netIncome: "Net income",
-  dilutedEps: "Earnings per share",
-  operatingCashFlow: "Operating cash flow",
-  capex: "Capital spending",
-  freeCashFlow: "Free cash flow",
-  totalDebt: "Total debt",
-  cash: "Cash",
-  equity: "Shareholders' equity",
+  revenue: msg("Revenue"),
+  operatingIncome: msg("Operating income"),
+  netIncome: msg("Net income"),
+  dilutedEps: msg("Earnings per share"),
+  operatingCashFlow: msg("Operating cash flow"),
+  capex: msg("Capital spending"),
+  freeCashFlow: msg("Free cash flow"),
+  totalDebt: msg("Total debt"),
+  cash: msg("Cash"),
+  equity: msg("Shareholders' equity"),
 };
 
 /** Guided shows the four lines that answer "does it make money, in cash?". */
@@ -54,6 +55,7 @@ const money = (value: number | null | undefined, currency: string | null) =>
   value == null ? "—" : `${compact(value)}${currency ? ` ${currency}` : ""}`;
 
 export function WhatItDoes({ profile, name }: { profile: BusinessProfile; name?: string }) {
+  const t = useT();
   const { summary, summaryState, industry, sector, employees, country, website } = profile;
   const where = industry ?? sector;
   // FOUR LINES, THEN A CHOICE. Provider descriptions run from one sentence to
@@ -65,7 +67,7 @@ export function WhatItDoes({ profile, name }: { profile: BusinessProfile; name?:
   return (
     <Card accent={palette.company}>
       <CardHeader>
-        <CardTitle>What {name ?? "this company"} does</CardTitle>
+        <CardTitle>{t("What {value} does", { value: name ?? t("this company") })}</CardTitle>
         {where && <span className="font-mono text-micro text-ash">{where}</span>}
       </CardHeader>
       <CardBody className="space-y-3">
@@ -81,7 +83,7 @@ export function WhatItDoes({ profile, name }: { profile: BusinessProfile; name?:
                       aria-expanded={expanded} aria-controls="company-summary"
                       className="mt-1 inline-flex min-h-[24px] items-center rounded text-meta text-tech
                                  hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-tech">
-                {expanded ? "Show less" : "Read the full description"}
+                {expanded ? t("Show less") : t("Read the full description")}
               </button>
             )}
           </div>
@@ -89,7 +91,7 @@ export function WhatItDoes({ profile, name }: { profile: BusinessProfile; name?:
           <p className="prose-col text-base leading-relaxed text-ash">{profile.reading}</p>
         )}
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-faint">
-          {employees != null && <span>{employees.toLocaleString()} employees</span>}
+          {employees != null && <span>{t("{employees} employees", { employees: employees.toLocaleString() })}</span>}
           {country && <span>{country}</span>}
           {website && (
             <a href={website} target="_blank" rel="noopener noreferrer"
@@ -100,7 +102,7 @@ export function WhatItDoes({ profile, name }: { profile: BusinessProfile; name?:
           )}
         </p>
         <p className="text-micro text-faint">
-          In the data provider&apos;s own words. Nothing in this app checks it against the filings.
+          {t("In the data provider's own words. Nothing in this app checks it against the filings.")}
         </p>
       </CardBody>
     </Card>
@@ -113,6 +115,7 @@ function MiniChart({
   label: string; values: (number | null)[]; years: string[]; currency: string | null;
   eps?: boolean;
 }) {
+  const t = useT();
   // "FY2025" → "’25": four mini charts side by side have room for two digits.
   const data = years.map((year, i) => ({ year: `’${year.slice(-2)}`, v: values[i] }));
   const latestIndex = values.map((v, i) => (v == null ? -1 : i)).filter((i) => i >= 0).pop();
@@ -126,7 +129,7 @@ function MiniChart({
         <span className="num text-meta font-semibold text-chalk">{shown}</span>
       </div>
       <p className="text-micro text-faint">
-        {latestIndex != null && latestIndex >= 0 ? years[latestIndex] : "not reported"}
+        {latestIndex != null && latestIndex >= 0 ? years[latestIndex] : t("not reported")}
       </p>
       {/* aria-hidden: the table below carries every value, and Recharts stamps
           role="img" on each bar — the anomaly chart once put 1,464 unlabelled
@@ -152,6 +155,7 @@ function MiniChart({
 }
 
 export function CompanyPanel({ data }: { data: CompanyResponse }) {
+  const t = useT();
   const guided = useDetail() === "simple";
   const { history, record, dividends, listing, currency, nextEarnings, explain } = data;
   const rows = guided ? GUIDED_ROWS : FULL_ROWS;
@@ -163,16 +167,17 @@ export function CompanyPanel({ data }: { data: CompanyResponse }) {
 
       {/* ---------------------------------------------------- key facts */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <ExplainedStat label="Market value" value={money(listing.marketCap, tradingCcy)}
-                       sub={listing.priceAsOf ? `At the close of ${listing.priceAsOf}` : undefined} />
-        <ExplainedStat label="Listed on" value={listing.exchange ?? (listing.market === "ID" ? "IDX" : "—")}
-                       sub={listing.market === "ID" ? "Indonesia" : "United States"} />
-        <ExplainedStat label="Trades in" value={tradingCcy ?? "—"}
+        <ExplainedStat label={t("Market value")} value={money(listing.marketCap, tradingCcy)}
+                       sub={listing.priceAsOf ? t("At the close of {date}", { date: listing.priceAsOf }) : undefined} />
+        <ExplainedStat label={t("Listed on")} value={listing.exchange ?? (listing.market === "ID" ? "IDX" : "—")}
+                       sub={listing.market === "ID" ? t("Indonesia") : t("United States")} />
+        <ExplainedStat label={t("Trades in")} value={tradingCcy ?? "—"}
                        sub={currency.reporting && currency.reporting !== tradingCcy
-                         ? `Reports in ${currency.reporting}` : "Reports in the same currency"} />
+                         ? t("Reports in {currency}", { currency: currency.reporting })
+                         : t("Reports in the same currency")} />
         <div className="rounded-lg border border-rule bg-panel px-4 py-3.5">
           <div className="eyebrow mb-2 flex items-center gap-1.5">
-            <CalendarClock aria-hidden className="h-3.5 w-3.5" /> Next report
+            <CalendarClock aria-hidden className="h-3.5 w-3.5" />{" "}{t("Next report")}
           </div>
           <div className="num text-figure font-semibold leading-none text-chalk">
             {nextEarnings.date ?? "—"}
@@ -185,7 +190,7 @@ export function CompanyPanel({ data }: { data: CompanyResponse }) {
       {/* ---------------------------------------------- year by year */}
       <Card accent={palette.company}>
         <CardHeader>
-          <CardTitle>The record, year by year</CardTitle>
+          <CardTitle>{t("The record, year by year")}</CardTitle>
           {history.available && (
             <span className="font-mono text-micro text-ash">
               {history.fiscalYears[0]}–{history.fiscalYears.at(-1)} · {history.currency ?? ""}
@@ -194,13 +199,13 @@ export function CompanyPanel({ data }: { data: CompanyResponse }) {
         </CardHeader>
         <CardBody className="space-y-4">
           {!history.available ? (
-            <StateCard kind="empty" bare title="No statements came back">{history.reason}.</StateCard>
+            <StateCard kind="empty" bare title={t("No statements came back")}>{history.reason}.</StateCard>
           ) : (
             <>
               <p className="prose-col text-meta leading-relaxed text-ash">{history.reading}</p>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {rows.filter((key) => !history.missing[key]).map((key) => (
-                  <MiniChart key={key} label={ROW_LABEL[key]} values={history.rows[key]}
+                  <MiniChart key={key} label={t(ROW_LABEL[key])} values={history.rows[key]}
                              years={history.fiscalYears} currency={history.currency}
                              eps={key === "dilutedEps"} />
                 ))}
@@ -208,13 +213,13 @@ export function CompanyPanel({ data }: { data: CompanyResponse }) {
               {rows.some((key) => history.missing[key]) && (
                 <ul className="space-y-1 text-meta text-ash">
                   {rows.filter((key) => history.missing[key]).map((key) => (
-                    <li key={key}><span className="text-body">{ROW_LABEL[key]}:</span> {history.missing[key]}.</li>
+                    <li key={key}><span className="text-body">{t(ROW_LABEL[key])}:</span> {history.missing[key]}.</li>
                   ))}
                 </ul>
               )}
               {history.freeCashFlowMethod && history.freeCashFlowMethod !== "reported" && (
                 <p className="text-micro text-faint">
-                  Free cash flow is {history.freeCashFlowMethod}; the data source reported no line of its own.
+                  {t("Free cash flow is {freeCashFlowMethod}; the data source reported no line of its own.", { freeCashFlowMethod: history.freeCashFlowMethod })}
                 </p>
               )}
               <HistoryTable history={history} guided={guided} />
@@ -226,12 +231,12 @@ export function CompanyPanel({ data }: { data: CompanyResponse }) {
       {/* ------------------------------------------ what it adds up to */}
       <Card accent={palette.company}>
         <CardHeader>
-          <CardTitle>What the record adds up to</CardTitle>
-          <span className="font-mono text-micro text-ash">description, not a score</span>
+          <CardTitle>{t("What the record adds up to")}</CardTitle>
+          <span className="font-mono text-micro text-ash">{t("description, not a score")}</span>
         </CardHeader>
         <CardBody className="space-y-4">
           {!record.available ? (
-            <StateCard kind="refused" bare title="Too short to call a record">{record.reason}.</StateCard>
+            <StateCard kind="refused" bare title={t("Too short to call a record")}>{record.reason}.</StateCard>
           ) : (
             <>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -249,7 +254,7 @@ export function CompanyPanel({ data }: { data: CompanyResponse }) {
       {/* ---------------------------------------------------- dividends */}
       <Card accent={palette.company}>
         <CardHeader>
-          <CardTitle>Dividends per share</CardTitle>
+          <CardTitle>{t("Dividends per share")}</CardTitle>
           {dividends.basis && <span className="font-mono text-micro text-ash">{dividends.basis}</span>}
         </CardHeader>
         <CardBody className="space-y-3">
@@ -272,12 +277,12 @@ export function CompanyPanel({ data }: { data: CompanyResponse }) {
                 </ResponsiveContainer>
               </div>
               <table className="w-full text-left text-meta">
-                <caption className="sr-only">Dividends per share by calendar year</caption>
+                <caption className="sr-only">{t("Dividends per share by calendar year")}</caption>
                 <tbody>
                   <tr className="[&>td]:px-2 [&>td]:py-1">
                     {dividends.perShare.map((d) => (
                       <td key={d.year} className="text-center">
-                        <div className="text-micro text-faint">{d.year}{d.partial ? " · to date" : ""}</div>
+                        <div className="text-micro text-faint">{d.year}{d.partial ? t(" · to date") : ""}</div>
                         <div className="num text-body">{num(d.amount, d.amount < 10 ? 3 : 0)}</div>
                       </td>
                     ))}
@@ -287,7 +292,7 @@ export function CompanyPanel({ data }: { data: CompanyResponse }) {
               <p className="text-meta text-ash">{dividends.reading}</p>
             </>
           ) : (
-            <StateCard kind="empty" bare title="No dividend series">{dividends.reading}</StateCard>
+            <StateCard kind="empty" bare title={t("No dividend series")}>{dividends.reading}</StateCard>
           )}
         </CardBody>
       </Card>
@@ -298,20 +303,21 @@ export function CompanyPanel({ data }: { data: CompanyResponse }) {
 function HistoryTable({
   history, guided,
 }: { history: Extract<CompanyResponse["history"], { available: true }>; guided: boolean }) {
+  const t = useT();
   const table = (
-    <ScrollRegion label="Statement lines by fiscal year" className="rounded-lg border border-ruleSoft">
+    <ScrollRegion label={t("Statement lines by fiscal year")} className="rounded-lg border border-ruleSoft">
       <table className="w-full min-w-[32rem] text-left text-meta">
-        <caption className="sr-only">Statement lines by fiscal year, in {history.currency ?? "the reporting currency"}</caption>
+        <caption className="sr-only">{t("Statement lines by fiscal year, in {value}", { value: history.currency ?? t("the reporting currency") })}</caption>
         <thead>
           <tr className="eyebrow border-b border-rule bg-sunken [&>th]:px-3 [&>th]:py-2 [&>th]:font-normal">
-            <th scope="col">Line</th>
+            <th scope="col">{t("Line")}</th>
             {history.fiscalYears.map((y) => <th key={y} scope="col" className="text-right">{y}</th>)}
           </tr>
         </thead>
         <tbody>
           {FULL_ROWS.map((key) => (
             <tr key={key} className="border-b border-ruleSoft last:border-0">
-              <th scope="row" className="px-3 py-1.5 font-normal text-ash">{ROW_LABEL[key]}</th>
+              <th scope="row" className="px-3 py-1.5 font-normal text-ash">{t(ROW_LABEL[key])}</th>
               {history.rows[key].map((v, i) => (
                 <td key={i} className={cn("num px-3 py-1.5 text-right", v == null ? "text-faint" : "text-body")}>
                   {v == null ? "—" : key === "dilutedEps" ? num(v) : compact(v)}
@@ -324,13 +330,13 @@ function HistoryTable({
     </ScrollRegion>
   );
   return guided ? (
-    <Explainer summary="Every line, every year, as figures — a dash is a year the source did not report, never a zero">
+    <Explainer summary={t("Every line, every year, as figures — a dash is a year the source did not report, never a zero")}>
       {table}
     </Explainer>
   ) : (
     <>
       {table}
-      <p className="text-micro text-faint">A dash is a year the source did not report, never a zero.</p>
+      <p className="text-micro text-faint">{t("A dash is a year the source did not report, never a zero.")}</p>
     </>
   );
 }

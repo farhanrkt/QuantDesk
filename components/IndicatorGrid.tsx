@@ -3,6 +3,7 @@
 import { Card, CardBody, CardHeader, CardTitle, Explainer } from "@/components/ui/card";
 import { ExplainedStat, useDetail } from "@/components/ui/explain";
 import type { ExplainMap } from "@/lib/types";
+import { useT } from "@/lib/i18n";
 
 /**
  * Every indicator, grouped by the horizon it actually speaks to.
@@ -21,16 +22,17 @@ import type { ExplainMap } from "@/lib/types";
  * `api/_lib/explain.py`; this component decides layout and nothing else.
  */
 export function IndicatorGrid({ explanations }: { explanations: ExplainMap }) {
+  const t = useT();
   const detail = useDetail();
   const simple = detail === "simple";
   const ex = explanations ?? {};
 
   const groups: [string, string, string[]][] = [
-    ["Long horizon", "months to years — where a long-term case is made",
+    [t("Long horizon"), t("months to years — where a long-term case is made"),
      ["sma200", "sma100", "adx", "aroon", "roc252"]],
-    ["Medium", "weeks to months — confirmation",
+    [t("Medium"), t("weeks to months — confirmation"),
      ["sma50", "macd", "roc63", "cci", "cmf", "mfi", "volumeTrend"]],
-    ["Short horizon", "days to weeks — entry timing only, never a thesis",
+    [t("Short horizon"), t("days to weeks — entry timing only, never a thesis"),
      ["rsi", "stochastic", "williamsR", "bbPercentB", "bbBandwidth", "atrPct"]],
   ];
 
@@ -38,11 +40,8 @@ export function IndicatorGrid({ explanations }: { explanations: ExplainMap }) {
     <div className="space-y-4">
       {simple && (
         <div className="rounded border border-rule bg-panel px-4 py-3">
-          <Explainer summary="Grouped by how long a horizon each one actually speaks to">
-            Only the top group has any bearing on owning something for years. The bottom group
-            describes the last two weeks, and the evidence behind it is weak even for that.
-            {" "}Press the <span className="font-semibold text-body">i</span> beside any number
-            to see what it measures and whether this reading is good or bad.
+          <Explainer summary={t("Grouped by how long a horizon each one actually speaks to")}>
+            {t("Only the top group has any bearing on owning something for years. The bottom group describes the last two weeks, and the evidence behind it is weak even for that. Press the")}{" "}<span className="font-semibold text-body">i</span>{" "}{t("beside any number to see what it measures and whether this reading is good or bad.")}
           </Explainer>
         </div>
       )}

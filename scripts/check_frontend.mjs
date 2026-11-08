@@ -210,7 +210,8 @@ const pyFamilies = Object.fromEntries(
     .map((m) => [m[1], m[2]]));
 const railFamilies = {};
 for (const block of railSource.split(/\n(?=function |const )/)) {
-  const lens = block.match(/lens:\s*"(\w+)"/);
+  // The lens name is a catalog key now, `msg("Flow")`; either spelling is read.
+  const lens = block.match(/lens:\s*(?:msg\()?"(\w+)"/);
   const family = block.match(/family:\s*"(price|filings)"/);
   if (lens && family) railFamilies[lens[1].toLowerCase()] = family[1];
 }
@@ -824,8 +825,8 @@ if (boardSources.length !== BOARD_FILES.length + 1) {
 //     string wrapped in `t("…")` but missing from lib/i18n-id.ts shows English
 //     to a reader who chose Indonesian, silently — the page still renders, so no
 //     other check would notice. So wrapping a string and translating it are one
-//     change: a missing entry fails here, an entry whose `{placeholders}` differ
-//     from its key's fails (a dropped `{n}` loses the number from the sentence),
+//     change: a missing entry fails here, an entry using a `{placeholder}`
+//     its key never fills fails (it would print as written),
 //     and an entry no component uses any more fails so the catalog cannot rot
 //     into a list of sentences the app no longer says. Keys must be literals —
 //     `t(\`…\`)` would make the key whatever the template evaluates to, which no
@@ -872,9 +873,15 @@ if (catalog) {
   for (const [key, file] of wrapped) {
     if (!Object.prototype.hasOwnProperty.call(catalog, key)) {
       fail(file, `"${key}" has no Bahasa Indonesia.`, "Add it to lib/i18n-id.ts.");
-    } else if (placeholders(key) !== placeholders(catalog[key])) {
-      fail("lib/i18n-id.ts", `"${key}" and its Indonesian name different placeholders.`,
-           `English has {${placeholders(key)}}, Indonesian has {${placeholders(catalog[key])}}.`);
+    } else {
+      // Every placeholder the Indonesian uses must be one the English fills. The
+      // reverse is allowed: an English plural ending ("day{s}") has no Indonesian.
+      const english = new Set(placeholders(key).split(",").filter(Boolean));
+      const extra = placeholders(catalog[key]).split(",").filter((p) => p && !english.has(p));
+      if (extra.length) {
+        fail("lib/i18n-id.ts", `"${key}" has an Indonesian placeholder its English never fills.`,
+             `{${extra.join("}, {")}} would print as written.`);
+      }
     }
   }
   for (const key of Object.keys(catalog)) {

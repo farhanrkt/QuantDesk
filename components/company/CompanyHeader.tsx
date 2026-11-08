@@ -2,6 +2,7 @@
 
 import { CalendarClock } from "lucide-react";
 import type { CompanyResponse, Engine } from "@/lib/types";
+import { useT } from "@/lib/i18n";
 
 /**
  * Who the ticker is, under the ticker, on every tab.
@@ -13,6 +14,7 @@ import type { CompanyResponse, Engine } from "@/lib/types";
  * question anyone has, without a click and without leaving the tab they are on.
  */
 export function CompanyHeader({ state }: { state: Engine<CompanyResponse> }) {
+  const t = useT();
   if (state.status !== "ready") {
     return state.status === "loading"
       ? <div aria-hidden className="mt-2 h-4 w-64 max-w-full animate-pulseline rounded bg-rule" />
@@ -33,7 +35,7 @@ export function CompanyHeader({ state }: { state: Engine<CompanyResponse> }) {
       {nextEarnings.date && (
         <p className="inline-flex items-center gap-1.5 text-micro text-faint">
           <CalendarClock aria-hidden className="h-3.5 w-3.5" />
-          Next report {nextEarnings.date} (provider&apos;s date, often an estimate)
+          {t("Next report {date} (provider's date, often an estimate)", { date: nextEarnings.date })}
         </p>
       )}
     </div>

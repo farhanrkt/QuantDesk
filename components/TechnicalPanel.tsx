@@ -20,6 +20,7 @@ import { downloadCsv, toCsv } from "@/lib/csv";
 import { TONE, cn, num, pct, splitEmphasis } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { useT } from "@/lib/i18n";
 
 const TECH = palette.tech;
 const FAST = palette.seriesFast;
@@ -38,6 +39,7 @@ type ChartPoint = TechPoint & {
 };
 
 function TechTooltip({ active, payload }: TooltipProps<number, string>) {
+  const t = useT();
   // Recharts types `payload[n].payload` as the untyped source row; this is the
   // one place the cast belongs, and ChartPoint is exactly what we put in.
   const p = payload?.[0]?.payload as ChartPoint | undefined;
@@ -46,9 +48,9 @@ function TechTooltip({ active, payload }: TooltipProps<number, string>) {
     <div className="rounded border border-rule bg-ink/95 px-3 py-2 text-meta">
       <div className="num mb-1 text-ash">{p.date}</div>
       <div className="num">O {num(p.open)} · H {num(p.high)} · L {num(p.low)} · C {num(p.close)}</div>
-      {p.sma50 != null && <div className="num" style={{ color: FAST }}>50-day {num(p.sma50)}</div>}
-      {p.sma200 != null && <div className="num" style={{ color: SLOW }}>200-day {num(p.sma200)}</div>}
-      {p.rsi != null && <div className="num text-ash">RSI {num(p.rsi, 1)}</div>}
+      {p.sma50 != null && <div className="num" style={{ color: FAST }}>{t("50-day {sma50}", { sma50: num(p.sma50) })}</div>}
+      {p.sma200 != null && <div className="num" style={{ color: SLOW }}>{t("200-day {sma200}", { sma200: num(p.sma200) })}</div>}
+      {p.rsi != null && <div className="num text-ash">{t("RSI {rsi}", { rsi: num(p.rsi, 1) })}</div>}
     </div>
   );
 }
@@ -62,6 +64,7 @@ export function TechnicalPanel({
   /** Which company this is, so the chosen sub-section survives a tab switch. */
   stateKey?: string;
 }) {
+  const t = useT();
   const { latest, summary, series, levels, signals } = data;
 
   // Defaults mirror api/_lib/technical.py analyze().
@@ -83,14 +86,14 @@ export function TechnicalPanel({
     downloadCsv(
       `${data.ticker}_${data.range}_indicators.csv`,
       toCsv(series, [
-        { key: "date", label: "Date" }, { key: "open", label: "Open" },
-        { key: "high", label: "High" }, { key: "low", label: "Low" },
-        { key: "close", label: "Close" }, { key: "volume", label: "Volume" },
+        { key: "date", label: t("Date") }, { key: "open", label: t("Open") },
+        { key: "high", label: t("High") }, { key: "low", label: t("Low") },
+        { key: "close", label: t("Close") }, { key: "volume", label: t("Volume") },
         { key: "sma50", label: "SMA_50" }, { key: "sma200", label: "SMA_200" },
         { key: "bbLower", label: "BB_LOWER" }, { key: "bbMid", label: "BB_MID" },
         { key: "bbUpper", label: "BB_UPPER" }, { key: "rsi", label: "RSI" },
         { key: "macd", label: "MACD" }, { key: "macdSignal", label: "MACD_SIGNAL" },
-        { key: "macdHist", label: "MACD_HIST" }, { key: "signal", label: "Signal" },
+        { key: "macdHist", label: "MACD_HIST" }, { key: "signal", label: t("Signal") },
       ])
     );
 
@@ -98,10 +101,10 @@ export function TechnicalPanel({
     downloadCsv(
       `${data.ticker}_crossovers.csv`,
       toCsv(signals, [
-        { key: "date", label: "Date" }, { key: "type", label: "Signal" },
-        { key: "description", label: "What happened" },
-        { key: "price", label: "Price that day" },
-        { key: "changeSince", label: "Change since (%)" },
+        { key: "date", label: t("Date") }, { key: "type", label: t("Signal") },
+        { key: "description", label: t("What happened") },
+        { key: "price", label: t("Price that day") },
+        { key: "changeSince", label: t("Change since (%)") },
       ])
     );
 
@@ -125,11 +128,11 @@ export function TechnicalPanel({
   // reason they stop using it. The line below the tabs says it is one click
   // away in Full, so nothing disappears silently.
   const SECTIONS = [
-    ...(data.hasLongTerm ? [{ id: "long", label: "Long term · years", accent: palette.trend }] : []),
-    { id: "mid", label: "Mid term · weeks–months", accent: palette.trend },
-    { id: "short", label: "Short term · days–weeks", accent: palette.trend },
-    { id: "chart", label: "Chart & signals", accent: palette.trend },
-    ...(guided ? [] : [{ id: "indicators", label: "All indicators", accent: palette.trend }]),
+    ...(data.hasLongTerm ? [{ id: "long", label: t("Long term · years"), accent: palette.trend }] : []),
+    { id: "mid", label: t("Mid term · weeks–months"), accent: palette.trend },
+    { id: "short", label: t("Short term · days–weeks"), accent: palette.trend },
+    { id: "chart", label: t("Chart & signals"), accent: palette.trend },
+    ...(guided ? [] : [{ id: "indicators", label: t("All indicators"), accent: palette.trend }]),
   ];
 
   // A section that is open when the mode changes underneath it would otherwise
@@ -141,12 +144,10 @@ export function TechnicalPanel({
   return (
     <div className="space-y-4 animate-rise">
       <Tabs tabs={SECTIONS} active={active} onChange={setSection}
-            idPrefix="horizon" label="Time horizon" hasPanels={false} />
+            idPrefix="horizon" label={t("Time horizon")} hasPanels={false} />
       {guided && (
         <p className="text-micro text-ash">
-          Switch to <span className="text-body">Full</span> for the complete indicator
-          grid — ADX, Aroon, Stochastic, Williams %R, CCI, Coppock and the rest, grouped by
-          the horizon each one speaks to.
+          {t("Switch to")}{" "}<span className="text-body">{t("Full")}</span>{" "}{t("for the complete indicator grid — ADX, Aroon, Stochastic, Williams %R, CCI, Coppock and the rest, grouped by the horizon each one speaks to.")}
         </p>
       )}
 
@@ -165,9 +166,9 @@ export function TechnicalPanel({
       {data.exposure?.usable && (
         <Card>
           <CardHeader>
-            <CardTitle>What this moves with</CardTitle>
+            <CardTitle>{t("What this moves with")}</CardTitle>
             <span className="font-mono text-micro text-ash">
-              {data.exposure.weeks} weeks
+              {t("{weeks} weeks", { weeks: data.exposure.weeks })}
             </span>
           </CardHeader>
           {/*
@@ -224,8 +225,7 @@ export function TechnicalPanel({
                       </div>
                     </div>
                     <p className="mt-1 text-meta leading-relaxed text-ash">
-                      explains {pct(row.rSquared, 0)} of what is left of its weekly moves
-                      once the market is out · over {row.weeks} weeks
+                      {t("explains {rSquared} of what is left of its weekly moves once the market is out · over {weeks} weeks", { rSquared: pct(row.rSquared, 0), weeks: row.weeks })}
                     </p>
                   </div>
                 );
@@ -233,9 +233,7 @@ export function TechnicalPanel({
             })()}
             {(data.exposure.factors ?? []).length === 0 && (
               <p className="prose-col text-meta leading-relaxed">
-                None of the tested factors accounted for enough of this stock&apos;s
-                movement to report. That is not evidence it is unexposed — only that
-                these ones did not explain it.
+                {t("None of the tested factors accounted for enough of this stock's movement to report. That is not evidence it is unexposed — only that these ones did not explain it.")}
               </p>
             )}
             {(data.exposure.refused ?? []).length > 0 && (
@@ -244,15 +242,12 @@ export function TechnicalPanel({
               // correctly on a name where only gold was refused and wrongly on
               // AAPL, where all four were — and a summary is the only part of a
               // closed disclosure anyone sees, so it cannot be approximately true.
-              <Explainer summary={
-                `${(data.exposure.refused ?? []).length} tested factor${
-                  (data.exposure.refused ?? []).length === 1 ? "" : "s"} did not explain this name`
-              }>
+              <Explainer summary={(data.exposure.refused ?? []).length === 1
+                ? t("{count} tested factor did not explain this name", { count: 1 })
+                : t("{count} tested factors did not explain this name",
+                    { count: (data.exposure.refused ?? []).length })}>
                 <p>
-                  Every factor is tested on every name. One is listed here when it did
-                  not account for enough of this stock&apos;s movement, once the local
-                  market is taken out of both sides, to be worth a number — which is not
-                  evidence the stock is unexposed to it.
+                  {t("Every factor is tested on every name. One is listed here when it did not account for enough of this stock's movement, once the local market is taken out of both sides, to be worth a number — which is not evidence the stock is unexposed to it.")}
                 </p>
                 <ul className="mt-2 space-y-1">
                   {(data.exposure?.refused ?? []).map((r) => (
@@ -262,9 +257,7 @@ export function TechnicalPanel({
                   ))}
                 </ul>
                 <p className="mt-2 text-meta leading-relaxed text-ash">
-                  Estimated over five years of weekly moves. Whether a loading like this
-                  persists into the next five could not be measured from the history
-                  available, so nothing here is offered as a forecast.
+                  {t("Estimated over five years of weekly moves. Whether a loading like this persists into the next five could not be measured from the history available, so nothing here is offered as a forecast.")}
                 </p>
               </Explainer>
             )}
@@ -292,22 +285,19 @@ export function TechnicalPanel({
       {!data.hasLongTerm && active === "chart" && (
         <div className="rounded-lg border border-warn/40 bg-warn/5 px-4 py-3.5">
           <p className="prose-col text-meta leading-relaxed text-warn">
-            The long-horizon section needs at least a year of history. Set the chart range to
-            5y or longer for drawdown depth, multi-year returns and relative strength — a
-            &ldquo;worst 3-year window&rdquo; built from one year of data would be a number
-            with nothing behind it.
+            {t("The long-horizon section needs at least a year of history. Set the chart range to 5y or longer for drawdown depth, multi-year returns and relative strength — a “worst 3-year window” built from one year of data would be a number with nothing behind it.")}
           </p>
         </div>
       )}
 
       <div className={active === "chart" ? "space-y-4" : "hidden"}>
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Latest close" value={num(latest.close)} sub={latest.date} />
-        <Stat label="Change on the day" value={`${latest.change >= 0 ? "+" : ""}${num(latest.change)}`}
+        <Stat label={t("Latest close")} value={num(latest.close)} sub={latest.date} />
+        <Stat label={t("Change on the day")} value={`${latest.change >= 0 ? "+" : ""}${num(latest.change)}`}
               tone={latest.change >= 0 ? "text-acc" : "text-dist"}
               sub={`${latest.changePct >= 0 ? "+" : ""}${num(latest.changePct)}%`} />
-        <Stat label="Day's high" value={num(latest.high)} />
-        <Stat label="Day's low" value={num(latest.low)} />
+        <Stat label={t("Day's high")} value={num(latest.high)} />
+        <Stat label={t("Day's low")} value={num(latest.low)} />
       </div>
 
       <Card accent={TECH}>
@@ -345,15 +335,14 @@ export function TechnicalPanel({
 
       {!data.hasSma200 && (
         <div className="rounded border border-warn/40 bg-warn/10 px-4 py-3 text-meta text-warn">
-          The 200-day average needs 200 trading days and this range is shorter, so the slow line
-          and its crossover signals are missing. Pick a longer range.
+          {t("The 200-day average needs 200 trading days and this range is shorter, so the slow line and its crossover signals are missing. Pick a longer range.")}
         </div>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Floors and ceilings</CardTitle>
-          <DownloadButton onClick={downloadSeries}>Indicators CSV</DownloadButton>
+          <CardTitle>{t("Floors and ceilings")}</CardTitle>
+          <DownloadButton onClick={downloadSeries}>{t("Indicators CSV")}</DownloadButton>
         </CardHeader>
         {/* GUIDED KEEPS THE COUNT, NOT AN EMPTY BOX. The tuning fields are Full's;
             hiding them used to leave Guided a header over a blank body, which
@@ -361,23 +350,22 @@ export function TechnicalPanel({
         <CardBody>
           {guided && (
             <p className="text-meta text-ash">
-              {levels.length} level{levels.length === 1 ? "" : "s"} drawn on the chart. Switch to
-              Full to change how far apart the turning points must be.
+              {t("{length} level{value} drawn on the chart. Switch to Full to change how far apart the turning points must be.", { length: levels.length, value: levels.length === 1 ? "" : "s" })}
             </p>
           )}
           <div className={guided ? "hidden" : "flex flex-wrap items-end gap-3"}>
-            <Field label="Turning points apart (days)"
-                   hint="Larger keeps only the major turns.">
+            <Field label={t("Turning points apart (days)")}
+                   hint={t("Larger keeps only the major turns.")}>
               <NumberField value={srWindow} onChange={(v) => setSrWindow(v ?? 10)}
                            min={3} max={40} />
             </Field>
-            <Field label="Lines to draw">
+            <Field label={t("Lines to draw")}>
               <NumberField value={srLevels} onChange={(v) => setSrLevels(v ?? 6)}
                            min={2} max={12} />
             </Field>
             <ApplyButton onClick={() => onApply({ srWindow, srLevels })} busy={busy} />
             <span className="pb-2 text-micro text-ash">
-              {levels.length} level{levels.length === 1 ? "" : "s"} drawn
+              {t("{length} level{value} drawn", { length: levels.length, value: levels.length === 1 ? "" : "s" })}
             </span>
           </div>
         </CardBody>
@@ -385,7 +373,7 @@ export function TechnicalPanel({
 
       <Card>
         <CardHeader>
-          <CardTitle>Price · {data.range} · {data.bars} bars</CardTitle>
+          <CardTitle>{t("Price · {range} · {bars} bars", { range: data.range, bars: data.bars })}</CardTitle>
           <span className="font-mono text-micro text-ash">{data.currency}</span>
         </CardHeader>
         <CardBody>
@@ -416,7 +404,7 @@ export function TechnicalPanel({
             </ResponsiveContainer>
           </div>
 
-          <div className="eyebrow mt-5 mb-1">RSI (14) · above 70 stretched, below 30 washed out</div>
+          <div className="eyebrow mt-5 mb-1">{t("RSI (14) · above 70 stretched, below 30 washed out")}</div>
           <div aria-hidden>
             <ResponsiveContainer width="100%" height={110}>
               <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
@@ -431,7 +419,7 @@ export function TechnicalPanel({
             </ResponsiveContainer>
           </div>
 
-          <div className="eyebrow mt-5 mb-1">MACD (12, 26, 9)</div>
+          <div className="eyebrow mt-5 mb-1">{t("MACD (12, 26, 9)")}</div>
           <div aria-hidden>
             <ResponsiveContainer width="100%" height={110}>
               <ComposedChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
@@ -468,22 +456,22 @@ export function TechnicalPanel({
 
       <Card>
         <CardHeader>
-          <CardTitle>Every crossover in this range</CardTitle>
-          {signals.length > 0 && <DownloadButton onClick={downloadSignals}>CSV</DownloadButton>}
+          <CardTitle>{t("Every crossover in this range")}</CardTitle>
+          {signals.length > 0 && <DownloadButton onClick={downloadSignals}>{t("CSV")}</DownloadButton>}
         </CardHeader>
         <CardBody className="px-0">
           {signals.length === 0 ? (
             <p className="px-5 text-base text-ash">
-              The 50-day and 200-day averages never crossed inside this range. Try a longer one.
+              {t("The 50-day and 200-day averages never crossed inside this range. Try a longer one.")}
             </p>
           ) : (
-            <ScrollRegion label="Every crossover in this range">
+            <ScrollRegion label={t("Every crossover in this range")}>
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                    <th>Date</th><th>What happened</th>
-                    <th className="text-right">Price that day</th>
-                    <th className="text-right">Change since</th>
+                    <th>{t("Date")}</th><th>{t("What happened")}</th>
+                    <th className="text-right">{t("Price that day")}</th>
+                    <th className="text-right">{t("Change since")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -508,10 +496,7 @@ export function TechnicalPanel({
       </Card>
 
       <Note>
-        &ldquo;Change since&rdquo; compares today&apos;s close with the price on the signal day,
-        ignoring costs, dividends and timing — a rough scorecard, not a return. Everything here
-        is computed on the visible window only, so a one-year range leaves the 200-day average
-        about fifty usable days.
+        {t("“Change since” compares today's close with the price on the signal day, ignoring costs, dividends and timing — a rough scorecard, not a return. Everything here is computed on the visible window only, so a one-year range leaves the 200-day average about fifty usable days.")}
       </Note>
       </div>
     </div>

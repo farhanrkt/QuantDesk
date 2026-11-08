@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/input";
 import { StateCard } from "@/components/ui/state";
 import { useSessionState } from "@/lib/session";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { msg, useT } from "@/lib/i18n";
 
 const CUSTOM = "__custom__";
 // A stable empty list: the session store returns its initial value by identity.
@@ -106,6 +107,7 @@ const EVIDENCE_DOT: Record<string, string> = {
  * reader is told that in the data rather than in a footnote.
  */
 export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void }) {
+  const t = useT();
   const { state: universeState } = useUniverses();
   const { state, scan } = useRanking();
   const { state: deepState, deepen, reset: resetDeepen } = useDeepen();
@@ -178,7 +180,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
 
   const togglePick = (ticker: string) => {
     setPicked((current) => current.includes(ticker)
-      ? current.filter((t) => t !== ticker)
+      ? current.filter((item) => item !== ticker)
       : current.length >= maxDeepen ? current : [...current, ticker]);
   };
 
@@ -194,7 +196,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
   const scanMarket: Market = choice === CUSTOM ? customMarket : (selected?.market ?? "US");
 
   // What the picker currently says, versus what the loaded table actually is.
-  const pendingName = choice === CUSTOM ? "your own list" : (selected?.name ?? choice);
+  const pendingName = choice === CUSTOM ? t("your own list") : (selected?.name ?? choice);
   const stale = data != null
     && (choice === CUSTOM ? data.universe.id !== null : data.universe.id !== choice);
 
@@ -220,11 +222,11 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
     downloadCsv(
       `quantdesk_ranking_${data.universe.id ?? "custom"}.csv`,
       toCsv(flat, [
-        { key: "rank", label: "Rank" }, { key: "ticker", label: "Ticker" },
-        { key: "composite", label: "Composite (percentile)" },
-        { key: "close", label: "Close" },
-        { key: "coverage", label: "Signal coverage" },
-        ...allSignals.map((s) => ({ key: s.key, label: `${s.label} (percentile)` })),
+        { key: "rank", label: t("Rank") }, { key: "ticker", label: t("Ticker") },
+        { key: "composite", label: t("Composite (percentile)") },
+        { key: "close", label: t("Close") },
+        { key: "coverage", label: t("Signal coverage") },
+        ...allSignals.map((s) => ({ key: s.key, label: t("{signal} (percentile)", { signal: s.label }) })),
       ])
     );
   };
@@ -234,52 +236,47 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
       {/* ---------------- what this is ---------------- */}
       <Card>
         <CardHeader>
-          <CardTitle>Scan a universe, then inspect the best few</CardTitle>
+          <CardTitle>{t("Scan a universe, then inspect the best few")}</CardTitle>
           {data && (
             <span className="font-mono text-micro text-ash">
-              {data.ranked} of {data.requested} ranked
+              {t("{ranked} of {requested} ranked", { ranked: data.ranked, requested: data.requested })}
             </span>
           )}
         </CardHeader>
         <CardBody className="space-y-4">
-          <Explainer summary="A shortlist, not a verdict — and 90 means “ahead of these peers”, not “going up”">
-            Every name in the list is scored against the others on seven measures built from
-            price and volume, then ordered. The job is to pick the three or four worth opening
-            the four lenses on.
-            {" "}Every figure is a position <em>within this scan</em>: a name at 90 beat 90% of
-            the others here today. It is not a forecast, and none of these measures knows
-            anything about the business.
+          <Explainer summary={t("A shortlist, not a verdict — and 90 means “ahead of these peers”, not “going up”")}>
+            {t("Every name in the list is scored against the others on seven measures built from price and volume, then ordered. The job is to pick the three or four worth opening the four lenses on. Every figure is a position")}{" "}<em>{t("within this scan")}</em>{t(": a name at 90 beat 90% of the others here today. It is not a forecast, and none of these measures knows anything about the business.")}
           </Explainer>
 
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Universe"
-                   hint={selected ? `${selected.count} names · list as of ${selected.asOf}`
-                                  : "Your own list"}>
+            <Field label={t("Universe")}
+                   hint={selected ? t("{count} names · list as of {date}", { count: selected.count, date: selected.asOf })
+                                  : t("Your own list")}>
               <SelectField
                 value={choice}
                 onChange={setChoice}
                 options={[
                   ...catalogue.map((u) => ({ value: u.id, label: `${u.name} (${u.count})` })),
-                  { value: CUSTOM, label: "My own list" },
+                  { value: CUSTOM, label: t("My own list") },
                 ]}
               />
             </Field>
             {choice === CUSTOM && (
-              <Field label="Bare codes are" hint="Suffixed symbols are left alone.">
+              <Field label={t("Bare codes are")} hint={t("Suffixed symbols are left alone.")}>
                 <SelectField value={customMarket} onChange={(v) => setCustomMarket(v as Market)}
                              options={[
-                               { value: "US", label: "US symbols" },
-                               { value: "ID", label: "IDX (add .JK)" },
+                               { value: "US", label: t("US symbols") },
+                               { value: "ID", label: t("IDX (add .JK)") },
                              ]} />
               </Field>
             )}
             <ApplyButton busy={state.status === "loading"} onClick={runScan}>
-              Rank them
+              {t("Rank them")}
             </ApplyButton>
           </div>
 
           {choice === CUSTOM && (
-            <Field label="Your list" hint="Comma or newline separated.">
+            <Field label={t("Your list")} hint={t("Comma or newline separated.")}>
               <Textarea mono value={custom} onChange={(e) => setCustom(e.target.value)} rows={3} />
             </Field>
           )}
@@ -288,12 +285,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
             <p className="text-meta leading-relaxed text-ash">
               {selected.note}{" "}
               <span className="text-warn">
-                This membership list was transcribed on {selected.asOf} and is not updated
-                automatically — index constituents change, and a name that has since been
-                dropped will still be scanned while a newly added one will be missing. There is
-                deliberately no S&amp;P 500 list: five hundred symbols is the length at which
-                transcription goes wrong, and a mistyped ticker produces a plausible row for a
-                company nobody asked about rather than an error.
+                {t("This membership list was transcribed on {asOf} and is not updated automatically — index constituents change, and a name that has since been dropped will still be scanned while a newly added one will be missing. There is deliberately no S&P 500 list: five hundred symbols is the length at which transcription goes wrong, and a mistyped ticker produces a plausible row for a company nobody asked about rather than an error.", { asOf: selected.asOf })}
               </span>
             </p>
           )}
@@ -304,10 +296,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
         <Card>
           <CardBody>
             <p className="mb-3 text-base leading-relaxed text-ash">
-              Fetching {choice === CUSTOM ? "your list" : `${selected?.count ?? ""} symbols`} in
-              batches of fifty and ranking them against each other. This takes a few seconds —
-              one request per fifty names rather than one per name is what makes a universe
-              this size possible at all.
+              {t("Fetching {value} in batches of fifty and ranking them against each other. This takes a few seconds — one request per fifty names rather than one per name is what makes a universe this size possible at all.", { value: choice === CUSTOM ? t("your list") : t("{count} symbols", { count: selected?.count ?? "" }) })}
             </p>
             <PanelSkeleton />
           </CardBody>
@@ -315,7 +304,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
       )}
 
       {state.status === "error" && (
-        <StateCard kind="error" title="The scan could not run">{state.failure.message}</StateCard>
+        <StateCard kind="error" title={t("The scan could not run")}>{state.failure.message}</StateCard>
       )}
 
       {data && (
@@ -324,11 +313,10 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
           {data.correlation.available && (
             <Card>
               <CardHeader>
-                <CardTitle>How independent are these signals?</CardTitle>
+                <CardTitle>{t("How independent are these signals?")}</CardTitle>
                 {data.correlation.effectiveSignals != null && (
                   <span className="num text-meta font-semibold text-chalk">
-                    {num(data.correlation.effectiveSignals, 1)} of{" "}
-                    {data.correlation.measuredSignals} independent
+                    {t("{effectiveSignals} of {measuredSignals} independent", { effectiveSignals: num(data.correlation.effectiveSignals, 1), measuredSignals: data.correlation.measuredSignals })}
                   </span>
                 )}
               </CardHeader>
@@ -346,7 +334,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                         <div key={key}
                              className="flex items-baseline justify-between gap-3 border-b border-ruleSoft pb-1 text-meta last:border-0">
                           <span className="flex items-center gap-1.5 text-ash">
-                            {labels(pair.a)} vs {labels(pair.b)}
+                            {t("{a} vs {b}", { a: labels(pair.a), b: labels(pair.b) })}
                             <Explain explain={data.explain?.[key]} />
                           </span>
                           {/* Toned by the server's reading of the pair
@@ -362,11 +350,8 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                     })}
                   </div>
                 )}
-                <Explainer summary="Seven columns are not seven tests">
-                  Where two columns move together above 0.7 they are one measure wearing two
-                  names, and averaging them counts that single fact twice. The figure in the
-                  header says how many genuinely separate measures the score is really averaging.
-                  {" "}It is measured from this scan rather than assumed.
+                <Explainer summary={t("Seven columns are not seven tests")}>
+                  {t("Where two columns move together above 0.7 they are one measure wearing two names, and averaging them counts that single fact twice. The figure in the header says how many genuinely separate measures the score is really averaging. It is measured from this scan rather than assumed.")}
                 </Explainer>
               </CardBody>
             </Card>
@@ -383,7 +368,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                   misattribution this codebase has been bitten by before. */}
               {stale && (
                 <span className="font-mono text-micro font-normal normal-case text-warn">
-                  showing the previous scan — press Rank them for {pendingName}
+                  {t("showing the previous scan — press Rank them for {pendingName}", { pendingName })}
                 </span>
               )}
             </CardTitle>
@@ -392,39 +377,39 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                   type="text"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
-                  placeholder="Filter ticker"
-                  aria-label="Filter by ticker"
+                  placeholder={t("Filter ticker")}
+                  aria-label={t("Filter by ticker")}
                   className="h-7 w-28 rounded border border-rule bg-raised px-2 font-mono text-micro text-chalk focus:border-tech/60"
                 />
                 <label className="flex items-center gap-1.5 text-micro text-ash">
-                  min score
+                  {t("min score")}
                   <input
                     type="number"
                     value={minComposite}
                     min={0}
                     max={100}
                     onChange={(e) => setMinComposite(Number(e.target.value) || 0)}
-                    aria-label="Minimum composite score"
+                    aria-label={t("Minimum composite score")}
                     className="h-7 w-14 rounded border border-rule bg-raised px-1.5 font-mono text-micro text-chalk focus:border-tech/60"
                   />
                 </label>
-                <DownloadButton onClick={download}>CSV</DownloadButton>
+                <DownloadButton onClick={download}>{t("CSV")}</DownloadButton>
               </div>
             </CardHeader>
             <CardBody className="px-0">
               {/* The ticker column stays put while the signal columns scroll,
                   because a row of seven percentiles is unreadable once you can
                   no longer see which name it belongs to. */}
-              <ScrollRegion vertical label="Ranked names" className="max-h-[36rem]">
+              <ScrollRegion vertical label={t("Ranked names")} className="max-h-[36rem]">
                 <table className="w-full text-left text-meta">
                   <thead className="sticky top-0 z-20 bg-panel">
                     <tr className="eyebrow border-b border-rule [&>th]:px-3 [&>th]:py-2 [&>th]:font-normal [&>th]:align-bottom">
-                      <th scope="col" className="w-8 bg-panel"><span className="sr-only">How it ranked</span></th>
+                      <th scope="col" className="w-8 bg-panel"><span className="sr-only">{t("How it ranked")}</span></th>
                       <th scope="col" className="w-10 bg-panel text-right">#</th>
-                      <SortHeader label="Ticker" active={sortKey === "ticker"}
+                      <SortHeader label={t("Ticker")} active={sortKey === "ticker"}
                                   ascending={ascending} onClick={() => toggleSort("ticker")}
                                   sticky />
-                      <SortHeader label="Score" active={sortKey === "composite"}
+                      <SortHeader label={t("Score")} active={sortKey === "composite"}
                                   ascending={ascending} onClick={() => toggleSort("composite")}
                                   align="right" />
                       {signals.map((signal) => (
@@ -438,11 +423,11 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                                     align="right"
                                     explain={data.explain?.[`signalDefinition.${signal.key}`]} />
                       ))}
-                      <SortHeader label="Close" active={sortKey === "close"}
+                      <SortHeader label={t("Close")} active={sortKey === "close"}
                                   ascending={ascending} onClick={() => toggleSort("close")}
                                   align="right" />
                       <th scope="col" className="w-10 bg-panel text-center"
-                          title={`Pick up to ${maxDeepen}`}>Pick</th>
+                          title={t("Pick up to {count}", { count: maxDeepen })}>{t("Pick")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -457,7 +442,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                               <button
                                 type="button"
                                 aria-expanded={open}
-                                aria-label={`Why ${row.ticker} ranked ${row.rank}`}
+                                aria-label={t("Why {ticker} ranked {rank}", { ticker: row.ticker, rank: row.rank })}
                                 onClick={() => setExpanded(open ? null : row.ticker)}
                                 className="text-ash transition-colors hover:text-chalk"
                               >
@@ -471,7 +456,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                                 <button
                                   type="button"
                                   onClick={() => onSelect(row.ticker)}
-                                  title={`Load ${row.ticker} into every lens`}
+                                  title={t("Load {ticker} into every lens", { ticker: row.ticker })}
                                   className={cn(
                                     "underline decoration-dotted decoration-rule underline-offset-4",
                                     "transition-colors hover:text-tech hover:decoration-tech",
@@ -496,7 +481,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
                                 checked={picked.includes(row.ticker)}
                                 onChange={() => togglePick(row.ticker)}
                                 disabled={!picked.includes(row.ticker) && picked.length >= maxDeepen}
-                                aria-label={`Add ${row.ticker} to the shortlist`}
+                                aria-label={t("Add {ticker} to the shortlist", { ticker: row.ticker })}
                                 className="h-[18px] w-[18px] shrink-0 accent-tech"
                               />
                             </td>
@@ -522,35 +507,26 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               {rows.length === 0 && (
                 <p className="px-5 py-3 text-base text-ash">
                   {data.rows.length === 0
-                    ? "No name in this list had enough price history to rank."
-                    : "Nothing matches the filter."}
+                    ? t("No name in this list had enough price history to rank.")
+                    : t("Nothing matches the filter.")}
                 </p>
               )}
 
               <div className="space-y-2 px-5 pt-4">
                 <p className="prose-col text-meta leading-relaxed text-ash">
-                  Click a row&apos;s arrow to see how it earned its score, or the ticker to load
-                  it into all four lenses.
+                  {t("Click a row's arrow to see how it earned its score, or the ticker to load it into all four lenses.")}
                 </p>
-                <Explainer summary="What the 0–100 numbers mean, and why the score is a judgement">
-                  Every number is a rank within this scan: 0 is last, 100 is first. The score
-                  averages them, weighted by how well each measure is supported in published
-                  research — the dot beside each column heading shows that support.
-                  {" "}Those weights are a judgement, not a finding.
+                <Explainer summary={t("What the 0–100 numbers mean, and why the score is a judgement")}>
+                  {t("Every number is a rank within this scan: 0 is last, 100 is first. The score averages them, weighted by how well each measure is supported in published research — the dot beside each column heading shows that support. Those weights are a judgement, not a finding.")}
                 </Explainer>
                 {data.missing.length > 0 && (
                   <Note tone="warn">
-                    {data.missing.length} symbol{data.missing.length === 1 ? "" : "s"} could not
-                    be ranked: <span className="num">{data.missing.join(", ")}</span>. Either
-                    delisted since this list was written, or under {data.minBars} days of price
-                    history — too little to rank on, so the name is dropped rather than scored
-                    on whichever measures happened to work.
+                    {t("{length} symbol{value} could not be ranked:", { length: data.missing.length, value: data.missing.length === 1 ? "" : "s" })}{" "}<span className="num">{data.missing.join(", ")}</span>{t(". Either delisted since this list was written, or under {minBars} days of price history — too little to rank on, so the name is dropped rather than scored on whichever measures happened to work.", { minBars: data.minBars })}
                   </Note>
                 )}
                 {data.benchmark == null && (
                   <Note tone="warn">
-                    The index did not load, so &ldquo;versus the index&rdquo; is empty and every
-                    score here is built from one fewer measure.
+                    {t("The index did not load, so “versus the index” is empty and every score here is built from one fewer measure.")}
                   </Note>
                 )}
               </div>
@@ -566,29 +542,25 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
           {/* ---------------- the deepen step ---------------- */}
           <Card accent={picked.length ? palette.tech : undefined}>
             <CardHeader>
-              <CardTitle>Then look at the filings</CardTitle>
+              <CardTitle>{t("Then look at the filings")}</CardTitle>
               <span className="font-mono text-micro text-ash">
-                {picked.length}/{maxDeepen} picked
+                {t("{length}/{maxDeepen} picked", { length: picked.length, maxDeepen })}
               </span>
             </CardHeader>
             <CardBody className="space-y-3">
               <p className="text-meta leading-relaxed text-ash">
-                Everything above is computed from price and volume, which is the half that can be
-                fetched for a hundred names at once. Accounting quality and intrinsic value need
-                the filings, and those come one company at a time — a few seconds each — which is
-                why they are a shortlist step rather than another column. Tick up to {maxDeepen}
-                {" "}names above and run them here.
+                {t("Everything above is computed from price and volume, which is the half that can be fetched for a hundred names at once. Accounting quality and intrinsic value need the filings, and those come one company at a time — a few seconds each — which is why they are a shortlist step rather than another column. Tick up to {maxDeepen} names above and run them here.", { maxDeepen })}
               </p>
               <div className="flex flex-wrap items-center gap-3">
                 <ApplyButton
                   busy={deepState.status === "loading"}
                   onClick={() => deepen(picked, scanMarket)}
                 >
-                  Run quality &amp; value
+                  {t("Run quality & value")}
                 </ApplyButton>
                 {picked.length === 0 && (
                   <span className="text-micro text-ash">
-                    Pick some names in the table first.
+                    {t("Pick some names in the table first.")}
                   </span>
                 )}
               </div>
@@ -596,8 +568,7 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               {deepState.status === "loading" && (
                 <>
                   <p className="text-meta leading-relaxed text-ash">
-                    Reading the filings for {picked.length} compan
-                    {picked.length === 1 ? "y" : "ies"}, one at a time — a few seconds each.
+                    {t("Reading the filings for {length} compan{value}, one at a time — a few seconds each.", { length: picked.length, value: picked.length === 1 ? "y" : "ies" })}
                   </p>
                   <PanelSkeleton />
                 </>
@@ -610,15 +581,15 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
               )}
 
               {deepState.status === "ready" && (
-                <ScrollRegion label="Quality and value for the shortlist">
+                <ScrollRegion label={t("Quality and value for the shortlist")}>
                   <table className="w-full text-left text-meta">
                     <thead>
                       <tr className="eyebrow border-b border-rule [&>th]:px-3 [&>th]:py-2 [&>th]:font-normal">
-                        <th>Ticker</th>
-                        <th>Accounting quality</th>
-                        <th>Health checks</th>
-                        <th>Intrinsic value</th>
-                        <th className="text-right">Gap to price</th>
+                        <th>{t("Ticker")}</th>
+                        <th>{t("Accounting quality")}</th>
+                        <th>{t("Health checks")}</th>
+                        <th>{t("Intrinsic value")}</th>
+                        <th className="text-right">{t("Gap to price")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -638,12 +609,16 @@ export function RankingPanel({ onSelect }: { onSelect?: (ticker: string) => void
       )}
 
       <Note>
-        A rank says which names stand out against <em>these</em> peers on <em>these</em> measures
-        today — a much weaker claim than it looks. Research use only.
+        {t("A rank says which names stand out against")}{" "}<em>{t("these")}</em>{" "}{t("peers on")}{" "}<em>{t("these")}</em>{" "}{t("measures today — a much weaker claim than it looks. Research use only.")}
       </Note>
     </div>
   );
 }
+
+// The evidence dot's title, by the code the ranking signal carries.
+const EVIDENCE_TITLE: Record<string, string> = {
+  strong: msg("strong evidence"), moderate: msg("moderate evidence"), weak: msg("weak evidence"),
+};
 
 function SortHeader({
   label, active, ascending, onClick, align = "left", hint, explain, sticky, title,
@@ -652,6 +627,7 @@ function SortHeader({
   align?: "left" | "right"; hint?: string; sticky?: boolean; title?: string;
   explain?: React.ComponentProps<typeof Explain>["explain"];
 }) {
+  const t = useT();
   return (
     <th scope="col"
         className={cn("bg-panel", align === "right" && "text-right",
@@ -660,7 +636,7 @@ function SortHeader({
       <span className={cn("inline-flex items-center gap-1",
                           align === "right" && "flex-row-reverse")}>
         <button type="button" onClick={onClick}
-                title={`Sort by ${title ?? label}`}
+                title={t("Sort by {column}", { column: title ?? label })}
                 className={cn("whitespace-nowrap py-0.5 transition-colors hover:text-chalk",
                               active ? "text-chalk" : "")}>
           {label}
@@ -670,7 +646,7 @@ function SortHeader({
         </button>
         {hint && (
           <span aria-hidden
-                title={`${hint} evidence`}
+                title={hint && EVIDENCE_TITLE[hint] ? t(EVIDENCE_TITLE[hint]) : `${hint} evidence`}
                 className={cn("inline-block h-1.5 w-1.5 rounded-full",
                               EVIDENCE_DOT[hint] ?? "bg-ash")} />
         )}
@@ -684,6 +660,7 @@ function SortHeader({
 function WhyRanked({
   row, signals, deep,
 }: { row: RankRow; signals: RankSignalDefinition[]; deep?: DeepenRow }) {
+  const t = useT();
   const composite = row.explain?.compositeRank;
   return (
     <div className="space-y-3">
@@ -713,7 +690,7 @@ function WhyRanked({
               {explanation && (
                 <p className={cn("mt-1 text-micro",
                                  TONE_TEXT[explanation.tone] ?? "text-ash")}>
-                  weight {signal.weight.toFixed(1)} · {signal.evidence} evidence
+                  {t("weight {weight} · {evidence} evidence", { weight: signal.weight.toFixed(1), evidence: signal.evidence })}
                 </p>
               )}
             </div>
@@ -722,23 +699,21 @@ function WhyRanked({
       </div>
       {deep && (
         <div className="rounded border border-tech/40 bg-tech/5 px-3 py-2 text-meta leading-relaxed">
-          <span className="eyebrow mr-2">From the filings</span>
+          <span className="eyebrow mr-2">{t("From the filings")}</span>
           {deep.quality.ok
             ? <span className="text-body">{deep.quality.data.headline}</span>
-            : <span className="text-ash">Quality could not be computed for this listing.</span>}
+            : <span className="text-ash">{t("Quality could not be computed for this listing.")}</span>}
         </div>
       )}
       <p className="text-meta leading-relaxed text-ash">
-        Coverage {pct(row.coverage, 0)} — {row.signalsAvailable} of {row.signalsTotal} signals
-        contributed. A signal with too little history is left out and the remaining weights are
-        renormalised, rather than filling the gap with the universe median and calling it a
-        measurement.
+        {t("Coverage {coverage} — {signalsAvailable} of {signalsTotal} signals contributed. A signal with too little history is left out and the remaining weights are renormalised, rather than filling the gap with the universe median and calling it a measurement.", { coverage: pct(row.coverage, 0), signalsAvailable: row.signalsAvailable, signalsTotal: row.signalsTotal })}
       </p>
     </div>
   );
 }
 
 function DeepRow({ row }: { row: DeepenRow }) {
+  const t = useT();
   const quality = row.quality.ok ? row.quality.data : null;
   const value = row.valuation.ok ? row.valuation.data : null;
   return (
@@ -746,7 +721,7 @@ function DeepRow({ row }: { row: DeepenRow }) {
       <td className="num px-3 py-2 font-semibold">{row.ticker}</td>
       <td className="px-3 py-2">
         {quality == null ? <span className="text-ash">—</span>
-          : !quality.applicable ? <span className="text-ash">not applicable</span>
+          : !quality.applicable ? <span className="text-ash">{t("not applicable")}</span>
             : <span className={quality.verdict === "SOUND" ? "text-acc"
                 : quality.verdict === "CONCERNS" ? "text-dist" : "text-ash"}>
                 {quality.verdict}
@@ -754,7 +729,7 @@ function DeepRow({ row }: { row: DeepenRow }) {
       </td>
       <td className="num px-3 py-2 text-ash">
         {quality?.piotroski
-          ? `${quality.piotroski.score}/${quality.piotroski.maxScore} passed`
+          ? t("{score}/{max} passed", { score: quality.piotroski.score, max: quality.piotroski.maxScore })
           : "—"}
       </td>
       <td className="px-3 py-2">

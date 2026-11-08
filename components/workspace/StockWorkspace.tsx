@@ -40,6 +40,7 @@ import type { Market } from "@/lib/types";
 import {
   DEFAULT_TAB, compareHref, parseStockQuery, stockHref, type StockTab,
 } from "@/lib/url";
+import { msg, useT } from "@/lib/i18n";
 
 /**
  * LABELLED BY THE QUESTION, NOT THE METHOD. "Flow · anomalies" and "Intrinsic
@@ -52,20 +53,20 @@ const TABS: (Tab & { id: StockTab })[] = [
   // what its filings say it has done is the question a newcomer has before any
   // lens makes sense; Trend stays the tab a run lands on, for the reason in
   // lib/url.ts, and a one-line company header answers "who is this" on every tab.
-  { id: "company", label: "What it is", accent: palette.company },
-  { id: "flow", label: "Who is trading it", accent: palette.flow },
-  { id: "trend", label: "What the price did", accent: palette.trend },
-  { id: "value", label: "What it is worth", accent: palette.value },
-  { id: "quality", label: "Are the numbers real", accent: palette.quality },
+  { id: "company", label: msg("What it is"), accent: palette.company },
+  { id: "flow", label: msg("Who is trading it"), accent: palette.flow },
+  { id: "trend", label: msg("What the price did"), accent: palette.trend },
+  { id: "value", label: msg("What it is worth"), accent: palette.value },
+  { id: "quality", label: msg("Are the numbers real"), accent: palette.quality },
   // The fourth question this app can answer — how does it sit against what I
   // already own — and the only one that needs an input other than a ticker.
-  { id: "portfolio", label: "Portfolio fit", accent: palette.portfolio },
+  { id: "portfolio", label: msg("Portfolio fit"), accent: palette.portfolio },
   // The cross-sectional half of the same question: what a whole index moves
   // with. It needs no input beyond picking a list, and highlights this ticker.
-  { id: "exposure", label: "What drives it", accent: palette.drivers },
+  { id: "exposure", label: msg("What drives it"), accent: palette.drivers },
   // Last of the published tabs: the only one that asks the reader for
   // something rather than telling them something.
-  { id: "thesis", label: "Thesis", accent: palette.thesis },
+  { id: "thesis", label: msg("Thesis"), accent: palette.thesis },
   // THE PRIVATE TIER, AND LAST FOR A REASON THAT IS NOT MODESTY. This is the
   // one tab that returns a verdict rather than a description, and the page is
   // arranged so a reader meets the evidence before anything compresses it. Its
@@ -73,7 +74,7 @@ const TABS: (Tab & { id: StockTab })[] = [
   // ONLY WHERE THE OWNER RUNS THE APP: the workspace drops it unless the server
   // says the private tier is on (`useCapabilities`), and the route refuses it on
   // any deployment whatever the page draws.
-  { id: "score", label: "Score it", accent: palette.private, divider: "Private" },
+  { id: "score", label: msg("Score it"), accent: palette.private, divider: msg("Private") },
 ];
 
 /** How old a loaded read may get before returning to the page fetches it again. */
@@ -95,6 +96,7 @@ const STALE_AFTER_MS = 15 * 60_000;
  * compare view and coming back restores the page rather than re-running it.
  */
 export function StockWorkspace({ symbol }: { symbol: string }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
@@ -114,9 +116,9 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
   const [tab, setTabState] = useState<StockTab>(parsed.tab);
   useEffect(() => { setTabState(parsed.tab); }, [parsed.tab]);
   const { privateTier } = useCapabilities();
-  const tabs = useMemo(() => (privateTier ? TABS : TABS.filter((t) => t.id !== "score")),
+  const tabs = useMemo(() => (privateTier ? TABS : TABS.filter((item) => item.id !== "score")),
                        [privateTier]);
-  const visible = tabs.some((t) => t.id === tab) ? tab : DEFAULT_TAB;
+  const visible = tabs.some((item) => item.id === tab) ? tab : DEFAULT_TAB;
   const setTab = useCallback((next: string) => {
     const id = next as StockTab;
     setTabState(id);
@@ -197,9 +199,10 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
   const onWatch = useCallback(() => {
     const wasWatched = isWatched(symbol);
     const ok = toggleWatch(symbol);
-    if (!ok) toast({ message: "Your watchlist is full (50). Remove one to add another.", tone: "error" });
-    else toast({ message: wasWatched ? `${symbol} removed from your watchlist` : `${symbol} added to your watchlist — kept in this browser only` });
-  }, [isWatched, toggleWatch, symbol, toast]);
+    if (!ok) toast({ message: t("Your watchlist is full (50). Remove one to add another."), tone: "error" });
+    else toast({ message: wasWatched ? t("{symbol} removed from your watchlist", { symbol })
+      : t("{symbol} added to your watchlist — kept in this browser only", { symbol }) });
+  }, [isWatched, toggleWatch, symbol, toast, t]);
   const onCompare = useCallback(() => {
     const last = readSession<string[]>("compare:last") ?? [];
     router.push(compareHref([...last.filter((s) => s !== symbol), symbol].slice(-4)));
@@ -207,10 +210,10 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
   const onCopy = useCallback(() => {
     const url = `${window.location.origin}${stockHref(symbol, visible, tuning)}`;
     navigator.clipboard?.writeText(url).then(
-      () => toast({ message: "Link copied — it carries the ticker and tab, nothing else" }),
-      () => toast({ message: "Could not reach the clipboard; copy the address bar instead", tone: "error" }),
+      () => toast({ message: t("Link copied — it carries the ticker and tab, nothing else") }),
+      () => toast({ message: t("Could not reach the clipboard; copy the address bar instead"), tone: "error" }),
     );
-  }, [symbol, visible, tuning, toast]);
+  }, [symbol, visible, tuning, toast, t]);
   const onPrint = useCallback(() => window.print(), []);
 
   // A printed page cannot open a disclosure, so every <details> on the page is
@@ -235,7 +238,7 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
   useEffect(() => {
     const onShortcut = (e: Event) => {
       const action = (e as CustomEvent<string>).detail;
-      const index = tabs.findIndex((t) => t.id === visible);
+      const index = tabs.findIndex((item) => item.id === visible);
       if (action === "prevTab") setTab(tabs[(index - 1 + tabs.length) % tabs.length].id);
       else if (action === "nextTab") setTab(tabs[(index + 1) % tabs.length].id);
       else if (action === "watch") onWatch();
@@ -245,14 +248,15 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
   }, [tabs, visible, setTab, onWatch]);
 
   const commands: RunnableCommand[] = [
-    ...tabs.map((t) => ({ id: `tab:${t.id}`, group: "Go to" as const,
-                          label: `${symbol}: ${t.label}`, keywords: `tab ${t.id}`,
-                          run: () => setTab(t.id) })),
-    { id: "act:watch", group: "Actions", label: watched ? `Remove ${symbol} from watchlist` : `Add ${symbol} to watchlist`,
+    ...tabs.map((item) => ({ id: `tab:${item.id}`, group: "Go to" as const,
+                          label: `${symbol}: ${t(item.label)}`, keywords: `tab ${item.id}`,
+                          run: () => setTab(item.id) })),
+    { id: "act:watch", group: "Actions", label: watched ? t("Remove {symbol} from watchlist", { symbol })
+      : t("Add {symbol} to watchlist", { symbol }),
       detail: "w", run: onWatch },
-    { id: "act:compare", group: "Actions", label: `Compare ${symbol} with…`, run: onCompare },
-    { id: "act:copy", group: "Actions", label: "Copy link to this page", run: onCopy },
-    { id: "act:print", group: "Actions", label: "Print this page", keywords: "pdf tearsheet", run: onPrint },
+    { id: "act:compare", group: "Actions", label: t("Compare {symbol} with…", { symbol }), run: onCompare },
+    { id: "act:copy", group: "Actions", label: t("Copy link to this page"), run: onCopy },
+    { id: "act:print", group: "Actions", label: t("Print this page"), keywords: "pdf tearsheet", run: onPrint },
   ];
   useRegisterCommands("stock", commands);
 
@@ -331,7 +335,7 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
                 {(d) => (
                   <TechnicalPanel data={d} busy={technical.status === "loading"}
                                   stateKey={symbol}
-                                  onApply={(t) => engines.refineTechnical(opts, t)} />
+                                  onApply={(item) => engines.refineTechnical(opts, item)} />
                 )}
               </Panel>
               {/* On the Trend tab because the seven signals it compares are
@@ -412,7 +416,7 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
                               onScore={() => scoreVerdict({ ticker: symbol, market })} />
               </div>
               <p className="hidden text-meta text-ash print:block">
-                The private score is not printed.
+                {t("The private score is not printed.")}
               </p>
             </TabPanel>
           )}

@@ -14,6 +14,7 @@ import {
   type JournalChange, type ThesisEntry,
 } from "@/lib/journal";
 import { stockHref } from "@/lib/url";
+import { useT } from "@/lib/i18n";
 
 /**
  * Every thesis the reader has written, for every company, as written.
@@ -34,6 +35,7 @@ import { stockHref } from "@/lib/url";
  * (scripts/check_frontend.mjs).
  */
 export function JournalView() {
+  const t = useT();
   const toast = useToast();
   const [entries, setEntries] = useState<ThesisEntry[] | null>(null);
   const [filter, setFilter] = useState("");
@@ -62,7 +64,7 @@ export function JournalView() {
     try {
       window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(next));
     } catch {
-      toast({ message: "Not saved — this browser would not store the change.", tone: "error" });
+      toast({ message: t("Not saved — this browser would not store the change."), tone: "error" });
     }
   };
 
@@ -82,38 +84,34 @@ export function JournalView() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
-          <h1>Thesis journal</h1>
+          <h1>{t("Thesis journal")}</h1>
           <p className="prose-col text-ash">
-            What you wrote down before acting, in the words you used at the time. Entries cannot be
-            edited, and nothing here is ever scored.
+            {t("What you wrote down before acting, in the words you used at the time. Entries cannot be edited, and nothing here is ever scored.")}
           </p>
         </div>
         <Button variant="quiet" size="sm" onClick={() => exportJournal(entries)}
                 disabled={entries.length === 0}>
-          <Download aria-hidden className="h-3.5 w-3.5" /> Export as JSON
+          <Download aria-hidden className="h-3.5 w-3.5" />{" "}{t("Export as JSON")}
         </Button>
       </header>
 
       {entries.length === 0 ? (
-        <StateCard kind="empty" level={2} title="No entries yet">
-          Open a company and use its Thesis tab to write down what has to be true and what would
-          prove it wrong — before you act. Entries are kept in this browser only.
+        <StateCard kind="empty" level={2} title={t("No entries yet")}>
+          {t("Open a company and use its Thesis tab to write down what has to be true and what would prove it wrong — before you act. Entries are kept in this browser only.")}
         </StateCard>
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-3">
             <Input value={filter} onChange={(e) => setFilter(e.target.value)}
-                   placeholder="Filter by ticker" aria-label="Filter entries by ticker"
+                   placeholder={t("Filter by ticker")} aria-label={t("Filter entries by ticker")}
                    className="h-9 max-w-[16rem]" />
             <span className="text-meta text-ash">
-              {entries.length} entr{entries.length === 1 ? "y" : "ies"} across{" "}
-              {new Set(entries.map((e) => e.ticker)).size} compan
-              {new Set(entries.map((e) => e.ticker)).size === 1 ? "y" : "ies"}
+              {t("{length} entr{value} across {size} compan{value2}", { length: entries.length, value: entries.length === 1 ? "y" : "ies", size: new Set(entries.map((e) => e.ticker)).size, value2: new Set(entries.map((e) => e.ticker)).size === 1 ? "y" : "ies" })}
             </span>
           </div>
 
           {groups.length === 0 && (
-            <StateCard kind="empty" level={2} title="No entry matches that ticker" />
+            <StateCard kind="empty" level={2} title={t("No entry matches that ticker")} />
           )}
 
           {groups.map(([ticker, list]) => (
@@ -125,7 +123,7 @@ export function JournalView() {
                 </CardTitle>
                 <Link href={stockHref(ticker, "thesis")}
                       className="inline-flex min-h-[24px] items-center gap-1.5 text-meta text-tech hover:underline">
-                  Open with today&apos;s figures
+                  {t("Open with today's figures")}
                   <ArrowRight aria-hidden className="h-3.5 w-3.5" />
                 </Link>
               </CardHeader>
@@ -134,8 +132,8 @@ export function JournalView() {
                   <Entry key={entry.id} entry={entry} current={null}
                          onDelete={() => {
                            persist((current) => removeEntry(current, entry.id));
-                           toast({ message: `Entry on ${ticker} deleted`,
-                                   action: { label: "Undo",
+                           toast({ message: t("Entry on {ticker} deleted", { ticker }),
+                                   action: { label: t("Undo"),
                                              onClick: () => persist((current) => appendEntry(current, entry)) } });
                          }} />
                 ))}
@@ -146,8 +144,7 @@ export function JournalView() {
       )}
 
       <Note tone="warn">
-        Kept in this browser and nowhere else — one cleared cache, private window or new machine
-        away from gone. Export it.
+        {t("Kept in this browser and nowhere else — one cleared cache, private window or new machine away from gone. Export it.")}
       </Note>
     </div>
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef } from "react";
+import { msg, useT } from "@/lib/i18n";
 import { alpha } from "@/lib/palette";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +36,7 @@ export interface Tab {
  * jump, and `aria-controls` pointing at a real `TabPanel`.
  */
 export function Tabs({
-  tabs, active, onChange, idPrefix = "tab", label = "Lenses", hasPanels = true,
+  tabs, active, onChange, idPrefix = "tab", label = msg("Lenses"), hasPanels = true,
 }: {
   tabs: Tab[];
   active: string;
@@ -53,6 +54,7 @@ export function Tabs({
    */
   label?: string;
 }) {
+  const t = useT();
   const strip = useRef<HTMLDivElement>(null);
 
   // ONE ROW, SCROLLED SIDEWAYS, and the selected tab kept in view. The strip
@@ -68,7 +70,7 @@ export function Tabs({
     const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
     if (!keys.includes(event.key)) return;
     event.preventDefault();
-    const index = tabs.findIndex((t) => t.id === active);
+    const index = tabs.findIndex((item) => item.id === active);
     const next =
       event.key === "Home" ? 0
         : event.key === "End" ? tabs.length - 1
@@ -85,7 +87,7 @@ export function Tabs({
     <div
       ref={strip}
       role="tablist"
-      aria-label={label}
+      aria-label={t(label)}
       onKeyDown={onKeyDown}
       className="flex gap-1 overflow-x-auto border-b border-rule [scrollbar-width:none]
                  [&::-webkit-scrollbar]:hidden"
@@ -98,7 +100,7 @@ export function Tabs({
             <span aria-hidden
                   className="ml-2 flex shrink-0 items-center border-l border-rule pl-3 pr-1 text-micro
                              uppercase tracking-[0.14em] text-faint">
-              {tab.divider}
+              {t(tab.divider)}
             </span>
           )}
           <button
@@ -133,7 +135,7 @@ export function Tabs({
                   background: alpha(tab.accent, 0.06) }
               : undefined}
           >
-            {tab.label}
+            {t(tab.label)}
           </button>
           </Fragment>
         );

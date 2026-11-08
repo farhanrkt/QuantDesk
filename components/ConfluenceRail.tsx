@@ -8,6 +8,7 @@ import { ChevronRight } from "lucide-react";
 import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
 import { cn, num, pct, signedPct, verdictLabel } from "@/lib/utils";
 import { LENS_HUE, palette } from "@/lib/palette";
+import { msg, t, useT } from "@/lib/i18n";
 
 const ACC = palette.acc;
 const DIST = palette.dist;
@@ -25,8 +26,8 @@ const ASH = palette.ash;
 type Family = "price" | "filings";
 
 const FAMILY_LABEL: Record<Family, string> = {
-  price: "price and volume",
-  filings: "the filings",
+  price: msg("price and volume"),
+  filings: msg("the filings"),
 };
 
 interface Reading {
@@ -89,7 +90,7 @@ export function agreementOf(readings: Reading[]): Agreement {
     // has finished and found nothing. Pending or never asked still awaits.
     const settledEmpty = readings.some((r) => r.failed) && !readings.some((r) => r.pending);
     return { lenses: 0, independent: 0,
-             headline: settledEmpty ? "No lens returned a reading" : "Awaiting data",
+             headline: settledEmpty ? t("No lens returned a reading") : t("Awaiting data"),
              color: ASH, footnote: null };
   }
 
@@ -108,34 +109,41 @@ export function agreementOf(readings: Reading[]): Agreement {
   const total = votes.length;
   const bulls = votes.filter((v) => v > 0).length;
   const bears = votes.filter((v) => v < 0).length;
-  const noun = total === 1 ? "reading" : "readings";
   // "Both" only when there are exactly two. There are two families today, so
   // `total` cannot exceed two — but the Family type is meant to be extended,
   // and "Both independent readings" over three sources is the kind of wrong
   // that survives review because it reads fluently.
-  const all = total === 2 ? "Both" : "All";
+  const both = total === 2;
 
-  let headline = "Mixed signals";
+  let headline = t("Mixed signals");
   let color = ASH;
   if (bulls === total && total > 1) {
-    headline = `${all} independent ${noun} constructive`;
+    headline = both ? t("Both independent readings constructive")
+      : t("All independent readings constructive");
     color = ACC;
   } else if (bears === total && total > 1) {
-    headline = `${all} independent ${noun} negative`;
+    headline = both ? t("Both independent readings negative")
+      : t("All independent readings negative");
     color = DIST;
   } else if (bulls > bears) {
-    headline = `${bulls} of ${total} independent ${noun} constructive`;
+    headline = total === 1
+      ? t("{count} of {total} independent reading constructive", { count: bulls, total })
+      : t("{count} of {total} independent readings constructive", { count: bulls, total });
     color = ACC;
   } else if (bears > bulls) {
-    headline = `${bears} of ${total} independent ${noun} negative`;
+    headline = total === 1
+      ? t("{count} of {total} independent reading negative", { count: bears, total })
+      : t("{count} of {total} independent readings negative", { count: bears, total });
     color = DIST;
   }
 
   const notes: string[] = [];
   if (live.length > total) {
-    notes.push(`${live.length} lenses, ${total} independent ${total === 1 ? "source" : "sources"}`);
+    notes.push(total === 1
+      ? t("{lenses} lenses, {total} independent source", { lenses: live.length, total })
+      : t("{lenses} lenses, {total} independent sources", { lenses: live.length, total }));
   }
-  for (const family of split) notes.push(`split on ${FAMILY_LABEL[family]}`);
+  for (const family of split) notes.push(t("split on {family}", { family: t(FAMILY_LABEL[family]) }));
 
   return { lenses: live.length, independent: total, headline, color,
            footnote: notes.length ? notes.join(" · ") : null };
@@ -162,7 +170,7 @@ const blank = (lens: string, question: string, family: Family,
   pending: state === "loading",
   failed: state === "error",
   verdict: state === "loading" ? "…" : "—",
-  detail: state === "loading" ? "running" : state === "error" ? "did not run" : "no reading",
+  detail: state === "loading" ? t("running") : state === "error" ? t("did not run") : t("no reading"),
 });
 
 /**
@@ -175,24 +183,30 @@ const blank = (lens: string, question: string, family: Family,
  * still shown in the anomaly panel, labelled with its horizon.
  */
 function readAnomaly(state: Engine<AnomalyResponse>): Reading {
-  const question = "Is anyone unusual trading this?";
-  if (state.status !== "ready") return blank("Flow", question, "price", state.status);
+  const question = t("Is anyone unusual trading this?");
+  if (state.status !== "ready") return blank(msg("Flow"), question, "price", state.status);
   const { stats } = state.data;
   const bias = stats.recentFlowBias;
   const color = bias === "Accumulation" ? ACC : bias === "Distribution" ? DIST : ASH;
   const drift =
     stats.netFlowBias !== bias
-      ? `, leaning ${stats.netFlowBias.toLowerCase()} over the full window`
+      ? t(", leaning {bias} over the full window",
+          { bias: t(BIAS_WORD[stats.netFlowBias] ?? stats.netFlowBias.toLowerCase()) })
       : "";
   return {
-    lens: "Flow",
+    lens: msg("Flow"),
     question,
-    verdict: stats.recentCount === 0 ? "Quiet" : bias === "Accumulation" ? "Buying"
-      : bias === "Distribution" ? "Selling" : "Mixed",
+    verdict: stats.recentCount === 0 ? t("Quiet") : bias === "Accumulation" ? t("Buying")
+      : bias === "Distribution" ? t("Selling") : t("Mixed"),
     detail:
       stats.recentCount === 0
-        ? `Nothing unusual in the last ${stats.recentDays} days (${stats.anomalyCount} odd days across the whole window)`
-        : `${stats.recentCount} unusual day${stats.recentCount === 1 ? "" : "s"} in the last ${stats.recentDays}${drift}`,
+        ? t("Nothing unusual in the last {days} days ({count} odd days across the whole window)",
+            { days: stats.recentDays, count: stats.anomalyCount })
+        : stats.recentCount === 1
+          ? t("{count} unusual day in the last {days}{drift}",
+              { count: stats.recentCount, days: stats.recentDays, drift })
+          : t("{count} unusual days in the last {days}{drift}",
+              { count: stats.recentCount, days: stats.recentDays, drift }),
     color: stats.recentCount === 0 ? ASH : color,
     vote:
       stats.recentCount === 0 ? 0 : bias === "Accumulation" ? 1 : bias === "Distribution" ? -1 : 0,
@@ -201,8 +215,8 @@ function readAnomaly(state: Engine<AnomalyResponse>): Reading {
 }
 
 function readTechnical(state: Engine<TechnicalResponse>): Reading {
-  const question = "What has the price been doing?";
-  if (state.status !== "ready") return blank("Trend", question, "price", state.status);
+  const question = t("What has the price been doing?");
+  if (state.status !== "ready") return blank(msg("Trend"), question, "price", state.status);
   const { summary, latest, longTerm, hasLongTerm } = state.data;
   const tone = summary.trend_tone;
   const color = tone === "bull" ? ACC : tone === "bear" ? DIST : TECH;
@@ -215,9 +229,10 @@ function readTechnical(state: Engine<TechnicalResponse>): Reading {
     // turns any NaN into a null on the wire, and `.toFixed` on a null throws —
     // which would take down the rail that sits above every other panel. The
     // shared formatters render "—" for missing data and are asserted to.
-    : `Last close ${num(latest.close)} (${signedPct(latest.changePct / 100)} on the day)`;
+    : t("Last close {close} ({change} on the day)",
+        { close: num(latest.close), change: signedPct(latest.changePct / 100) });
   return {
-    lens: "Trend",
+    lens: msg("Trend"),
     question,
     verdict: summary.trend,
     detail: context,
@@ -228,28 +243,36 @@ function readTechnical(state: Engine<TechnicalResponse>): Reading {
 }
 
 const ENGINE_NAMES: Record<string, string> = {
-  DCF: "cash-flow model",
-  DDM: "dividend model",
-  RI: "book-value model",
+  DCF: msg("cash-flow model"),
+  DDM: msg("dividend model"),
+  RI: msg("book-value model"),
+};
+
+// The flow bias codes as words; the codes themselves are compared above.
+const BIAS_WORD: Record<string, string> = {
+  Accumulation: msg("accumulation"), Distribution: msg("distribution"),
+  Mixed: msg("mixed"), Neutral: msg("neutral"),
 };
 
 function readValuation(state: Engine<ValuationResponse>): Reading {
-  const question = "What is the business worth?";
-  if (state.status !== "ready") return blank("Value", question, "filings", state.status);
+  const question = t("What is the business worth?");
+  if (state.status !== "ready") return blank(msg("Value"), question, "filings", state.status);
   const d = state.data;
   const color =
     d.verdict === "UNDERVALUED" ? ACC : d.verdict === "OVERVALUED" ? DIST
       : d.engine === "DDM" ? DDM : DCF;
   const gap = d.monteCarlo.upside;
   const direction = gap == null ? "" : gap >= 0
-    ? `the market price is ${pct(Math.abs(gap), 0)} below that`
-    : `the market price is ${pct(Math.abs(gap), 0)} above that`;
+    ? t("the market price is {gap} below that", { gap: pct(Math.abs(gap), 0) })
+    : t("the market price is {gap} above that", { gap: pct(Math.abs(gap), 0) });
   return {
-    lens: "Value",
+    lens: msg("Value"),
     question,
     verdict: verdictLabel(d.verdict),
-    detail: `The ${ENGINE_NAMES[d.engine] ?? d.engine} puts it near ${d.monteCarlo.p50Label}; ${direction}. `
-      + `${pct(d.monteCarlo.probUndervalued, 0)} of simulated runs came out cheap.`,
+    detail: t("The {engine} puts it near {fair}; {direction}. ",
+              { engine: ENGINE_NAMES[d.engine] ? t(ENGINE_NAMES[d.engine]) : d.engine,
+                fair: d.monteCarlo.p50Label, direction })
+      + t("{share} of simulated runs came out cheap.", { share: pct(d.monteCarlo.probUndervalued, 0) }),
     color,
     vote: d.verdict === "UNDERVALUED" ? 1 : d.verdict === "OVERVALUED" ? -1 : 0,
     family: "filings",
@@ -257,20 +280,20 @@ function readValuation(state: Engine<ValuationResponse>): Reading {
 }
 
 const DISTRESS_WORDS: Record<string, string> = {
-  safe: "balance sheet comfortably clear of distress",
-  grey: "balance sheet neither clearly safe nor distressed",
-  distress: "balance sheet in the distress zone",
+  safe: msg("balance sheet comfortably clear of distress"),
+  grey: msg("balance sheet neither clearly safe nor distressed"),
+  distress: msg("balance sheet in the distress zone"),
 };
 
 const MANIPULATION_WORDS: Record<string, string> = {
-  clean: "no sign of massaged earnings",
-  borderline: "accruals close to the manipulation threshold",
-  flagged: "accounting pattern flags for a closer look",
+  clean: msg("no sign of massaged earnings"),
+  borderline: msg("accruals close to the manipulation threshold"),
+  flagged: msg("accounting pattern flags for a closer look"),
 };
 
 function readQuality(state: Engine<QualityResponse>): Reading {
-  const question = "Are the numbers real?";
-  if (state.status !== "ready") return blank("Quality", question, "filings", state.status);
+  const question = t("Are the numbers real?");
+  if (state.status !== "ready") return blank(msg("Quality"), question, "filings", state.status);
   const d = state.data;
   // THE REFUSAL SAYS WHICH REFUSAL. This printed the bank sentence for every
   // `applicable: false`, so a throttled fetch that returned no sector for
@@ -279,26 +302,28 @@ function readQuality(state: Engine<QualityResponse>): Reading {
   // cause and a sentence for each; only the designed refusal gets the short one.
   if (!d.applicable)
     return {
-      lens: "Quality", question, verdict: "n/a",
+      lens: msg("Quality"), question, verdict: "n/a",
       detail: d.cause === "financial" || (!d.cause && !d.reason)
-        ? "These three accounting models were built on non-financial firms and do not "
-          + "transfer to banks or insurers, so no score is reported."
-        : d.reason ?? "No score could be computed for this listing.",
+        ? t("These three accounting models were built on non-financial firms and do not transfer to banks or insurers, so no score is reported.")
+        : d.reason ?? t("No score could be computed for this listing."),
       color: ASH, vote: 0, family: "filings",
     };
 
   const parts: string[] = [];
   if (d.piotroski) {
-    parts.push(`${d.piotroski.score} of ${d.piotroski.maxScore} health checks passed`);
+    parts.push(t("{score} of {max} health checks passed",
+                 { score: d.piotroski.score, max: d.piotroski.maxScore }));
   }
-  if (d.altman?.band) parts.push(DISTRESS_WORDS[d.altman.band] ?? d.altman.band);
-  if (d.beneish?.band) parts.push(MANIPULATION_WORDS[d.beneish.band] ?? d.beneish.band);
+  if (d.altman?.band) parts.push(DISTRESS_WORDS[d.altman.band] ? t(DISTRESS_WORDS[d.altman.band]) : d.altman.band);
+  if (d.beneish?.band) {
+    parts.push(MANIPULATION_WORDS[d.beneish.band] ? t(MANIPULATION_WORDS[d.beneish.band]) : d.beneish.band);
+  }
 
   return {
-    lens: "Quality",
+    lens: msg("Quality"),
     question,
-    verdict: d.verdict === "SOUND" ? "Sound"
-      : d.verdict === "CONCERNS" ? "Concerns" : "Neutral",
+    verdict: d.verdict === "SOUND" ? t("Sound")
+      : d.verdict === "CONCERNS" ? t("Concerns") : t("Neutral"),
     detail: parts.length ? `${parts.join(", ")}.` : (d.headline ?? ""),
     color: d.verdict === "SOUND" ? ACC : d.verdict === "CONCERNS" ? DIST : QUAL,
     vote: d.verdict === "SOUND" ? 1 : d.verdict === "CONCERNS" ? -1 : 0,
@@ -355,7 +380,7 @@ function LensChips({ readings }: { readings: Reading[] }) {
             <span className="min-w-0">
               <span className="block text-micro font-semibold uppercase tracking-wider"
                     style={{ color: hue }}>
-                {r.lens}
+                {t(r.lens)}
               </span>
               {/* WRAPS, NEVER TRUNCATES. Two of these verdicts are three words
                   long — "Above model range" came out as "Above mod…" in a
@@ -394,6 +419,7 @@ export function ConfluenceRail({
   /** Watch, compare, share, print: things to do WITH this page, beside its name. */
   actions?: React.ReactNode;
 }) {
+  const t = useT();
   const readings = [readAnomaly(anomaly), readTechnical(technical),
                     readValuation(valuation), readQuality(quality)];
   const agreement = agreementOf(readings);
@@ -418,9 +444,13 @@ export function ConfluenceRail({
           {subtitle}
           <p className="mt-1 text-meta text-ash">
             {pending > 0
-              ? `${readings.length - pending} of ${readings.length} lenses have answered`
-              : `${agreement.lenses || "No"} lenses reading · ${agreement.independent} independent `
-                + `${agreement.independent === 1 ? "source" : "sources"} of data`}
+              ? t("{answered} of {total} lenses have answered",
+                  { answered: readings.length - pending, total: readings.length })
+              : agreement.independent === 1
+                ? t("{lenses} lenses reading · {independent} independent source of data",
+                    { lenses: agreement.lenses || t("No"), independent: agreement.independent })
+                : t("{lenses} lenses reading · {independent} independent sources of data",
+                    { lenses: agreement.lenses || t("No"), independent: agreement.independent })}
           </p>
         </div>
         <div className="min-w-0 text-left sm:text-right">
@@ -447,8 +477,7 @@ export function ConfluenceRail({
           RESEARCH_ROADMAP §6 and §15; what a reader needs beside the count is
           what the count counts. */}
       <p className="border-t border-rule px-5 py-2.5 text-meta text-ash">
-        Flow and Trend both read price and volume; Value and Quality both read the filings.
-        The count is of data sources, not panels.
+        {t("Flow and Trend both read price and volume; Value and Quality both read the filings. The count is of data sources, not panels.")}
       </p>
 
       <button
@@ -463,7 +492,7 @@ export function ConfluenceRail({
         <ChevronRight aria-hidden
                       className={cn("h-4 w-4 shrink-0 transition-transform",
                                     showDetail && "rotate-90")} />
-        {showDetail ? "Hide what each lens says" : "What each lens says"}
+        {showDetail ? t("Hide what each lens says") : t("What each lens says")}
       </button>
 
       <div id="lens-detail"
@@ -479,7 +508,7 @@ export function ConfluenceRail({
                 <span aria-hidden className="h-3.5 w-1 shrink-0 rounded-full"
                       style={{ background: hue, opacity: r.verdict === "—" ? 0.3 : 1 }} />
                 <span className="text-micro font-semibold uppercase tracking-wider"
-                      style={{ color: hue }}>{r.lens}</span>
+                      style={{ color: hue }}>{t(r.lens)}</span>
               </div>
               {/* The QUESTION, at reading size and not in italic grey. It is the
                   most useful line in the whole rail for a newcomer, and v1 set
