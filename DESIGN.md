@@ -222,9 +222,16 @@ so a dense table row still reads as a table row.
 Routes replaced the single page: `/` (landing), `/stock/[symbol]` (one company, `?tab=` and
 any non-default tuning in the query), `/markets` (opens on Today; `?view=rank|screener|exposure|scan`),
 `/compare?symbols=` and `/journal`. A top bar is on every page — brand link, Markets /
-Compare / Journal, search, Guided/Full, field manual; on a phone the links move into a native
-`<dialog>` menu. Every route owns exactly one `h1`: on a stock page it is the ticker, still
-the largest thing on the page.
+Compare / Journal, search, Guided/Full, EN/ID, field manual; on a phone the links move into a
+native `<dialog>` menu. Every route owns exactly one `h1`: on a stock page it is the ticker,
+still the largest thing on the page.
+
+**Between a phone and a wide screen the bar sheds in a fixed order**, and everything it sheds
+is in the menu, whose button stays until `xl`: the field manual below `xl`, the language switch
+below `lg`, and below `lg` the three links drop to their icons, keeping the name as the
+accessible name and the tooltip. It did not fit before this: measured at 768px the bar ran
+116px past the screen in English and 157px in Bahasa Indonesia, and 13px over at 1024 in
+Indonesian. It now fits in both from 640 to 1440.
 
 **The landing shows no company's numbers.** One question (which company?), answered three
 ways — type it, pick a preset, or open one from your desk — then the app in three lines and
@@ -629,6 +636,58 @@ Rules that survived the pass:
   goes.
 - Second person over passive. "Your holdings stay in this browser", not "the
   list is retained client-side".
+
+## Language
+
+*Since November 2026* the app reads in English or Bahasa Indonesia. The switch is `EN | ID` in
+the top bar (in the menu below `lg`) and under Settings in the palette. The choice is kept in
+this browser and nowhere else, and a first visit follows the browser's own language.
+
+**One reading, two languages, one layout.** The Indonesian is 15% longer than the English it
+replaces overall, and one interface sentence in ten is a third longer or more, so every layout
+that fitted English was measured again in Indonesian at 375, 768 and 1440: the top bar was
+the one that did not fit (see The shell), and is the one layout that changed.
+
+**Where each half lives.**
+
+- *The interface.* Every string a component draws is its English, passed to `t()` — or to
+  `msg()` in a table, and to `t()` where the table is drawn — and its Indonesian is the entry
+  with that key in `lib/i18n-id.ts`. Rule 20 fails the build on a wrapped string with no
+  Indonesian, an entry nothing says any more, a duplicate entry, a template-literal key, and an
+  Indonesian `{placeholder}` the English never fills.
+- *Everything the server writes* — every explanation, reading, refusal and error — arrives in
+  the language the request asked for (`?lang=id`). The English is byte-for-byte what it was:
+  each sentence became a `tr(english, indonesian)` pair, and replacing every pair with its
+  English reproduces the previous source exactly, which was checked mechanically, module by
+  module. The reading is the same reading in either language, with the same numbers.
+
+**What stays as written, on purpose.**
+
+- *Identifiers.* Bands, tones, verdict codes, signal and engine names, lens keys — anything a
+  component, a cache or a test branches on — stay English on the wire, and the interface words
+  them where it draws them (`lib/labels.ts`). A translated identifier is a broken comparison.
+- *Numbers.* A comma for thousands and a point for decimals in both languages, as the server's
+  sentences, the charts, the tables and the CSV exports all write them. Indonesian convention
+  is the reverse, and switching the interface but not the sentences beside it would put
+  "1.708" on one screen meaning two different numbers. Dates, months and weekdays do follow
+  the language.
+- *Third-party text*: company descriptions, headlines and the provider's industry labels, as
+  their sources wrote them. *Citations and proper names*: Piotroski (2000), The Fed, the
+  Bureau of Labor Statistics. *Published models*: Piotroski F-Score, Altman Z, Beneish M, DCF —
+  an Indonesian reader searches for them under those names.
+- *The field manual, the page's metadata and the private scanner tier* are English. The
+  private tier runs only on the owner's machine.
+
+**The words were chosen once** and both halves use them; the list heads `lib/i18n-id.ts`. Lens
+is *lensa*, and the four are *Arus*, *Tren*, *Nilai*, *Kualitas*; Guided and Full are *Terpandu*
+and *Lengkap*; drawdown is *penurunan dari puncak*; the Jakarta exchange is *BEI* in a sentence
+and keeps `.JK`, IDX30 and LQ45 where those are the names it trades under; the reader is
+*Anda*.
+
+**The first paint is English.** The server renders the page before it can know the choice,
+which lives in this browser, so the static chrome switches after hydration. The requests ask
+for Indonesian from the first fetch, so no reading arrives in English and is then replaced.
+Keeping the choice in a cookie as well would let the server render it directly.
 
 ## Motion
 

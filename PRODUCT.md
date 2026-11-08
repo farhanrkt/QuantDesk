@@ -18,6 +18,13 @@ They are usually deciding whether to buy or keep a single listed company, at a d
 time to read but no way to tell an ordinary number from an alarming one. They arrive
 knowing a ticker and little else.
 
+**In their own language** (*November 2026*). The app reads in English or Bahasa
+Indonesia. The newcomer above is as likely to be reading an IDX listing as a US one, and
+for an Indonesian newcomer every caveat this app insists on was arriving in a second
+language — the one reader the Guided default is for, served least well by it. Nothing is
+dropped from the Indonesian to make it shorter: every number keeps its base rate and its
+caveat in both languages, and the reading of a company is the same reading in either.
+
 **Secondary: the experienced investor, and the author.** Full mode is a standing promise
 to them — **every control and every indicator, nothing removed or hidden**. That promise is
 load-bearing: a mode that simplifies by taking capability away from the people who came for
@@ -383,6 +390,12 @@ decision behind a choice.
 
 ## Open decisions
 
+- Whether Indonesian should also mean Indonesian number formatting (`1.708,5`). Not now:
+  the server's sentences, the interface and the CSV exports write numbers one way, and
+  switching one surface without the others would put "1.708" on a screen meaning two
+  different numbers. Doing it properly means the server formats numbers per language too.
+- Translating the field manual, which is still English. Part of it is generated from
+  `explain.py`'s definitions, which already carry their Indonesian.
 - Whether Guided and Full eventually become two genuinely distinct designs rather than one
   design with elements hidden. Not now; v2 keeps one design with Guided as the default.
 - IDX fundamentals curation — the largest single effort, and blocked on an architectural

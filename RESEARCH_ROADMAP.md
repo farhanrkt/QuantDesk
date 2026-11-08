@@ -2404,6 +2404,28 @@ can move, because a stamp that predates a change to what it measured is worse th
   rather than clearing the table. **Throttled register and earnings lookups** are kept for
   minutes and never written to disk.
 
+## 25. Bahasa Indonesia — what it changes, and what it cannot
+
+*November 2026.* Every sentence the API writes now comes in English or Bahasa Indonesia, chosen
+per request (`?lang=id`; DESIGN.md *Language*). This section is here for the same reason §24 is:
+to say which stamps a change can move. **It moves none.**
+
+- **No engine changed what it computes.** The work replaced English literals with
+  `tr(english, indonesian)` pairs, and for every module the substitution of each pair by its
+  English was checked to reproduce the previous syntax tree exactly — so English output is
+  byte-identical, which is also why the 1,900-odd existing tests pass unedited.
+- **Identifiers did not move.** Bands, tones, verdict codes, signal types and lens keys are
+  what the measured artifacts, the scanner and the tests key on, and they stay English in
+  both languages. `tests/test_language.py` asserts it.
+- **No cache holds a language.** Shared process caches (the market board, the company
+  record's conversion note) keep both texts or the English and word it per request, so one
+  reader's language can never be served to the next, and nothing measured from a cache can
+  differ by who asked first.
+- **The private tier is untouched**, in English, and so are its forward log and backtest.
+
+So `check_calibration.json`, `lens_agreement.json`, the stability studies and the scanner's
+stamps stand or fall exactly as §24 left them.
+
 ---
 
 ## What is still open

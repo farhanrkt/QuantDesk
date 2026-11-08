@@ -289,6 +289,31 @@ is never printed.
 
 ---
 
+## Bahasa Indonesia
+
+**EN | ID** in the top bar (in the menu on a narrower screen, and under Settings in the
+palette) switches the whole app between English and Bahasa Indonesia. The choice stays in
+this browser; a first visit follows the browser's own language.
+
+Indonesian covers what the app says, not only its chrome: every explanation and reading,
+the synthesis and the pre-trade checks, every lens's narrative, the market board, the
+calendar, the refusals and the error messages. They come from the server in the language the
+request asks for (`?lang=id` on any route), so the reading of a company is the same reading in
+either language, with the same numbers. Some things stay as written, deliberately:
+
+- **Numbers** keep a comma for thousands and a point for decimals in both languages, the way
+  the server's sentences, the tables and the CSV exports write them. Dates, months and
+  weekdays follow the language.
+- **Names**: tickers, published models (Piotroski F-Score, Altman Z, DCF), citations, and
+  third-party text — company descriptions, headlines, the provider's industry labels.
+- **The field manual** and **the private scanner tier** are English.
+- **The first paint is English**, for a moment, before the browser's choice is known; the
+  requests already ask for Indonesian, so no figure or sentence is fetched twice.
+
+How it is built, and the glossary every sentence uses, is in DESIGN.md's *Language*.
+
+---
+
 ## What moved the markets
 
 The day's context, beside whatever company you are reading. **Markets → Today** (the page
@@ -1112,6 +1137,9 @@ lib/          API client, wire types, CSV export, formatting
               cache.ts    Confluence payloads shared across views for five minutes
               watchlist.ts, shortcuts.ts, commands.ts, compare.ts, redact.ts — pure,
                           and pinned by the frontend assertions
+              i18n.ts     The reader's language: t(), msg(), useT(), dates
+              i18n-id.ts  Bahasa Indonesia for every string the interface wraps,
+                          keyed by its English; rule 20 keeps the two in step
               journal.ts  The thesis journal — client-only by design, so its
                           logic is tested by scripts/check_frontend.mjs
 api/
@@ -1142,7 +1170,10 @@ api/
               posterior.py      What a flag is worth once you account for how
                                 rare the thing it screens for is
               explain.py        Plain-English interpretation for every metric,
-                                and the cross-lens synthesis
+                                and the cross-lens synthesis — in English or
+                                Bahasa Indonesia, sentence by sentence
+              lang.py           The request's language (?lang=id): tr(), and
+                                carry() for work handed to a thread pool
               symbols.py        Ticker → Yahoo symbol, resolved once
               news.py           Google News RSS
               jsonsafe.py       NaN/inf → null before serialising
@@ -1419,6 +1450,12 @@ dollars to rupiah. A five-year projection converted at today's rate carries the 
 as well as the company's. The data source is not internally consistent about which of its
 dividend fields follows which currency, so every dividend figure is checked against the share
 price it will be compared with before it is used.
+
+**Language.** Bahasa Indonesia covers the published app; the field manual, the private
+scanner tier and the page metadata are English, numbers keep English separators in both
+languages, and the first paint is English until the browser's choice is read. The Indonesian
+was written for this app, not by a translator, and has not yet been read by a native-speaking
+investor — the glossary in `lib/i18n-id.ts` is the place to correct a word everywhere at once.
 
 **Data.** yfinance is an unofficial scraper against an undocumented endpoint, with no SLA.
 Fundamentals for smaller IDX listings are patchy — where a figure is missing, the app offers
