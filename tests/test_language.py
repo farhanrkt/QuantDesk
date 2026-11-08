@@ -222,3 +222,27 @@ def test_money_is_written_in_indonesian_units(indonesian):
 
 def test_the_board_names_months_in_indonesian(indonesian):
     assert E._board_date("2026-08-03", with_year=True) == "3 Agu 2026"
+
+
+def test_the_calendar_names_its_sources_in_indonesian(indonesian):
+    from _lib import econcalendar
+    doc = econcalendar.load()
+    named = econcalendar._sources(doc)
+    assert named.keys() == doc["sources"].keys()
+    for key, source in doc["sources"].items():
+        assert named[key]["url"] == source["url"], "a translated citation still links the source"
+        assert named[key]["name"] == econcalendar._SOURCES_ID[source["name"]], (
+            f"{key}: every source in the file has its Indonesian name")
+
+
+def test_the_calendar_sources_are_untouched_in_english():
+    from _lib import econcalendar
+    doc = econcalendar.load()
+    assert econcalendar._sources(doc) == doc["sources"]
+
+
+def test_the_jakarta_exchange_is_bei_to_an_indonesian_reader(indonesian):
+    from _lib import econcalendar
+    assert econcalendar._exchange_name("IDX") == "BEI"
+    assert econcalendar._exchange_name("NYSE") == "NYSE"
+    assert econcalendar.EXCHANGES["ID"]["name"] == "IDX", "the table itself is not changed"

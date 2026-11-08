@@ -241,6 +241,37 @@ _PENDING_ID = {
         "The Fed mencantumkan setiap risalah setelah dirilis, jadi risalah yang akan datang "
         "tidak ditampilkan.",
 }
+# Keyed by the English name, like the notes above, so a refresh that rewords a
+# source in the JSON falls back to its new English rather than a stale translation.
+_SOURCES_ID = {
+    "Federal Reserve, FOMC meeting calendars": "Federal Reserve, kalender rapat FOMC",
+    "U.S. Bureau of Labor Statistics, release schedules 2024-2027":
+        "U.S. Bureau of Labor Statistics, jadwal rilis 2024-2027",
+    "U.S. Bureau of Economic Analysis, release schedule":
+        "U.S. Bureau of Economic Analysis, jadwal rilis",
+    "Bank Indonesia, BI-Rate decisions": "Bank Indonesia, keputusan BI-Rate",
+    "Bank Indonesia, Board of Governors meeting schedule":
+        "Bank Indonesia, jadwal Rapat Dewan Gubernur",
+    "NYSE holidays and trading hours": "Hari libur dan jam perdagangan NYSE",
+    "IDX 2027 exchange holidays (notice Peng-00169/BEI.POP/09-2026), as reported by IDX "
+    "Channel and Emiten News; 2026 from IDX's 2026 calendar as reported by the press":
+        "Libur bursa BEI 2027 (pengumuman Peng-00169/BEI.POP/09-2026), sebagaimana diberitakan "
+        "IDX Channel dan Emiten News; 2026 dari kalender BEI 2026 sebagaimana diberitakan media",
+}
+
+
+def _exchange_name(name: str) -> str:
+    """The exchange as its own readers call it: IDX is the Bursa Efek Indonesia, BEI."""
+    return "BEI" if name == "IDX" and lang.current() == "id" else name
+
+
+def _sources(doc: dict) -> dict:
+    """The schedules the file was copied from, each named in the request's language."""
+    sources = doc.get("sources") or {}
+    if lang.current() != "id":
+        return sources
+    return {key: {**source, "name": _SOURCES_ID.get(source.get("name"), source.get("name"))}
+            for key, source in sources.items()}
 
 
 def _months(text: str) -> str:
@@ -354,7 +385,7 @@ def payload(today: dt.date, days: int = 90) -> dict:
         # rather than drawing it as a day with nothing on it.
         "window": {"from": first.isoformat(), "through": last.isoformat()},
         "kinds": kinds(),
-        "exchanges": {code: {**info, "closures": [
+        "exchanges": {code: {**info, "name": _exchange_name(info["name"]), "closures": [
             {"date": e["date"], "kind": e["kind"], "time": e.get("time"),
              "detail": _detail(e.get("detail"), code)}
             for e in doc["events"]
@@ -364,5 +395,5 @@ def payload(today: dt.date, days: int = 90) -> dict:
         "coverage": coverage(doc),
         "pending": [{**item, "note": _detail(item.get("note"))}
                     for item in doc.get("pending") or []],
-        "sources": doc.get("sources") or {},
+        "sources": _sources(doc),
     }
