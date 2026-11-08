@@ -36,6 +36,7 @@ from email.utils import parsedate_to_datetime
 from typing import Optional
 
 from . import market_data, symbols
+from .lang import tr
 
 USER_AGENT = "Mozilla/5.0 (compatible; QuantDesk/1.0)"
 MAX_ITEMS = 5
@@ -145,7 +146,7 @@ def _items(root: ET.Element, limit: Optional[int] = None) -> list[dict]:
             title = title[: -(len(source) + 3)]
         elif not source and " - " in title:
             title, _, source = title.rpartition(" - ")
-        source = source or "Financial Media"
+        source = source or tr("Financial Media", "Media Keuangan")
 
         # HTTPS OR NOTHING, the rule the Yahoo path in `market_data.news_search`
         # already applies. The link becomes an anchor's href; a feed is
@@ -189,7 +190,9 @@ def fetch_news(symbol: str, limit: int = MAX_ITEMS, strict: bool = False) -> lis
     except Exception as exc:
         # Network error, timeout, DNS failure, malformed XML.
         if strict:
-            raise NewsUnavailable(NEWS_UNAVAILABLE) from exc
+            raise NewsUnavailable(tr(NEWS_UNAVAILABLE,
+                                     "Umpan berita tidak bisa dibaca saat ini, yang tidak "
+                                     "sama dengan tidak ada berita.")) from exc
         return []
     return _items(root, limit)
 
@@ -279,9 +282,12 @@ def fetch_headlines(topic: str, market: str = "US", limit: int = MAX_ITEMS) -> d
     except Exception:
         return {"topic": topic, "market": market, "query": query, "available": False,
                 "items": [], "source": "Google News",
-                "reason": "The news feed could not be read just now, which is not the same "
-                          "as there being no news."}
+                "reason": tr("The news feed could not be read just now, which is not the same "
+                             "as there being no news.",
+                             "Umpan berita tidak bisa dibaca saat ini, yang tidak sama dengan tidak "
+                             "ada berita.")}
     items = sorted(_items(root), key=_published, reverse=True)[:limit]
     return {"topic": topic, "market": market, "query": query, "available": True,
             "items": items, "source": "Google News",
-            "reason": None if items else "The feed held no headlines from the past day."}
+            "reason": None if items else tr("The feed held no headlines from the past day.",
+                                            "Umpan ini tidak memuat judul berita dari sehari terakhir.")}

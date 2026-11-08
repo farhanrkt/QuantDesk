@@ -44,10 +44,13 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 from zoneinfo import ZoneInfo
+
+from . import lang
 
 PATH = Path(__file__).with_name("calendar_events.json")
 
@@ -174,6 +177,135 @@ def coverage(doc: Optional[dict] = None) -> dict[str, str]:
     return out
 
 
+# The kinds in Bahasa Indonesia. The calendar file's own words — each event's
+# detail, the pending notes — come from official English schedules and follow a
+# handful of fixed shapes, so `_detail` restates those shapes rather than
+# translating free text.
+_KINDS_ID: dict[str, dict[str, str]] = {
+    "fomc": {"label": "Keputusan suku bunga FOMC",
+             "about": ("Komite penentu suku bunga Federal Reserve mengumumkan di mana ia menahan "
+                       "suku bunga AS. Empat dari delapan rapatnya setahun disertai proyeksi The "
+                       "Fed sendiri untuk suku bunga, pertumbuhan, dan inflasi.")},
+    "cpi": {"label": "Harga konsumen AS (CPI)",
+            "about": ("Perubahan bulanan harga yang dibayar konsumen AS — angka inflasi yang "
+                      "paling sering disandingkan dengan keputusan The Fed berikutnya.")},
+    "jobs": {"label": "Laporan ketenagakerjaan AS",
+             "about": ("Berapa banyak lapangan kerja yang ditambahkan ekonomi AS bulan lalu dan "
+                       "tingkat penganggurannya, dari Bureau of Labor Statistics, biasanya pada "
+                       "Jumat pertama.")},
+    "pce": {"label": "Inflasi PCE AS",
+            "about": ("Harga yang diukur lewat apa yang benar-benar dibelanjakan konsumen. The "
+                      "Fed menyatakan target inflasi 2%-nya dalam ukuran ini, bukan CPI.")},
+    "gdp": {"label": "PDB AS",
+            "about": ("Besarnya ekonomi AS dalam satu kuartal, diperkirakan tiga kali seiring "
+                      "datangnya data: awal, kedua, dan ketiga.")},
+    "bi-rate": {"label": "Keputusan suku bunga Bank Indonesia",
+                "about": ("Dewan Gubernur Bank Indonesia menetapkan BI-Rate, suku bunga kebijakan "
+                          "Indonesia, dalam rapat dua hari, biasanya sebulan sekali.")},
+    "holiday": {"label": "Bursa tutup",
+                "about": "Tidak ada perdagangan di bursa ini sepanjang hari."},
+    "early-close": {"label": "Tutup lebih awal",
+                    "about": "Bursa menghentikan perdagangan lebih awal."},
+}
+
+
+def kinds() -> dict[str, dict[str, str]]:
+    """KINDS in the request's language."""
+    if lang.current() != "id":
+        return KINDS
+    return {kind: {**text, **_KINDS_ID.get(kind, {})} for kind, text in KINDS.items()}
+
+
+_MONTHS_EN = ("January", "February", "March", "April", "May", "June", "July", "August",
+              "September", "October", "November", "December")
+_MONTHS_ID = ("Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus",
+              "September", "Oktober", "November", "Desember")
+_HOLIDAYS_ID = {
+    "New Year's Day": "Tahun Baru", "Good Friday": "Jumat Agung",
+    "Martin Luther King, Jr. Day": "Hari Martin Luther King, Jr.",
+    "Washington's Birthday": "Hari Ulang Tahun Washington", "Memorial Day": "Memorial Day",
+    "Labor Day": "Hari Buruh AS", "Thanksgiving Day": "Hari Thanksgiving",
+    "The day after Thanksgiving": "Sehari setelah Thanksgiving",
+    "Christmas Day": "Hari Natal", "Christmas Eve": "Malam Natal", "Christmas": "Natal",
+    "Exchange holiday (libur bursa)": "Libur bursa", "Eid al-Fitr": "Idulfitri",
+    "Eid al-Adha": "Iduladha", "Juneteenth": "Juneteenth", "Isra Mi'raj": "Isra Mikraj",
+    "Nyepi": "Hari Raya Nyepi", "Ascension Day": "Kenaikan Isa Almasih", "Vesak": "Waisak",
+    "Pancasila Day": "Hari Lahir Pancasila", "Chinese New Year": "Tahun Baru Imlek",
+}
+_PENDING_ID = {
+    "BPS's release calendar could not be read, so Indonesian inflation dates are not shown. "
+    "BPS usually publishes on the first working day of the month.":
+        "Kalender rilis BPS tidak bisa dibaca, jadi tanggal inflasi Indonesia tidak ditampilkan. "
+        "BPS biasanya merilis pada hari kerja pertama setiap bulan.",
+    "The Fed lists each set of minutes once it is released, so upcoming minutes are not shown.":
+        "The Fed mencantumkan setiap risalah setelah dirilis, jadi risalah yang akan datang "
+        "tidak ditampilkan.",
+}
+
+
+def _months(text: str) -> str:
+    for en, id_ in zip(_MONTHS_EN, _MONTHS_ID, strict=True):
+        text = re.sub(rf"\b{en}\b", id_, text)
+    return text.replace("Apr/May", "Apr/Mei")
+
+
+def _detail(text: Optional[str], market: Optional[str] = None) -> Optional[str]:
+    """An event's detail, or a pending note, in the request's language.
+
+    The file's sentences come in a few fixed shapes, each restated here; any
+    sentence that matches none of them is returned as written, in English,
+    rather than guessed at.
+    """
+    if not text or lang.current() != "id":
+        return text
+    if text in _PENDING_ID:
+        return _PENDING_ID[text]
+    rules = (
+        (r"Bank Indonesia has not yet published its (\d{4}) meeting schedule\.",
+         lambda m: f"Bank Indonesia belum menerbitkan jadwal rapat {m[1]}."),
+        (r"BI-Rate set at ([\d.]+)%\. Decided outside the published schedule\.",
+         lambda m: f"BI-Rate ditetapkan {m[1]}%. Diputuskan di luar jadwal yang diterbitkan."),
+        (r"BI-Rate set at ([\d.]+)%\.", lambda m: f"BI-Rate ditetapkan {m[1]}%."),
+        (r"(\w+) (\d{4})\. Published late after the (\d{4}) shutdown\.",
+         lambda m: f"{_months(m[1])} {m[2]}. Terbit terlambat setelah penutupan pemerintahan "
+                   f"AS {m[3]}."),
+        (r"(Advance|Second|Third) estimate, Q(\d) (\d{4})\.",
+         lambda m: f"Estimasi {dict(Advance='awal', Second='kedua', Third='ketiga')[m[1]]}, "
+                   f"kuartal {m[2]} {m[3]}."),
+        (r"(With the Fed's economic projections\. )?Meeting (.+?); statement at ([\d:]+) ET, "
+         r"press conference after\.",
+         lambda m: ("Disertai proyeksi ekonomi The Fed. " if m[1] else "")
+                   + f"Rapat {_months(m[2])}; pernyataan pukul {m[3]} ET, disusul konferensi "
+                     "pers."),
+        (r"Personal income and outlays, (\w+) (\d{4})\. The Fed's preferred inflation "
+         r"measure\.",
+         lambda m: f"Pendapatan dan belanja pribadi, {_months(m[1])} {m[2]}. Ukuran inflasi "
+                   "pilihan The Fed."),
+        (r"Board of Governors meeting, (.+)\. Scheduled: in (\d{4}) BI moved one meeting by a "
+         r"week and decided once between meetings\.",
+         lambda m: f"Rapat Dewan Gubernur, {_months(m[1])}. Terjadwal: pada {m[2]} BI menggeser "
+                   "satu rapat sepekan dan sekali memutuskan di antara jadwal rapat."),
+        (r"(\w+) (\d{4})\.", lambda m: f"{_months(m[1])} {m[2]}." if m[1] in _MONTHS_EN
+         else None),
+        (r"Cuti bersama, (.+)\.",
+         lambda m: f"Cuti bersama {_HOLIDAYS_ID.get(m[1], m[1])}." if m[1] in _HOLIDAYS_ID
+         else None),
+        (r"Independence Day(, observed)?\.",
+         lambda m: ("Hari Kemerdekaan RI" if (market or "").upper() == "ID"
+                    else "Hari Kemerdekaan AS") + (" (pengganti)." if m[1] else ".")),
+        (r"(.+?)(, observed)?\.",
+         lambda m: (_HOLIDAYS_ID[m[1]] + (" (pengganti)." if m[2] else "."))
+         if m[1] in _HOLIDAYS_ID else None),
+    )
+    for pattern, render in rules:
+        match = re.fullmatch(pattern, text)
+        if match:
+            rendered = render(match)
+            if rendered:
+                return rendered
+    return text
+
+
 def between(first: dt.date, last: dt.date, doc: Optional[dict] = None) -> list[dict]:
     """Events dated `first` through `last`, each with its UTC instant and kind text."""
     doc = doc or load()
@@ -181,7 +313,8 @@ def between(first: dt.date, last: dt.date, doc: Optional[dict] = None) -> list[d
     for event in doc["events"]:
         if first.isoformat() <= event["date"] <= last.isoformat():
             out.append({**event, "utc": instant(event), "allDay": not event.get("time"),
-                        "label": KINDS[event["kind"]]["label"]})
+                        "label": kinds()[event["kind"]]["label"],
+                        "detail": _detail(event.get("detail"), event.get("market"))})
     return out
 
 
@@ -220,14 +353,16 @@ def payload(today: dt.date, days: int = 90) -> dict:
         # Said, so the month view can mark a day past `through` as not loaded
         # rather than drawing it as a day with nothing on it.
         "window": {"from": first.isoformat(), "through": last.isoformat()},
-        "kinds": KINDS,
+        "kinds": kinds(),
         "exchanges": {code: {**info, "closures": [
-            {"date": e["date"], "kind": e["kind"], "time": e.get("time"), "detail": e.get("detail")}
+            {"date": e["date"], "kind": e["kind"], "time": e.get("time"),
+             "detail": _detail(e.get("detail"), code)}
             for e in doc["events"]
             if e["market"] == code and e["kind"] in ("holiday", "early-close")
             and e["date"] >= today.isoformat()]}
             for code, info in EXCHANGES.items()},
         "coverage": coverage(doc),
-        "pending": doc.get("pending") or [],
+        "pending": [{**item, "note": _detail(item.get("note"))}
+                    for item in doc.get("pending") or []],
         "sources": doc.get("sources") or {},
     }

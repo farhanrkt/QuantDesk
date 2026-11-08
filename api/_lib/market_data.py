@@ -93,6 +93,7 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 from . import symbols
+from .lang import Bilingual, names, tr
 
 OHLCV = ("Open", "High", "Low", "Close", "Volume")
 
@@ -673,14 +674,14 @@ def _fundamentals_load(kind: str, ticker: str) -> Optional[dict]:
 # that is what it IS — a lens that says "no sector came back, a refetch will
 # usually resolve it" about BTC-USD is reporting a fact as a gap. Found in the
 # November audit on BTC-USD and SPY, where every fundamental lens said so.
-NON_COMPANY = {
-    "CRYPTOCURRENCY": "a cryptocurrency",
-    "ETF": "an exchange-traded fund",
-    "MUTUALFUND": "a mutual fund",
-    "INDEX": "a market index",
-    "CURRENCY": "a currency pair",
-    "FUTURE": "a futures contract",
-}
+NON_COMPANY = Bilingual({
+    "CRYPTOCURRENCY": ("a cryptocurrency", "mata uang kripto"),
+    "ETF": ("an exchange-traded fund", "reksa dana yang diperdagangkan di bursa (ETF)"),
+    "MUTUALFUND": ("a mutual fund", "reksa dana"),
+    "INDEX": ("a market index", "indeks pasar"),
+    "CURRENCY": ("a currency pair", "pasangan mata uang"),
+    "FUTURE": ("a futures contract", "kontrak berjangka"),
+})
 
 # A coin quoted against a currency, the form `symbols` tells readers to type.
 # Used only when `.info` did not say what the listing is.
@@ -1277,6 +1278,16 @@ def _apply_fx(out: dict) -> dict:
                         f"in line with it. The statements appear to be in "
                         f"{trading_ccy} already, so they are left alone. This is a "
                         f"wrong label at the source, not a missing rate."),
+                    # Both languages are stored, because this record is cached
+                    # for every reader; the valuation picks one per request.
+                    "reasonId": (
+                        f"Sumber data memberi label {financial_ccy} pada laporan keuangan ini "
+                        f"sementara sahamnya diperdagangkan dalam {trading_ccy}, tetapi "
+                        f"mengonversinya dengan kurs {rate:,.4g} akan membuat pendapatan jauh "
+                        f"tidak sebanding dengan nilai pasar perusahaan itu sendiri, sedangkan "
+                        f"angka yang belum dikonversi sebanding dengannya. Laporan keuangannya "
+                        f"tampaknya sudah dalam {trading_ccy}, jadi dibiarkan apa adanya. Ini "
+                        f"label yang salah di sumbernya, bukan kurs yang hilang."),
                 }
                 return out
             _convert_statements(out, rate)
@@ -1408,9 +1419,13 @@ def provider_answering(market_code: str = "US") -> bool:
 def provider_outage_message(symbol: str) -> str:
     """What a reader is told when the provider, not the symbol, is the problem."""
     _, name = CANARY.get(symbols.market_of(symbol), CANARY["US"])
-    return (f"The market-data provider is not answering right now — it did not return even "
-            f"{name} — so nothing about {symbol} could be fetched. This is not a problem "
-            f"with the symbol; running the lenses again in a few minutes usually resolves it.")
+    return tr(f"The market-data provider is not answering right now — it did not return even "
+              f"{name} — so nothing about {symbol} could be fetched. This is not a problem "
+              f"with the symbol; running the lenses again in a few minutes usually resolves it.",
+              f"Penyedia data pasar sedang tidak menjawab — bahkan {names(name)} pun tidak "
+              f"dikembalikannya — jadi tidak ada data tentang {symbol} yang bisa diambil. Ini "
+              f"bukan masalah simbolnya; menjalankan lensa lagi dalam beberapa menit biasanya "
+              f"menyelesaikannya.")
 
 
 # --------------------------------------------------------------------------- #
@@ -1564,9 +1579,11 @@ def listed_equities(market_code: str = "ID") -> list[dict]:
     """
     region = SCREENER_REGION.get((market_code or "").strip().upper())
     if region is None:
-        raise MarketDataError(
+        raise MarketDataError(tr(
             f"No listed-equity source for market '{market_code}'. "
-            f"Known markets: {', '.join(sorted(SCREENER_REGION))}.")
+            f"Known markets: {', '.join(sorted(SCREENER_REGION))}.",
+            f"Tidak ada sumber saham tercatat untuk pasar '{market_code}'. "
+            f"Pasar yang dikenal: {', '.join(sorted(SCREENER_REGION))}."))
 
     query = yf.EquityQuery("eq", ["region", region])
     rows: dict[str, dict] = {}
@@ -1610,9 +1627,11 @@ def listed_equities(market_code: str = "ID") -> list[dict]:
             break
 
     if not rows:
-        raise MarketDataError(
+        raise MarketDataError(tr(
             f"The listed-equity screener returned nothing for market "
-            f"'{market_code}'. That is a failed request, not an empty market.")
+            f"'{market_code}'. That is a failed request, not an empty market.",
+            f"Penyaring saham tercatat tidak mengembalikan apa pun untuk pasar "
+            f"'{market_code}'. Itu permintaan yang gagal, bukan pasar yang kosong."))
 
     return sorted(rows.values(),
                   key=lambda r: (r["marketCap"] is None, -(r["marketCap"] or 0.0)))

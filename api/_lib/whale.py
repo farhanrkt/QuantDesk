@@ -71,6 +71,7 @@ import pandas as pd
 
 from . import indicators as ind
 from . import lang, market_data, symbols
+from .lang import tr
 
 try:
     from sklearn.ensemble import IsolationForest
@@ -279,14 +280,17 @@ class WhaleTracker:
             # module docstring for why these four are the only ones.
             ticker, period=period, allow_stale=True)
         if history is None:
-            raise DataFetchError(f"No data found for '{ticker}'. {symbols.hint(ticker)}")
+            raise DataFetchError(tr(f"No data found for '{ticker}'. {symbols.hint(ticker)}",
+                                    f"Tidak ada data untuk '{ticker}'. {symbols.hint(ticker)}"))
 
         df = self._engineer_features(history)
 
         if len(df) < self.config.min_rows:
             raise DataFetchError(
-                f"Only {len(df)} usable rows for '{ticker}'; need at least "
-                f"{self.config.min_rows}. Try a longer period."
+                tr(f"Only {len(df)} usable rows for '{ticker}'; need at least "
+                   f"{self.config.min_rows}. Try a longer period.",
+                   f"Hanya {len(df)} baris yang bisa dipakai untuk '{ticker}'; butuh "
+                   f"setidaknya {self.config.min_rows}. Coba periode yang lebih panjang.")
             )
         return df
 
@@ -484,16 +488,16 @@ class WhaleTracker:
         def tag(row) -> str:
             tags = []
             if row["Volume_vs_Avg"] >= 2.5:
-                tags.append("Volume Spike")
+                tags.append(tr("Volume Spike", "Lonjakan volume"))
             if abs(row["Gap_%"]) >= 3:
-                tags.append("Price Gap")
+                tags.append(tr("Price Gap", "Celah harga"))
             if row["Volume_vs_Avg"] >= 2 and row["Abs_Price_Change_%"] < 1.5:
-                tags.append("Churn")  # heavy volume, little price move = absorption
+                tags.append(tr("Churn", "Churn"))  # heavy volume, little price move = absorption
             if row["Price_Change_%"] >= 4 and row["Volume_vs_Avg"] >= 1.8:
-                tags.append("Breakout")
+                tags.append(tr("Breakout", "Tembusan naik"))
             if row["Price_Change_%"] <= -4 and row["Volume_vs_Avg"] >= 1.8:
-                tags.append("Breakdown")
-            return ", ".join(tags) if tags else "Unusual Activity"
+                tags.append(tr("Breakdown", "Tembusan turun"))
+            return ", ".join(tags) if tags else tr("Unusual Activity", "Aktivitas tidak biasa")
 
         df["Tag"] = df.apply(tag, axis=1)
 
@@ -532,7 +536,8 @@ class WhaleTracker:
             data = data[liquid >= self.config.min_avg_turnover]
             if data.empty:
                 raise DataFetchError(
-                    f"'{ticker}' falls below the minimum turnover threshold."
+                    tr(f"'{ticker}' falls below the minimum turnover threshold.",
+                       f"'{ticker}' berada di bawah ambang nilai transaksi minimum.")
                 )
 
         scored = self.detect_anomalies(data)
@@ -628,7 +633,8 @@ class WhaleTracker:
     @staticmethod
     def _normalize_ticker(ticker: str) -> str:
         if not ticker or not str(ticker).strip():
-            raise DataFetchError("Ticker symbol must be a non-empty string.")
+            raise DataFetchError(tr("Ticker symbol must be a non-empty string.",
+                                    "Simbol ticker harus berupa teks yang tidak kosong."))
         return str(ticker).strip().upper()
 
 

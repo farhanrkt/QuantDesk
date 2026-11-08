@@ -4286,7 +4286,11 @@ def _read_trend(data: dict) -> Optional[dict]:
         count = tr(f" ({passed} of {scored} checks point that way.)",
                    f" ({passed} dari {scored} pemeriksaan mengarah ke sana.)") if scored else ""
         return _reading(
-            tr("Trend", "Tren"), "trend", str(view["verdict"]).capitalize(),
+            tr("Trend", "Tren"), "trend",
+            {"CONSTRUCTIVE": tr("Constructive", "Konstruktif"), "WEAK": tr("Weak", "Lemah"),
+             "MIXED": tr("Mixed", "Bercampur"),
+             "NO READING": tr("No reading", "Tidak ada pembacaan")}.get(
+                 str(view["verdict"]), str(view["verdict"]).capitalize()),
             f"{_plain(view.get('headline'))}{count}",
             tone, 1 if tone == "good" else -1 if tone == "bad" else 0)
 

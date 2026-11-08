@@ -54,6 +54,7 @@ from typing import Optional, Sequence
 
 import numpy as np
 import pandas as pd
+from .lang import month_abbr, tr
 
 TRADING_DAYS = 252
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -328,17 +329,22 @@ def rolling_returns(close: pd.Series,
             short_by = needed - len(prices)
             out.append({
                 "years": horizon, "usable": False, "windows": 0,
-                "reason": (f"Needs about {needed:,} trading days of history to have "
-                           f"{MIN_WINDOWS + 1} overlapping {horizon}-year periods to compare, "
-                           f"and this range has {len(prices):,} — {short_by:,} short. Widen "
-                           f"the chart range."),
+                "reason": (tr(f"Needs about {needed:,} trading days of history to have "
+                              f"{MIN_WINDOWS + 1} overlapping {horizon}-year periods to compare, "
+                              f"and this range has {len(prices):,} — {short_by:,} short. Widen "
+                              f"the chart range.",
+                              f"Butuh riwayat sekitar {needed:,} hari perdagangan agar ada "
+                              f"{MIN_WINDOWS + 1} periode {horizon} tahun yang saling tumpang tindih "
+                              f"untuk dibandingkan, dan rentang ini hanya punya {len(prices):,} — "
+                              f"kurang {short_by:,}. Perlebar rentang grafik.")),
             })
             continue
         ratio = prices / prices.shift(window)
         annualised = (ratio ** (1.0 / horizon) - 1.0).dropna()
         if annualised.empty:
             out.append({"years": horizon, "usable": False, "windows": 0,
-                        "reason": "No complete period of this length in the loaded prices."})
+                        "reason": tr("No complete period of this length in the loaded prices.",
+                                     "Tidak ada periode lengkap sepanjang ini dalam harga yang dimuat.")})
             continue
         out.append({
             "years": horizon,
@@ -392,12 +398,12 @@ def monthly_seasonality(close: pd.Series) -> dict:
     months = []
     for number in range(1, 13):
         if number not in grouped.groups:
-            months.append({"month": MONTHS[number - 1], "mean": None, "count": 0,
+            months.append({"month": month_abbr(number), "mean": None, "count": 0,
                            "positiveShare": None})
             continue
         values = grouped.get_group(number)
         months.append({
-            "month": MONTHS[number - 1],
+            "month": month_abbr(number),
             "mean": float(values.mean()),
             "median": float(values.median()),
             "count": len(values),
@@ -407,9 +413,12 @@ def monthly_seasonality(close: pd.Series) -> dict:
         "usable": True,
         "months": months,
         "yearsCovered": float(len(monthly) / 12.0),
-        "caveat": ("Descriptive history, not a signal. With twelve months one will "
-                   "always look best by chance; calendar effects are the most "
-                   "data-mined corner of finance."),
+        "caveat": (tr("Descriptive history, not a signal. With twelve months one will "
+                      "always look best by chance; calendar effects are the most "
+                      "data-mined corner of finance.",
+                      "Sejarah deskriptif, bukan sinyal. Dengan dua belas bulan, salah satunya "
+                      "akan selalu tampak terbaik karena kebetulan; efek kalender adalah sudut "
+                      "keuangan yang paling banyak dikorek datanya.")),
     }
 
 

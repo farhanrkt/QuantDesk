@@ -47,6 +47,7 @@ from typing import Optional, Sequence
 import numpy as np
 import pandas as pd
 from scipy import stats
+from .lang import tr
 
 DEFAULT_HORIZONS = (5, 20, 60)
 DEFAULT_ESTIMATION_WINDOW = 120
@@ -141,7 +142,7 @@ def run_event_study(price_history: pd.DataFrame, market_history: pd.DataFrame,
     """
     if price_history is None or price_history.empty or events is None or events.empty:
         return {"events": 0, "horizons": {}, "byDirection": {}, "usable": False,
-                "reason": "No events to study."}
+                "reason": tr("No events to study.", "Tidak ada peristiwa untuk dipelajari.")}
 
     stock = price_history["Close"].astype("float64").pct_change(fill_method=None)
     market = market_history["Close"].astype("float64").pct_change(fill_method=None)
@@ -166,8 +167,10 @@ def run_event_study(price_history: pd.DataFrame, market_history: pd.DataFrame,
 
     if not collected:
         return {"events": 0, "horizons": {}, "byDirection": {}, "usable": False,
-                "reason": ("Not enough clean history around the detected events to "
-                           "estimate a market model.")}
+                "reason": (tr("Not enough clean history around the detected events to "
+                              "estimate a market model.",
+                              "Riwayat bersih di sekitar peristiwa yang terdeteksi tidak cukup untuk "
+                              "memperkirakan model pasar."))}
 
     def summarise(subset: list[dict], horizon: int) -> Optional[dict]:
         values = [c["cars"].get(horizon) for c in subset]
@@ -202,9 +205,13 @@ def run_event_study(price_history: pd.DataFrame, market_history: pd.DataFrame,
         "config": {"estimationWindow": estimation_window, "gap": gap,
                    "horizons": list(horizons)},
         "caveat": (
-            "Cumulative abnormal returns versus a market model fitted on the "
-            "120 trading days ending 10 days before each event. In-sample, on "
-            "one ticker, with overlapping windows — indicative, not a backtest."
+            tr("Cumulative abnormal returns versus a market model fitted on the "
+               "120 trading days ending 10 days before each event. In-sample, on "
+               "one ticker, with overlapping windows — indicative, not a backtest.",
+               "Imbal hasil abnormal kumulatif dibandingkan model pasar yang dicocokkan "
+               "pada 120 hari perdagangan yang berakhir 10 hari sebelum setiap "
+               "peristiwa. Di dalam sampel, pada satu ticker, dengan periode yang "
+               "saling tumpang tindih — sebuah petunjuk, bukan uji historis.")
         ),
         # THE EVENTS THEMSELVES ARE NOT CHOSEN POINT IN TIME, and until the
         # audit that was unstated. The market model's estimation window is
@@ -221,13 +228,21 @@ def run_event_study(price_history: pd.DataFrame, market_history: pd.DataFrame,
         # route runs under. The Flow tab offers that mode for anyone who wants
         # the stricter selection.
         "selectionCaveat": (
-            "The days treated as events are chosen by a detector fitted on the whole "
-            "loaded window, so a large move late in the history can change whether an "
-            "earlier day was flagged. On simulated histories that picks about 93% of "
-            "the events a strictly point-in-time detector would. The market model "
-            "behind each CAR is unaffected — its estimation window ends before the "
-            "event. Run the Flow tab in walk-forward mode for selection with no "
-            "look-ahead at all."
+            tr("The days treated as events are chosen by a detector fitted on the whole "
+               "loaded window, so a large move late in the history can change whether an "
+               "earlier day was flagged. On simulated histories that picks about 93% of "
+               "the events a strictly point-in-time detector would. The market model "
+               "behind each CAR is unaffected — its estimation window ends before the "
+               "event. Run the Flow tab in walk-forward mode for selection with no "
+               "look-ahead at all.",
+               "Hari-hari yang diperlakukan sebagai peristiwa dipilih oleh detektor "
+               "yang dicocokkan pada seluruh periode yang dimuat, jadi pergerakan besar "
+               "di akhir riwayat bisa mengubah apakah hari sebelumnya ditandai. Pada "
+               "riwayat simulasi, cara ini memilih sekitar 93% peristiwa yang akan "
+               "dipilih detektor yang benar-benar tepat waktu. Model pasar di balik "
+               "setiap CAR tidak terpengaruh — periode estimasinya berakhir sebelum "
+               "peristiwa. Jalankan tab Arus dalam mode walk-forward untuk pemilihan "
+               "tanpa melihat ke depan sama sekali.")
         ),
     }
 
@@ -332,7 +347,8 @@ def screener_significance(rows: Sequence[dict], recent_trading_days: int,
               if r.get("anomalyRate") is not None and r.get("recentAnomalies") is not None]
     if not usable:
         return {"available": False, "rows": list(rows),
-                "reason": "Screener rows carry no base rate to test against."}
+                "reason": tr("Screener rows carry no base rate to test against.",
+                             "Baris penyaring tidak membawa tingkat dasar untuk dijadikan pembanding.")}
 
     pvalues = [binomial_pvalue(int(r["recentAnomalies"]), int(recent_trading_days),
                                float(r["anomalyRate"])) for r in usable]
@@ -353,9 +369,12 @@ def screener_significance(rows: Sequence[dict], recent_trading_days: int,
         "expectedByChance": expected_false,
         "alpha": alpha,
         "reading": (
-            f"{correction['discoveries']} of {len(usable)} names survive a "
-            f"false-discovery-rate correction at {alpha:.0%}. About "
-            f"{expected_false:.1f} hit{'' if abs(expected_false - 1) < 0.05 else 's'} "
-            f"would be expected from each name's own base rate alone."
+            tr(f"{correction['discoveries']} of {len(usable)} names survive a "
+               f"false-discovery-rate correction at {alpha:.0%}. About "
+               f"{expected_false:.1f} hit{'' if abs(expected_false - 1) < 0.05 else 's'} "
+               f"would be expected from each name's own base rate alone.",
+               f"{correction['discoveries']} dari {len(usable)} saham lolos koreksi "
+               f"tingkat penemuan palsu pada {alpha:.0%}. Sekitar {expected_false:.1f} "
+               "temuan akan muncul dari tingkat dasar masing-masing saham saja.")
         ),
     }

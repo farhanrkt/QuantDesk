@@ -48,6 +48,7 @@ import numpy as np
 import pandas as pd
 
 from . import market_data
+from .lang import tr
 
 MARKET_INDEX = {"US": "^GSPC", "ID": "^JKSE"}
 
@@ -293,7 +294,9 @@ def estimate_beta(price_history: pd.DataFrame, market_code: str = "US",
     market_returns = _index_returns(market_code, period)
     if market_returns is None or price_history is None or price_history.empty:
         adjusted = blume_adjust(fallback_beta)
-        notes.append("Index history unavailable; fell back to Yahoo's beta with Blume shrinkage.")
+        notes.append(tr("Index history unavailable; fell back to Yahoo's beta with Blume shrinkage.",
+                        "Riwayat indeks tidak tersedia; beralih ke beta Yahoo dengan penyusutan "
+                        "Blume."))
         return BetaEstimate(
             raw=_finite(fallback_beta) or np.nan, adjusted=adjusted, stderr=np.nan,
             r_squared=np.nan, observations=0, method="blume-fallback",
@@ -312,8 +315,11 @@ def estimate_beta(price_history: pd.DataFrame, market_code: str = "US",
     if len(paired) < 30:
         adjusted = blume_adjust(fallback_beta)
         notes.append(
-            f"Only {len(paired)} overlapping trading days with {index_symbol}; "
-            "too few to regress, so Yahoo's beta was used with Blume shrinkage."
+            tr(f"Only {len(paired)} overlapping trading days with {index_symbol}; "
+               "too few to regress, so Yahoo's beta was used with Blume shrinkage.",
+               f"Hanya {len(paired)} hari perdagangan yang beririsan dengan "
+               f"{index_symbol}; terlalu sedikit untuk diregresikan, jadi beta Yahoo "
+               "dipakai dengan penyusutan Blume.")
         )
         return BetaEstimate(
             raw=_finite(fallback_beta) or np.nan, adjusted=adjusted, stderr=np.nan,
@@ -327,13 +333,17 @@ def estimate_beta(price_history: pd.DataFrame, market_code: str = "US",
 
     if np.isfinite(prior_weight) and prior_weight > 0.5:
         notes.append(
-            f"Beta is imprecisely measured (se {stderr:.2f}), so it is shrunk "
-            f"{prior_weight:.0%} of the way toward the market's 1.0."
+            tr(f"Beta is imprecisely measured (se {stderr:.2f}), so it is shrunk "
+               f"{prior_weight:.0%} of the way toward the market's 1.0.",
+               f"Beta diukur dengan tidak presisi (se {stderr:.2f}), jadi disusutkan "
+               f"{prior_weight:.0%} menuju 1.0 milik pasar.")
         )
     if np.isfinite(r_squared) and r_squared < 0.05:
         notes.append(
-            f"Only {r_squared:.1%} of this stock's daily moves are explained by "
-            f"{index_symbol}; a single-factor cost of equity is weak here."
+            tr(f"Only {r_squared:.1%} of this stock's daily moves are explained by "
+               f"{index_symbol}; a single-factor cost of equity is weak here.",
+               f"Hanya {r_squared:.1%} pergerakan harian saham ini yang dijelaskan oleh "
+               f"{index_symbol}; biaya ekuitas satu faktor lemah di sini.")
         )
 
     return BetaEstimate(

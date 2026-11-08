@@ -153,6 +153,7 @@ from typing import Optional, Sequence
 import numpy as np
 
 from . import riskmodel
+from .lang import names, tr
 
 # The three states a lens vote can take. Ordered, because tau-b reads them as a
 # scale and because "neutral" genuinely sits between the other two.
@@ -249,7 +250,8 @@ def cohens_kappa(first: Sequence, second: Sequence) -> Optional[dict]:
     chance = float(np.dot(_counts(a), _counts(b)))
     if chance >= 1.0:
         return {"n": int(a.size), "observed": observed, "chance": chance,
-                "kappa": None, "undefined": "both lenses returned one level throughout"}
+                "kappa": None, "undefined": tr("both lenses returned one level throughout",
+                                               "kedua lensa hanya memberi satu tingkat sepanjang waktu")}
     return {"n": int(a.size), "observed": observed, "chance": chance,
             "kappa": (observed - chance) / (1.0 - chance)}
 
@@ -352,32 +354,37 @@ def effective_lenses(votes: dict[str, Sequence]) -> dict:
     """
     order = [lens for lens in LENS_ORDER if lens in votes]
     if len(order) < 2:
-        return {"available": False, "reason": "fewer than two lenses were measured"}
+        return {"available": False, "reason": tr("fewer than two lenses were measured",
+                                                 "kurang dari dua lensa yang diukur")}
 
     columns = [list(votes[lens]) for lens in order]
     length = len(columns[0])
     if any(len(column) != length for column in columns):
-        return {"available": False, "reason": "vote series of differing lengths"}
+        return {"available": False, "reason": tr("vote series of differing lengths",
+                                                 "deret suara dengan panjang yang berbeda")}
 
     complete = [i for i in range(length)
                 if all(column[i] is not None for column in columns)]
     if len(complete) < MIN_PAIR_SAMPLE:
         return {"available": False, "completeCases": len(complete),
-                "reason": f"only {len(complete)} names had all "
-                          f"{len(order)} lenses reading"}
+                "reason": tr(f"only {len(complete)} names had all "
+                             f"{len(order)} lenses reading",
+                             f"hanya {len(complete)} saham yang keempat {len(order)} lensanya terbaca")}
 
     matrix = np.array([[float(column[i]) for i in complete] for column in columns])
     varying = [i for i in range(len(order)) if np.std(matrix[i]) > 0]
     dropped = [LENS_LABEL[order[i]] for i in range(len(order)) if i not in varying]
     if len(varying) < 2:
         return {"available": False, "completeCases": len(complete),
-                "reason": "fewer than two lenses varied across the complete cases"}
+                "reason": tr("fewer than two lenses varied across the complete cases",
+                             "kurang dari dua lensa yang bervariasi di antara kasus lengkap")}
 
     correlation = np.corrcoef(matrix[varying])
     effective = riskmodel.effective_independent(correlation)
     if effective is None:
         return {"available": False, "completeCases": len(complete),
-                "reason": "the correlation matrix was not usable"}
+                "reason": tr("the correlation matrix was not usable",
+                             "matriks korelasinya tidak bisa dipakai")}
 
     kept = [order[i] for i in varying]
     return {
@@ -486,13 +493,18 @@ def _reading(families: dict, lenses: dict, pairs: Sequence[dict], scope: str) ->
     """
     kappa, n = families.get("kappa"), families.get("n")
     if not families.get("excludesZero"):
-        verdict = "no more often than chance would put them there"
+        verdict = tr("no more often than chance would put them there",
+                     "tidak lebih sering daripada yang akan dihasilkan kebetulan")
     elif kappa is not None and kappa > 0:
-        verdict = "rather more often than chance alone would produce"
+        verdict = tr("rather more often than chance alone would produce",
+                     "sedikit lebih sering daripada yang dihasilkan kebetulan saja")
     else:
-        verdict = "less often than chance alone would produce"
-    return (f"Measured across {n} names in {scope}: the two agree {verdict} "
-            f"(κ = {kappa:+.2f}).")
+        verdict = tr("less often than chance alone would produce",
+                     "lebih jarang daripada yang dihasilkan kebetulan saja")
+    return (tr(f"Measured across {n} names in {scope}: the two agree {verdict} "
+               f"(κ = {kappa:+.2f}).",
+               f"Diukur di {n} saham dalam {scope}: keduanya sepakat {verdict} (κ = "
+               f"{kappa:+.2f})."))
 
 
 def for_synthesis(market: Optional[str] = None,
@@ -519,7 +531,8 @@ def for_synthesis(market: Optional[str] = None,
 
     lenses = population.get("lenses") or {}
     pairs = population.get("pairs") or []
-    scope = population.get("label") or "the calibration universes"
+    scope = names(population.get("label")) or tr("the calibration universes",
+                                                 "semesta kalibrasi")
     return {
         "measuredOn": measurement.get("measuredOn"),
         "scope": scope,

@@ -28,6 +28,7 @@ not carry it, so a route that fans out through one wraps the work in `carry`.
 from __future__ import annotations
 
 import contextvars
+import re
 from collections.abc import Mapping
 from typing import Callable, Iterator, TypeVar
 
@@ -119,4 +120,14 @@ def month_abbr(month: int) -> str:
     C locale's English whatever the reader chose, and changing the process
     locale would change it for every request on the instance at once."""
     return (_MONTHS_ID if _current.get() == "id" else _MONTHS_EN)[month - 1]
+
+
+def names(text):
+    """A list of proper names written for an English sentence — "the Dow Jones
+    Industrial Average and the Nasdaq-100", as the calibration files store a
+    universe — in this request's language. Indonesian takes no article and
+    joins with "dan"; the names themselves are names."""
+    if not text or _current.get() != "id":
+        return text
+    return re.sub(r"\b[Tt]he\s+", "", str(text)).replace(" and ", " dan ")
 

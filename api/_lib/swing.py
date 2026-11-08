@@ -64,6 +64,7 @@ import numpy as np
 import pandas as pd
 
 from . import indicators as ind
+from .lang import tr
 
 # Horizon parameters, kept in one place so the two readouts differ by data
 # rather than by duplicated code.
@@ -359,9 +360,12 @@ def vwap_profile(frame: pd.DataFrame) -> dict:
     anchors = []
 
     for label, anchor_date, note in (
-        ("52-week low", year["Low"].idxmin(), "where a recovery would have begun"),
-        ("52-week high", year["High"].idxmax(), "the average price paid by the last buyers at the top"),
-        ("Last 63 days", frame.index[max(0, len(frame) - 63)], "recent participants"),
+        (tr("52-week low", "Titik terendah 52 minggu"), year["Low"].idxmin(), tr("where a recovery would have begun",
+                                                 "tempat pemulihan akan dimulai")),
+        (tr("52-week high", "Puncak 52 minggu"), year["High"].idxmax(), tr("the average price paid by the last buyers at the top",
+                                                   "harga rata-rata yang dibayar pembeli terakhir di puncak")),
+        (tr("Last 63 days", "63 hari terakhir"), frame.index[max(0, len(frame) - 63)], tr("recent participants",
+                                                                  "pelaku pasar terbaru")),
     ):
         value = anchored_vwap(frame, anchor_date)
         if value is None or value <= 0:
@@ -376,9 +380,12 @@ def vwap_profile(frame: pd.DataFrame) -> dict:
         })
 
     return {"usable": bool(anchors), "price": price, "anchors": anchors,
-            "caveat": ("Computed from daily bars — each day contributes one typical price "
-                       "weighted by its volume, which approximates but is not a tick-accurate "
-                       "intraday VWAP.")}
+            "caveat": (tr("Computed from daily bars — each day contributes one typical price "
+                          "weighted by its volume, which approximates but is not a tick-accurate "
+                          "intraday VWAP.",
+                          "Dihitung dari batang harian — setiap hari menyumbang satu harga tipikal "
+                          "yang dibobot volumenya, yang mendekati tetapi bukan VWAP intrahari yang "
+                          "akurat per transaksi."))}
 
 
 # ============================================================================ #
@@ -437,19 +444,28 @@ def candlestick_patterns(frame: pd.DataFrame, atr_value: float) -> list[dict]:
     # --- two-bar ---------------------------------------------------------
     if c > o and pc < po and c >= po and o <= pc and body > abs(pc - po):
         add("Bullish engulfing", "up",
-            "Today's up-bar completely covers yesterday's down-bar — buyers took back the "
-            "whole of the previous day's selling.")
+            tr("Today's up-bar completely covers yesterday's down-bar — buyers took back the "
+               "whole of the previous day's selling.",
+               "Batang naik hari ini sepenuhnya menutupi batang turun kemarin — pembeli "
+               "merebut kembali seluruh penjualan hari sebelumnya."))
     if c < o and pc > po and c <= po and o >= pc and body > abs(pc - po):
         add("Bearish engulfing", "down",
-            "Today's down-bar completely covers yesterday's up-bar.")
+            tr("Today's down-bar completely covers yesterday's up-bar.",
+               "Batang turun hari ini sepenuhnya menutupi batang naik kemarin."))
     if h <= ph and low_ >= pl:
         add("Inside bar", "none",
-            "The whole day traded inside yesterday's range — a pause, with no directional "
-            "information of its own. It says volatility contracted, nothing more.")
+            tr("The whole day traded inside yesterday's range — a pause, with no directional "
+               "information of its own. It says volatility contracted, nothing more.",
+               "Seluruh hari diperdagangkan di dalam rentang kemarin — sebuah jeda, "
+               "tanpa informasi arah tersendiri. Ia hanya berkata volatilitas "
+               "menyempit, tidak lebih."))
     if h > ph and low_ < pl:
         add("Outside bar", "none",
-            "The day traded both above yesterday's high and below its low. Both sides were "
-            "active; which one won is told by the close, not by the shape.")
+            tr("The day traded both above yesterday's high and below its low. Both sides were "
+               "active; which one won is told by the close, not by the shape.",
+               "Hari ini diperdagangkan di atas puncak kemarin dan di bawah titik "
+               "terendahnya. Kedua sisi aktif; siapa yang menang ditunjukkan oleh harga "
+               "penutupan, bukan oleh bentuknya."))
 
     # --- single-bar ------------------------------------------------------
     # SHADOW TESTS COME FIRST, and they are measured against the bar's own RANGE
@@ -463,16 +479,23 @@ def candlestick_patterns(frame: pd.DataFrame, atr_value: float) -> list[dict]:
 
     if long_lower and span >= 0.6 * atr_value:
         add("Hammer" if c >= o else "Hanging man", "up" if c >= o else "down",
-            "Sold off hard during the day and closed back near the top. Buyers turned up "
-            "somewhere down there — though the same shape appears constantly in noise.")
+            tr("Sold off hard during the day and closed back near the top. Buyers turned up "
+               "somewhere down there — though the same shape appears constantly in noise.",
+               "Dijual keras di siang hari lalu ditutup kembali dekat puncaknya. "
+               "Pembeli muncul di suatu tempat di bawah sana — meski bentuk yang sama "
+               "terus-menerus muncul di tengah derau."))
     elif long_upper and span >= 0.6 * atr_value:
         add("Shooting star" if c <= o else "Inverted hammer", "down" if c <= o else "up",
-            "Rallied during the day and gave it all back by the close. Sellers were waiting "
-            "up there.")
+            tr("Rallied during the day and gave it all back by the close. Sellers were waiting "
+               "up there.",
+               "Reli di siang hari lalu mengembalikan semuanya saat penutupan. Penjual "
+               "sudah menunggu di atas sana."))
     elif body <= 0.1 * span:
         add("Doji", "none",
-            "Opened and closed at almost the same price after ranging in between — "
-            "indecision. On its own it means the day was a draw.")
+            tr("Opened and closed at almost the same price after ranging in between — "
+               "indecision. On its own it means the day was a draw.",
+               "Dibuka dan ditutup di harga yang hampir sama setelah bergerak di "
+               "antaranya — keraguan. Berdiri sendiri, artinya hari itu berakhir seri."))
 
     return found
 
@@ -629,9 +652,13 @@ def momentum_divergence(frame: pd.DataFrame, order: int = 5,
         "bearish": bearish,
         "bullish": bullish,
         "swingOrder": order,
-        "caveat": ("Divergence depends heavily on how a turning point is defined. Widening the "
-                   "definition by two bars makes some of these appear and others vanish, and a "
-                   "divergence can persist for months without resolving."),
+        "caveat": (tr("Divergence depends heavily on how a turning point is defined. Widening the "
+                      "definition by two bars makes some of these appear and others vanish, and a "
+                      "divergence can persist for months without resolving.",
+                      "Divergensi sangat bergantung pada cara titik balik didefinisikan. "
+                      "Melebarkan definisinya dua batang membuat sebagian muncul dan sebagian "
+                      "lain hilang, dan divergensi bisa bertahan berbulan-bulan tanpa "
+                      "terselesaikan.")),
     }
 
 
@@ -728,17 +755,24 @@ def detect_setup(frame: pd.DataFrame, config: dict, levels: dict,
     if np.isfinite(channel_high) and price > channel_high and trend["alignment"] != "down":
         confirmed = volume.get("confirms", False)
         return {
-            "name": f"{breakout_window}-day breakout",
+            "name": tr(f"{breakout_window}-day breakout", f"tembusan {breakout_window} hari"),
             "direction": "long",
             "evidence": "moderate",
-            "reason": (f"The price closed above the highest point of the previous "
-                       f"{breakout_window} trading days ({channel_high:,.2f}), which is the "
-                       f"classic breakout rule. "
-                       + ("Volume on the day was heavier than usual, which is the "
-                          "confirmation this rule normally asks for."
+            "reason": (tr(f"The price closed above the highest point of the previous "
+                          f"{breakout_window} trading days ({channel_high:,.2f}), which is the "
+                          f"classic breakout rule. ",
+                          f"Harga ditutup di atas titik tertinggi {breakout_window} hari "
+                          f"perdagangan sebelumnya ({channel_high:,.2f}), yaitu aturan tembusan "
+                          "klasik. ")
+                       + (tr("Volume on the day was heavier than usual, which is the "
+                             "confirmation this rule normally asks for.",
+                             "Volume pada hari itu lebih ramai dari biasanya, konfirmasi yang "
+                             "biasanya diminta aturan ini.")
                           if confirmed else
-                          "Volume was not unusually heavy, so the break is less well "
-                          "supported than the rule would like.")),
+                          tr("Volume was not unusually heavy, so the break is less well "
+                             "supported than the rule would like.",
+                             "Volumenya tidak luar biasa ramai, jadi tembusannya kurang didukung "
+                             "dibandingkan yang diinginkan aturan."))),
             "anchor": channel_high,
             # INVALIDATION IS THE LEVEL THAT WAS BROKEN, not the far side of the
             # range. This first shipped pointing at `channel_low`, which put the
@@ -758,13 +792,17 @@ def detect_setup(frame: pd.DataFrame, config: dict, levels: dict,
     # --- 2. breakdown -----------------------------------------------------
     if np.isfinite(channel_low) and price < channel_low and trend["alignment"] != "up":
         return {
-            "name": f"{breakout_window}-day breakdown",
+            "name": tr(f"{breakout_window}-day breakdown", f"jebolan {breakout_window} hari"),
             "direction": "short",
             "evidence": "moderate",
-            "reason": (f"The price closed below the lowest point of the previous "
-                       f"{breakout_window} trading days ({channel_low:,.2f}). This app does "
-                       f"not plan short positions, so the readout below describes where the "
-                       f"structure sits rather than a trade."),
+            "reason": (tr(f"The price closed below the lowest point of the previous "
+                          f"{breakout_window} trading days ({channel_low:,.2f}). This app does "
+                          f"not plan short positions, so the readout below describes where the "
+                          f"structure sits rather than a trade.",
+                          f"Harga ditutup di bawah titik terendah {breakout_window} hari "
+                          f"perdagangan sebelumnya ({channel_low:,.2f}). Aplikasi ini tidak "
+                          "merencanakan posisi jual kosong, jadi uraian di bawah menggambarkan di "
+                          "mana strukturnya berada, bukan sebuah transaksi.")),
             "anchor": channel_low,
             "invalidation": channel_high if np.isfinite(channel_high) else None,
             "consolidation": consolidation,
@@ -778,14 +816,20 @@ def detect_setup(frame: pd.DataFrame, config: dict, levels: dict,
             and trend["slow"] is not None and atr_value > 0
             and abs(price - trend["slow"]) <= 2.0 * atr_value):
         return {
-            "name": "Pullback to trend support",
+            "name": tr("Pullback to trend support", "Koreksi ke support tren"),
             "direction": "long",
             "evidence": "weak",
-            "reason": (f"The longer trend is still up — the {config['slow_ma']}-day average is "
-                       f"rising and the price is above its 200-day — but the price has eased "
-                       f"back to within reach of that average (RSI {rsi_value:.0f}). This is the "
-                       f"'buy the dip in an uptrend' setup. It is widely used and thinly "
-                       f"evidenced; the mechanism is plausible, the published support is not."),
+            "reason": (tr(f"The longer trend is still up — the {config['slow_ma']}-day average is "
+                          f"rising and the price is above its 200-day — but the price has eased "
+                          f"back to within reach of that average (RSI {rsi_value:.0f}). This is the "
+                          f"'buy the dip in an uptrend' setup. It is widely used and thinly "
+                          f"evidenced; the mechanism is plausible, the published support is not.",
+                          f"Tren yang lebih panjang masih naik — rata-rata {config['slow_ma']} hari "
+                          "sedang naik dan harga di atas rata-rata 200 harinya — tetapi harga "
+                          f"sudah turun kembali mendekati rata-rata itu (RSI {rsi_value:.0f}). "
+                          "Inilah pola 'beli saat turun dalam tren naik'. Pola ini banyak dipakai "
+                          "tetapi buktinya tipis; mekanismenya masuk akal, dukungan bukti "
+                          "terbitannya tidak.")),
             "anchor": trend["slow"],
             "invalidation": nearest_support["price"] if nearest_support else None,
             "consolidation": consolidation,
@@ -795,13 +839,18 @@ def detect_setup(frame: pd.DataFrame, config: dict, levels: dict,
     # --- 4. volatility squeeze -------------------------------------------
     if squeeze.get("usable") and squeeze.get("inSqueeze"):
         return {
-            "name": "Volatility squeeze",
+            "name": tr("Volatility squeeze", "Squeeze volatilitas"),
             "direction": "none",
             "evidence": "weak",
-            "reason": ("Price movement has contracted to the quietest it has been in about a "
-                       "year. Quiet periods are genuinely followed by louder ones more often "
-                       "than chance — volatility clusters. But nothing here says WHICH WAY the "
-                       "loud move goes, and no entry can be planned from it. Wait for the break."),
+            "reason": (tr("Price movement has contracted to the quietest it has been in about a "
+                          "year. Quiet periods are genuinely followed by louder ones more often "
+                          "than chance — volatility clusters. But nothing here says WHICH WAY the "
+                          "loud move goes, and no entry can be planned from it. Wait for the break.",
+                          "Pergerakan harga menyempit ke titik paling tenang dalam sekitar "
+                          "setahun. Periode tenang memang lebih sering diikuti periode bergejolak "
+                          "daripada kebetulan — volatilitas cenderung mengumpul. Tetapi tidak ada "
+                          "di sini yang berkata KE ARAH MANA gejolak itu bergerak, dan tidak ada "
+                          "titik masuk yang bisa direncanakan darinya. Tunggu tembusannya.")),
             "anchor": None,
             "invalidation": None,
             "consolidation": consolidation,
@@ -813,10 +862,15 @@ def detect_setup(frame: pd.DataFrame, config: dict, levels: dict,
         "name": None,
         "direction": "none",
         "evidence": None,
-        "reason": ("None of the setups this app looks for is present. The price is not breaking "
-                   "out of its recent range, is not pulling back inside an established uptrend, "
-                   "and is not unusually quiet. That is the ordinary state of most stocks on "
-                   "most days, and inventing something here would be worse than saying so."),
+        "reason": (tr("None of the setups this app looks for is present. The price is not breaking "
+                      "out of its recent range, is not pulling back inside an established uptrend, "
+                      "and is not unusually quiet. That is the ordinary state of most stocks on "
+                      "most days, and inventing something here would be worse than saying so.",
+                      "Tidak ada pola yang dicari aplikasi ini yang muncul. Harga tidak sedang "
+                      "menembus rentang terbarunya, tidak sedang terkoreksi di dalam tren naik "
+                      "yang mapan, dan tidak luar biasa tenang. Itulah keadaan biasa "
+                      "kebanyakan saham pada kebanyakan hari, dan mengada-adakan sesuatu di "
+                      "sini lebih buruk daripada mengatakannya.")),
         "anchor": None,
         "invalidation": None,
         "consolidation": consolidation,
@@ -851,13 +905,16 @@ def build_plan(setup: dict, levels: dict, config: dict,
     """
     if setup["direction"] != "long":
         return {"usable": False, "reason": (
-            "No long setup, so there is nothing to place levels around. The support and "
-            "resistance below still describe where the structure sits.")}
+            tr("No long setup, so there is nothing to place levels around. The support and "
+               "resistance below still describe where the structure sits.",
+               "Tidak ada pola beli, jadi tidak ada yang bisa dipasangi level. Support "
+               "dan resistance di bawah tetap menggambarkan di mana strukturnya berada."))}
 
     price = float(levels["price"])
     atr_value = float(levels["atr"])
     if atr_value <= 0:
-        return {"usable": False, "reason": "No usable range estimate to size a stop with."}
+        return {"usable": False, "reason": tr("No usable range estimate to size a stop with.",
+                                              "Tidak ada perkiraan rentang yang bisa dipakai untuk menentukan stop.")}
 
     entry = price
     stop_atr = float(config["stop_atr"])
@@ -890,7 +947,8 @@ def build_plan(setup: dict, levels: dict, config: dict,
         stop = entry - MIN_STOP_ATR * atr_value
         widened = True
     if stop <= 0:
-        return {"usable": False, "reason": "A sensible stop would fall below zero."}
+        return {"usable": False, "reason": tr("A sensible stop would fall below zero.",
+                                              "Stop yang masuk akal akan jatuh di bawah nol.")}
 
     risk_per_share = entry - stop
 
@@ -898,8 +956,9 @@ def build_plan(setup: dict, levels: dict, config: dict,
     targets = []
     for level in (levels.get("resistances") or [])[:2]:
         targets.append({
-            "label": f"Next resistance ({level['touches']} prior "
-                     f"turn{'s' if level['touches'] != 1 else ''})",
+            "label": tr(f"Next resistance ({level['touches']} prior "
+                        f"turn{'s' if level['touches'] != 1 else ''})",
+                        f"Resistance berikutnya ({level['touches']} titik balik sebelumnya)"),
             "price": float(level["price"]),
             "basis": "structure",
         })
@@ -908,10 +967,12 @@ def build_plan(setup: dict, levels: dict, config: dict,
         # Measured move: a range that breaks is conventionally projected by its
         # own height. It is a convention, not a finding, and is labelled as one.
         projected = float(setup["anchor"]) + float(consolidation["height"])
-        targets.append({"label": "Measured move (range height projected)",
+        targets.append({"label": tr("Measured move (range height projected)",
+                                    "Pergerakan terukur (tinggi rentang diproyeksikan)"),
                         "price": projected, "basis": "measured move"})
     if not targets:
-        targets.append({"label": "Two average daily ranges up",
+        targets.append({"label": tr("Two average daily ranges up",
+                                    "Dua kali rentang harian rata-rata ke atas"),
                         "price": entry + 2.0 * atr_value, "basis": "volatility"})
 
     for target in targets:
@@ -924,8 +985,10 @@ def build_plan(setup: dict, levels: dict, config: dict,
     return {
         "usable": True,
         "entry": float(entry),
-        "entryNote": ("The current price. This app does not tell you to buy — it shows where "
-                      "the levels would sit if you did."),
+        "entryNote": (tr("The current price. This app does not tell you to buy — it shows where "
+                         "the levels would sit if you did.",
+                         "Harga saat ini. Aplikasi ini tidak menyuruh Anda membeli — ia "
+                         "menunjukkan di mana level-levelnya berada jika Anda membeli.")),
         "stop": float(stop),
         "stopBasis": basis,
         "stopWidened": widened,
@@ -948,17 +1011,45 @@ def build_plan(setup: dict, levels: dict, config: dict,
 # ============================================================================ #
 # Horizon assembly
 # ============================================================================ #
+# The two horizons' names and the patterns' reasons in Bahasa Indonesia, beside
+# the tables they translate — both are built at import, in no reader's language.
+_HORIZON_TEXT_ID = {
+    "short": {"label": "Jangka pendek", "window": "beberapa hari hingga beberapa minggu"},
+    "mid": {"label": "Jangka menengah", "window": "beberapa minggu hingga beberapa bulan"},
+}
+_UNDETECTABLE_ID = {
+    "Head and shoulders": ("butuh keputusan subjektif tentang di mana setiap bahu dimulai dan "
+                           "seberapa simetris yang dianggap cukup simetris"),
+    "Flags and pennants": ("butuh penentuan 'tiang bendera' — pergerakan yang dianggap cukup "
+                           "tajam — yang tidak bisa ditangkap satu ambang tetap di berbagai saham"),
+    "Wedges and triangles": ("dua garis tren yang menyempit bisa dicocokkan pada hampir 20 batang "
+                             "mana pun jika Anda boleh memilih puncak dan dasar mana yang dipakai"),
+    "Cup and handle": ("bentuk yang didefinisikan oleh rupanya, tanpa definisi angka yang "
+                       "disepakati para praktisi"),
+    "Double top / bottom": ("pada prinsipnya bisa dideteksi, tetapi toleransi untuk 'level yang "
+                            "sama' dan jarak yang disyaratkan sangat mengubah tingkat temuannya"),
+}
+
+
+def _horizon_text(horizon: str, config: dict, field: str) -> str:
+    return tr(config[field], _HORIZON_TEXT_ID.get(horizon, {}).get(field, config[field]))
+
+
 def analyse_horizon(frame: pd.DataFrame, horizon: str,
                     risk_budget: float = DEFAULT_RISK_BUDGET) -> dict:
     """One complete readout: setup, levels, plan, context, and its own caveats."""
     config = HORIZONS[horizon]
     minimum = MIN_BARS[horizon]
     if len(frame) < minimum:
-        return {"usable": False, "horizon": horizon, "label": config["label"],
-                "window": config["window"],
-                "reason": (f"The {config['label'].lower()} readout needs at least {minimum} "
-                           f"trading days and this range has {len(frame)}. Widen the chart "
-                           f"range rather than reading a number built from too little data.")}
+        return {"usable": False, "horizon": horizon,
+                "label": _horizon_text(horizon, config, "label"),
+                "window": _horizon_text(horizon, config, "window"),
+                "reason": (tr(f"The {config['label'].lower()} readout needs at least {minimum} "
+                              f"trading days and this range has {len(frame)}. Widen the chart "
+                              f"range rather than reading a number built from too little data.",
+                              f"Uraian {_horizon_text(horizon, config, 'label').lower()} butuh setidaknya {minimum} hari "
+                              f"perdagangan dan rentang ini hanya punya {len(frame)}. Perlebar rentang "
+                              "grafik alih-alih membaca angka yang dibangun dari data terlalu sedikit."))}
 
     span = frame.tail(max(config["lookback"], minimum))
     atr_series = ind.atr(frame["High"], frame["Low"], frame["Close"])
@@ -973,8 +1064,8 @@ def analyse_horizon(frame: pd.DataFrame, horizon: str,
     return {
         "usable": True,
         "horizon": horizon,
-        "label": config["label"],
-        "window": config["window"],
+        "label": _horizon_text(horizon, config, "label"),
+        "window": _horizon_text(horizon, config, "window"),
         "price": float(frame["Close"].iloc[-1]),
         "atr": atr_value,
         "atrPct": float(atr_value / float(frame["Close"].iloc[-1])) if atr_value else None,
@@ -991,7 +1082,8 @@ def analyse_horizon(frame: pd.DataFrame, horizon: str,
         "gaps": gap_analysis(frame, atr_value),
         "divergence": momentum_divergence(frame, order=config["swing_order"]),
         "candlesticks": candlestick_patterns(frame, atr_value),
-        "undetectable": [{"name": name, "why": why} for name, why in UNDETECTABLE_PATTERNS],
+        "undetectable": [{"name": name, "why": tr(why, _UNDETECTABLE_ID.get(name, why))}
+                         for name, why in UNDETECTABLE_PATTERNS],
     }
 
 
