@@ -1333,6 +1333,9 @@ equity risk premium, 21% tax and `^GSPC` as benchmark; IDX uses 6.5%, 7.0%, 22% 
 
 ## Development
 
+[`CLAUDE.md`](CLAUDE.md) is what every Claude Code session reads first: the checks below
+and the standing rules, each with its reason.
+
 Python engines:
 
 ```bash

@@ -11,15 +11,16 @@ CODEBASE_REVIEW.md is older and partly superseded.
 
 STATE
 =====
-Branch: claude/codebase-app-overhaul-e51579 — feature/personal-verdict-scanner
-plus main's IC-bar commit and the fix-ci advisory commit (merged, not
-cherry-picked), plus the October 2026 overhaul. It is open for review as PR
-farhanrkt/QuantDesk#5. The market board (November 2026) is on
-claude/markets-today, stacked on that branch so #5 stays reviewable: merge #5
-first. Each commit states what it changed and why.
+main has the October 2026 overhaul, the private market scanner and the market
+board, which reached it through farhanrkt/QuantDesk#5. The November 2026 work
+(the analysis fixes, Bahasa Indonesia across the app, the Indonesian field
+manual) is on claude/gallant-davinci-l5qtd5 and reaches main through its own
+pull request: start from main once that has merged, and from that branch
+before. Each commit states what it changed and why. CLAUDE.md, which Claude
+Code loads into every session, carries the checks and the standing rules.
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
-single Vercel Python function on the back. ~1,740 offline pytest tests, 78
-frontend assertions, 19 enforced design rules plus structural checks. US and
+single Vercel Python function on the back. ~1,920 offline pytest tests, 85
+frontend assertions, 20 enforced design rules plus structural checks. US and
 Indonesian (IDX) listings. lxml is now a runtime dependency (see below).
 
 The full battery, all green as of the last commit:
