@@ -32,6 +32,13 @@ from _lib import explain, market_data, news
 def clean(monkeypatch):
     index._RATE_HITS.clear()
     market_data._CANARY_CACHE.clear()
+
+    # US headlines ask Yahoo's search before the feed these tests plant. Without
+    # this, a runner that can reach Yahoo reads live headlines instead, and a
+    # feed planted to fail is never asked.
+    def no_yahoo(query, count=8):
+        raise OSError("offline")
+    monkeypatch.setattr(market_data, "news_search", no_yahoo)
     yield
     index._RATE_HITS.clear()
     market_data._CANARY_CACHE.clear()
