@@ -33,7 +33,8 @@ imply otherwise.
 **New to any of this?** Start with the **QuantDesk Field Manual** —
 [read it online](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009) or open
 [`docs/field-manual.html`](docs/field-manual.html) locally. Every lens and every term explained
-from scratch, no prior finance assumed.
+from scratch, no prior finance assumed. In Bahasa Indonesia:
+[`docs/field-manual.id.html`](docs/field-manual.id.html).
 
 ---
 
@@ -286,6 +287,32 @@ thesis survives a trip to another tab. Each page says when its figures were fetc
 **Print** gives a tearsheet of the tab you are on, dark on white, with the ticker, the time,
 the close the prices are from, and "not investment advice" in the header. The private score
 is never printed.
+
+---
+
+## Bahasa Indonesia
+
+**EN | ID** in the top bar (in the menu on a narrower screen, and under Settings in the
+palette) switches the whole app between English and Bahasa Indonesia. The choice stays in
+this browser; a first visit follows the browser's own language.
+
+Indonesian covers what the app says, not only its chrome: every explanation and reading,
+the synthesis and the pre-trade checks, every lens's narrative, the market board, the
+calendar, the refusals and the error messages. They come from the server in the language the
+request asks for (`?lang=id` on any route), so the reading of a company is the same reading in
+either language, with the same numbers. Some things stay as written, deliberately:
+
+- **Numbers** keep a comma for thousands and a point for decimals in both languages, the way
+  the server's sentences, the tables and the CSV exports write them. Dates, months and
+  weekdays follow the language.
+- **Names**: tickers, published models (Piotroski F-Score, Altman Z, DCF), citations, and
+  third-party text — company descriptions, headlines, the provider's industry labels.
+- **The field manual** has an Indonesian edition, built from the English page, and the app
+  opens the one in your language. **The private scanner tier** is English.
+- **The first paint is English**, for a moment, before the browser's choice is known; the
+  requests already ask for Indonesian, so no figure or sentence is fetched twice.
+
+How it is built, and the glossary every sentence uses, is in DESIGN.md's *Language*.
 
 ---
 
@@ -573,8 +600,16 @@ refusal is right for that surface and it is not an answer to a different questio
 Indonesian listings, which forty deserve an hour this week?* You cannot answer that without
 ordering, and there is no honest way to order without a score.
 
-So there is a second, private tier — not linked from the app, writing to a gitignored
-`reports/` directory — that sweeps a whole market and scores every name it can reach.
+So there is a second, private tier — writing to a gitignored `reports/` directory — that
+sweeps a whole market and scores every name it can reach.
+
+**It runs where you run the app, and nowhere public.** On any Vercel deployment, previews
+included, `/api/verdict` and `/api/scan/latest` refuse before running anything, and the page
+draws neither the **Score it** tab nor the local-scan view — the client asks
+`/api/capabilities`, which answers from the same function that guards the routes. Locally both
+appear with no setting. `QUANTDESK_PRIVATE_TIER=1` turns the tier on where it would be off, and
+`=0` turns it off locally. Until November 2026 this was a description rather than a fence: the
+score and a position size were served to any visitor of a deployment.
 
 ```bash
 python scripts/refresh_listings.py --market ID     # once, then when it goes stale
@@ -1104,6 +1139,9 @@ lib/          API client, wire types, CSV export, formatting
               cache.ts    Confluence payloads shared across views for five minutes
               watchlist.ts, shortcuts.ts, commands.ts, compare.ts, redact.ts — pure,
                           and pinned by the frontend assertions
+              i18n.ts     The reader's language: t(), msg(), useT(), dates
+              i18n-id.ts  Bahasa Indonesia for every string the interface wraps,
+                          keyed by its English; rule 20 keeps the two in step
               journal.ts  The thesis journal — client-only by design, so its
                           logic is tested by scripts/check_frontend.mjs
 api/
@@ -1134,7 +1172,10 @@ api/
               posterior.py      What a flag is worth once you account for how
                                 rare the thing it screens for is
               explain.py        Plain-English interpretation for every metric,
-                                and the cross-lens synthesis
+                                and the cross-lens synthesis — in English or
+                                Bahasa Indonesia, sentence by sentence
+              lang.py           The request's language (?lang=id): tr(), and
+                                carry() for work handed to a thread pool
               symbols.py        Ticker → Yahoo symbol, resolved once
               news.py           Google News RSS
               jsonsafe.py       NaN/inf → null before serialising
@@ -1170,6 +1211,8 @@ api/
               scanlog.py        What the scanner said, and what happened next
 docs/
   field-manual.html   Beginner's guide; glossary generated from _lib/explain.py
+  field-manual.id.html  The same guide in Bahasa Indonesia, BUILT from the English
+                      page and field-manual.id.json (its Indonesian, block by block)
 scripts/
   build_glossary.py   Regenerates that glossary, and CI's drift check
   calibrate_checks.py How often each pre-trade check fires, measured offline
@@ -1202,7 +1245,7 @@ scripts/
   scan_market.py      The private scanner: sweep a market, score every
                       tradeable name, write a report
   render_scan.py      That report as one self-contained HTML file
-tests/        1,690 offline tests (pytest), plus 59 frontend assertions
+tests/        1,894 offline tests (pytest), plus 85 frontend assertions
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -1245,7 +1288,9 @@ Interactive docs at `/api/docs`.
 | `GET /api/event-study` | Abnormal returns after each anomaly, with t-stats |
 | `GET /api/rank` | **Rank a universe** on price signals, with per-signal breakdown |
 | `GET /api/rank/universes` | The predefined lists and the fetched whole-market lists, each with its as-of date |
-| `GET /api/verdict` | **The private scanner's score and action for one name** — nine components across three families, the tape reading and the chart-formation study with their market-wide firing rates, the share register, where the trade is wrong, what a round trip costs, the market regime, the shrinkage, the gates, and the two backtests that calibrate all of it |
+| `GET /api/verdict` | **The private scanner's score and action for one name** — nine components across three families, the tape reading and the chart-formation study with their market-wide firing rates, the share register, where the trade is wrong, what a round trip costs, the market regime, the shrinkage, the gates, and the two backtests that calibrate all of it. **Local runs only**, and `no-store` |
+| `GET /api/scan/latest` | **The last local scan report**, trimmed for the table. Local runs only |
+| `GET /api/capabilities` | **What this deployment serves**: whether the private tier is on, so the page draws only what the routes will answer |
 | `POST /api/portfolio` | **A candidate against a book of holdings** — correlation, independent positions, risk against money. `no-store` |
 | `POST /api/rank/list` | **Rank a reader's own list** — the watchlist, or one pasted in. Same engine and caps as `/api/rank`, in a body, `no-store` |
 | `GET /api/peers` | **Where one ticker sits among its own index** on the seven price signals |
@@ -1270,7 +1315,15 @@ symbol finder, which reads two files already in memory and has to keep up with t
 for the market board, its calendar and 20/min for its headlines, most of which the edge
 cache answers; 3/min for the watchlist's report dates, one provider call per name). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
 8. These exist because each of those requests fans out to upstream calls — the caps are sized
-to what actually batches.
+to what actually batches. The client is identified by the forwarded address only on Vercel,
+whose edge writes it; anywhere else by the connection, as uvicorn resolves it for the proxies it
+trusts. Paths no route answers share one bucket, so a client cannot mint buckets to flush the
+table.
+
+**A provider failure is said and not kept.** When both price lenses fail, the app asks the
+provider for the market's own index: if that fails too, every lens says the provider is not
+answering — not that the symbol is wrong — and the response is held at the edge for fifteen
+seconds instead of six minutes. An empty ranking, scan or headline feed gets the same short life.
 
 **Market conventions** are configured per market — US uses a 4.2% risk-free rate, 5.5%
 equity risk premium, 21% tax and `^GSPC` as benchmark; IDX uses 6.5%, 7.0%, 22% and
@@ -1279,6 +1332,9 @@ equity risk premium, 21% tax and `^GSPC` as benchmark; IDX uses 6.5%, 7.0%, 22% 
 ---
 
 ## Development
+
+[`CLAUDE.md`](CLAUDE.md) is what every Claude Code session reads first: the checks below
+and the standing rules, each with its reason.
 
 Python engines:
 
@@ -1345,7 +1401,9 @@ it prints is the honest answer to whether the signal exists in that market:
 ```
 
 The field manual's glossary is generated, so regenerate it after touching the explanation
-layer — CI fails if you forget:
+layer — CI fails if you forget. The same run builds the Indonesian manual from the English one,
+so an edit to the English manual also needs its Indonesian in `docs/field-manual.id.json`;
+`--missing` lists the blocks still to translate:
 
 ```bash
 .venv/bin/python scripts/build_glossary.py
@@ -1401,6 +1459,12 @@ dollars to rupiah. A five-year projection converted at today's rate carries the 
 as well as the company's. The data source is not internally consistent about which of its
 dividend fields follows which currency, so every dividend figure is checked against the share
 price it will be compared with before it is used.
+
+**Language.** Bahasa Indonesia covers the published app and the field manual; the private
+scanner tier and the page metadata are English, numbers keep English separators in both
+languages, and the first paint is English until the browser's choice is read. The Indonesian
+was written for this app, not by a translator, and has not yet been read by a native-speaking
+investor — the glossary in `lib/i18n-id.ts` is the place to correct a word everywhere at once.
 
 **Data.** yfinance is an unofficial scraper against an undocumented endpoint, with no SLA.
 Fundamentals for smaller IDX listings are patchy — where a figure is missing, the app offers
@@ -1468,7 +1532,8 @@ where you press the button.
 - **[docs/field-manual.html](docs/field-manual.html)** — a beginner's guide to the whole app
   ([published copy](https://claude.ai/code/artifact/a73e6190-7252-430a-a57b-a84fe7cfd009)). All four
   lenses, the synthesis that reads them together, the statistics that decide whether to believe any
-  of it, and every one of the 85 metrics in a searchable glossary. Assumes no prior finance.
+  of it, and every one of the 95 metrics in a searchable glossary. Assumes no prior finance.
+  In Bahasa Indonesia: **[docs/field-manual.id.html](docs/field-manual.id.html)**.
 
   Its glossary is **generated**, not transcribed: `scripts/build_glossary.py` injects the same
   strings `_lib/explain.py` puts on screen, and CI fails if a metric is added without regenerating.

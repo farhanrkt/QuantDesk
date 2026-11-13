@@ -4,6 +4,7 @@ import {
   createContext, useContext, useEffect, useId, useLayoutEffect, useRef, useState,
 } from "react";
 import { ArrowDown, ArrowUp, Info, X } from "lucide-react";
+import { msg, useT } from "@/lib/i18n";
 import type { Explanation, ExplainMap } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { palette } from "@/lib/palette";
@@ -53,10 +54,15 @@ export const TONE_FIELD: Record<string, string> = {
 };
 
 const EVIDENCE_NOTE: Record<string, string> = {
-  strong: "Well supported — decades of out-of-sample evidence across many markets.",
-  moderate: "Reasonably supported, with caveats. Published and replicated, but not settled.",
-  weak: "Weak evidence. Widely used, poorly supported once trading costs are counted.",
-  none: "No evidence base. Descriptive only.",
+  strong: msg("Well supported — decades of out-of-sample evidence across many markets."),
+  moderate: msg("Reasonably supported, with caveats. Published and replicated, but not settled."),
+  weak: msg("Weak evidence. Widely used, poorly supported once trading costs are counted."),
+  none: msg("No evidence base. Descriptive only."),
+};
+
+// The level itself, as a word; the codes are compared above and stay as sent.
+const EVIDENCE_WORD: Record<string, string> = {
+  strong: msg("strong"), moderate: msg("moderate"), weak: msg("weak"), none: msg("none"),
 };
 
 const EVIDENCE_TONE: Record<string, string> = {
@@ -131,6 +137,7 @@ export function useDetailLevel(): [DetailLevel, (v: DetailLevel) => void] {
 export function DetailToggle({
   level, onChange,
 }: { level: DetailLevel; onChange: (v: DetailLevel) => void }) {
+  const t = useT();
   const options = ["simple", "detailed"] as const;
   const move = (event: React.KeyboardEvent) => {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
@@ -138,7 +145,7 @@ export function DetailToggle({
     onChange(level === "simple" ? "detailed" : "simple");
   };
   return (
-    <div role="radiogroup" aria-label="Reading mode"
+    <div role="radiogroup" aria-label={t("Reading mode")}
          className="inline-flex rounded-lg border border-rule bg-raised p-1">
       {options.map((option) => (
         <button
@@ -158,7 +165,7 @@ export function DetailToggle({
               : "text-ash hover:text-chalk",
           )}
         >
-          {option === "simple" ? "Guided" : "Full"}
+          {option === "simple" ? t("Guided") : t("Full")}
         </button>
       ))}
     </div>
@@ -169,12 +176,13 @@ export function DetailToggle({
 // The explanation itself
 // --------------------------------------------------------------------------- //
 function ArrowFor({ direction }: { direction: Explanation["goodDirection"] }) {
+  const t = useT();
   if (direction === "none") return null;
   const Icon = direction === "high" ? ArrowUp : ArrowDown;
   return (
     <span className="inline-flex items-center gap-1 text-micro text-ash">
       <Icon aria-hidden className="h-3 w-3" />
-      {direction === "high" ? "higher is better" : "lower is better"}
+      {direction === "high" ? t("higher is better") : t("lower is better")}
     </span>
   );
 }
@@ -196,21 +204,22 @@ function ArrowFor({ direction }: { direction: Explanation["goodDirection"] }) {
  * it.
  */
 export function ExplanationBody({ explain }: { explain: Explanation }) {
+  const t = useT();
   return (
     <span className="block space-y-3">
       <span className="block">
-        <span className="eyebrow mb-1 block">What it is</span>
+        <span className="eyebrow mb-1 block">{t("What it is")}</span>
         <span className="block text-meta leading-relaxed text-body">{explain.what}</span>
       </span>
       <span className="block">
-        <span className="eyebrow mb-1 block">This reading</span>
+        <span className="eyebrow mb-1 block">{t("This reading")}</span>
         <span className={cn("block text-meta font-medium leading-relaxed",
                             TONE_TEXT[explain.tone] ?? "text-chalk")}>
           {explain.reading}
         </span>
       </span>
       <span className="block">
-        <span className="eyebrow mb-1 block">What to do</span>
+        <span className="eyebrow mb-1 block">{t("What to do")}</span>
         <span className="block text-meta leading-relaxed text-body">{explain.action}</span>
       </span>
       <span className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-ruleSoft pt-2.5">
@@ -218,10 +227,11 @@ export function ExplanationBody({ explain }: { explain: Explanation }) {
         {explain.evidence && (
           <span className={cn("text-micro", EVIDENCE_TONE[explain.evidence] ?? "text-ash")}>
             <span className="font-semibold uppercase tracking-wide">
-              {explain.evidence} evidence
+              {t("{evidence} evidence",
+                 { evidence: EVIDENCE_WORD[explain.evidence] ? t(EVIDENCE_WORD[explain.evidence]) : explain.evidence })}
             </span>
             {" — "}
-            <span className="text-ash">{EVIDENCE_NOTE[explain.evidence]}</span>
+            <span className="text-ash">{EVIDENCE_NOTE[explain.evidence] ? t(EVIDENCE_NOTE[explain.evidence]) : null}</span>
           </span>
         )}
       </span>
@@ -245,6 +255,7 @@ export function ExplanationBody({ explain }: { explain: Explanation }) {
 function InfoButton({
   label, open, onToggle, controls,
 }: { label: string; open: boolean; onToggle: () => void; controls: string }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -257,7 +268,8 @@ function InfoButton({
       // that goes nowhere. Found by resolving every id rather than by reading
       // the markup.
       aria-controls={open ? controls : undefined}
-      aria-label={open ? `Hide the explanation of ${label}` : `Explain ${label}`}
+      aria-label={open ? t("Hide the explanation of {label}", { label })
+        : t("Explain {label}", { label })}
       onClick={onToggle}
       className={cn(
         "inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full",
@@ -292,6 +304,7 @@ function InfoButton({
  * `aria-expanded`/`aria-controls` describes what is actually here.
  */
 export function Explain({ explain }: { explain?: Explanation }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [flip, setFlip] = useState(false);
   const id = useId();
@@ -342,7 +355,7 @@ export function Explain({ explain }: { explain?: Explanation }) {
           <span className="mb-2.5 flex items-start justify-between gap-3 border-b border-ruleSoft pb-2">
             <span className="block text-meta font-semibold text-chalk">{explain.label}</span>
             <button type="button" onClick={() => setOpen(false)}
-                    aria-label={`Close the explanation of ${explain.label}`}
+                    aria-label={t("Close the explanation of {label}", { label: explain.label })}
                     className="-mr-1 -mt-0.5 inline-flex h-6 w-6 shrink-0 items-center
                                justify-center rounded text-faint transition-colors
                                hover:bg-rule/60 hover:text-chalk focus:outline-none

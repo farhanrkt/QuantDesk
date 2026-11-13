@@ -72,6 +72,7 @@ import pandas as pd
 
 from . import universes
 from .valuation import _get_row, _safe_float
+from .lang import tr
 
 # The three fits, as data. Each `sample` string is what the paper's own sample
 # was; each `thisUse` is computed from the company in front of the reader.
@@ -124,26 +125,33 @@ def _period(key: str, name: str, sample: str, first: int, last: int,
             fiscal_year: Optional[int]) -> dict:
     if fiscal_year is None:
         return _dimension(
-            key, name, sample, "no dated filing", UNKNOWN,
-            "The statements carry no readable period, so the gap cannot be measured.")
+            key, name, sample, tr("no dated filing", "tidak ada laporan keuangan bertanggal"), UNKNOWN,
+            tr("The statements carry no readable period, so the gap cannot be measured.",
+               "Laporan keuangannya tidak memuat periode yang bisa dibaca, jadi "
+               "selisihnya tidak bisa diukur."))
     inside = first <= fiscal_year <= last
     gap = fiscal_year - last
     return _dimension(
-        key, name, sample, f"{fiscal_year} filings",
+        key, name, sample, tr(f"{fiscal_year} filings", f"laporan keuangan {fiscal_year}"),
         INSIDE if inside else OUTSIDE,
-        "Inside the years the model was fitted on."
+        tr("Inside the years the model was fitted on.",
+           "Di dalam rentang tahun tempat model ini dicocokkan.")
         if inside else
-        f"{gap} years after the sample ends. Accounting standards, disclosure rules "
-        f"and the composition of listed markets have all moved since; the model has "
-        f"not been refitted here.")
+        tr(f"{gap} years after the sample ends. Accounting standards, disclosure rules "
+           f"and the composition of listed markets have all moved since; the model has "
+           f"not been refitted here.",
+           f"{gap} tahun setelah sampelnya berakhir. Standar akuntansi, aturan "
+           "pengungkapan, dan komposisi pasar saham semuanya sudah bergeser sejak "
+           "itu; model ini belum dicocokkan ulang di sini."))
 
 
 def _market(key: str, sample: str, market_code: Optional[str],
             emerging_recalibration: bool = False) -> dict:
     code = (market_code or "").upper()
     if code not in ("US", "ID"):
-        return _dimension(key, "Market", sample, "not stated", UNKNOWN,
-                          "The listing's market was not passed to this check.")
+        return _dimension(key, tr("Market", "Pasar"), sample, tr("not stated", "tidak disebutkan"), UNKNOWN,
+                          tr("The listing's market was not passed to this check.",
+                             "Pasar saham ini tidak diteruskan ke pemeriksaan ini."))
     if emerging_recalibration:
         # THE ONE PLACE THE USUAL DIRECTION REVERSES, and it is worth saying out
         # loud. Altman's bands come from a recalibration built for emerging
@@ -151,24 +159,36 @@ def _market(key: str, sample: str, market_code: Optional[str],
         # were drawn on than a US one is. The coefficients are a separate
         # dimension and go the other way.
         return _dimension(
-            key, "Market", sample,
-            "US listing" if code == "US" else "Indonesian (IDX) listing",
+            key, tr("Market", "Pasar"), sample,
+            tr("US listing", "saham tercatat AS") if code == "US" else tr("Indonesian (IDX) listing",
+                                                 "saham tercatat Indonesia (BEI)"),
             OUTSIDE if code == "US" else INSIDE,
-            "The emerging-market recalibration was built for exactly this kind of "
-            "listing, so the zone boundaries are on home ground here."
+            tr("The emerging-market recalibration was built for exactly this kind of "
+               "listing, so the zone boundaries are on home ground here.",
+               "Kalibrasi ulang pasar berkembang dibuat persis untuk jenis saham "
+               "seperti ini, jadi batas zonanya berada di kandang sendiri di sini.")
             if code == "ID" else
-            "The zone boundaries come from an emerging-market recalibration, "
-            "benchmarked to US bond ratings. A US listing is not what that "
-            "adjustment was made for, though the underlying ratios are unaffected.")
+            tr("The zone boundaries come from an emerging-market recalibration, "
+               "benchmarked to US bond ratings. A US listing is not what that "
+               "adjustment was made for, though the underlying ratios are unaffected.",
+               "Batas zonanya berasal dari kalibrasi ulang pasar berkembang, yang "
+               "dipatok pada peringkat obligasi AS. Saham AS bukan sasaran penyesuaian "
+               "itu, meski rasio dasarnya tidak terpengaruh."))
     return _dimension(
-        key, "Market", sample,
-        "US listing" if code == "US" else "Indonesian (IDX) listing",
+        key, tr("Market", "Pasar"), sample,
+        tr("US listing", "saham tercatat AS") if code == "US" else tr("Indonesian (IDX) listing",
+                                             "saham tercatat Indonesia (BEI)"),
         INSIDE if code == "US" else OUTSIDE,
-        "A US listing, which is the market the model was fitted on."
+        tr("A US listing, which is the market the model was fitted on.",
+           "Saham AS, pasar tempat model ini dicocokkan.")
         if code == "US" else
-        "Fitted on US filings under US accounting standards. Indonesian filers "
-        "report under IFRS-converged standards with different disclosure "
-        "requirements, and no refit for this market is applied here.")
+        tr("Fitted on US filings under US accounting standards. Indonesian filers "
+           "report under IFRS-converged standards with different disclosure "
+           "requirements, and no refit for this market is applied here.",
+           "Dicocokkan pada laporan keuangan AS dengan standar akuntansi AS. Emiten "
+           "Indonesia melapor dengan standar yang mengadopsi IFRS dan persyaratan "
+           "pengungkapan yang berbeda, dan tidak ada pencocokan ulang untuk pasar "
+           "ini yang diterapkan di sini."))
 
 
 def _book_equity(company: dict) -> Optional[float]:
@@ -196,30 +216,41 @@ def _book_to_market(company: dict) -> tuple[Optional[float], str]:
     cap = _finite(company.get("market_cap"))
     equity = _book_equity(company)
     if cap is None or equity is None or cap <= 0:
-        return None, "not computable"
+        return None, tr("not computable", "tidak bisa dihitung")
     ratio = equity / cap
-    return ratio, f"book/market {ratio:.2f}"
+    return ratio, tr(f"book/market {ratio:.2f}", f"nilai buku/pasar {ratio:.2f}")
 
 
 def _value_style(company: dict) -> dict:
-    sample = "highest book-to-market fifth of the market (value stocks)"
+    sample = tr("highest book-to-market fifth of the market (value stocks)",
+                "seperlima pasar dengan rasio nilai buku terhadap pasar tertinggi (saham "
+                "nilai)")
     ratio, text = _book_to_market(company)
     if ratio is None:
         return _dimension(
-            "style", "Valuation style", sample, text, UNKNOWN,
-            "Book value or market capitalisation is missing, so this listing cannot be "
-            "placed against the value screen the sample was drawn from.")
+            "style", tr("Valuation style", "Gaya valuasi"), sample, text, UNKNOWN,
+            tr("Book value or market capitalisation is missing, so this listing cannot be "
+               "placed against the value screen the sample was drawn from.",
+               "Nilai buku atau kapitalisasi pasar tidak ada, jadi saham ini tidak bisa "
+               "ditempatkan terhadap penyaring nilai tempat sampelnya diambil."))
     if ratio < NOT_VALUE_BM:
         return _dimension(
-            "style", "Valuation style", sample, text, OUTSIDE,
-            f"Priced at more than three times book value. The F-Score's evidence comes "
-            f"entirely from the cheapest fifth of the market on this measure, and no "
-            f"published breakpoint for that fifth sits anywhere near {ratio:.2f}.")
+            "style", tr("Valuation style", "Gaya valuasi"), sample, text, OUTSIDE,
+            tr(f"Priced at more than three times book value. The F-Score's evidence comes "
+               f"entirely from the cheapest fifth of the market on this measure, and no "
+               f"published breakpoint for that fifth sits anywhere near {ratio:.2f}.",
+               "Dihargai lebih dari tiga kali nilai bukunya. Bukti F-Score sepenuhnya "
+               "berasal dari seperlima pasar yang termurah menurut ukuran ini, dan "
+               f"tidak ada batas terbitan untuk seperlima itu yang mendekati {ratio:.2f}."))
     return _dimension(
-        "style", "Valuation style", sample, text, UNKNOWN,
-        "Cheap enough to be in value territory, but the top fifth is a position in a "
-        "cross-section and placing this name in one needs a universe-wide scan of book "
-        "values, which does not batch and is not run here.")
+        "style", tr("Valuation style", "Gaya valuasi"), sample, text, UNKNOWN,
+        tr("Cheap enough to be in value territory, but the top fifth is a position in a "
+           "cross-section and placing this name in one needs a universe-wide scan of book "
+           "values, which does not batch and is not run here.",
+           "Cukup murah untuk masuk wilayah nilai, tetapi seperlima teratas adalah "
+           "posisi dalam penampang pasar, dan menempatkan saham ini di dalamnya "
+           "butuh pemindaian nilai buku di seluruh semesta, yang tidak bisa "
+           "dilakukan sekaligus dan tidak dijalankan di sini."))
 
 
 def _size_and_coverage(symbol: Optional[str], company: dict) -> dict:
@@ -232,59 +263,86 @@ def _size_and_coverage(symbol: Optional[str], company: dict) -> dict:
     the Nasdaq-100, IDX30 or LQ45 says the same thing without any of them, is
     already in this repo, and carries its own as-of date.
     """
-    sample = ("small and mid-caps, thinly traded, with no analyst following — where "
-              "Piotroski reports the effect concentrated")
+    sample = (tr("small and mid-caps, thinly traded, with no analyst following — where "
+                 "Piotroski reports the effect concentrated",
+                 "saham berkapitalisasi kecil dan menengah, jarang diperdagangkan, tanpa "
+                 "liputan analis — tempat Piotroski melaporkan efeknya terkonsentrasi"))
     groups = universes.containing(symbol) if symbol else []
     if groups:
         names = ", ".join(g["name"] for g in groups)
         return _dimension(
-            "size", "Size and coverage", sample, f"a member of {names}", OUTSIDE,
-            "A headline-index constituent is followed by many analysts and traded "
-            "heavily, which is the opposite end of the market from where the paper "
-            "found the effect. The nine tests still describe the filings; the return "
-            "evidence behind them does not come from companies like this one.")
+            "size", tr("Size and coverage", "Ukuran dan liputan"), sample, tr(f"a member of {names}", f"anggota {names}"), OUTSIDE,
+            tr("A headline-index constituent is followed by many analysts and traded "
+               "heavily, which is the opposite end of the market from where the paper "
+               "found the effect. The nine tests still describe the filings; the return "
+               "evidence behind them does not come from companies like this one.",
+               "Anggota indeks utama diikuti banyak analis dan ramai diperdagangkan, "
+               "ujung pasar yang berlawanan dengan tempat makalah itu menemukan "
+               "efeknya. Sembilan uji itu tetap menggambarkan laporan keuangannya; "
+               "bukti imbal hasil di baliknya tidak berasal dari perusahaan seperti ini."))
     cap = _finite(company.get("market_cap"))
-    detail = "not in any predefined index"
+    detail = tr("not in any predefined index", "tidak termasuk indeks yang sudah ditentukan")
     if cap is not None and cap > 0:
-        detail += f", market cap {cap:,.0f} {company.get('currency') or ''}".rstrip()
+        detail += tr(f", market cap {cap:,.0f} {company.get('currency') or ''}",
+                     f", kapitalisasi pasar {cap:,.0f} {company.get('currency') or ''}").rstrip()
     return _dimension(
-        "size", "Size and coverage", sample, detail, UNKNOWN,
-        "Outside the predefined index lists, so this app cannot say how heavily it is "
-        "followed. Analyst coverage and share turnover are the variables the paper "
-        "conditions on, and neither is fetched here.")
+        "size", tr("Size and coverage", "Ukuran dan liputan"), sample, detail, UNKNOWN,
+        tr("Outside the predefined index lists, so this app cannot say how heavily it is "
+           "followed. Analyst coverage and share turnover are the variables the paper "
+           "conditions on, and neither is fetched here.",
+           "Di luar daftar indeks yang sudah ditentukan, jadi aplikasi ini tidak "
+           "bisa menilai seberapa banyak ia diikuti. Liputan analis dan perputaran "
+           "saham adalah variabel yang dikendalikan makalah itu, dan keduanya tidak "
+           "diambil di sini."))
 
 
 def _industry(company: dict) -> dict:
     industry = (company.get("industry") or "").strip()
     sector = (company.get("sector") or "").strip()
-    described = industry or sector or "not stated"
+    described = industry or sector or tr("not stated", "tidak disebutkan")
     manufacturing = any(word in (industry + " " + sector).lower() for word in (
         "manufactur", "industrial", "machinery", "auto", "aerospace", "chemical",
         "steel", "materials", "semiconductor equipment", "building products",
         "electrical equipment", "packaging"))
     if not (industry or sector):
         return _dimension(
-            "industry", "Industry", "US manufacturers", described, UNKNOWN,
-            "No sector came back for this listing, so the fit cannot be judged.")
+            "industry", tr("Industry", "Industri"), tr("US manufacturers", "perusahaan manufaktur AS"), described, UNKNOWN,
+            tr("No sector came back for this listing, so the fit cannot be judged.",
+               "Tidak ada sektor yang kembali untuk saham ini, jadi kecocokannya tidak "
+               "bisa dinilai."))
     return _dimension(
-        "industry", "Industry", "US manufacturers", described,
+        "industry", tr("Industry", "Industri"), tr("US manufacturers", "perusahaan manufaktur AS"), described,
         INSIDE if manufacturing else OUTSIDE,
-        "A manufacturer, which is what the discriminant analysis was fitted on."
+        tr("A manufacturer, which is what the discriminant analysis was fitted on.",
+           "Perusahaan manufaktur, yang menjadi dasar pencocokan analisis "
+           "diskriminan.")
         if manufacturing else
-        "The Z'' form drops the sales-to-assets term precisely so the score travels "
-        "across industries with different asset turnover, so this is the dimension the "
-        "model itself was adapted to survive — but the coefficients were still "
-        "estimated on manufacturers.")
+        tr("The Z'' form drops the sales-to-assets term precisely so the score travels "
+           "across industries with different asset turnover, so this is the dimension the "
+           "model itself was adapted to survive — but the coefficients were still "
+           "estimated on manufacturers.",
+           "Bentuk Z'' menghapus suku penjualan terhadap aset justru agar skornya "
+           "berlaku lintas industri dengan perputaran aset yang berbeda, jadi "
+           "inilah dimensi yang memang disesuaikan agar model bertahan — tetapi "
+           "koefisiennya tetap diperkirakan dari perusahaan manufaktur."))
 
 
 def _event_rate(company: dict) -> dict:
     return _dimension(
-        "prevalence", "How common the event was in the sample",
-        "50 manipulators against 1,708 controls, about 3% of the estimation sample",
-        "a listed company drawn from no sample at all", OUTSIDE,
-        "Manipulators were deliberately over-represented — about one firm in thirty-four, "
-        "far commoner than in the wild. A screen tuned that way raises more false alarms "
-        "here, so a flag is a reason to read the filings rather than a finding.")
+        "prevalence", tr("How common the event was in the sample",
+                         "Seberapa umum peristiwa itu dalam sampel"),
+        tr("50 manipulators against 1,708 controls, about 3% of the estimation sample",
+           "50 manipulator dibandingkan 1,708 pembanding, sekitar 3% dari sampel "
+           "estimasi"),
+        tr("a listed company drawn from no sample at all",
+           "perusahaan tercatat yang tidak diambil dari sampel mana pun"), OUTSIDE,
+        tr("Manipulators were deliberately over-represented — about one firm in thirty-four, "
+           "far commoner than in the wild. A screen tuned that way raises more false alarms "
+           "here, so a flag is a reason to read the filings rather than a finding.",
+           "Manipulator sengaja diwakili berlebihan — sekitar satu dari tiga puluh "
+           "empat perusahaan, jauh lebih umum daripada di dunia nyata. Penyaring "
+           "yang disetel seperti itu memunculkan lebih banyak alarm palsu di sini, "
+           "jadi tanda adalah alasan untuk membaca laporan keuangan, bukan temuan."))
 
 
 def assess(company: dict, symbol: Optional[str] = None,
@@ -299,23 +357,24 @@ def assess(company: dict, symbol: Optional[str] = None,
                                company.get("cashflow"))
 
     piotroski = [
-        _period("period", "Period", "US filings, 1976-1996", 1976, 1996, fiscal_year),
-        _market("market", "US Compustat filers", market_code),
+        _period("period", tr("Period", "Periode"), tr("US filings, 1976-1996", "laporan keuangan AS, 1976-1996"), 1976, 1996, fiscal_year),
+        _market("market", tr("US Compustat filers", "emiten AS di Compustat"), market_code),
         _value_style(company),
         _size_and_coverage(symbol, company),
     ]
 
     altman = [
-        _period("period", "Period the coefficients come from",
-                "US filings from before 1966", 1946, 1965, fiscal_year),
-        _market("market", "emerging-market corporates (2005 recalibration)",
+        _period("period", tr("Period the coefficients come from", "Periode asal koefisien"),
+                tr("US filings from before 1966", "laporan keuangan AS sebelum 1966"), 1946, 1965, fiscal_year),
+        _market("market", tr("emerging-market corporates (2005 recalibration)",
+                             "perusahaan pasar berkembang (kalibrasi ulang 2005)"),
                 market_code, emerging_recalibration=True),
         _industry(company),
     ]
 
     beneish = [
-        _period("period", "Period", "US filings, 1982-1988", 1982, 1988, fiscal_year),
-        _market("market", "US Compustat filers", market_code),
+        _period("period", tr("Period", "Periode"), tr("US filings, 1982-1988", "laporan keuangan AS, 1982-1988"), 1982, 1988, fiscal_year),
+        _market("market", tr("US Compustat filers", "emiten AS di Compustat"), market_code),
         _event_rate(company),
     ]
 
@@ -326,25 +385,34 @@ def assess(company: dict, symbol: Optional[str] = None,
             "piotroski": {
                 "label": "Piotroski F-Score",
                 "citation": "Piotroski (2000), Journal of Accounting Research 38",
-                "sample": ("14,043 firm-years from the highest book-to-market fifth of "
-                           "US Compustat, 1976-1996"),
+                "sample": (tr("14,043 firm-years from the highest book-to-market fifth of "
+                              "US Compustat, 1976-1996",
+                              "14,043 tahun-perusahaan dari seperlima pasar Compustat AS dengan rasio "
+                              "nilai buku terhadap pasar tertinggi, 1976-1996")),
                 "dimensions": piotroski,
             },
             "altman": {
-                "label": "Altman Z''-score (emerging-market variant)",
+                "label": tr("Altman Z''-score (emerging-market variant)",
+                            "Altman Z''-score (varian pasar berkembang)"),
                 "citation": ("Altman (1968), Journal of Finance 23(4); Altman (2005), "
                              "Emerging Markets Review 6(4)"),
-                "sample": ("66 US manufacturers, 33 of which went bankrupt, on filings "
-                           "from before 1966; the zone boundaries recalibrated on "
-                           "emerging-market corporates in 2005"),
+                "sample": (tr("66 US manufacturers, 33 of which went bankrupt, on filings "
+                              "from before 1966; the zone boundaries recalibrated on "
+                              "emerging-market corporates in 2005",
+                              "66 perusahaan manufaktur AS, 33 di antaranya bangkrut, dari laporan "
+                              "keuangan sebelum 1966; batas zonanya dikalibrasi ulang pada perusahaan "
+                              "pasar berkembang pada 2005")),
                 "dimensions": altman,
             },
             "beneish": {
                 "label": "Beneish M-Score",
                 "citation": "Beneish (1999), Financial Analysts Journal 55(5)",
-                "sample": ("50 manipulators found through SEC enforcement actions "
-                           "against 1,708 industry-matched controls, US Compustat, "
-                           "1982-1988"),
+                "sample": (tr("50 manipulators found through SEC enforcement actions "
+                              "against 1,708 industry-matched controls, US Compustat, "
+                              "1982-1988",
+                              "50 manipulator yang ditemukan lewat tindakan penegakan hukum SEC "
+                              "dibandingkan 1,708 pembanding yang dicocokkan per industri, Compustat "
+                              "AS, 1982-1988")),
                 "dimensions": beneish,
             },
         },

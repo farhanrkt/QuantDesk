@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/input";
 import { StateCard } from "@/components/ui/state";
 import { useSessionState } from "@/lib/session";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { useT } from "@/lib/i18n";
 
 const ACC = palette.acc;
 const DIST = palette.dist;
@@ -42,6 +43,7 @@ const DEFAULT_UNIVERSE = "AAPL, NVDA, TSLA, JPM, KO, BBCA.JK, BBRI.JK, TLKM.JK";
  * whole list is bare Indonesian codes.
  */
 export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => void }) {
+  const t = useT();
   const { state, scan } = useScreener();
   const [tickers, setTickers] = useSessionState("screener:tickers", DEFAULT_UNIVERSE);
   const [recentDays, setRecentDays] = useSessionState("screener:recentDays", 10);
@@ -52,8 +54,8 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
   const bareCodes = tickers
     .replace(/\n/g, ",")
     .split(",")
-    .map((t) => t.trim())
-    .filter((t) => t && !t.includes("."));
+    .map((item) => item.trim())
+    .filter((item) => item && !item.includes("."));
   const suffixWarning = market === "ID" && bareCodes.length > 0;
 
   const rows = state.status === "ready" ? state.data.rows : [];
@@ -62,74 +64,71 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
     downloadCsv(
       "whale_screener_extract.csv",
       toCsv(rows, [
-        { key: "ticker", label: "Ticker" },
-        { key: "recentAnomalies", label: "Recent Anomalies" },
-        { key: "dominantFlow", label: "Dominant Flow" },
-        { key: "topStrength", label: "Top Strength" },
-        { key: "latestSignal", label: "Latest Signal" },
-        { key: "latestTag", label: "Latest Tag" },
-        { key: "latestClose", label: "Latest Close" },
-        { key: "topRvol", label: "RVOL (top)" },
+        { key: "ticker", label: t("Ticker") },
+        { key: "recentAnomalies", label: t("Recent Anomalies") },
+        { key: "dominantFlow", label: t("Dominant Flow") },
+        { key: "topStrength", label: t("Top Strength") },
+        { key: "latestSignal", label: t("Latest Signal") },
+        { key: "latestTag", label: t("Latest Tag") },
+        { key: "latestClose", label: t("Latest Close") },
+        { key: "topRvol", label: t("RVOL (top)") },
       ])
     );
 
   return (
     <div className="space-y-4 animate-rise">
       <Card>
-        <CardHeader><CardTitle>Cross-asset screener</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("Cross-asset screener")}</CardTitle></CardHeader>
         <CardBody className="space-y-4">
-          <Explainer summary="Scans a list and shows only the names with fresh unusual trading">
-            Symbols keep their own suffix, so a mixed US and IDX list works on either setting.
-            {" "}Capped at 20 a scan: each symbol costs one download and one model fit.
+          <Explainer summary={t("Scans a list and shows only the names with fresh unusual trading")}>
+            {t("Symbols keep their own suffix, so a mixed US and IDX list works on either setting. Capped at 20 a scan: each symbol costs one download and one model fit.")}
           </Explainer>
-          <Field label="Universe" hint="Comma or newline separated.">
+          <Field label={t("Universe")} hint={t("Comma or newline separated.")}>
             <Textarea mono value={tickers} onChange={(e) => setTickers(e.target.value)} rows={3} />
           </Field>
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Bare codes are" hint="Suffixed symbols are left alone.">
+            <Field label={t("Bare codes are")} hint={t("Suffixed symbols are left alone.")}>
               <SelectField value={market} onChange={(v) => setMarket(v as Market)}
                            options={[
-                             { value: "US", label: "US symbols" },
-                             { value: "ID", label: "IDX (add .JK)" },
+                             { value: "US", label: t("US symbols") },
+                             { value: "ID", label: t("IDX (add .JK)") },
                            ]} />
             </Field>
-            <Field label="Look-back window (days)">
+            <Field label={t("Look-back window (days)")}>
               <NumberField value={recentDays} onChange={(v) => setRecentDays(v ?? 10)}
                            min={1} max={60} />
             </Field>
-            <Field label="History">
+            <Field label={t("History")}>
               <SelectField value={period} onChange={setPeriod}
                            options={["6mo", "1y", "2y", "5y", "max"]} />
             </Field>
-            <Field label="Detection">
+            <Field label={t("Detection")}>
               <SelectField value={mode} onChange={setMode}
                            options={[
-                             { value: "threshold", label: "Threshold" },
-                             { value: "mad", label: "Robust (MAD)" },
-                             { value: "quota", label: "Fixed quota" },
-                             { value: "walkforward", label: "Walk-forward" },
+                             { value: "threshold", label: t("Threshold") },
+                             { value: "mad", label: t("Robust (MAD)") },
+                             { value: "quota", label: t("Fixed quota") },
+                             { value: "walkforward", label: t("Walk-forward") },
                            ]} />
             </Field>
             <ApplyButton
               busy={state.status === "loading"}
               onClick={() => scan({ tickers, market, period, mode, recentDays })}
             >
-              Execute scan
+              {t("Execute scan")}
             </ApplyButton>
           </div>
           {suffixWarning && (
             <p className="text-meta leading-relaxed text-warn">
-              {bareCodes.length} bare code{bareCodes.length === 1 ? "" : "s"} (
+              {t("{length} bare code{value} (", { length: bareCodes.length, value: bareCodes.length === 1 ? "" : "s" })}
               <span className="font-mono">{bareCodes.slice(0, 4).join(", ")}
-              {bareCodes.length > 4 ? "…" : ""}</span>) will get{" "}
-              <span className="font-mono">.JK</span> appended. Symbols that do not exist on the
-              IDX fetch nothing and are dropped from the results without an error.
+              {bareCodes.length > 4 ? "…" : ""}</span>{t(") will get")}{" "}
+              <span className="font-mono">{t(".JK")}</span>{" "}{t("appended. Symbols that do not exist on the IDX fetch nothing and are dropped from the results without an error.")}
             </p>
           )}
           {mode === "walkforward" && (
             <Note tone="warn">
-              Walk-forward refits the model at every step, so it is capped at 5 symbols. Use
-              Threshold or Robust for a whole list.
+              {t("Walk-forward refits the model at every step, so it is capped at 5 symbols. Use Threshold or Robust for a whole list.")}
             </Note>
           )}
         </CardBody>
@@ -138,46 +137,43 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
       {state.status === "loading" && <Card><PanelSkeleton /></Card>}
 
       {state.status === "error" && (
-        <StateCard kind="error" title="The scan could not run">{state.failure.message}</StateCard>
+        <StateCard kind="error" title={t("The scan could not run")}>{state.failure.message}</StateCard>
       )}
 
       {state.status === "ready" && (
         <Card>
           <CardHeader>
             <CardTitle>
-              {rows.length} of {state.data.scanned} with activity in the last{" "}
-              {state.data.recentDays} days
+              {t("{length} of {scanned} with activity in the last {recentDays} days", { length: rows.length, scanned: state.data.scanned, recentDays: state.data.recentDays })}
             </CardTitle>
             <div className="flex items-center gap-3">
               {state.data.significance?.available && (
                 <span className="num text-micro text-ash">
-                  {state.data.significance.discoveries} significant
+                  {t("{discoveries} significant", { discoveries: state.data.significance.discoveries })}
                 </span>
               )}
               {rows.length > 0 && onSelect && (
-                <span className="text-micro text-ash">Select a ticker to load it</span>
+                <span className="text-micro text-ash">{t("Select a ticker to load it")}</span>
               )}
-              {rows.length > 0 && <DownloadButton onClick={download}>CSV</DownloadButton>}
+              {rows.length > 0 && <DownloadButton onClick={download}>{t("CSV")}</DownloadButton>}
             </div>
           </CardHeader>
           <CardBody className="px-0">
             {rows.length === 0 ? (
               <p className="prose-col px-5 text-base text-ash">
-                Nothing unusual traded in any of these names over this window. Try a longer
-                look-back or a looser detection setting — and note that finding nothing is a
-                result, not a failure.
+                {t("Nothing unusual traded in any of these names over this window. Try a longer look-back or a looser detection setting — and note that finding nothing is a result, not a failure.")}
               </p>
             ) : (
-              <ScrollRegion label="Screener results">
+              <ScrollRegion label={t("Screener results")}>
                 <table className="w-full text-left text-meta">
                   <thead>
                     <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                      <th>Ticker</th><th className="text-right">Events</th>
-                      <th>Dominant flow</th><th>Latest signal</th><th>Tag</th>
-                      <th className="text-right">Close</th>
-                      <th className="text-right">Max RVOL</th>
-                      <th className="text-right">q-value</th>
-                      <th className="w-32">Strength</th>
+                      <th>{t("Ticker")}</th><th className="text-right">{t("Events")}</th>
+                      <th>{t("Dominant flow")}</th><th>{t("Latest signal")}</th><th>{t("Tag")}</th>
+                      <th className="text-right">{t("Close")}</th>
+                      <th className="text-right">{t("Max RVOL")}</th>
+                      <th className="text-right">{t("q-value")}</th>
+                      <th className="w-32">{t("Strength")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -191,7 +187,7 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
                             <button
                               type="button"
                               onClick={() => onSelect(r.ticker)}
-                              title={`Load ${r.ticker} into every lens`}
+                              title={t("Load {ticker} into every lens", { ticker: r.ticker })}
                               className={cn(
                                 "underline decoration-dotted decoration-rule underline-offset-4",
                                 "transition-colors hover:text-tech hover:decoration-tech",
@@ -215,7 +211,8 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
                         <td className={cn("num px-5 py-2 text-right",
                                           r.significant ? "text-acc" : "text-ash")}
                             title={r.anomalyRate == null ? undefined
-                              : `Tested against this ticker's own ${pct(r.anomalyRate)} long-run flag rate`}>
+                              : t("Tested against this ticker's own {rate} long-run flag rate",
+                                  { rate: pct(r.anomalyRate) })}>
                           {r.qValue == null ? "—" : r.qValue.toFixed(3)}
                         </td>
                         <td className="px-5 py-2">
@@ -242,22 +239,18 @@ export function ScreenerPanel({ onSelect }: { onSelect?: (ticker: string) => voi
 
       {state.status === "ready" && state.data.significance?.available && (
         <div className="rounded border border-rule bg-panel px-4 py-3">
-          <div className="eyebrow mb-1">Multiple testing</div>
+          <div className="eyebrow mb-1">{t("Multiple testing")}</div>
           <p className="text-meta leading-relaxed text-body">
             {state.data.significance.reading}
           </p>
-          <Explainer summary="Scan enough names and some will look unusual by chance — this corrects for that">
-            Each ticker is measured against <em>its own</em> normal flag rate, so a habitually
-            noisy stock has to do much more to qualify than a quiet one. The q-value column then
-            corrects across the whole scan for the number of names tested
-            (Benjamini-Hochberg).
+          <Explainer summary={t("Scan enough names and some will look unusual by chance — this corrects for that")}>
+            {t("Each ticker is measured against")}{" "}<em>{t("its own")}</em>{" "}{t("normal flag rate, so a habitually noisy stock has to do much more to qualify than a quiet one. The q-value column then corrects across the whole scan for the number of names tested (Benjamini-Hochberg).")}
           </Explainer>
         </div>
       )}
 
       <Note>
-        A symbol that fails to download is skipped rather than stopping the scan, so a short
-        list can mean a bad ticker as easily as a quiet market. Research use only.
+        {t("A symbol that fails to download is skipped rather than stopping the scan, so a short list can mean a bad ticker as easily as a quiet market. Research use only.")}
       </Note>
     </div>
   );

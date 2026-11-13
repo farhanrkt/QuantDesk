@@ -222,9 +222,16 @@ so a dense table row still reads as a table row.
 Routes replaced the single page: `/` (landing), `/stock/[symbol]` (one company, `?tab=` and
 any non-default tuning in the query), `/markets` (opens on Today; `?view=rank|screener|exposure|scan`),
 `/compare?symbols=` and `/journal`. A top bar is on every page — brand link, Markets /
-Compare / Journal, search, Guided/Full, field manual; on a phone the links move into a native
-`<dialog>` menu. Every route owns exactly one `h1`: on a stock page it is the ticker, still
-the largest thing on the page.
+Compare / Journal, search, Guided/Full, EN/ID, field manual; on a phone the links move into a
+native `<dialog>` menu. Every route owns exactly one `h1`: on a stock page it is the ticker,
+still the largest thing on the page.
+
+**Between a phone and a wide screen the bar sheds in a fixed order**, and everything it sheds
+is in the menu, whose button stays until `xl`: the field manual below `xl`, the language switch
+below `lg`, and below `lg` the three links drop to their icons, keeping the name as the
+accessible name and the tooltip. It did not fit before this: measured at 768px the bar ran
+116px past the screen in English and 157px in Bahasa Indonesia, and 13px over at 1024 in
+Indonesian. It now fits in both from 640 to 1440.
 
 **The landing shows no company's numbers.** One question (which company?), answered three
 ways — type it, pick a preset, or open one from your desk — then the app in three lines and
@@ -531,14 +538,22 @@ four files (AnomalyPanel 2, EventStudyPanel 1, LongTermPanel 3, TechnicalPanel
 2) — the event study lost one when its card stopped colouring itself by the
 sign of a mean.
 
-Beside the design rules the same script holds three structural checks:
+Beside the design rules the same script holds structural checks:
 `lib/api.ts` may not import the journal or watchlist stores or touch browser
 storage; every analytics `track(` carries only `market` and `lenses`;
 `lib/symbols.ts` must resolve tickers with the same pattern and suffix map as
 the Python; `cn()` must know every font size the config defines; the market board's
 requests carry no ticker: the board and the calendar take no parameters at all, the
 headlines take a market and declared topic keys, and the watchlist's report dates go only in
-a POST body; and the news image hosts in `next.config.mjs` equal the Python allowlist.
+a POST body; the news image hosts in `next.config.mjs` equal the Python allowlist; and
+the private tier is drawn only behind its capability — `VerdictPanel` and `ScanPanel` must
+sit inside a `privateTier && (...)` block, the request layer must ask `/api/capabilities`,
+and both private routes must call `private_tier_enabled()`.
+
+**What the rail says while lenses run.** A lens still running casts no vote: the headline is
+built from the lenses that have answered, reads "Awaiting data" while none has, and "No lens
+returned a reading" once all have settled without one. It used to count a running lens's "…"
+as a neutral reading, so a half-loaded rail could headline "Mixed signals".
 
 Comments are stripped before the greps — rule 7 fired on its own explanation the
 first time it ran, because `LongTermPanel`'s docstring quotes the expression it
@@ -621,6 +636,67 @@ Rules that survived the pass:
   goes.
 - Second person over passive. "Your holdings stay in this browser", not "the
   list is retained client-side".
+
+## Language
+
+*Since November 2026* the app reads in English or Bahasa Indonesia. The switch is `EN | ID` in
+the top bar (in the menu below `lg`) and under Settings in the palette. The choice is kept in
+this browser and nowhere else, and a first visit follows the browser's own language.
+
+**One reading, two languages, one layout.** The Indonesian is 15% longer than the English it
+replaces overall, and one interface sentence in ten is a third longer or more, so every layout
+that fitted English was measured again in Indonesian at 375, 768 and 1440: the top bar was
+the one that did not fit (see The shell), and is the one layout that changed.
+
+**Where each half lives.**
+
+- *The interface.* Every string a component draws is its English, passed to `t()` — or to
+  `msg()` in a table, and to `t()` where the table is drawn — and its Indonesian is the entry
+  with that key in `lib/i18n-id.ts`. Rule 20 fails the build on a wrapped string with no
+  Indonesian, an entry nothing says any more, a duplicate entry, a template-literal key, and an
+  Indonesian `{placeholder}` the English never fills.
+- *Everything the server writes* — every explanation, reading, refusal and error — arrives in
+  the language the request asked for (`?lang=id`). The English is byte-for-byte what it was:
+  each sentence became a `tr(english, indonesian)` pair, and replacing every pair with its
+  English reproduces the previous source exactly, which was checked mechanically, module by
+  module. The reading is the same reading in either language, with the same numbers.
+
+**What stays as written, on purpose.**
+
+- *Identifiers.* Bands, tones, verdict codes, signal and engine names, lens keys — anything a
+  component, a cache or a test branches on — stay English on the wire, and the interface words
+  them where it draws them (`lib/labels.ts`). A translated identifier is a broken comparison.
+- *Numbers.* A comma for thousands and a point for decimals in both languages, as the server's
+  sentences, the charts, the tables and the CSV exports all write them. Indonesian convention
+  is the reverse, and switching the interface but not the sentences beside it would put
+  "1.708" on one screen meaning two different numbers. Dates, months and weekdays do follow
+  the language.
+- *Third-party text*: company descriptions, headlines and the provider's industry labels, as
+  their sources wrote them. *Citations and proper names*: Piotroski (2000), The Fed, the
+  Bureau of Labor Statistics. *Published models*: Piotroski F-Score, Altman Z, Beneish M, DCF —
+  an Indonesian reader searches for them under those names.
+- *The page's metadata and the private scanner tier* are English. The private tier runs
+  only on the owner's machine.
+
+**The field manual is in both languages, and only one of them is written.**
+`docs/field-manual.id.html` is built from the English page by `scripts/build_glossary.py`: each
+block of the English — the text between two block-level tags, inline links and emphasis
+included — is replaced by its Indonesian from `docs/field-manual.id.json`, and the glossary
+inside it is `explain.py`'s own Indonesian. The build fails on an English block with no
+Indonesian, on an entry that matches no block, and on a translation whose markup differs from
+its English, so an edit to the English cannot leave a stale Indonesian page behind. Each page
+links to the other, and the app opens the reader's (`MANUAL_HREF` in `lib/url.ts`).
+
+**The words were chosen once** and both halves use them; the list heads `lib/i18n-id.ts`. Lens
+is *lensa*, and the four are *Arus*, *Tren*, *Nilai*, *Kualitas*; Guided and Full are *Terpandu*
+and *Lengkap*; drawdown is *penurunan dari puncak*; the Jakarta exchange is *BEI* in a sentence
+and keeps `.JK`, IDX30 and LQ45 where those are the names it trades under; the reader is
+*Anda*.
+
+**The first paint is English.** The server renders the page before it can know the choice,
+which lives in this browser, so the static chrome switches after hydration. The requests ask
+for Indonesian from the first fetch, so no reading arrives in English and is then replaced.
+Keeping the choice in a cookie as well would let the server render it directly.
 
 ## Motion
 

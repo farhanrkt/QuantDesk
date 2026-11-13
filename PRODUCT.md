@@ -18,6 +18,13 @@ They are usually deciding whether to buy or keep a single listed company, at a d
 time to read but no way to tell an ordinary number from an alarming one. They arrive
 knowing a ticker and little else.
 
+**In their own language** (*November 2026*). The app reads in English or Bahasa
+Indonesia. The newcomer above is as likely to be reading an IDX listing as a US one, and
+for an Indonesian newcomer every caveat this app insists on was arriving in a second
+language — the one reader the Guided default is for, served least well by it. Nothing is
+dropped from the Indonesian to make it shorter: every number keeps its base rate and its
+caveat in both languages, and the reading of a company is the same reading in either.
+
 **Secondary: the experienced investor, and the author.** Full mode is a standing promise
 to them — **every control and every indicator, nothing removed or hidden**. That promise is
 load-bearing: a mode that simplifies by taking capability away from the people who came for
@@ -120,6 +127,17 @@ These are durable product facts. Future work preserves them; none is a style pre
      **Score it** tab — both behind a "Private" divider, never the default, never printed,
      and never read by the compare view. (This line used to say the scanner was not linked
      from the app, which stopped being true the day the landing panel and the tab shipped.)
+
+     *Enforced 8 November 2026.* "Locally" was a description, not a fence: `/api/verdict`
+     computes live, so every deployment served the score, the action and a position size to
+     any visitor, and the stock page offered the tab. Now `private_tier_enabled` in
+     `api/index.py` refuses both private routes on any Vercel deployment, previews included,
+     and the page draws neither panel unless `/api/capabilities` — answered by the same
+     function — says the tier is on. Locally it is on with no setting;
+     `QUANTDESK_PRIVATE_TIER` overrides either way. `tests/test_private_tier.py` holds the
+     routes and a structural check in `scripts/check_frontend.mjs` holds the page.
+     `.vercelignore` now also excludes `reports/` and both caches, because a command-line
+     deploy uploads what is on disk.
    - **The annotated chart is part of the private surface, not the published one.**
      `api/_lib/chartlayers.py` and `components/AnnotatedChart.tsx` draw the scanner's
      readings — defended levels with their touch counts, the detected formations, the
@@ -313,6 +331,8 @@ These are durable product facts. Future work preserves them; none is a style pre
   so a session cannot be circled on one and uncounted by the other.
 - `docs/field-manual.html` — beginner's guide; its glossary is **generated** from
   `api/_lib/explain.py` and CI fails if a metric is added without regenerating.
+  `docs/field-manual.id.html` is the same guide in Bahasa Indonesia, **built** from the English
+  page and `docs/field-manual.id.json`; CI fails if an English block has no Indonesian.
 - Twelve network scripts in `scripts/` deliberately outside CI. Re-run after touching what
   they measure; a stale stamped number is worse than none. Two arrived with the market
   scanner: `refresh_listings.py` fetches the whole-market universe, and
@@ -372,6 +392,13 @@ decision behind a choice.
 
 ## Open decisions
 
+- Whether Indonesian should also mean Indonesian number formatting (`1.708,5`). Not now:
+  the server's sentences, the interface and the CSV exports write numbers one way, and
+  switching one surface without the others would put "1.708" on a screen meaning two
+  different numbers. Doing it properly means the server formats numbers per language too.
+- ~~Translating the field manual~~ **Done, November 2026.** It is built from the English
+  page block by block, so the two cannot drift: an English edit without its Indonesian fails
+  the build.
 - Whether Guided and Full eventually become two genuinely distinct designs rather than one
   design with elements hidden. Not now; v2 keeps one design with Guided as the default.
 - IDX fundamentals curation — the largest single effort, and blocked on an architectural

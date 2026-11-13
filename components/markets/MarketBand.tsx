@@ -15,6 +15,7 @@ import {
 import { marksFor, relatedFirst, stripFor } from "@/lib/marketboard";
 import { marketsHref } from "@/lib/url";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /**
  * The markets panel for a screen narrower than 1280px, where a side column
@@ -27,6 +28,7 @@ import { cn } from "@/lib/utils";
  * measurably moved with — the sentence the tiles' rings stand for.
  */
 export function MarketBand({ className }: { className?: string }) {
+  const t = useT();
   const { state, calendar, earnings, market, chooseMarket, focus, fullBoard } = useMarketBoard();
   const [picked, setPicked] = useState<string | null>(null);
   const today = todayIn(new Date());
@@ -50,23 +52,23 @@ export function MarketBand({ className }: { className?: string }) {
   const relations = Object.values(marks).flat().filter((m) => m.kind === "movesWith").map((m) => m.text);
 
   return (
-    <section aria-label="Markets now"
+    <section aria-label={t("Markets now")}
              className={cn("rounded-lg border border-rule bg-panel print:hidden", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-2.5">
-        <span className="text-meta font-semibold text-chalk">Markets</span>
+        <span className="text-meta font-semibold text-chalk">{t("Markets")}</span>
         <div className="flex items-center gap-2">
           {!focus && <MarketSwitch market={market} onChange={chooseMarket} />}
           <Link href={marketsHref("today")}
                 className="inline-flex min-h-[24px] items-center text-micro text-tech hover:underline">
-            Calendar and news
+            {t("Calendar and news")}
           </Link>
         </div>
       </div>
       {calendar.status === "ready" && <ExchangeStatusLine className="px-3 pt-1" calendar={calendar.data} />}
       {relations.length > 0 && (
-        <p className="px-3 pt-1 text-micro text-ash">{relations.join("; ")}. A record, not a forecast.</p>
+        <p className="px-3 pt-1 text-micro text-ash">{t("{relations}. A record, not a forecast.", { relations: relations.join("; ") })}</p>
       )}
-      <ScrollRegion label="Market prices" className="px-1.5 pb-2 pt-2">
+      <ScrollRegion label={t("Market prices")} className="px-1.5 pb-2 pt-2">
         {board ? (
           <ul className="flex gap-2 px-1.5">
             {rows.map((row) => (
@@ -76,7 +78,7 @@ export function MarketBand({ className }: { className?: string }) {
             ))}
           </ul>
         ) : (
-          <p className="px-1.5 py-2 text-micro text-ash" role="status">Fetching prices…</p>
+          <p className="px-1.5 py-2 text-micro text-ash" role="status">{t("Fetching prices…")}</p>
         )}
       </ScrollRegion>
       {calendar.status === "ready" && (
@@ -87,7 +89,7 @@ export function MarketBand({ className }: { className?: string }) {
                           board={board} compact />
           ) : next ? (
             <p className="text-micro text-ash">
-              Nothing in the next seven days. <span className="text-body">Next:</span>{" "}
+              {t("Nothing in the next seven days.")}{" "}<span className="text-body">{t("Next:")}</span>{" "}
               {next.title}, {dayHeading(dayOf(next))} {timeText(next)}, {relativeDay(dayOf(next), today)}.
             </p>
           ) : null}

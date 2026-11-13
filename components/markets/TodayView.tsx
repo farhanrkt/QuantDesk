@@ -18,6 +18,7 @@ import { byDay, dayHeading, earningsEvents, todayIn, upcoming } from "@/lib/cale
 import { clockText, dayText, levelText, rowsFor, sinceText } from "@/lib/marketboard";
 import type { BoardRow, CalendarKind, Market, MarketBoard } from "@/lib/types";
 import { cn, ordinal } from "@/lib/utils";
+import { msg, useT } from "@/lib/i18n";
 
 /**
  * What moved the markets: the whole board, for one market's readers.
@@ -33,16 +34,17 @@ import { cn, ordinal } from "@/lib/utils";
  * in scripts/check_frontend.mjs fails the build on a sort or a tone class here.
  */
 export function TodayView() {
+  const t = useT();
   useFullBoard();
   const { state, market, chooseMarket, refresh, refreshing } = useMarketBoard();
 
   if (state.status === "idle" || state.status === "loading") {
-    return <StateCard kind="loading" shape="table" title="Fetching the board" />;
+    return <StateCard kind="loading" shape="table" title={t("Fetching the board")} />;
   }
   if (state.status === "error") {
     return (
-      <StateCard kind="error" title="The market board did not load"
-                 action={<Button variant="secondary" size="sm" onClick={refresh}>Try again</Button>}>
+      <StateCard kind="error" title={t("The market board did not load")}
+                 action={<Button variant="secondary" size="sm" onClick={refresh}>{t("Try again")}</Button>}>
         {state.failure.message}
       </StateCard>
     );
@@ -59,18 +61,18 @@ export function TodayView() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <MarketSwitch market={market} onChange={chooseMarket} />
             <div className="flex items-center gap-3 text-micro text-ash">
-              {clock && <span>Fetched at {clock}</span>}
+              {clock && <span>{t("Fetched at {clock}", { clock })}</span>}
               <Button variant="quiet" size="xs" onClick={refresh} disabled={refreshing}>
                 <RefreshCw aria-hidden
                            className={cn("h-3.5 w-3.5", refreshing && "animate-spin motion-reduce:animate-none")} />
-                Refresh
+                {t("Refresh")}
               </Button>
             </div>
           </div>
           <p className="max-w-measureWide text-lead leading-snug text-chalk">{said?.summary}</p>
           {said?.baseRate && <p className="prose-col text-meta leading-relaxed text-ash">{said.baseRate}</p>}
           <p className="prose-col text-micro text-ash">
-            {board.delay} Source: {board.source}. Each instrument is read on its own trading days.
+            {t("{delay} Source: {source}. Each instrument is read on its own trading days.", { delay: board.delay, source: board.source })}
           </p>
         </CardBody>
       </Card>
@@ -82,32 +84,30 @@ export function TodayView() {
       <NewsCard board={board} market={market} />
 
       <Note>
-        A description of one day, not a forecast of the next, and not a reason to buy or sell
-        anything. A move&apos;s size is set against its own past year; nothing here says what
-        caused it, and nothing here is coloured by whether it went up or down.
+        {t("A description of one day, not a forecast of the next, and not a reason to buy or sell anything. A move's size is set against its own past year; nothing here says what caused it, and nothing here is coloured by whether it went up or down.")}
       </Note>
     </div>
   );
 }
 
 function BoardTable({ board, market }: { board: MarketBoard; market: Market }) {
+  const t = useT();
   const rows = rowsFor(board, market);
   return (
     <Card>
-      <ScrollRegion label="Market board">
+      <ScrollRegion label={t("Market board")}>
         <table className="w-full min-w-[46rem] text-meta">
           <caption className="sr-only">
-            Each instrument&apos;s latest session, and how its move compares with its own daily
-            moves over the past year.
+            {t("Each instrument's latest session, and how its move compares with its own daily moves over the past year.")}
           </caption>
           <thead>
             <tr className="border-b border-rule text-left">
-              <th scope="col" className="eyebrow px-5 py-2.5 font-normal">Instrument</th>
-              <th scope="col" className="eyebrow px-3 py-2.5 text-right font-normal">Last</th>
-              <th scope="col" className="eyebrow px-3 py-2.5 text-right font-normal">Move</th>
-              <th scope="col" className="eyebrow px-3 py-2.5 font-normal">Against its own year</th>
-              <th scope="col" className="eyebrow px-3 py-2.5 font-normal">Past 3 months</th>
-              <th scope="col" className="eyebrow px-5 py-2.5 text-right font-normal">Session</th>
+              <th scope="col" className="eyebrow px-5 py-2.5 font-normal">{t("Instrument")}</th>
+              <th scope="col" className="eyebrow px-3 py-2.5 text-right font-normal">{t("Last")}</th>
+              <th scope="col" className="eyebrow px-3 py-2.5 text-right font-normal">{t("Move")}</th>
+              <th scope="col" className="eyebrow px-3 py-2.5 font-normal">{t("Against its own year")}</th>
+              <th scope="col" className="eyebrow px-3 py-2.5 font-normal">{t("Past 3 months")}</th>
+              <th scope="col" className="eyebrow px-5 py-2.5 text-right font-normal">{t("Session")}</th>
             </tr>
           </thead>
           {board.groups.map((group) => {
@@ -175,9 +175,10 @@ function BoardRowView({ row, board }: { row: BoardRow; board: MarketBoard }) {
 }
 
 function Percentile({ row, board }: { row: BoardRow; board: MarketBoard }) {
+  const t = useT();
   const p = row.percentile;
   if (p == null) {
-    return <span className="text-micro text-ash">Too little history to say</span>;
+    return <span className="text-micro text-ash">{t("Too little history to say")}</span>;
   }
   return (
     <div className="flex items-center gap-2">
@@ -192,7 +193,7 @@ function Percentile({ row, board }: { row: BoardRow; board: MarketBoard }) {
       </div>
       {row.unusual && (
         <span className="rounded-sm border border-ruleStrong px-1.5 text-micro leading-tight text-chalk">
-          unusual
+          {t("unusual")}
         </span>
       )}
       <Explain explain={board.explain.rows[row.key]?.percentile ?? undefined} />
@@ -201,12 +202,13 @@ function Percentile({ row, board }: { row: BoardRow; board: MarketBoard }) {
 }
 
 function Missing({ board, market }: { board: MarketBoard; market: Market }) {
+  const t = useT();
   const missing = board.missing.filter((item) => item.markets.includes(market));
   if (missing.length === 0) return null;
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Not on this board, and why</CardTitle>
+        <CardTitle>{t("Not on this board, and why")}</CardTitle>
       </CardHeader>
       <CardBody>
         <ul className="space-y-2">
@@ -224,10 +226,10 @@ function Missing({ board, market }: { board: MarketBoard; market: Market }) {
 
 /** Which kinds of date each filter shows. */
 const CALENDAR_FILTERS: { key: string; label: string; kinds: CalendarKind[] }[] = [
-  { key: "banks", label: "Central banks", kinds: ["fomc", "bi-rate"] },
-  { key: "data", label: "Data releases", kinds: ["cpi", "jobs", "pce", "gdp"] },
-  { key: "closed", label: "Exchange holidays", kinds: ["holiday", "early-close"] },
-  { key: "earnings", label: "Your watchlist's reports", kinds: ["earnings"] },
+  { key: "banks", label: msg("Central banks"), kinds: ["fomc", "bi-rate"] },
+  { key: "data", label: msg("Data releases"), kinds: ["cpi", "jobs", "pce", "gdp"] },
+  { key: "closed", label: msg("Exchange holidays"), kinds: ["holiday", "early-close"] },
+  { key: "earnings", label: msg("Your watchlist's reports"), kinds: ["earnings"] },
 ];
 
 /**
@@ -238,6 +240,7 @@ const CALENDAR_FILTERS: { key: string; label: string; kinds: CalendarKind[] }[] 
  * apply to both; choosing a day there puts that day in the list.
  */
 function FullCalendar({ board, market }: { board: MarketBoard; market: Market }) {
+  const t = useT();
   const { calendar, earnings } = useMarketBoard();
   const [shown, setShown] = useState<Set<string>>(() => new Set(CALENDAR_FILTERS.map((f) => f.key)));
   const [now, setNow] = useState(() => Date.now());
@@ -268,12 +271,12 @@ function FullCalendar({ board, market }: { board: MarketBoard; market: Market })
   return (
     <Card>
       <CardHeader>
-        <CardTitle>The next 60 days</CardTitle>
-        <div role="group" aria-label="Which dates to show" className="flex flex-wrap gap-1">
+        <CardTitle>{t("The next 60 days")}</CardTitle>
+        <div role="group" aria-label={t("Which dates to show")} className="flex flex-wrap gap-1">
           {CALENDAR_FILTERS.map((filter) => (
             <Button key={filter.key} variant="chip" size="xs" aria-pressed={shown.has(filter.key)}
                     onClick={() => toggle(filter.key)}>
-              {filter.label}
+              {t(filter.label)}
             </Button>
           ))}
         </div>
@@ -290,22 +293,22 @@ function FullCalendar({ board, market }: { board: MarketBoard; market: Market })
               <div className="min-w-0 space-y-2">
                 <div className="flex min-h-[24px] items-center justify-between gap-2">
                   <p aria-live="polite" className="text-micro text-ash">
-                    {showing ? `Showing ${dayHeading(showing)}` : "The next 60 days"}
+                    {showing ? t("Showing {day}", { day: dayHeading(showing) }) : t("The next 60 days")}
                   </p>
                   {showing && (
                     <button type="button" onClick={() => setPicked(null)}
                             className="inline-flex min-h-[24px] items-center text-micro text-tech hover:underline">
-                      Back to the next 60 days
+                      {t("Back to the next 60 days")}
                     </button>
                   )}
                 </div>
                 {list.length > 0
                   ? <CalendarList events={list} kinds={calendar.data.kinds} board={board} />
-                  : <p className="text-meta text-ash">Nothing of the kinds chosen in the next 60 days.</p>}
+                  : <p className="text-meta text-ash">{t("Nothing of the kinds chosen in the next 60 days.")}</p>}
               </div>
             </div>
             <p className="prose-col text-micro leading-snug text-ash">
-              Times are on your clock. Transcribed from the{" "}
+              {t("Times are on your clock. Transcribed from the")}{" "}
               {Object.values(calendar.data.sources).map((source, i, all) => (
                 <span key={source.url}>
                   <a href={source.url} target="_blank" rel="noopener noreferrer" className="text-tech hover:underline">
@@ -313,15 +316,13 @@ function FullCalendar({ board, market }: { board: MarketBoard; market: Market })
                   </a>
                   {i < all.length - 1 ? ", " : ""}
                 </span>
-              ))}{" "}
-              schedules, checked {dayText(calendar.data.verifiedOn)} {calendar.data.verifiedOn.slice(0, 4)}.
-              {calendar.data.pending.length > 0 && ` Not shown: ${calendar.data.pending
-                .map((p) => p.note.replace(/\.$/, "")).join("; ")}.`}
+              ))}{" "}{t("schedules, checked {verifiedOn} {verifiedOn2}.{value}", { verifiedOn: dayText(calendar.data.verifiedOn), verifiedOn2: calendar.data.verifiedOn.slice(0, 4), value: calendar.data.pending.length > 0 && t(" Not shown: {notes}.", { notes: calendar.data.pending
+                .map((p) => p.note.replace(/\.$/, "")).join("; ") }) })}
             </p>
           </>
         ) : (
           <p className="text-meta text-ash" role="status">
-            {calendar.status === "error" ? "The calendar did not load." : "Fetching the calendar…"}
+            {calendar.status === "error" ? t("The calendar did not load.") : t("Fetching the calendar…")}
           </p>
         )}
       </CardBody>
@@ -330,7 +331,8 @@ function FullCalendar({ board, market }: { board: MarketBoard; market: Market })
 }
 
 const HISTORY_TITLES: Record<string, string> = {
-  fomc: "FOMC decisions", cpi: "US CPI releases", jobs: "US jobs reports", "bi-rate": "Bank Indonesia decisions",
+  fomc: msg("FOMC decisions"), cpi: msg("US CPI releases"), jobs: msg("US jobs reports"),
+  "bi-rate": msg("Bank Indonesia decisions"),
 };
 
 /**
@@ -339,17 +341,19 @@ const HISTORY_TITLES: Record<string, string> = {
  * and it is said rather than implied away.
  */
 function EventHistory({ board }: { board: MarketBoard }) {
+  const t = useT();
   const kinds = Object.keys(board.eventHistory ?? {});
   if (kinds.length === 0) return null;
   return (
     <Card>
       <CardHeader>
-        <CardTitle>What past event days were like</CardTitle>
+        <CardTitle>{t("What past event days were like")}</CardTitle>
       </CardHeader>
       <CardBody className="space-y-4">
         {kinds.map((kind) => (
-          <section key={kind} aria-label={HISTORY_TITLES[kind] ?? kind} className="space-y-1.5">
-            <h4 className="text-meta font-semibold text-chalk">{HISTORY_TITLES[kind] ?? kind}</h4>
+          <section key={kind} aria-label={HISTORY_TITLES[kind] ? t(HISTORY_TITLES[kind]) : kind}
+                   className="space-y-1.5">
+            <h4 className="text-meta font-semibold text-chalk">{HISTORY_TITLES[kind] ? t(HISTORY_TITLES[kind]) : kind}</h4>
             {board.eventHistory[kind].map((row) => (
               <div key={row.key} className="flex items-start gap-2">
                 <p className="prose-col text-meta leading-relaxed text-body">
@@ -361,9 +365,7 @@ function EventHistory({ board }: { board: MarketBoard }) {
           </section>
         ))}
         <Note>
-          History over the two years of prices this board holds, never a forecast. Each event is
-          read against the session it landed in, and a release on a day the market was shut
-          against the next one.
+          {t("History over the two years of prices this board holds, never a forecast. Each event is read against the session it landed in, and a release on a day the market was shut against the next one.")}
         </Note>
       </CardBody>
     </Card>

@@ -11,6 +11,7 @@ import { palette } from "@/lib/palette";
 import { Textarea } from "@/components/ui/input";
 import { StateCard } from "@/components/ui/state";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { useT } from "@/lib/i18n";
 
 /**
  * Where this candidate sits against what the reader already owns.
@@ -81,6 +82,7 @@ export function PortfolioPanel({
   ticker: string;
   onCompare: (holdings: string[], weights: Record<string, number>) => void;
 }) {
+  const t = useT();
   const [raw, setRaw] = useHoldings();
   const guided = useDetail() === "simple";
   const { symbols, weights } = parse(raw);
@@ -90,17 +92,15 @@ export function PortfolioPanel({
     <div className="space-y-4 animate-rise">
       <Card accent={PORTFOLIO}>
         <CardHeader>
-          <CardTitle>What you already own</CardTitle>
+          <CardTitle>{t("What you already own")}</CardTitle>
           <span className="font-mono text-micro text-ash">
-            {others.length} holding{others.length === 1 ? "" : "s"}, stored in this browser
+            {t("{length} holding{value}, stored in this browser", { length: others.length, value: others.length === 1 ? "" : "s" })}
           </span>
         </CardHeader>
         <CardBody className="space-y-3">
           <p className="text-meta leading-relaxed text-ash">
-            Every other lens here reads one company on its own, which hides the most common
-            way a portfolio goes wrong: the candidate is the fourth copy of a bet already
-            held. Paste what you own — one symbol per line or comma separated, with{" "}
-            <code className="font-mono text-body">TICKER:WEIGHT</code> if the sizes differ.
+            {t("Every other lens here reads one company on its own, which hides the most common way a portfolio goes wrong: the candidate is the fourth copy of a bet already held. Paste what you own — one symbol per line or comma separated, with")}{" "}
+            <code className="font-mono text-body">TICKER:WEIGHT</code>{" "}{t("if the sizes differ.")}
           </p>
           <Textarea
             mono
@@ -108,22 +108,18 @@ export function PortfolioPanel({
             onChange={(e) => setRaw(e.target.value)}
             rows={3}
             spellCheck={false}
-            aria-label="Holdings"
-            placeholder="AAPL, MSFT:2, BBCA.JK"
+            aria-label={t("Holdings")}
+            placeholder={t("AAPL, MSFT:2, BBCA.JK")}
           />
           <div className="flex flex-wrap items-center gap-3">
             <ApplyButton onClick={() => onCompare(others, weights)}
                          busy={state.status === "loading"}
                          disabled={others.length === 0 || !ticker}>
-              Compare with {ticker || "this ticker"}
+              {t("Compare with {value}", { value: ticker || t("this ticker") })}
             </ApplyButton>
             <span className="min-w-0">
-              <Explainer summary="Your holdings stay in this browser">
-                There are no accounts and no database here. The list is sent to answer this one
-                question and then forgotten.
-                {" "}It is the only request in the app that travels in the body rather than the
-                address, because a web address is written into a log by every machine that
-                handles it — and a list of what you own has no business in a log.
+              <Explainer summary={t("Your holdings stay in this browser")}>
+                {t("There are no accounts and no database here. The list is sent to answer this one question and then forgotten. It is the only request in the app that travels in the body rather than the address, because a web address is written into a log by every machine that handles it — and a list of what you own has no business in a log.")}
               </Explainer>
             </span>
           </div>
@@ -131,7 +127,7 @@ export function PortfolioPanel({
       </Card>
 
       {state.status === "error" && (
-        <StateCard kind="error" title="The comparison could not run">
+        <StateCard kind="error" title={t("The comparison could not run")}>
           {state.failure.message}
         </StateCard>
       )}
@@ -142,6 +138,7 @@ export function PortfolioPanel({
 }
 
 function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) {
+  const t = useT();
   const ex: ExplainMap = data.explain ?? {};
 
   if (!data.usable) {
@@ -161,9 +158,9 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
     <>
       <Card accent={PORTFOLIO} tone={ex.effectiveHoldings?.tone}>
         <CardHeader>
-          <CardTitle>Is this a bet you already hold?</CardTitle>
+          <CardTitle>{t("Is this a bet you already hold?")}</CardTitle>
           <span className="flex items-center gap-1.5 font-mono text-micro text-ash">
-            {data.observations} trading days
+            {t("{observations} trading days", { observations: data.observations })}
             <Explain explain={ex.effectiveHoldings} />
           </span>
         </CardHeader>
@@ -174,9 +171,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
                 {num(independence.after ?? 0, 1)}
               </span>
               <span className="text-meta leading-relaxed text-ash">
-                independent bets across {independence.withCandidate} positions — from{" "}
-                {num(independence.before ?? 0, 1)} across {independence.holdings} before
-                adding this one. An unrelated name would have added a full bet.
+                {t("independent bets across {withCandidate} positions — from {value} across {holdings} before adding this one. An unrelated name would have added a full bet.", { withCandidate: independence.withCandidate, value: num(independence.before ?? 0, 1), holdings: independence.holdings })}
               </span>
             </div>
           )}
@@ -192,9 +187,9 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
       {data.driver?.usable && (
         <Card>
           <CardHeader>
-            <CardTitle>What these move with</CardTitle>
+            <CardTitle>{t("What these move with")}</CardTitle>
             <span className="flex items-center gap-1.5 font-mono text-micro text-ash">
-              {data.driver.weeks} weeks
+              {t("{weeks} weeks", { weeks: data.driver.weeks })}
               <Explain explain={ex.sharedDirection} />
             </span>
           </CardHeader>
@@ -214,11 +209,10 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
                   {pct(data.driver.varianceShare ?? 0, 0)}
                 </span>
                 <span className="text-meta leading-relaxed text-ash">
-                  of the week-to-week movement is one shared direction
+                  {t("of the week-to-week movement is one shared direction")}
                   {data.driver.marketShare != null && (
-                    <> — of which {pct(data.driver.marketShare, 0)} is
-                    {" "}{data.driver.indexSymbol === "^JKSE"
-                      ? "the Jakarta Composite" : "the S&P 500"} itself</>
+                    <>{" "}{t("— of which {marketShare} is {value} itself", { marketShare: pct(data.driver.marketShare, 0), value: data.driver.indexSymbol === "^JKSE"
+                      ? t("the Jakarta Composite") : t("the S&P 500") })}</>
                   )}
                 </span>
               </div>
@@ -231,7 +225,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
             {ex.sharedDriver && (
               <div className="border-t border-ruleSoft pt-3">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="eyebrow">What they have in common</span>
+                  <span className="eyebrow">{t("What they have in common")}</span>
                   <Explain explain={ex.sharedDriver} />
                 </div>
                 <p className="mt-1 text-meta leading-relaxed text-body">
@@ -240,23 +234,14 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
               </div>
             )}
             {(data.driver.tested ?? []).length > 0 && (
-              <Explainer summary="Four things were tested, and they are not the only things there are">
+              <Explainer summary={t("Four things were tested, and they are not the only things there are")}>
                 <p>
-                  The shared movement is compared against gold, energy, copper and the
-                  dollar — contracts that trade everywhere, so none of them can be one of
-                  your holdings. Peer baskets of miners and plantations were built and
-                  measured for this and did not work: a foreign coal basket scored lower
-                  against four Indonesian coal miners than palm oil did, and a domestic
-                  one labelled a nickel-and-gold book as coal. Both were dropped rather
-                  than shipped, so a resources book will often come back with nothing
-                  named even when its holder can see exactly what it is.
+                  {t("The shared movement is compared against gold, energy, copper and the dollar — contracts that trade everywhere, so none of them can be one of your holdings. Peer baskets of miners and plantations were built and measured for this and did not work: a foreign coal basket scored lower against four Indonesian coal miners than palm oil did, and a domestic one labelled a nickel-and-gold book as coal. Both were dropped rather than shipped, so a resources book will often come back with nothing named even when its holder can see exactly what it is.")}
                 </p>
                 <p className="mt-2">
-                  Tested here:{" "}
-                  {(data.driver.tested ?? [])
-                    .map((t) => `${t.label}${t.available ? "" : " (no data)"}`)
-                    .join(", ")}. Measured on weekly moves, because at daily frequency the
-                  markets these settle in are hours apart and the signal washes out.
+                  {t("Tested here: {value}. Measured on weekly moves, because at daily frequency the markets these settle in are hours apart and the signal washes out.", { value: (data.driver.tested ?? [])
+                    .map((item) => `${item.label}${item.available ? "" : t(" (no data)")}`)
+                    .join(", ") })}
                 </p>
               </Explainer>
             )}
@@ -266,8 +251,8 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
 
       <Card>
         <CardHeader>
-          <CardTitle>How closely it tracks each holding</CardTitle>
-          <span className="font-mono text-micro text-ash">past year</span>
+          <CardTitle>{t("How closely it tracks each holding")}</CardTitle>
+          <span className="font-mono text-micro text-ash">{t("past year")}</span>
         </CardHeader>
         <CardBody className="space-y-1.5 text-meta">
           {(data.pairs ?? []).map((pair) => (
@@ -278,8 +263,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
           ))}
           {(data.missing ?? []).length > 0 && (
             <p className="pt-2 text-meta leading-relaxed text-ash">
-              Not compared: {(data.missing ?? []).join(", ")} — too few trading days in
-              common to mean anything. Dropped rather than estimated.
+              {t("Not compared: {value} — too few trading days in common to mean anything. Dropped rather than estimated.", { value: (data.missing ?? []).join(", ") })}
             </p>
           )}
         </CardBody>
@@ -288,20 +272,20 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
       {rows.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Where the risk actually sits</CardTitle>
+            <CardTitle>{t("Where the risk actually sits")}</CardTitle>
             <span className="font-mono text-micro text-ash">
-              {data.equalWeighted ? "equal weights assumed" : "your weights"}
+              {data.equalWeighted ? t("equal weights assumed") : t("your weights")}
             </span>
           </CardHeader>
           <CardBody className="px-0">
-            <ScrollRegion label="Where the risk sits">
+            <ScrollRegion label={t("Where the risk sits")}>
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                    <th>Position</th>
-                    <th className="text-right">Share of money</th>
-                    <th className="text-right">Share of risk</th>
-                    {!guided && <th className="text-right">Volatility</th>}
+                    <th>{t("Position")}</th>
+                    <th className="text-right">{t("Share of money")}</th>
+                    <th className="text-right">{t("Share of risk")}</th>
+                    {!guided && <th className="text-right">{t("Volatility")}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -334,9 +318,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
               </table>
             </ScrollRegion>
             <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
-              Compare the two columns. A holding with a tenth of the money and a quarter of the
-              risk is not diversified by being one of ten — it is the whole portfolio under a
-              smaller name.
+              {t("Compare the two columns. A holding with a tenth of the money and a quarter of the risk is not diversified by being one of ten — it is the whole portfolio under a smaller name.")}
             </p>
           </CardBody>
         </Card>
@@ -345,9 +327,9 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
       {data.stability && (
         <Card>
           <CardHeader>
-            <CardTitle>Why this one is allowed to inform position size</CardTitle>
+            <CardTitle>{t("Why this one is allowed to inform position size")}</CardTitle>
             <span className="font-mono text-micro text-ash">
-              measured {data.stability.measuredOn}
+              {t("measured {measuredOn}", { measuredOn: data.stability.measuredOn })}
             </span>
           </CardHeader>
           <CardBody className="space-y-2">
@@ -363,9 +345,7 @@ function Result({ data, guided }: { data: PortfolioResponse; guided: boolean }) 
               ))}
             </ul>
             <Note>
-              All of this is price and volume only — the filings cannot be fetched in bulk, so
-              nothing here knows what these businesses do. Two companies can move together 0.9
-              of the time and be nothing alike.
+              {t("All of this is price and volume only — the filings cannot be fetched in bulk, so nothing here knows what these businesses do. Two companies can move together 0.9 of the time and be nothing alike.")}
             </Note>
           </CardBody>
         </Card>

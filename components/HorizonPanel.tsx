@@ -9,14 +9,16 @@ import type { ExplainMap, HorizonBlock, PivotSet } from "@/lib/types";
 import { cn, num, pct, signedPct } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { msg, useT } from "@/lib/i18n";
+import { label as wordFor } from "@/lib/labels";
 
 const UP = palette.acc;
 const WARN = palette.warn;
 
 const EVIDENCE_BADGE: Record<string, { text: string; colour: string }> = {
-  strong: { text: "Well evidenced", colour: UP },
-  moderate: { text: "Moderately evidenced", colour: UP },
-  weak: { text: "Thinly evidenced", colour: WARN },
+  strong: { text: msg("Well evidenced"), colour: UP },
+  moderate: { text: msg("Moderately evidenced"), colour: UP },
+  weak: { text: msg("Thinly evidenced"), colour: WARN },
 };
 
 /**
@@ -35,6 +37,7 @@ const EVIDENCE_BADGE: Record<string, { text: string; colour: string }> = {
  * feature nobody validated.
  */
 export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency: string }) {
+  const t = useT();
   const detail = useDetail();
   const simple = detail === "simple";
   const ex: ExplainMap = data.explain ?? {};
@@ -46,7 +49,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
           <AlertTriangle aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-warn" />
           <div>
             <div className="eyebrow mb-1 text-warn">
-              {data.label ?? "This horizon"} withheld
+              {t("{value} withheld", { value: data.label ?? t("This horizon") })}
             </div>
             <p className="text-base leading-relaxed text-body">{data.reason}</p>
           </div>
@@ -72,13 +75,13 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
       <Card accent={accent}>
         <CardHeader>
           <CardTitle>
-            {setup.name ?? "No setup right now"}
+            {setup.name ?? t("No setup right now")}
           </CardTitle>
           <div className="flex items-center gap-3">
             {evidence && (
               <span className="font-mono text-micro uppercase tracking-[0.1em]"
                     style={{ color: evidence.colour }}>
-                {evidence.text}
+                {t(evidence.text)}
               </span>
             )}
             <span className="font-mono text-micro text-ash">{data.window}</span>
@@ -103,9 +106,9 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
       {plan.usable ? (
         <Card tone={ex.riskReward?.tone}>
           <CardHeader>
-            <CardTitle>Where the levels would sit</CardTitle>
+            <CardTitle>{t("Where the levels would sit")}</CardTitle>
             <span className="font-mono text-micro text-ash">
-              not a recommendation
+              {t("not a recommendation")}
             </span>
           </CardHeader>
           <CardBody className="space-y-4">
@@ -114,32 +117,30 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                 the only thing that makes any of them meaningful. */}
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded border border-rule bg-raised/40 px-3 py-2">
-                <div className="eyebrow mb-1">Entry</div>
+                <div className="eyebrow mb-1">{t("Entry")}</div>
                 <div className="num text-figure font-semibold text-chalk">{money(plan.entry)}</div>
                 <div className="mt-0.5 text-micro leading-snug text-ash">
-                  today&apos;s price
+                  {t("today's price")}
                 </div>
               </div>
               <div className="rounded border border-dist/40 bg-dist/5 px-3 py-2">
                 <div className="eyebrow mb-1 flex items-center gap-1.5">
-                  Stop <Explain explain={ex.stopDistance} />
+                  {t("Stop")}{" "}<Explain explain={ex.stopDistance} />
                 </div>
                 <div className="num text-figure font-semibold text-dist">{money(plan.stop)}</div>
                 <div className="mt-0.5 text-micro leading-snug text-ash">
-                  {pct(plan.stopDistancePct)} down ·{" "}
-                  {num(plan.stopDistanceAtr, 1)} average days
-                  {plan.stopWidened && " · widened from structure"}
+                  {t("{stopDistancePct} down · {stopDistanceAtr} average days{value}", { stopDistancePct: pct(plan.stopDistancePct), stopDistanceAtr: num(plan.stopDistanceAtr, 1), value: plan.stopWidened && t(" · widened from structure") })}
                 </div>
               </div>
               <div className="rounded border border-acc/40 bg-acc/5 px-3 py-2">
                 <div className="eyebrow mb-1 flex items-center gap-1.5">
-                  <Target aria-hidden className="h-3 w-3" /> First target
+                  <Target aria-hidden className="h-3 w-3" />{" "}{t("First target")}
                 </div>
                 <div className="num text-figure font-semibold text-acc">
                   {money(plan.targets?.[0]?.price)}
                 </div>
                 <div className="mt-0.5 text-micro leading-snug text-ash">
-                  {signedPct(plan.targets?.[0]?.distancePct)} · {plan.targets?.[0]?.basis}
+                  {signedPct(plan.targets?.[0]?.distancePct)} · {wordFor(plan.targets?.[0]?.basis)}
                 </div>
               </div>
             </div>
@@ -147,18 +148,18 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
             <div className="grid gap-3 sm:grid-cols-2">
               <ExplainedStat explain={ex.riskReward} />
               <ExplainedStat explain={ex.positionShare}
-                             sub={`risking ${pct(plan.riskBudget, 0)} of the account`} />
+                             sub={t("risking {share} of the account", { share: pct(plan.riskBudget, 0) })} />
             </div>
 
             {(plan.targets?.length ?? 0) > 1 && !simple && (
               <div className="space-y-1 text-meta">
-                <div className="eyebrow">Further targets</div>
+                <div className="eyebrow">{t("Further targets")}</div>
                 {plan.targets!.slice(1).map((target) => (
                   <div key={target.label}
                        className="flex items-baseline justify-between gap-3 border-b border-ruleSoft pb-1 last:border-0">
                     <span className="text-ash">{target.label}</span>
                     <span className="num">
-                      {money(target.price)} · {num(target.rMultiple, 1)}x risk
+                      {t("{price} · {rMultiple}x risk", { price: money(target.price), rMultiple: num(target.rMultiple, 1) })}
                     </span>
                   </div>
                 ))}
@@ -166,8 +167,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
             )}
 
             <Note>
-              The stop sits beyond a level the price turned at before, not at a round
-              percentage. A wider stop means a smaller position for the same money at risk.
+              {t("The stop sits beyond a level the price turned at before, not at a round percentage. A wider stop means a smaller position for the same money at risk.")}
             </Note>
           </CardBody>
         </Card>
@@ -183,22 +183,20 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
       {/* ---------------- levels ---------------- */}
       <Card>
         <CardHeader>
-          <CardTitle>Floors and ceilings</CardTitle>
+          <CardTitle>{t("Floors and ceilings")}</CardTitle>
           <span className="font-mono text-micro text-ash">
-            confirmed turning points
+            {t("confirmed turning points")}
           </span>
         </CardHeader>
         <CardBody className="space-y-3">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 text-meta">
               <div className="eyebrow flex items-center gap-1.5">
-                Ceilings above <Explain explain={ex["distanceToLevel.resistance"]} />
+                {t("Ceilings above")}{" "}<Explain explain={ex["distanceToLevel.resistance"]} />
               </div>
               {levels.resistances.length === 0 ? (
                 <p className="text-meta leading-relaxed text-ash">
-                  None. The price is above every level it has previously turned at in this
-                  window — there is no overhead supply to work through, and equally no reference
-                  point for a target.
+                  {t("None. The price is above every level it has previously turned at in this window — there is no overhead supply to work through, and equally no reference point for a target.")}
                 </p>
               ) : levels.resistances.map((level) => (
                 <LevelRow key={level.price} level={level} money={money} tone="text-dist" />
@@ -206,12 +204,11 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
             </div>
             <div className="space-y-1.5 text-meta">
               <div className="eyebrow flex items-center gap-1.5">
-                Floors below <Explain explain={ex["distanceToLevel.support"]} />
+                {t("Floors below")}{" "}<Explain explain={ex["distanceToLevel.support"]} />
               </div>
               {levels.supports.length === 0 ? (
                 <p className="text-meta leading-relaxed text-ash">
-                  None in this window, which is why any stop below has to be placed by
-                  volatility rather than by structure.
+                  {t("None in this window, which is why any stop below has to be placed by volatility rather than by structure.")}
                 </p>
               ) : levels.supports.map((level) => (
                 <LevelRow key={level.price} level={level} money={money} tone="text-acc" />
@@ -219,11 +216,8 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
             </div>
           </div>
           <p className="text-meta leading-relaxed text-ash">
-            A level is a price the market turned at, with {" "}
-            <span className="text-body">bars either side</span> confirming it. A level tested
-            once is barely a level; one tested three or four times is a price more participants
-            are watching. The most recent {levels.confirmationLag} bars can never appear here —
-            a turning point is only a turning point in hindsight.
+            {t("A level is a price the market turned at, with")}{" "}
+            <span className="text-body">{t("bars either side")}</span>{" "}{t("confirming it. A level tested once is barely a level; one tested three or four times is a price more participants are watching. The most recent {confirmationLag} bars can never appear here — a turning point is only a turning point in hindsight.", { confirmationLag: levels.confirmationLag })}
           </p>
         </CardBody>
       </Card>
@@ -237,7 +231,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
         {(data.vwap?.anchors ?? []).slice(0, 2).map((anchor) => (
           <ExplainedStat key={anchor.label}
                          explain={ex[`vwapDistance.${anchor.label}`]}
-                         sub={`${money(anchor.vwap)} · anchored ${anchor.anchoredOn}`} />
+                         sub={t("{price} · anchored {date}", { price: money(anchor.vwap), date: anchor.anchoredOn })} />
         ))}
       </div>
 
@@ -247,25 +241,20 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
           {data.pivots?.classic.usable && (
             <Card>
               <CardHeader>
-                <CardTitle>Pivot levels</CardTitle>
+                <CardTitle>{t("Pivot levels")}</CardTitle>
                 <span className="font-mono text-micro text-ash">
-                  from last complete {data.pivots.classic.period}
+                  {t("from last complete {period}", { period: data.pivots.classic.period })}
                 </span>
               </CardHeader>
               <CardBody className="space-y-3">
                 <div className="grid gap-4 lg:grid-cols-2">
-                  <PivotTable title="Classic" set={data.pivots.classic}
+                  <PivotTable title={t("Classic")} set={data.pivots.classic}
                               price={data.price!} money={money} />
-                  <PivotTable title="Fibonacci" set={data.pivots.fibonacci}
+                  <PivotTable title={t("Fibonacci")} set={data.pivots.fibonacci}
                               price={data.price!} money={money} />
                 </div>
                 <p className="text-meta leading-relaxed text-ash">
-                  Arithmetic on last {data.pivots.classic.period}&apos;s high, low and close —
-                  nothing more. They are here because a great many traders watch them, which is
-                  the only mechanism by which they could work and also the reason not to
-                  overstate them. There is no published evidence they produce excess returns
-                  after costs. They are computed from the last COMPLETE period, so they do not
-                  move under you during the current one.
+                  {t("Arithmetic on last {period}'s high, low and close — nothing more. They are here because a great many traders watch them, which is the only mechanism by which they could work and also the reason not to overstate them. There is no published evidence they produce excess returns after costs. They are computed from the last COMPLETE period, so they do not move under you during the current one.", { period: data.pivots.classic.period })}
                 </p>
               </CardBody>
             </Card>
@@ -274,13 +263,13 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
           {/* ---------------- candlesticks, honestly framed ---------------- */}
           <Card>
             <CardHeader>
-              <CardTitle>Candlestick and chart patterns</CardTitle>
-              <span className="font-mono text-micro text-warn">no demonstrated value</span>
+              <CardTitle>{t("Candlestick and chart patterns")}</CardTitle>
+              <span className="font-mono text-micro text-warn">{t("no demonstrated value")}</span>
             </CardHeader>
             <CardBody className="space-y-3">
               {(data.candlesticks?.length ?? 0) === 0 ? (
                 <p className="text-base text-ash">
-                  No single- or two-bar formation on the latest bar.
+                  {t("No single- or two-bar formation on the latest bar.")}
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -299,12 +288,11 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
               )}
               <div className="rounded border border-warn/30 bg-warn/5 px-3 py-2">
                 <Note tone="warn">
-                  Shown because you will meet them elsewhere. No entry, stop or target here
-                  ever comes from one — tested against random price series, they show no value.
+                  {t("Shown because you will meet them elsewhere. No entry, stop or target here ever comes from one — tested against random price series, they show no value.")}
                 </Note>
               </div>
               <div>
-                <div className="eyebrow mb-1.5">What this app will not claim to detect</div>
+                <div className="eyebrow mb-1.5">{t("What this app will not claim to detect")}</div>
                 <ul className="space-y-1">
                   {(data.undetectable ?? []).map((item) => (
                     <li key={item.name} className="flex gap-2 text-meta leading-relaxed">
@@ -318,9 +306,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                 </ul>
                 <div className="mt-2">
                   <Note>
-                    Each needs a judgement about where the shape begins. A simple matcher would
-                    fire several times a month on noise, so they are declined rather than
-                    detected badly.
+                    {t("Each needs a judgement about where the shape begins. A simple matcher would fire several times a month on noise, so they are declined rather than detected badly.")}
                   </Note>
                 </div>
               </div>
@@ -330,38 +316,36 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
           {/* ---------------- trend and structure detail ---------------- */}
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle>Moving-average alignment</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t("Moving-average alignment")}</CardTitle></CardHeader>
               <CardBody className="space-y-2 text-meta">
-                <ExplainedRow label={`${setup.trend?.fastLength}-day average`}
+                <ExplainedRow label={t("{days}-day average", { days: setup.trend?.fastLength })}
                               value={money(setup.trend?.fast)} tone="text-chalk" />
-                <ExplainedRow label={`${setup.trend?.slowLength}-day average`}
+                <ExplainedRow label={t("{days}-day average", { days: setup.trend?.slowLength })}
                               value={money(setup.trend?.slow)} tone="text-chalk" />
-                <ExplainedRow label="200-day average" value={money(setup.trend?.long)}
+                <ExplainedRow label={t("200-day average")} value={money(setup.trend?.long)}
                               tone="text-chalk" />
-                <ExplainedRow label="Slower average is"
+                <ExplainedRow label={t("Slower average is")}
                               value={setup.trend?.slowRising == null ? "—"
-                                : setup.trend.slowRising ? "rising" : "falling"}
+                                : setup.trend.slowRising ? t("rising") : t("falling")}
                               tone={setup.trend?.slowRising ? "text-acc" : "text-dist"} />
-                <ExplainedRow label="Stacked"
-                              value={setup.trend?.alignment === "up" ? "price > fast > slow"
-                                : setup.trend?.alignment === "down" ? "price < fast < slow"
-                                : "mixed"}
+                <ExplainedRow label={t("Stacked")}
+                              value={setup.trend?.alignment === "up" ? t("price > fast > slow")
+                                : setup.trend?.alignment === "down" ? t("price < fast < slow")
+                                : t("mixed")}
                               tone={setup.trend?.alignment === "up" ? "text-acc"
                                 : setup.trend?.alignment === "down" ? "text-dist" : "text-ash"} />
                 <p className="pt-1 text-meta leading-relaxed text-ash">
-                  &quot;Stacked&quot; means the price, the fast average and the slow average are
-                  in order. It is the plainest description of a trend there is, and it is
-                  descriptive — it tells you what has been happening, not what happens next.
+                  {t("\"Stacked\" means the price, the fast average and the slow average are in order. It is the plainest description of a trend there is, and it is descriptive — it tells you what has been happening, not what happens next.")}
                 </p>
               </CardBody>
             </Card>
 
             <Card>
-              <CardHeader><CardTitle>Recent gaps</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t("Recent gaps")}</CardTitle></CardHeader>
               <CardBody className="space-y-2 text-meta">
                 {(data.gaps?.gaps?.length ?? 0) === 0 ? (
                   <p className="text-meta leading-relaxed text-ash">
-                    No gap larger than half an average daily range in the recent history.
+                    {t("No gap larger than half an average daily range in the recent history.")}
                   </p>
                 ) : (
                   <>
@@ -378,8 +362,7 @@ export function HorizonPanel({ data, currency }: { data: HorizonBlock; currency:
                     ))}
                     <div className="pt-1">
                       <Note>
-                        Prices the stock jumped over, so almost nobody traded there. Gaps do
-                        not always fill.
+                        {t("Prices the stock jumped over, so almost nobody traded there. Gaps do not always fill.")}
                       </Note>
                     </div>
                   </>
@@ -407,10 +390,11 @@ function LevelRow({
   money: (v: number | null | undefined) => string;
   tone: string;
 }) {
+  const t = useT();
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-ruleSoft pb-1 last:border-0">
       <span className="text-ash">
-        turned {level.touches}x
+        {t("turned {touches}x", { touches: level.touches })}
       </span>
       <span className={cn("num font-semibold", tone)}>
         {money(level.price)}

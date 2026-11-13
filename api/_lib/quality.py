@@ -52,6 +52,7 @@ from . import market_data
 from . import posterior as posterior_lib
 from . import screendomain
 from .valuation import _get_row, _safe_float
+from .lang import tr
 
 # Sectors and industry keywords the three models were never fitted on.
 _FINANCIAL_SECTORS = {"financial services", "financials"}
@@ -61,6 +62,21 @@ _FINANCIAL_KEYWORDS = ("bank", "insurance", "insurer", "capital markets",
 # Beneish combines eight indices; a score assembled from half of them is not a
 # Beneish score. Below this many, the module declines to report one.
 _MIN_BENEISH_INDICES = 6
+
+# THE PIOTROSKI BANDS, AS SHARES OF THE CHECKS THAT COULD BE COMPUTED. The
+# lower edge of mixed, solid and strong. On a full nine they are exactly the
+# counts the bands always used — 4, 6 and 8 — and on eight computable checks
+# they band every score as the counts did, so nothing scored on complete or
+# nearly complete filings moves. `explain._piotroski` reads the same three edges,
+# so the metric's sentence and the band that votes cannot disagree again.
+PIOTROSKI_CUTS = (4 / 9, 6 / 9, 8 / 9)
+
+# Fewer computable checks than this and no band is called. Six of the nine
+# compare this year with last, so one year of statements leaves three level
+# tests — profitable, cash-generating, cash above profit — which say nothing
+# about a TREND, and the F-score is a trend reading. Same floor, for the same
+# reason, as Beneish's six of eight.
+PIOTROSKI_MIN_SIGNALS = 6
 
 
 # --------------------------------------------------------------------------- #
@@ -100,6 +116,34 @@ def _nullable(value) -> Optional[float]:
 # --------------------------------------------------------------------------- #
 # Piotroski F-Score
 # --------------------------------------------------------------------------- #
+def piotroski_band(score: int, computable: int) -> tuple[str, str]:
+    """The band, and its sentence, for `score` passes out of `computable` checks."""
+    if computable <= 0:
+        return "unknown", tr("No usable statement history.",
+                             "Tidak ada riwayat laporan keuangan yang bisa dipakai.")
+    if computable < PIOTROSKI_MIN_SIGNALS:
+        return "unknown", (tr(f"Only {computable} of the nine checks could be computed from these "
+                              f"filings, too few to call a direction: most of them compare this "
+                              f"year with last.",
+                              f"Hanya {computable} dari sembilan pemeriksaan yang bisa dihitung dari "
+                              "laporan keuangan ini, terlalu sedikit untuk menyimpulkan arah: sebagian "
+                              "besar membandingkan tahun ini dengan tahun lalu."))
+    share = score / computable
+    mixed, solid, strong = PIOTROSKI_CUTS
+    # The tolerance only absorbs float error at an exact edge such as 6/9.
+    if share >= strong - 1e-9:
+        return "strong", tr("Fundamentals improving on almost every axis.",
+                            "Fundamental membaik di hampir setiap sumbu.")
+    if share >= solid - 1e-9:
+        return "solid", tr("More improving than deteriorating.",
+                           "Lebih banyak yang membaik daripada yang memburuk.")
+    if share >= mixed - 1e-9:
+        return "mixed", tr("No clear fundamental direction.",
+                           "Tidak ada arah fundamental yang jelas.")
+    return "weak", tr("Deteriorating on most axes Piotroski measures.",
+                      "Memburuk di sebagian besar sumbu yang diukur Piotroski.")
+
+
 def piotroski_f_score(income, balance, cashflow) -> dict:
     """Nine binary fundamental signals, scored 0-9.
 
@@ -108,6 +152,15 @@ def piotroski_f_score(income, balance, cashflow) -> dict:
     from nine tests reads differently from a 5/7 built from seven. Awarding a
     point for missing data would be the easy bug here and it inflates every
     thin-coverage listing.
+
+    THE BAND READS THE SHARE OF COMPUTABLE CHECKS, NOT THE RAW COUNT. It used
+    to band the count as if nine had always been computed, so the opposite bug
+    shipped instead: a company with one year of statements, passing all three
+    checks that year allows, banded "weak — deteriorating on most axes", the
+    Quality lens voted bearish, and the pre-trade panel printed "3 of 3
+    fundamental checks passed — deteriorating". Found in the November 2026
+    analysis. Below PIOTROSKI_MIN_SIGNALS the band is `unknown`, which every
+    reader already treats as "could not be assessed".
     """
     signals: list[dict] = []
 
@@ -126,14 +179,14 @@ def piotroski_f_score(income, balance, cashflow) -> dict:
     roa_prior = _ratio(income_prior, assets_prior)
 
     # --- profitability ---
-    record("Return on assets positive", roa_now > 0 if np.isfinite(roa_now) else None,
-           f"ROA {roa_now:.1%}" if np.isfinite(roa_now) else "unavailable")
-    record("Operating cash flow positive", cfo_now > 0 if np.isfinite(cfo_now) else None,
-           "" if np.isfinite(cfo_now) else "unavailable")
-    record("Return on assets improving",
+    record(tr("Return on assets positive", "Imbal hasil aset positif"), roa_now > 0 if np.isfinite(roa_now) else None,
+           f"ROA {roa_now:.1%}" if np.isfinite(roa_now) else tr("unavailable", "tidak tersedia"))
+    record(tr("Operating cash flow positive", "Arus kas operasional positif"), cfo_now > 0 if np.isfinite(cfo_now) else None,
+           "" if np.isfinite(cfo_now) else tr("unavailable", "tidak tersedia"))
+    record(tr("Return on assets improving", "Imbal hasil aset membaik"),
            roa_now > roa_prior if np.isfinite(roa_now) and np.isfinite(roa_prior) else None,
            f"{roa_prior:.1%} -> {roa_now:.1%}"
-           if np.isfinite(roa_now) and np.isfinite(roa_prior) else "unavailable")
+           if np.isfinite(roa_now) and np.isfinite(roa_prior) else tr("unavailable", "tidak tersedia"))
 
     # THE DETAIL REPORTS THE TWO FIGURES, not the conclusion. It used to read
     # "earnings backed by cash rather than accruals" whatever the test did, so a
@@ -141,69 +194,61 @@ def piotroski_f_score(income, balance, cashflow) -> dict:
     # 31.2% ROA — rendered a red cross beside a sentence asserting the opposite.
     # Every other signal here prints what it measured; this one now does too.
     cfo_over_assets = _ratio(cfo_now, assets_now)
-    record("Cash flow exceeds accounting profit",
+    record(tr("Cash flow exceeds accounting profit", "Arus kas melebihi laba akuntansi"),
            cfo_over_assets > roa_now
            if np.isfinite(cfo_over_assets) and np.isfinite(roa_now) else None,
-           f"cash {cfo_over_assets:.1%} vs profit {roa_now:.1%}"
-           if np.isfinite(cfo_over_assets) and np.isfinite(roa_now) else "unavailable")
+           tr(f"cash {cfo_over_assets:.1%} vs profit {roa_now:.1%}",
+              f"kas {cfo_over_assets:.1%} vs laba {roa_now:.1%}")
+           if np.isfinite(cfo_over_assets) and np.isfinite(roa_now) else tr("unavailable", "tidak tersedia"))
 
     # --- leverage, liquidity, source of funds ---
     ltd_now, ltd_prior = _at(balance, "long_term_debt", 0), _at(balance, "long_term_debt", 1)
     leverage_now = _ratio(ltd_now, assets_now)
     leverage_prior = _ratio(ltd_prior, assets_prior)
-    record("Leverage falling",
+    record(tr("Leverage falling", "Leverage menurun"),
            leverage_now < leverage_prior
            if np.isfinite(leverage_now) and np.isfinite(leverage_prior) else None,
            f"{leverage_prior:.1%} -> {leverage_now:.1%}"
-           if np.isfinite(leverage_now) and np.isfinite(leverage_prior) else "unavailable")
+           if np.isfinite(leverage_now) and np.isfinite(leverage_prior) else tr("unavailable", "tidak tersedia"))
 
     current_now = _ratio(_at(balance, "current_assets", 0), _at(balance, "current_liabilities", 0))
     current_prior = _ratio(_at(balance, "current_assets", 1), _at(balance, "current_liabilities", 1))
-    record("Current ratio improving",
+    record(tr("Current ratio improving", "Rasio lancar membaik"),
            current_now > current_prior
            if np.isfinite(current_now) and np.isfinite(current_prior) else None,
            f"{current_prior:.2f} -> {current_now:.2f}"
-           if np.isfinite(current_now) and np.isfinite(current_prior) else "unavailable")
+           if np.isfinite(current_now) and np.isfinite(current_prior) else tr("unavailable", "tidak tersedia"))
 
     shares_now, shares_prior = _at(balance, "shares_issued", 0), _at(balance, "shares_issued", 1)
-    record("No dilution",
+    record(tr("No dilution", "Tanpa dilusi"),
            shares_now <= shares_prior * 1.001
            if np.isfinite(shares_now) and np.isfinite(shares_prior) else None,
-           f"{shares_prior / 1e6:,.0f}M -> {shares_now / 1e6:,.0f}M shares"
-           if np.isfinite(shares_now) and np.isfinite(shares_prior) else "unavailable")
+           tr(f"{shares_prior / 1e6:,.0f}M -> {shares_now / 1e6:,.0f}M shares",
+              f"{shares_prior / 1e6:,.0f}jt -> {shares_now / 1e6:,.0f}jt saham")
+           if np.isfinite(shares_now) and np.isfinite(shares_prior) else tr("unavailable", "tidak tersedia"))
 
     # --- operating efficiency ---
     revenue_now, revenue_prior = _at(income, "revenue", 0), _at(income, "revenue", 1)
     cogs_now, cogs_prior = _at(income, "cogs", 0), _at(income, "cogs", 1)
     margin_now = _ratio(revenue_now - cogs_now, revenue_now)
     margin_prior = _ratio(revenue_prior - cogs_prior, revenue_prior)
-    record("Gross margin expanding",
+    record(tr("Gross margin expanding", "Margin kotor melebar"),
            margin_now > margin_prior
            if np.isfinite(margin_now) and np.isfinite(margin_prior) else None,
            f"{margin_prior:.1%} -> {margin_now:.1%}"
-           if np.isfinite(margin_now) and np.isfinite(margin_prior) else "unavailable")
+           if np.isfinite(margin_now) and np.isfinite(margin_prior) else tr("unavailable", "tidak tersedia"))
 
     turnover_now = _ratio(revenue_now, assets_now)
     turnover_prior = _ratio(revenue_prior, assets_prior)
-    record("Asset turnover improving",
+    record(tr("Asset turnover improving", "Perputaran aset membaik"),
            turnover_now > turnover_prior
            if np.isfinite(turnover_now) and np.isfinite(turnover_prior) else None,
            f"{turnover_prior:.2f}x -> {turnover_now:.2f}x"
-           if np.isfinite(turnover_now) and np.isfinite(turnover_prior) else "unavailable")
+           if np.isfinite(turnover_now) and np.isfinite(turnover_prior) else tr("unavailable", "tidak tersedia"))
 
     scored = [s for s in signals if s["passed"] is not None]
     score = sum(1 for s in scored if s["passed"])
-
-    if not scored:
-        band, reading = "unknown", "No usable statement history."
-    elif score >= 8:
-        band, reading = "strong", "Fundamentals improving on almost every axis."
-    elif score >= 6:
-        band, reading = "solid", "More improving than deteriorating."
-    elif score >= 4:
-        band, reading = "mixed", "No clear fundamental direction."
-    else:
-        band, reading = "weak", "Deteriorating on most axes Piotroski measures."
+    band, reading = piotroski_band(score, len(scored))
 
     return {
         "score": int(score),
@@ -236,7 +281,8 @@ def altman_z_em(income, balance) -> dict:
     assets = _at(balance, "total_assets")
     if not np.isfinite(assets) or assets <= 0:
         return {"score": None, "band": "unknown",
-                "reading": "Total assets unavailable, so no solvency score.",
+                "reading": tr("Total assets unavailable, so no solvency score.",
+                              "Total aset tidak tersedia, jadi tidak ada skor solvabilitas."),
                 "components": {}}
 
     working_capital = _at(balance, "current_assets") - _at(balance, "current_liabilities")
@@ -255,22 +301,28 @@ def altman_z_em(income, balance) -> dict:
 
     if not all(np.isfinite(v) for v in (x1, x2, x3, x4)):
         missing = [name for name, value in
-                   zip(("working capital", "retained earnings", "EBIT", "total liabilities"),
+                   zip((tr("working capital", "modal kerja"), tr("retained earnings", "laba ditahan"), "EBIT", tr("total liabilities",
+                                                                           "total kewajiban")),
                        (x1, x2, x3, x4), strict=True) if not np.isfinite(value)]
         return {"score": None, "band": "unknown",
-                "reading": f"Cannot score: {', '.join(missing)} unavailable.",
+                "reading": tr(f"Cannot score: {', '.join(missing)} unavailable.",
+                              f"Tidak bisa diberi skor: {', '.join(missing)} tidak tersedia."),
                 "components": components}
 
     score = 3.25 + 6.56 * x1 + 3.26 * x2 + 6.72 * x3 + 1.05 * x4
 
     # Altman's Z'' zones (2.6 / 1.1) shifted by the +3.25 EM constant.
     if score > 5.85:
-        band, reading = "safe", "Comfortably outside Altman's distress zone."
+        band, reading = "safe", tr("Comfortably outside Altman's distress zone.",
+                                   "Jauh di luar zona tertekan Altman.")
     elif score >= 4.35:
-        band, reading = "grey", "Altman's grey zone — neither safe nor distressed."
+        band, reading = "grey", tr("Altman's grey zone — neither safe nor distressed.",
+                                   "Zona abu-abu Altman — tidak aman, tidak pula tertekan.")
     else:
-        band, reading = "distress", ("Inside Altman's distress zone. A going-concern "
-                                     "question outranks any valuation.")
+        band, reading = "distress", (tr("Inside Altman's distress zone. A going-concern "
+                                        "question outranks any valuation.",
+                                        "Di dalam zona tertekan Altman. Pertanyaan tentang kelangsungan usaha "
+                                        "mengalahkan valuasi apa pun."))
 
     return {"score": float(score), "band": band, "reading": reading,
             "components": components}
@@ -353,8 +405,10 @@ def beneish_m_score(income, balance, cashflow) -> dict:
         return {
             "score": None, "band": "unknown", "indices": indices,
             "indicesAvailable": available, "indicesTotal": len(indices),
-            "reading": (f"Only {available} of {len(indices)} Beneish indices could be "
-                        "computed from these filings — too few to report a score."),
+            "reading": (tr(f"Only {available} of {len(indices)} Beneish indices could be "
+                           "computed from these filings — too few to report a score.",
+                           f"Hanya {available} dari {len(indices)} indeks Beneish yang bisa dihitung "
+                           "dari laporan keuangan ini — terlalu sedikit untuk melaporkan skor.")),
         }
 
     score = (-4.84 + 0.920 * dsri + 0.528 * gmi + 0.404 * aqi + 0.892 * sgi
@@ -362,14 +416,18 @@ def beneish_m_score(income, balance, cashflow) -> dict:
 
     if score > -1.78:
         band = "flagged"
-        reading = ("Accrual and growth patterns resemble those Beneish found among "
-                   "manipulators. A screen, not a finding — read the filings.")
+        reading = (tr("Accrual and growth patterns resemble those Beneish found among "
+                      "manipulators. A screen, not a finding — read the filings.",
+                      "Pola akrual dan pertumbuhannya mirip dengan yang ditemukan Beneish pada "
+                      "para manipulator. Ini penyaring, bukan temuan — bacalah laporan "
+                      "keuangannya."))
     elif score > -2.22:
         band = "borderline"
-        reading = "Close to Beneish's threshold; worth a look at the accruals."
+        reading = tr("Close to Beneish's threshold; worth a look at the accruals.",
+                     "Dekat ambang Beneish; layak melihat akrualnya.")
     else:
         band = "clean"
-        reading = "No Beneish manipulation signature."
+        reading = tr("No Beneish manipulation signature.", "Tidak ada jejak manipulasi Beneish.")
 
     return {"score": float(score), "band": band, "indices": indices,
             "indicesAvailable": available, "indicesTotal": len(indices),
@@ -410,9 +468,12 @@ def analyze(company: dict, symbol: Optional[str] = None,
         return {
             "applicable": False,
             "cause": "not-a-company",
-            "reason": (f"This listing is {kind}, not a company, so there are no "
-                       f"financial statements for Piotroski, Altman or Beneish to "
-                       f"read. That is what the listing is, not a gap in the data."),
+            "reason": (tr(f"This listing is {kind}, not a company, so there are no "
+                          f"financial statements for Piotroski, Altman or Beneish to "
+                          f"read. That is what the listing is, not a gap in the data.",
+                          f"Saham ini adalah {kind}, bukan perusahaan, jadi tidak ada laporan "
+                          "keuangan untuk dibaca Piotroski, Altman, atau Beneish. Begitulah wujud "
+                          "instrumen ini, bukan celah data.")),
             "sector": None, "industry": None,
             "piotroski": None, "altman": None, "beneish": None,
         }
@@ -438,12 +499,19 @@ def analyze(company: dict, symbol: Optional[str] = None,
             "applicable": False,
             "cause": "unknown-sector",
             "reason": (
-                "No sector or industry came back for this listing, so there is no way "
-                "to tell whether Piotroski, Altman and Beneish apply to it. They were "
-                "built on non-financial firms and do not transfer to a bank or "
-                "insurer, and scoring first and asking afterwards is how a bank gets "
-                "an F-score. This is a refusal to guess, not a finding about the "
-                "company — a repeat fetch will usually resolve it."
+                tr("No sector or industry came back for this listing, so there is no way "
+                   "to tell whether Piotroski, Altman and Beneish apply to it. They were "
+                   "built on non-financial firms and do not transfer to a bank or "
+                   "insurer, and scoring first and asking afterwards is how a bank gets "
+                   "an F-score. This is a refusal to guess, not a finding about the "
+                   "company — a repeat fetch will usually resolve it.",
+                   "Tidak ada sektor atau industri yang kembali untuk saham ini, jadi tidak "
+                   "ada cara mengetahui apakah Piotroski, Altman, dan Beneish berlaku "
+                   "untuknya. Ketiganya dibangun di atas perusahaan nonkeuangan dan tidak "
+                   "berlaku untuk bank atau asuransi, dan memberi skor dulu lalu bertanya "
+                   "kemudian adalah cara sebuah bank mendapat F-score. Ini penolakan untuk "
+                   "menebak, bukan temuan tentang perusahaannya — pengambilan ulang "
+                   "biasanya menyelesaikannya.")
             ),
             "sector": None, "industry": None,
             "piotroski": None, "altman": None, "beneish": None,
@@ -460,11 +528,16 @@ def analyze(company: dict, symbol: Optional[str] = None,
             # first time the prose is reworded.
             "cause": "financial",
             "reason": (
-                "Piotroski, Altman and Beneish were all built on non-financial "
-                "firms and none of them transfers to a bank or insurer: there is "
-                "no operating cycle for working capital or a current ratio to "
-                "describe, and revenue is not a receivables-and-inventory "
-                "process. A score here would be arithmetic without meaning."
+                tr("Piotroski, Altman and Beneish were all built on non-financial "
+                   "firms and none of them transfers to a bank or insurer: there is "
+                   "no operating cycle for working capital or a current ratio to "
+                   "describe, and revenue is not a receivables-and-inventory "
+                   "process. A score here would be arithmetic without meaning.",
+                   "Piotroski, Altman, dan Beneish semuanya dibangun di atas perusahaan "
+                   "nonkeuangan dan tidak ada yang berlaku untuk bank atau asuransi: tidak "
+                   "ada siklus operasi untuk digambarkan modal kerja atau rasio lancar, dan "
+                   "pendapatannya bukan proses piutang dan persediaan. Skor di sini "
+                   "hanyalah aritmetika tanpa makna.")
             ),
             "sector": sector or None,
             "industry": industry or None,
@@ -478,7 +551,8 @@ def analyze(company: dict, symbol: Optional[str] = None,
         return {
             "applicable": False,
             "cause": "no-statements",
-            "reason": "No financial statements came back for this listing.",
+            "reason": tr("No financial statements came back for this listing.",
+                         "Tidak ada laporan keuangan yang kembali untuk saham ini."),
             "sector": sector or None, "industry": industry or None,
             "piotroski": None, "altman": None, "beneish": None,
         }
@@ -490,21 +564,24 @@ def analyze(company: dict, symbol: Optional[str] = None,
     # One headline the confluence rail can vote with.
     concerns = []
     if altman["band"] == "distress":
-        concerns.append("solvency")
+        concerns.append(tr("solvency", "solvabilitas"))
     if beneish["band"] == "flagged":
-        concerns.append("accruals")
+        concerns.append(tr("accruals", "akrual"))
     if piotroski["band"] == "weak":
-        concerns.append("fundamental trend")
+        concerns.append(tr("fundamental trend", "tren fundamental"))
 
     if concerns:
         verdict, tone = "CONCERNS", "bear"
-        headline = "Flagged on " + " and ".join(concerns) + "."
+        headline = (tr("Flagged on ", "Ditandai pada ") + tr(" and ", " dan ").join(concerns)
+                    + ".")
     elif piotroski["band"] in {"strong", "solid"} and altman["band"] == "safe":
         verdict, tone = "SOUND", "bull"
-        headline = "Improving fundamentals and no solvency or accrual flags."
+        headline = tr("Improving fundamentals and no solvency or accrual flags.",
+                      "Fundamental membaik dan tidak ada tanda solvabilitas atau akrual.")
     else:
         verdict, tone = "NEUTRAL", "neutral"
-        headline = "Nothing alarming, nothing outstanding."
+        headline = tr("Nothing alarming, nothing outstanding.",
+                      "Tidak ada yang mengkhawatirkan, tidak ada yang menonjol.")
 
     return {
         "applicable": True,

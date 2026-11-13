@@ -2358,10 +2358,81 @@ recomputed independently from raw provider data, and every page and tab driven i
 
 ---
 
+## 24. The November 2026 analysis — what it changed, and which stamps it touches
+
+An outside read of the whole app, run with the data provider unreachable from the sandbox — which
+is what a Yahoo throttle looks like to this app — found the defects below. Each fix is in code
+with a test that plants the failure; this section records which stamped measurements each one
+can move, because a stamp that predates a change to what it measured is worse than none.
+
+### 24.1 Changes that can move a stamped number
+
+- **Piotroski bands read the share of computable checks.** A company with one year of
+  statements passed 3 of 3 checks, banded "weak — deteriorating", voted the Quality lens
+  bearish and fired the pre-trade check as "3 of 3 fundamental checks passed — deteriorating".
+  The band now reads the share against the same edges as before (4, 6 and 8 of nine), and
+  below six computable checks it is `unknown`. On nine or eight computable checks every band is
+  unchanged; on six or seven a band can only rise; below six it becomes unknown. So
+  **`check_calibration.json`'s `piotroskiWeak` rate can only fall** (it was 1.3%), and
+  **`lens_agreement.json` can move** for names with six to seven computable checks, whose
+  Quality vote may go from neutral to sound. The metric's own sentence had separate edges
+  (0.45, 0.70, 0.89) and disagreed with the band at 4, 6 and 8 of nine; it now reads the same
+  edges from `quality.PIOTROSKI_CUTS`.
+- **The trailing dividend.** It stopped counting a dividend last paid more than fifteen
+  months ago (one suspended in 2023 was still "trailing 12m payments"), and its window is 350
+  days back from the last payment instead of 365, which counted three instalments for a
+  semi-annual payer whose dates drifted by a day. The DDM's "Last full year" and "3-year
+  average" bases, and its dispersion estimate, now read complete calendar years only. These
+  move DDM fair values for the affected names, and so possibly the Value vote; the terminal
+  share does not move, because it is invariant to the base.
+
+**Both need re-measuring**: `scripts/calibrate_checks.py` and
+`scripts/measure_lens_agreement.py`, on network access the analysis did not have.
+
+### 24.2 Changes that move no stamp
+
+- **Weekend-trading series are annualised over their own year.** `longterm.py` read 252 bars
+  as a year for every series, so bitcoin's "one-year" holding period was eight months and its
+  volatility was understated by about a sixth. `sessions_per_year` now reads the series' own
+  dates and returns exactly 252 for anything that trades on weekdays, so no measured universe
+  moves; the 252-bar indicator windows in `technical.py` (Donchian, regression, ROC) were left
+  as they were.
+- **A provider outage is named and held for seconds** (§ the README's limits). **The private
+  tier is served only locally** (PRODUCT.md constraint 1). **The journal is written through**,
+  so two tabs no longer overwrite each other's entries. **The rate limiter** trusts the
+  forwarded address only on Vercel, buckets unrouted paths together and evicts stale buckets
+  rather than clearing the table. **Throttled register and earnings lookups** are kept for
+  minutes and never written to disk.
+
+## 25. Bahasa Indonesia — what it changes, and what it cannot
+
+*November 2026.* Every sentence the API writes now comes in English or Bahasa Indonesia, chosen
+per request (`?lang=id`; DESIGN.md *Language*). This section is here for the same reason §24 is:
+to say which stamps a change can move. **It moves none.**
+
+- **No engine changed what it computes.** The work replaced English literals with
+  `tr(english, indonesian)` pairs, and for every module the substitution of each pair by its
+  English was checked to reproduce the previous syntax tree exactly — so English output is
+  byte-identical, which is also why the 1,900-odd existing tests pass unedited.
+- **Identifiers did not move.** Bands, tones, verdict codes, signal types and lens keys are
+  what the measured artifacts, the scanner and the tests key on, and they stay English in
+  both languages. `tests/test_language.py` asserts it.
+- **No cache holds a language.** Shared process caches (the market board, the company
+  record's conversion note) keep both texts or the English and word it per request, so one
+  reader's language can never be served to the next, and nothing measured from a cache can
+  differ by who asked first.
+- **The private tier is untouched**, in English, and so are its forward log and backtest.
+
+So `check_calibration.json`, `lens_agreement.json`, the stability studies and the scanner's
+stamps stand or fall exactly as §24 left them.
+
+---
+
 ## What is still open
 
 | Item | Why it was not done now |
 |---|---|
+| Re-measure after §24.1 | The Piotroski band and the trailing dividend changed what two lenses conclude for some names. `calibrate_checks.py` and `measure_lens_agreement.py` need the network, which the November 2026 analysis did not have; until they are re-run the two stamps predate those changes |
 | Placing a company in a book-to-market quintile | §8 declines this rather than inventing a breakpoint. It needs a universe-wide scan of book values, and fundamentals do not batch |
 | Multi-factor cost of equity (Fama-French) | Factor returns are freely available for the US; constructing IDX factors is a project in itself |
 | Peer / sector relative multiples | Needs a peer-set source beyond yfinance. §18 supplies half of it — a field membership from the provider's industry label — but those labels are coarse ("Conglomerates" is not a field anyone competes in) and a quarter of the exchange cannot be placed at all, so they are not yet a base for a multiple |

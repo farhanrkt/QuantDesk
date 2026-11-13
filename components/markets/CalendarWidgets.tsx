@@ -8,6 +8,7 @@ import {
 } from "@/lib/calendar";
 import type { CalendarEvent } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { dayLong as weekdayLong, dayShort as weekdayShort, useT } from "@/lib/i18n";
 
 /**
  * The calendar as a calendar: a month of days with the dates that move markets
@@ -26,11 +27,8 @@ import { cn } from "@/lib/utils";
  * than as a day with nothing on it.
  */
 
-const WEEKDAYS: [string, string][] = [
-  ["M", "Monday"], ["T", "Tuesday"], ["W", "Wednesday"], ["T", "Thursday"],
-  ["F", "Friday"], ["S", "Saturday"], ["S", "Sunday"],
-];
-const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** The grid's columns, Monday first, as `getUTCDay` numbers them (Sunday is 0). */
+const WEEK = [1, 2, 3, 4, 5, 6, 0];
 
 const FOCUS = "focus:outline-none focus-visible:ring-2 focus-visible:ring-tech "
   + "focus-visible:ring-offset-2 focus-visible:ring-offset-ink";
@@ -44,6 +42,7 @@ function dayName(day: string, today: string, events: CalendarEvent[]): string {
 }
 
 function Labels({ events, room, past }: { events: CalendarEvent[]; room: number; past: boolean }) {
+  const t = useT();
   const shown = events.slice(0, room);
   const more = events.length - shown.length;
   return (
@@ -56,7 +55,7 @@ function Labels({ events, room, past }: { events: CalendarEvent[]; room: number;
         </span>
       ))}
       {more > 0 && (
-        <span className="block text-micro leading-tight text-ash">+{more}{room > 1 ? " more" : ""}</span>
+        <span className="block text-micro leading-tight text-ash">+{more}{room > 1 ? t(" more") : ""}</span>
       )}
     </>
   );
@@ -89,6 +88,7 @@ export function CalendarMonth({
   size?: "compact" | "full";
   timeZone?: string;
 }) {
+  const t = useT();
   const first = today.slice(0, 7);
   const last = through && through.slice(0, 7) > first ? through.slice(0, 7) : first;
   const [month, setMonth] = useState(first);
@@ -103,27 +103,26 @@ export function CalendarMonth({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <Button variant="quiet" size="icon" className="h-8 w-8" aria-label="Previous month"
+        <Button variant="quiet" size="icon" className="h-8 w-8" aria-label={t("Previous month")}
                 disabled={shown <= first} onClick={() => setMonth(shiftMonth(shown, -1))}>
           <ChevronLeft aria-hidden className="h-4 w-4" />
         </Button>
         <p aria-live="polite" className="text-meta font-semibold text-chalk">{monthHeading(shown)}</p>
-        <Button variant="quiet" size="icon" className="h-8 w-8" aria-label="Next month"
+        <Button variant="quiet" size="icon" className="h-8 w-8" aria-label={t("Next month")}
                 disabled={shown >= last} onClick={() => setMonth(shiftMonth(shown, 1))}>
           <ChevronRight aria-hidden className="h-4 w-4" />
         </Button>
       </div>
       <table className="w-full table-fixed border-separate border-spacing-0.5">
         <caption className="sr-only">
-          The dates that move markets in {monthHeading(shown)}, on your clock. Days with something
-          on them are buttons that show what it is.
+          {t("The dates that move markets in {shown}, on your clock. Days with something on them are buttons that show what it is.", { shown: monthHeading(shown) })}
         </caption>
         <thead>
           <tr>
-            {WEEKDAYS.map(([short, long]) => (
-              <th key={long} scope="col" className="pb-0.5 text-center text-micro font-normal text-ash">
-                <span aria-hidden>{short}</span>
-                <span className="sr-only">{long}</span>
+            {WEEK.map((weekday) => (
+              <th key={weekday} scope="col" className="pb-0.5 text-center text-micro font-normal text-ash">
+                <span aria-hidden>{weekdayLong(weekday).charAt(0)}</span>
+                <span className="sr-only">{weekdayLong(weekday)}</span>
               </th>
             ))}
           </tr>
@@ -142,7 +141,7 @@ export function CalendarMonth({
                     {!loaded(day) ? (
                       <div className={cn(box, "border border-dashed border-rule")}>
                         <DayNumber day={day} today={today} />
-                        <span className="sr-only">, not loaded yet</span>
+                        <span className="sr-only">{t(", not loaded yet")}</span>
                       </div>
                     ) : items.length ? (
                       <button type="button" aria-pressed={isSelected}
@@ -169,7 +168,7 @@ export function CalendarMonth({
       </table>
       {cut && (
         <p className="text-micro text-ash">
-          Dates after {dayHeading(cut)} are not loaded yet; the calendar holds 90 days ahead.
+          {t("Dates after {cut} are not loaded yet; the calendar holds 90 days ahead.", { cut: dayHeading(cut) })}
         </p>
       )}
     </div>
@@ -189,15 +188,16 @@ export function CalendarWeek({
   onSelect: (day: string | null) => void;
   timeZone?: string;
 }) {
+  const t = useT();
   const days = byDay(events, timeZone);
   const week = Array.from({ length: 7 }, (_, i) => addDays(today, i));
   return (
-    <ul aria-label="The next seven days" className="grid grid-cols-7 gap-1">
+    <ul aria-label={t("The next seven days")} className="grid grid-cols-7 gap-1">
       {week.map((day) => {
         const items = days.get(day) ?? [];
         const isSelected = selected === day;
-        const weekday = day === today ? "Today"
-          : WEEKDAY_SHORT[new Date(`${day}T00:00:00Z`).getUTCDay()];
+        const weekday = day === today ? t("Today")
+          : weekdayShort(new Date(`${day}T00:00:00Z`).getUTCDay());
         const body = (
           <>
             <span className="text-micro leading-tight text-ash">{weekday}</span>
@@ -218,7 +218,7 @@ export function CalendarWeek({
               </button>
             ) : (
               <div className={cn(box, "border border-transparent")}>
-                <span className="sr-only">{dayName(day, today, [])}, nothing on the calendar</span>
+                <span className="sr-only">{t("{day}, nothing on the calendar", { day: dayName(day, today, []) })}</span>
                 <span aria-hidden className="contents">{body}</span>
               </div>
             )}

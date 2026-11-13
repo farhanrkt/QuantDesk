@@ -13,6 +13,7 @@ import { downloadCsv, toCsv } from "@/lib/csv";
 import { cn, num, pct } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { useT } from "@/lib/i18n";
 
 const ACC = palette.acc;
 const DIST = palette.dist;
@@ -32,6 +33,7 @@ type ChartPoint = AnomalyPoint & {
 };
 
 function AnomalyTooltip({ active, payload }: TooltipProps<number, string>) {
+  const t = useT();
   // Recharts types `payload[n].payload` as the untyped source row; this is the
   // one place the cast belongs, and ChartPoint is exactly what we put in.
   const p = payload?.[0]?.payload as ChartPoint | undefined;
@@ -39,12 +41,12 @@ function AnomalyTooltip({ active, payload }: TooltipProps<number, string>) {
   return (
     <div className="rounded border border-rule bg-ink/95 px-3 py-2 text-meta shadow-xl">
       <div className="num mb-1 text-ash">{p.date}</div>
-      <div className="num">Close {num(p.close)}</div>
+      <div className="num">{t("Close {close}", { close: num(p.close) })}</div>
       {p.isAnomaly && (
         <>
           <div className="mt-1" style={{ color: flowColor(p.flow) }}>{p.flow}</div>
-          <div className="num text-ash">Strength {p.strength}/100</div>
-          <div className="num text-ash">RVOL {num(p.rvol)}x · MFI {num(p.mfi, 0)}</div>
+          <div className="num text-ash">{t("Strength {strength}/100", { strength: p.strength })}</div>
+          <div className="num text-ash">{t("RVOL {rvol}x · MFI {mfi}", { rvol: num(p.rvol), mfi: num(p.mfi, 0) })}</div>
         </>
       )}
     </div>
@@ -52,6 +54,7 @@ function AnomalyTooltip({ active, payload }: TooltipProps<number, string>) {
 }
 
 export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
+  const t = useT();
   const { stats, series, anomalies, config, liquidity, accumulation } = data;
   const detail = useDetail();
   const simple = detail === "simple";
@@ -75,54 +78,56 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
     downloadCsv(
       `${data.ticker}_anomaly_extract.csv`,
       toCsv(anomalies, [
-        { key: "date", label: "Date" }, { key: "close", label: "Close" },
-        { key: "rvol", label: "RVOL (x)" },
-        { key: "priceChangePct", label: "Price change (%)" },
-        { key: "mfi", label: "MFI" }, { key: "flow", label: "Flow" },
-        { key: "tag", label: "Tag" }, { key: "strength", label: "Strength" },
-        { key: "anomalyScore", label: "Anomaly Score" },
+        { key: "date", label: t("Date") }, { key: "close", label: t("Close") },
+        { key: "rvol", label: t("RVOL (x)") },
+        { key: "priceChangePct", label: t("Price change (%)") },
+        { key: "mfi", label: "MFI" }, { key: "flow", label: t("Flow") },
+        { key: "tag", label: t("Tag") }, { key: "strength", label: t("Strength") },
+        { key: "anomalyScore", label: t("Anomaly Score") },
       ])
     );
 
   return (
     <div className="space-y-4 animate-rise">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Stat label="Latest close" value={num(stats.latestClose)} />
-        <ExplainedStat label="Unusual days found" value={stats.anomalyCount}
+        <Stat label={t("Latest close")} value={num(stats.latestClose)} />
+        <ExplainedStat label={t("Unusual days found")} value={stats.anomalyCount}
                        explain={ex.anomalyRate}
-                       sub={`${pct(stats.anomalyRate)} of ${stats.totalDays} days`} />
+                       sub={t("{share} of {days} days", { share: pct(stats.anomalyRate), days: stats.totalDays })} />
         {/* Two horizons, kept apart on purpose. The all-time figure summarises
             the whole look-back; only the recent one describes where flow is
             now, and that is what the confluence view votes with. */}
-        <ExplainedStat explain={ex.recentFlowBias} value={stats.recentFlowBias}
+        <ExplainedStat explain={ex.recentFlowBias} value={t(stats.recentFlowBias)}
                        tone={toneOf(stats.recentFlowBias)}
-                       sub={`${stats.recentCount} fresh event${stats.recentCount === 1 ? "" : "s"}`} />
-        <ExplainedStat explain={ex.netFlowBias} value={stats.netFlowBias}
-                       label={`Flow bias · full ${config.period}`}
+                       sub={stats.recentCount === 1
+                         ? t("{count} fresh event", { count: stats.recentCount })
+                         : t("{count} fresh events", { count: stats.recentCount })} />
+        <ExplainedStat explain={ex.netFlowBias} value={t(stats.netFlowBias)}
+                       label={t("Flow bias · full {period}", { period: config.period })}
                        tone={toneOf(stats.netFlowBias)}
-                       sub="whole look-back" />
-        <Stat label="Peak strength" value={`${stats.maxStrength}/100`} />
+                       sub={t("whole look-back")} />
+        <Stat label={t("Peak strength")} value={`${stats.maxStrength}/100`} />
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <ExplainedStat explain={ex.spread} />
-        <ExplainedStat explain={ex.moveVsSpread} sub="latest day, in and out" />
+        <ExplainedStat explain={ex.moveVsSpread} sub={t("latest day, in and out")} />
         <ExplainedStat explain={ex.yangZhangVol} />
-        <ExplainedStat explain={ex.amihud} sub="cost of putting size through it" />
+        <ExplainedStat explain={ex.amihud} sub={t("cost of putting size through it")} />
       </div>
 
       <Card tone={flowTone(stats.recentFlowBias)}>
         <CardHeader>
-          <CardTitle>Price with detected anomalies</CardTitle>
+          <CardTitle>{t("Price with detected anomalies")}</CardTitle>
           <div className="flex flex-wrap items-center gap-3 text-micro text-ash">
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rotate-45" style={{ background: ACC }} /> Accumulation
+              <span className="inline-block h-2 w-2 rotate-45" style={{ background: ACC }} />{" "}{t("Accumulation")}
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rotate-45" style={{ background: DIST }} /> Distribution
+              <span className="inline-block h-2 w-2 rotate-45" style={{ background: DIST }} />{" "}{t("Distribution")}
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-full" style={{ background: NEU }} /> Neutral
+              <span className="inline-block h-2 w-2 rounded-full" style={{ background: NEU }} />{" "}{t("Neutral")}
             </span>
           </div>
         </CardHeader>
@@ -152,7 +157,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
           </ResponsiveContainer>
           </div>
 
-          <div className="eyebrow mt-4 mb-1">On-balance volume</div>
+          <div className="eyebrow mt-4 mb-1">{t("On-balance volume")}</div>
           <ResponsiveContainer width="100%" height={90}>
             <AreaChart data={chartData} margin={{ top: 2, right: 8, left: 0, bottom: 0 }}>
               <defs>
@@ -175,9 +180,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
           patiently rather than in one visible print? */}
       {liquidity?.insideSpreadNoise && (
         <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-meta leading-relaxed text-warn">
-          The latest move is only {num(liquidity.moveVsSpread ?? 0, 1)}x the estimated
-          round-trip spread of {pct(liquidity.warningSpread ?? 0, 2)}. On this listing a move
-          that size does not survive the cost of trading it, however unusual the volume looks.
+          {t("The latest move is only {value}x the estimated round-trip spread of {value2}. On this listing a move that size does not survive the cost of trading it, however unusual the volume looks.", { value: num(liquidity.moveVsSpread ?? 0, 1), value2: pct(liquidity.warningSpread ?? 0, 2) })}
         </div>
       )}
 
@@ -186,21 +189,21 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
           ? flowTone(accumulation.current.direction) : undefined}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Slow, patient buying or selling
+              {t("Slow, patient buying or selling")}
             </CardTitle>
             <span className="font-mono text-micro text-ash">
-              CUSUM · h={accumulation.config.threshold} · k={accumulation.config.slack}
+              {t("CUSUM · h={threshold} · k={slack}", { threshold: accumulation.config.threshold, slack: accumulation.config.slack })}
             </span>
           </CardHeader>
           <CardBody className="px-0">
-            <ScrollRegion label="Accumulation and distribution episodes">
+            <ScrollRegion label={t("Accumulation and distribution episodes")}>
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                    <th>Direction</th><th>Began</th><th>Confirmed</th><th>Ended</th>
-                    <th className="text-right">Days</th>
-                    <th className="text-right">Price</th>
-                    <th className="text-right">Avg RVOL</th>
+                    <th>{t("Direction")}</th><th>{t("Began")}</th><th>{t("Confirmed")}</th><th>{t("Ended")}</th>
+                    <th className="text-right">{t("Days")}</th>
+                    <th className="text-right">{t("Price")}</th>
+                    <th className="text-right">{t("Avg RVOL")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -208,7 +211,7 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
                     <tr key={`${e.direction}-${e.start}`}
                         className="border-b border-ruleSoft last:border-0 hover:bg-raised/60">
                       <td className="px-5 py-2" style={{ color: flowColor(e.direction) }}>
-                        {e.direction}{e.ongoing && " · ongoing"}
+                        {e.direction}{e.ongoing && t(" · ongoing")}
                       </td>
                       <td className="num px-5 py-2 text-ash">{e.start}</td>
                       <td className="num px-5 py-2 text-ash">{e.detected}</td>
@@ -233,14 +236,8 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
               </div>
             )}
             <div className="px-5 pt-3">
-              <Explainer summary="Why a patient buyer is invisible to the detector above">
-                A large buyer splits the order across weeks precisely so no single day stands
-                out — and a test that scores each day on its own can only ever catch the
-                impatient one.
-                {" "}This one adds up small deviations instead, so a run of unremarkable days
-                can trip a threshold none of them would alone. &ldquo;Began&rdquo; is the
-                estimated start; &ldquo;confirmed&rdquo; is when there was enough evidence to
-                say so.
+              <Explainer summary={t("Why a patient buyer is invisible to the detector above")}>
+                {t("A large buyer splits the order across weeks precisely so no single day stands out — and a test that scores each day on its own can only ever catch the impatient one. This one adds up small deviations instead, so a run of unremarkable days can trip a threshold none of them would alone. “Began” is the estimated start; “confirmed” is when there was enough evidence to say so.")}
               </Explainer>
             </div>
           </CardBody>
@@ -249,35 +246,34 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
 
       <Card>
         <CardHeader>
-          <CardTitle>Event log · ranked by strength</CardTitle>
+          <CardTitle>{t("Event log · ranked by strength")}</CardTitle>
           <div className="flex items-center gap-2">
             <span className="font-mono text-micro text-ash">
               {config.mode} · {config.period}
-              {config.mode === "threshold" && ` · cutoff ${config.scoreThreshold}`}
+              {config.mode === "threshold" && t(" · cutoff {value}", { value: config.scoreThreshold })}
               {config.mode === "quota" && ` · ${pct(config.contamination)}`}
               {config.mode === "mad" && ` · ${config.madK} MAD`}
             </span>
             {anomalies.length > 0 && (
-              <DownloadButton onClick={downloadAnomalies}>CSV</DownloadButton>
+              <DownloadButton onClick={downloadAnomalies}>{t("CSV")}</DownloadButton>
             )}
           </div>
         </CardHeader>
         <CardBody className="px-0">
           {anomalies.length === 0 ? (
             <p className="prose-col px-5 text-base text-ash">
-              No day in this window was unusual enough to flag. That is a result, not a failure:
-              the cutoff is fixed, so a calm stock genuinely returns nothing.
+              {t("No day in this window was unusual enough to flag. That is a result, not a failure: the cutoff is fixed, so a calm stock genuinely returns nothing.")}
             </p>
           ) : (
-            <ScrollRegion vertical label="Flagged days" className="max-h-[22rem]">
+            <ScrollRegion vertical label={t("Flagged days")} className="max-h-[22rem]">
               <table className="w-full text-left text-meta">
                 <thead className="sticky top-0 bg-panel">
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                    <th>Date</th><th>Flow</th><th>Tag</th>
-                    <th className="text-right">RVOL</th>
-                    <th className="text-right">Δ price</th>
-                    <th className="text-right">MFI</th>
-                    <th className="w-32">Strength</th>
+                    <th>{t("Date")}</th><th>{t("Flow")}</th><th>{t("Tag")}</th>
+                    <th className="text-right">{t("RVOL")}</th>
+                    <th className="text-right">{t("Δ price")}</th>
+                    <th className="text-right">{t("MFI")}</th>
+                    <th className="w-32">{t("Strength")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -312,19 +308,13 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
 
       {simple && anomalies.length > 8 && (
         <p className="text-meta text-ash">
-          Showing the 8 strongest of {anomalies.length} flagged days. Switch to Full for the
-          full log and the model settings behind it.
+          {t("Showing the 8 strongest of {length} flagged days. Switch to Full for the full log and the model settings behind it.", { length: anomalies.length })}
         </p>
       )}
 
       <p className={cn("text-meta leading-relaxed text-ash", simple && "hidden")}>
-        Isolation Forest over six behavioural features (return, RVOL, |return|, MFI, OBV z-score,
-        intraday range), 200 estimators, seed 42, fit with{" "}
-        <span className="font-mono text-body">contamination=&quot;auto&quot;</span> so the
-        decision score is an absolute scale and the anomaly count floats with the regime rather
-        than being pinned to a fixed percentage. Flow is a four-way vote of OBV direction, A/D
-        direction, MFI level and price direction. Anomalous activity has many benign causes —
-        index rebalances, dividends, options expiry.
+        {t("Isolation Forest over six behavioural features (return, RVOL, |return|, MFI, OBV z-score, intraday range), 200 estimators, seed 42, fit with")}{" "}
+        <span className="font-mono text-body">{t("contamination=\"auto\"")}</span>{" "}{t("so the decision score is an absolute scale and the anomaly count floats with the regime rather than being pinned to a fixed percentage. Flow is a four-way vote of OBV direction, A/D direction, MFI level and price direction. Anomalous activity has many benign causes — index rebalances, dividends, options expiry.")}
       </p>
     </div>
   );

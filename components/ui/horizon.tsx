@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /**
  * How long the reader intends to hold this, stated once and read everywhere.
@@ -73,6 +74,7 @@ export function HorizonPicker({
   /** Horizons the loaded history can actually support. */
   available?: readonly number[];
 }) {
+  const t = useT();
   // A `radiogroup` promises arrow keys and one tab stop. v1 declared the role
   // and implemented neither, so a screen reader announced a control that did
   // not behave like one — worse than plain buttons, because the announcement
@@ -91,7 +93,7 @@ export function HorizonPicker({
     onChange(HORIZONS[next]);
   };
   return (
-    <div role="radiogroup" aria-label="Holding horizon" onKeyDown={move}
+    <div role="radiogroup" aria-label={t("Holding horizon")} onKeyDown={move}
          className="inline-flex rounded-lg border border-rule bg-raised p-1">
       {HORIZONS.map((option) => {
         // An unsupported horizon stays SELECTABLE. Greying it out would hide
@@ -107,7 +109,7 @@ export function HorizonPicker({
             aria-checked={value === option}
             tabIndex={value === option ? 0 : -1}
             onClick={() => onChange(option)}
-            title={measured ? undefined : "Not enough loaded history for this horizon"}
+            title={measured ? undefined : t("Not enough loaded history for this horizon")}
             className={cn(
               // 28px tall, over the 24px target floor. v1 was 24 exactly and
               // the label inside it was 10.4px.

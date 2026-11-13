@@ -6,6 +6,7 @@ import { TONE_HEX, TONE_TEXT } from "@/components/ui/explain";
 import { cn, pct, signed } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { useT } from "@/lib/i18n";
 
 /**
  * What the four lenses add up to, in sentences.
@@ -124,6 +125,7 @@ function Block({
  * removed.
  */
 function Measured({ data }: { data: AgreementMeasurement }) {
+  const t = useT();
   const rows = data.pairs.filter((p) => p.usable);
   return (
     <div className="mt-4 rounded-lg border border-ruleSoft bg-sunken">
@@ -135,11 +137,10 @@ function Measured({ data }: { data: AgreementMeasurement }) {
           <ChevronRight aria-hidden
                         className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
           <span className="min-w-0">
-            How much do the two actually overlap? Measured:{" "}
+            {t("How much do the two actually overlap? Measured:")}{" "}
             <span className="num font-semibold text-chalk">
               κ = {signed(data.families.kappa)}
-            </span>{" "}
-            across {data.families.n} names
+            </span>{" "}{t("across {n} names", { n: data.families.n })}
           </span>
         </summary>
 
@@ -147,21 +148,21 @@ function Measured({ data }: { data: AgreementMeasurement }) {
           <p className="prose-col text-meta text-ash">{data.reading}</p>
 
           {rows.length > 0 && (
-            <ScrollRegion label="How the lenses agree, measured">
+            <ScrollRegion label={t("How the lenses agree, measured")}>
               <table className="w-full text-left text-micro">
                 <caption className="sr-only">
-                  Chance-corrected agreement between each pair of lenses
+                  {t("Chance-corrected agreement between each pair of lenses")}
                 </caption>
                 <thead>
                   <tr className="border-b border-rule text-faint [&>th]:py-2 [&>th]:pr-3
                                  [&>th]:font-medium">
-                    <th scope="col">Pair</th>
-                    <th scope="col" className="text-right">Agree</th>
-                    <th scope="col" className="text-right">By chance</th>
+                    <th scope="col">{t("Pair")}</th>
+                    <th scope="col" className="text-right">{t("Agree")}</th>
+                    <th scope="col" className="text-right">{t("By chance")}</th>
                     <th scope="col" className="text-right">κ</th>
-                    <th scope="col" className="text-right">95% interval</th>
+                    <th scope="col" className="text-right">{t("95% interval")}</th>
                     <th scope="col" className="text-right">τb</th>
-                    <th scope="col" className="text-right">Names</th>
+                    <th scope="col" className="text-right">{t("Names")}</th>
                   </tr>
                 </thead>
                 <tbody className="text-ash">
@@ -177,7 +178,7 @@ function Measured({ data }: { data: AgreementMeasurement }) {
                       </td>
                       <td className="num py-2 pr-3 text-right">
                         {p.low === null || p.high === null
-                          ? "—" : `${signed(p.low)} to ${signed(p.high)}`}
+                          ? "—" : t("{low} to {high}", { low: signed(p.low), high: signed(p.high) })}
                       </td>
                       <td className="num py-2 pr-3 text-right">{signed(p.tauB)}</td>
                       <td className="num py-2 text-right">{p.n}</td>
@@ -189,11 +190,8 @@ function Measured({ data }: { data: AgreementMeasurement }) {
           )}
 
           <p className="prose-col text-meta leading-relaxed text-faint">
-            Measured {data.measuredOn} across {data.scope}. κ is agreement minus the agreement
-            each pair&apos;s own habits already produce; τb is whether they order the same way.
-            A rate measured today decays with the lists it was taken on — re-run{" "}
-            <code className="font-mono text-ash">scripts/measure_lens_agreement.py</code> after
-            changing what any lens concludes.
+            {t("Measured {measuredOn} across {scope}. κ is agreement minus the agreement each pair's own habits already produce; τb is whether they order the same way. A rate measured today decays with the lists it was taken on — re-run", { measuredOn: data.measuredOn, scope: data.scope })}{" "}
+            <code className="font-mono text-ash">scripts/measure_lens_agreement.py</code>{" "}{t("after changing what any lens concludes.")}
           </p>
         </div>
       </details>
@@ -202,6 +200,7 @@ function Measured({ data }: { data: AgreementMeasurement }) {
 }
 
 export function SynthesisPanel({ data }: { data: Synthesis }) {
+  const t = useT();
   // Guided/Full no longer splits this panel. It used to decide whether the next
   // steps were spelled out or collapsed, and now everything below the conclusion
   // is behind one control in both modes — a distinction that no longer had
@@ -244,7 +243,7 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
           up. */}
       <div className="px-5 pb-4 pt-5">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-          <h2>What this adds up to</h2>
+          <h2>{t("What this adds up to")}</h2>
           <p className="text-meta text-ash">{data.headline}</p>
         </div>
         <p className={cn("prose-col mt-3 text-lead leading-snug", TONE_TEXT[agreement.tone])}>
@@ -264,31 +263,31 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
               conflict" on a company with no conflicts is a small lie. */}
           {(() => {
             const parts = [
-              agreement.measured && "how much the two overlap",
-              data.tensions.length > 0 && "where they conflict",
-              data.blindSpots.length > 0 && "what none of them can see",
-              "what to check next",
+              agreement.measured && t("how much the two overlap"),
+              data.tensions.length > 0 && t("where they conflict"),
+              data.blindSpots.length > 0 && t("what none of them can see"),
+              t("what to check next"),
             ].filter(Boolean) as string[];
             const joined = parts.length > 1
-              ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`
+              ? t("{list} and {last}", { list: parts.slice(0, -1).join(", "), last: parts[parts.length - 1] })
               : parts[0];
             return joined.charAt(0).toUpperCase() + joined.slice(1);
           })()}
         </summary>
 
         {agreement.measured && (
-          <Block icon={Scale} title="How much the two actually overlap" tone={agreement.tone}>
+          <Block icon={Scale} title={t("How much the two actually overlap")} tone={agreement.tone}>
             <Measured data={agreement.measured} />
           </Block>
         )}
 
         {data.tensions.length > 0 && (
-          <Block icon={AlertTriangle} title="Where they pull against each other" tone="warn">
+          <Block icon={AlertTriangle} title={t("Where they pull against each other")} tone="warn">
             <ul className="space-y-4">
-              {data.tensions.map((t) => (
-                <li key={t.title} className="border-l border-warn/40 pl-4">
-                  <h4 className="text-lead font-semibold text-warn">{t.title}</h4>
-                  <p className="prose-col mt-1 text-base leading-relaxed text-body">{t.text}</p>
+              {data.tensions.map((item) => (
+                <li key={item.title} className="border-l border-warn/40 pl-4">
+                  <h4 className="text-lead font-semibold text-warn">{item.title}</h4>
+                  <p className="prose-col mt-1 text-base leading-relaxed text-body">{item.text}</p>
                 </li>
               ))}
             </ul>
@@ -296,7 +295,7 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
         )}
 
         {data.blindSpots.length > 0 && (
-          <Block icon={EyeOff} title="What this cannot tell you about this company"
+          <Block icon={EyeOff} title={t("What this cannot tell you about this company")}
                  weight="quiet">
             <ul className="space-y-3.5">
               {data.blindSpots.map((b) => (
@@ -309,7 +308,7 @@ export function SynthesisPanel({ data }: { data: Synthesis }) {
           </Block>
         )}
 
-        <Block icon={ArrowRight} title="What to check next">{steps}</Block>
+        <Block icon={ArrowRight} title={t("What to check next")}>{steps}</Block>
       </details>
 
       <p className="prose-col border-t border-rule px-5 py-4 text-meta leading-relaxed text-ash">

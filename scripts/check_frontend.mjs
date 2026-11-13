@@ -210,7 +210,8 @@ const pyFamilies = Object.fromEntries(
     .map((m) => [m[1], m[2]]));
 const railFamilies = {};
 for (const block of railSource.split(/\n(?=function |const )/)) {
-  const lens = block.match(/lens:\s*"(\w+)"/);
+  // The lens name is a catalog key now, `msg("Flow")`; either spelling is read.
+  const lens = block.match(/lens:\s*(?:msg\()?"(\w+)"/);
   const family = block.match(/family:\s*"(price|filings)"/);
   if (lens && family) railFamilies[lens[1].toLowerCase()] = family[1];
 }
@@ -270,6 +271,50 @@ if (Object.keys(railFamilies).length < 4) {
   console.error("Could not read all four lens families out of ConfluenceRail.tsx; "
                 + "the drift check between it and explain.py is not running.");
   process.exit(1);
+}
+
+// THE PRIVATE TIER IS DRAWN ONLY WHERE THE SERVER SERVES IT. The Score tab and
+// the local-scan view render a composite buy/sell, which PRODUCT.md constraint 1
+// keeps off every published view, and until November 2026 both rendered on every
+// deployment. The routes now refuse outside a local run (`private_tier_enabled`
+// in api/index.py) and the page asks the server the same question before drawing
+// either panel. Checked here so a refactor cannot quietly un-gate one of them:
+// the panel must sit INSIDE the parentheses of a `privateTier && (` block, not
+// merely somewhere after one.
+{
+  const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const insideGate = (src, tag) => {
+    for (const m of src.matchAll(/privateTier\s*&&\s*\(/g)) {
+      let depth = 1;
+      let i = m.index + m[0].length;
+      for (; i < src.length && depth > 0; i += 1) {
+        if (src[i] === "(") depth += 1;
+        else if (src[i] === ")") depth -= 1;
+      }
+      if (src.slice(m.index, i).includes(`<${tag}`)) return true;
+    }
+    return false;
+  };
+  const problems = [];
+  for (const [file, panel] of [["components/workspace/StockWorkspace.tsx", "VerdictPanel"],
+                               ["components/markets/MarketsView.tsx", "ScanPanel"]]) {
+    const src = strip(readFileSync(join(ROOT, file), "utf8"));
+    if (!/useCapabilities\(\)/.test(src) || !insideGate(src, panel)) {
+      problems.push(`${file} renders <${panel}> outside a \`privateTier && (...)\` block`);
+    }
+  }
+  if (!/export function useCapabilities/.test(strippedRequestLayer)
+      || !/"\/api\/capabilities"/.test(strippedRequestLayer)) {
+    problems.push("lib/api.ts no longer asks /api/capabilities");
+  }
+  if (!/def private_tier_enabled\(/.test(pyIndex)
+      || (pyIndex.match(/if not private_tier_enabled\(request\):/g) ?? []).length < 2) {
+    problems.push("api/index.py no longer guards /api/verdict and /api/scan/latest");
+  }
+  if (problems.length) {
+    console.error(`The private tier is not gated: ${problems.join("; ")}.`);
+    process.exit(1);
+  }
 }
 
 // --------------------------------------------------------------------------- //
@@ -644,12 +689,19 @@ if (compareSources.length < 2) {
 // /docs/field-manual.html for months while production returned a 404: docs/
 // was excluded from the upload and nothing copied the file into public/. The
 // copy now happens in `prebuild`, and this checks the other half — that every
-// /docs/ path the UI links to names a file that exists to be copied.
-for (const [file, src] of uiFiles) {
+// /docs/ path the UI links to names a file that exists to be copied. lib/ is
+// read too: the links name the manual through `MANUAL_HREF` in lib/url.ts, one
+// page per language.
+const docsLinkSources = [
+  ...uiFiles,
+  ...readdirSync(join(ROOT, "lib")).filter((f) => /\.tsx?$/.test(f))
+    .map((f) => [`lib/${f}`, stripComments(readFileSync(join(ROOT, "lib", f), "utf8"))]),
+];
+for (const [file, src] of docsLinkSources) {
   for (const m of src.matchAll(/["'`](\/docs\/[^"'`#?]+)/g)) {
     if (!existsSync(join(ROOT, m[1].slice(1)))) {
       fail(file, `Links to ${m[1]}, which is not in docs/.`,
-           "prebuild copies docs/field-manual.html into public/docs/; a link to anything "
+           "prebuild copies the pages in docs/ into public/docs/; a link to anything "
            + "else under /docs/ will 404 in production.");
     }
   }
@@ -776,13 +828,85 @@ if (boardSources.length !== BOARD_FILES.length + 1) {
        "Point BOARD_FILES at the board's new home rather than deleting the rule.");
 }
 
+// 20. EVERY WRAPPED STRING HAS ITS BAHASA INDONESIA, AND NOTHING ELSE DOES. A
+//     string wrapped in `t("…")` but missing from lib/i18n-id.ts shows English
+//     to a reader who chose Indonesian, silently — the page still renders, so no
+//     other check would notice. So wrapping a string and translating it are one
+//     change: a missing entry fails here, an entry using a `{placeholder}`
+//     its key never fills fails (it would print as written),
+//     and an entry no component uses any more fails so the catalog cannot rot
+//     into a list of sentences the app no longer says. Keys must be literals —
+//     `t(\`…\`)` would make the key whatever the template evaluates to, which no
+//     catalog can hold.
+const catalogSource = readFileSync(join(ROOT, "lib/i18n-id.ts"), "utf8");
+const catalogBody = catalogSource.match(/export const ID: Record<string, string> = \{([\s\S]*)\};\s*$/);
+let catalog = null;
+if (!catalogBody) {
+  fail("lib/i18n-id.ts", "The Indonesian catalog is not in the shape rule 20 reads.",
+       "Keep `export const ID: Record<string, string> = { … };` as the file's last statement.");
+} else {
+  const body = catalogBody[1].replace(/^\s*\/\/.*$/gm, "").replace(/,\s*$/, "");
+  try {
+    catalog = JSON.parse(`{${body}}`);
+  } catch (error) {
+    fail("lib/i18n-id.ts", "The Indonesian catalog is not plain JSON inside its braces.",
+         `${error.message}. Double-quoted strings, one entry per line, comments on their own lines.`);
+  }
+  const declared = [...body.matchAll(/^\s*("(?:[^"\\]|\\.)*")\s*:/gm)].map((m) => JSON.parse(m[1]));
+  const seen = new Set();
+  for (const key of declared) {
+    if (seen.has(key)) fail("lib/i18n-id.ts", `"${key}" has two entries.`, "Keep one.");
+    seen.add(key);
+  }
+}
+const decode = (literal) => (literal.startsWith("'")
+  ? JSON.parse(`"${literal.slice(1, -1).replace(/\\'/g, "'").replace(/"/g, '\\"')}"`)
+  : JSON.parse(literal));
+const placeholders = (text) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(",");
+const libFiles = readdirSync(join(ROOT, "lib")).filter((f) => /\.tsx?$/.test(f) && !f.startsWith("i18n"))
+  .map((f) => [`lib/${f}`, stripComments(readFileSync(join(ROOT, "lib", f), "utf8"))]);
+const wrapped = new Map();
+for (const [file, src] of [...uiFiles, ...libFiles]) {
+  for (const m of src.matchAll(/\b(?:t|msg)\(\s*`/g)) {
+    fail(file, `A translated string is a template literal (${m[0]}…).`,
+         "Pass a plain literal and fill it with `{name}` placeholders: t(\"{n} lenses\", { n }).");
+  }
+  for (const m of src.matchAll(/\b(?:t|msg)\(\s*("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')/g)) {
+    const key = decode(m[1]);
+    if (!wrapped.has(key)) wrapped.set(key, file);
+  }
+}
+if (catalog) {
+  for (const [key, file] of wrapped) {
+    if (!Object.prototype.hasOwnProperty.call(catalog, key)) {
+      fail(file, `"${key}" has no Bahasa Indonesia.`, "Add it to lib/i18n-id.ts.");
+    } else {
+      // Every placeholder the Indonesian uses must be one the English fills. The
+      // reverse is allowed: an English plural ending ("day{s}") has no Indonesian.
+      const english = new Set(placeholders(key).split(",").filter(Boolean));
+      const extra = placeholders(catalog[key]).split(",").filter((p) => p && !english.has(p));
+      if (extra.length) {
+        fail("lib/i18n-id.ts", `"${key}" has an Indonesian placeholder its English never fills.`,
+             `{${extra.join("}, {")}} would print as written.`);
+      }
+    }
+  }
+  for (const key of Object.keys(catalog)) {
+    if (!wrapped.has(key)) {
+      fail("lib/i18n-id.ts", `"${key}" is translated but no component says it any more.`,
+           "Remove the entry, or wrap the string where it is shown.");
+    }
+  }
+}
+
 if (designFailures.length) {
   console.error("\nDesign-system rules broken (see DESIGN.md):\n");
   console.error(designFailures.join("\n\n"));
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 19 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 20 checked across ${uiFiles.length} UI files`);
+console.log(`  translation: ${wrapped.size} interface strings, every one with Bahasa Indonesia`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));

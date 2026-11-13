@@ -41,6 +41,7 @@ from . import swing
 from . import longterm as lt
 from . import riskmodel
 from .valuation import MARKETS
+from .lang import month_abbr, tr
 
 OHLCV_COLUMNS = ["Open", "High", "Low", "Close", "Volume"]
 CURRENCY_SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥", "IDR": "Rp", "AUD": "A$"}
@@ -333,59 +334,70 @@ def summarise_market(df: pd.DataFrame, levels: list, currency: str, ticker: str)
 
     if sma_fast is not None and sma_slow is not None:
         if price > sma_fast > sma_slow:
-            trend, trend_tone = "Uptrend", "bull"
+            trend, trend_tone = tr("Uptrend", "Tren naik"), "bull"
         elif price < sma_fast < sma_slow:
-            trend, trend_tone = "Downtrend", "bear"
+            trend, trend_tone = tr("Downtrend", "Tren turun"), "bear"
         else:
-            trend, trend_tone = "Sideways", "neutral"
+            trend, trend_tone = tr("Sideways", "Menyamping"), "neutral"
         gap = (price / sma_slow - 1.0) * 100.0
-        side = "above" if gap >= 0 else "below"
+        side = tr("above", "di atas") if gap >= 0 else tr("below", "di bawah")
         trend_sentence = (
-            f"**{ticker}** is in a **{trend.lower()}**, trading "
-            f"{abs(gap):.1f}% {side} its 200-day average."
+            tr(f"**{ticker}** is in a **{trend.lower()}**, trading "
+               f"{abs(gap):.1f}% {side} its 200-day average.",
+               f"**{ticker}** sedang dalam **{trend.lower()}**, diperdagangkan "
+               f"{abs(gap):.1f}% {side} rata-rata 200 harinya.")
         )
     elif sma_fast is not None:
         drift = (price / sma_fast - 1.0) if sma_fast else 0.0
         if abs(drift) < 0.001:
-            trend, trend_tone = "Flat", "neutral"
+            trend, trend_tone = tr("Flat", "Datar"), "neutral"
         else:
-            trend = "Rising" if drift > 0 else "Falling"
+            trend = tr("Rising", "Naik") if drift > 0 else tr("Falling", "Turun")
             trend_tone = "bull" if drift > 0 else "bear"
         trend_sentence = (
-            f"**{ticker}** is **{trend.lower()}** against its 50-day average. "
-            "Load more history for the full trend picture."
+            tr(f"**{ticker}** is **{trend.lower()}** against its 50-day average. "
+               "Load more history for the full trend picture.",
+               f"**{ticker}** **{trend.lower()}** terhadap rata-rata 50 harinya. Muat "
+               "riwayat lebih panjang untuk gambaran tren yang lengkap.")
         )
     else:
-        trend, trend_tone = "Too early to call", "neutral"
+        trend, trend_tone = tr("Too early to call", "Terlalu dini untuk disimpulkan"), "neutral"
         trend_sentence = (
-            f"**{ticker}** has too little history here to read a trend. "
-            "Widen the date range."
+            tr(f"**{ticker}** has too little history here to read a trend. "
+               "Widen the date range.",
+               f"**{ticker}** punya riwayat terlalu sedikit di sini untuk membaca tren. "
+               "Perlebar rentang tanggalnya.")
         )
 
     if rsi is None:
-        momentum, momentum_tone = "No reading", "neutral"
-        momentum_sentence = "Momentum needs about two more weeks of data."
+        momentum, momentum_tone = tr("No reading", "Tidak ada pembacaan"), "neutral"
+        momentum_sentence = tr("Momentum needs about two more weeks of data.",
+                               "Momentum butuh data sekitar dua minggu lagi.")
     elif rsi >= 70:
-        momentum, momentum_tone = f"Overbought ({rsi:.0f})", "warn"
-        momentum_sentence = "It has run hot recently, so a pause would not be a surprise."
+        momentum, momentum_tone = tr(f"Overbought ({rsi:.0f})", f"Jenuh beli ({rsi:.0f})"), "warn"
+        momentum_sentence = tr("It has run hot recently, so a pause would not be a surprise.",
+                               "Belakangan ini ia berlari kencang, jadi jeda bukanlah kejutan.")
     elif rsi <= 30:
-        momentum, momentum_tone = f"Oversold ({rsi:.0f})", "warn"
-        momentum_sentence = "It has been sold hard recently and is stretched to the downside."
+        momentum, momentum_tone = tr(f"Oversold ({rsi:.0f})", f"Jenuh jual ({rsi:.0f})"), "warn"
+        momentum_sentence = tr("It has been sold hard recently and is stretched to the downside.",
+                               "Belakangan ini ia dijual keras dan teregang ke bawah.")
     elif rsi >= 50:
-        momentum, momentum_tone = f"Firm ({rsi:.0f})", "bull"
-        momentum_sentence = "Buyers have had the upper hand over the past two weeks."
+        momentum, momentum_tone = tr(f"Firm ({rsi:.0f})", f"Kuat ({rsi:.0f})"), "bull"
+        momentum_sentence = tr("Buyers have had the upper hand over the past two weeks.",
+                               "Pembeli lebih unggul selama dua minggu terakhir.")
     else:
-        momentum, momentum_tone = f"Soft ({rsi:.0f})", "bear"
-        momentum_sentence = "Sellers have had the upper hand over the past two weeks."
+        momentum, momentum_tone = tr(f"Soft ({rsi:.0f})", f"Lunak ({rsi:.0f})"), "bear"
+        momentum_sentence = tr("Sellers have had the upper hand over the past two weeks.",
+                               "Penjual lebih unggul selama dua minggu terakhir.")
 
     if macd_line is None or macd_signal is None:
-        macd_label, macd_tone = "No reading", "neutral"
+        macd_label, macd_tone = tr("No reading", "Tidak ada pembacaan"), "neutral"
     elif macd_line == macd_signal:
-        macd_label, macd_tone = "Level", "neutral"
+        macd_label, macd_tone = tr("Level", "Setara"), "neutral"
     elif macd_line > macd_signal:
-        macd_label, macd_tone = "Turning up", "bull"
+        macd_label, macd_tone = tr("Turning up", "Berbalik naik"), "bull"
     else:
-        macd_label, macd_tone = "Turning down", "bear"
+        macd_label, macd_tone = tr("Turning down", "Berbalik turun"), "bear"
 
     above_levels = [level for level in levels if level > price]
     below_levels = [level for level in levels if level < price]
@@ -396,17 +408,21 @@ def summarise_market(df: pd.DataFrame, levels: list, currency: str, ticker: str)
     if resistance is not None:
         distance = (resistance / price - 1.0) * 100.0
         level_parts.append(
-            f"the next ceiling is {_format_currency(resistance, currency)} "
-            f"({distance:.1f}% up)"
+            tr(f"the next ceiling is {_format_currency(resistance, currency)} "
+               f"({distance:.1f}% up)",
+               f"langit-langit berikutnya ada di {_format_currency(resistance, currency)}"
+               f" ({distance:.1f}% ke atas)")
         )
     if support is not None:
         distance = (1.0 - support / price) * 100.0
         level_parts.append(
-            f"the nearest floor is {_format_currency(support, currency)} "
-            f"({distance:.1f}% down)"
+            tr(f"the nearest floor is {_format_currency(support, currency)} "
+               f"({distance:.1f}% down)",
+               f"lantai terdekat ada di {_format_currency(support, currency)} ("
+               f"{distance:.1f}% ke bawah)")
         )
     if level_parts:
-        level_sentence = "On past behaviour, " + " and ".join(level_parts) + "."
+        level_sentence = tr("On past behaviour, ", "Berdasarkan perilaku sebelumnya, ") + tr(" and ", " dan ").join(level_parts) + "."
     else:
         level_sentence = ""
 
@@ -415,21 +431,26 @@ def summarise_market(df: pd.DataFrame, levels: list, currency: str, ticker: str)
         last_signal = signal_rows.iloc[-1]
         last_date = signal_rows.index[-1]
         since = (price / float(last_signal["Close"]) - 1.0) * 100.0
-        signal_label = f"{last_signal['Signal']} · {last_date:%d %b %Y}"
-        signal_detail = f"{since:+.1f}% since"
+        # The signal itself is an identifier the chart compares; only its words move.
+        signal_label = tr(f"{last_signal['Signal']} · {last_date:%d %b %Y}",
+                          f"{'Beli' if last_signal['Signal'] == 'Buy' else 'Jual'} · "
+                          f"{last_date:%d} {month_abbr(last_date.month)} {last_date:%Y}")
+        signal_detail = tr(f"{since:+.1f}% since", f"{since:+.1f}% sejak itu")
         signal_tone = "bull" if last_signal["Signal"] == "Buy" else "bear"
     else:
-        signal_label, signal_detail, signal_tone = "None yet", "no crossover in range", "neutral"
+        signal_label, signal_detail, signal_tone = tr("None yet", "Belum ada"), tr("no crossover in range",
+                                                                  "tidak ada persilangan dalam rentang ini"), "neutral"
 
     move = _typical_daily_move(df)
-    move_label = f"±{move:.1f}% a day" if move is not None else "No reading"
+    move_label = tr(f"±{move:.1f}% a day", f"±{move:.1f}% per hari") if move is not None else tr("No reading",
+                                                                   "Tidak ada pembacaan")
 
     chips = [
-        {"label": "Trend", "value": trend, "tone": trend_tone},
-        {"label": "Momentum (RSI)", "value": momentum, "tone": momentum_tone},
+        {"label": tr("Trend", "Tren"), "value": trend, "tone": trend_tone},
+        {"label": tr("Momentum (RSI)", "Momentum (RSI)"), "value": momentum, "tone": momentum_tone},
         {"label": "MACD", "value": macd_label, "tone": macd_tone},
-        {"label": "Typical swing", "value": move_label, "tone": "neutral"},
-        {"label": "Latest signal", "value": f"{signal_label} · {signal_detail}", "tone": signal_tone},
+        {"label": tr("Typical swing", "Ayunan biasa"), "value": move_label, "tone": "neutral"},
+        {"label": tr("Latest signal", "Sinyal terakhir"), "value": f"{signal_label} · {signal_detail}", "tone": signal_tone},
     ]
     sentences = [trend_sentence, momentum_sentence, level_sentence]
     headline = " ".join(part for part in sentences if part)
@@ -479,25 +500,31 @@ def long_term_view(frame: pd.DataFrame, drawdown: dict, risk: dict,
     # --- primary trend ----------------------------------------------------
     sma_200 = _last_valid(frame["SMA_200"])
     if sma_200 is not None:
-        add("Above the 200-day average", close > sma_200,
-            f"{(close / sma_200 - 1) * 100:+.1f}% versus the 200-day")
+        add(tr("Above the 200-day average", "Di atas rata-rata 200 hari"), close > sma_200,
+            tr(f"{(close / sma_200 - 1) * 100:+.1f}% versus the 200-day",
+               f"{(close / sma_200 - 1) * 100:+.1f}% dibandingkan rata-rata 200 hari"))
     else:
-        add("Above the 200-day average", None, "needs 200 bars of history")
+        add(tr("Above the 200-day average", "Di atas rata-rata 200 hari"), None, tr("needs 200 bars of history",
+                                                  "perlu riwayat 200 batang"))
 
     if faber.get("usable"):
-        add("Faber 10-month rule", faber["signal"] == "invested",
-            f"monthly close {faber['distance'] * 100:+.1f}% versus its 10-month average, "
-            f"{faber['monthsInStance']} months in this stance")
+        add(tr("Faber 10-month rule", "Aturan 10 bulan Faber"), faber["signal"] == "invested",
+            tr(f"monthly close {faber['distance'] * 100:+.1f}% versus its 10-month average, "
+               f"{faber['monthsInStance']} months in this stance",
+               f"penutupan bulanan {faber['distance'] * 100:+.1f}% dibandingkan "
+               f"rata-rata 10 bulannya, {faber['monthsInStance']} bulan dalam posisi ini"))
     else:
-        add("Faber 10-month rule", None, "needs about a year of history")
+        add(tr("Faber 10-month rule", "Aturan 10 bulan Faber"), None, tr("needs about a year of history",
+                                            "perlu riwayat sekitar setahun"))
 
     # --- momentum ---------------------------------------------------------
     twelve_one = momentum.get("momentum12_1")
     if twelve_one is not None:
-        add("12-1 month momentum", twelve_one > 0,
-            f"{twelve_one * 100:+.1f}% over 12 months ending a month ago")
+        add(tr("12-1 month momentum", "Momentum 12-1 bulan"), twelve_one > 0,
+            tr(f"{twelve_one * 100:+.1f}% over 12 months ending a month ago",
+               f"{twelve_one * 100:+.1f}% selama 12 bulan yang berakhir sebulan lalu"))
     else:
-        add("12-1 month momentum", None, "needs a year of history")
+        add(tr("12-1 month momentum", "Momentum 12-1 bulan"), None, tr("needs a year of history", "perlu riwayat setahun"))
 
     # --- trend quality ----------------------------------------------------
     adx_value = _last_valid(frame["ADX"])
@@ -505,11 +532,14 @@ def long_term_view(frame: pd.DataFrame, drawdown: dict, risk: dict,
     minus_di = _last_valid(frame["MINUS_DI"])
     if adx_value is not None and plus_di is not None and minus_di is not None:
         trending = adx_value >= 25
-        add("Trend is strong enough to read", trending,
-            f"ADX {adx_value:.0f} ({'trending' if trending else 'directionless'}), "
-            f"+DI {plus_di:.0f} versus -DI {minus_di:.0f}")
+        add(tr("Trend is strong enough to read", "Tren cukup kuat untuk dibaca"), trending,
+            tr(f"ADX {adx_value:.0f} ({'trending' if trending else 'directionless'}), "
+               f"+DI {plus_di:.0f} versus -DI {minus_di:.0f}",
+               f"ADX {adx_value:.0f} ({'bertren' if trending else 'tanpa arah'}), +DI "
+               f"{plus_di:.0f} dibandingkan -DI {minus_di:.0f}"))
     else:
-        add("Trend is strong enough to read", None, "insufficient history")
+        add(tr("Trend is strong enough to read", "Tren cukup kuat untuk dibaca"), None, tr("insufficient history",
+                                                       "riwayat tidak cukup"))
 
     # THE VERDICT IS SAMPLE-SIZE AWARE, not a fixed 0.45-0.55 band. The band was
     # barely one standard error wide, so a genuine random walk tripped this line
@@ -520,47 +550,59 @@ def long_term_view(frame: pd.DataFrame, drawdown: dict, risk: dict,
     verdict = hurst_reading.get("verdict")
     if hurst is not None and verdict != "unavailable":
         stderr = hurst_reading.get("stderr") or 0.0
-        detail = f"Hurst {hurst:.2f} ± {stderr:.2f} — "
+        detail = tr(f"Hurst {hurst:.2f} ± {stderr:.2f} — ", f"Hurst {hurst:.2f} ± {stderr:.2f} — ")
         if verdict == "persistent":
-            add("Price series shows persistence", True,
-                detail + "trending by more than the estimate's own error, so trend tools "
-                         "have something to work with")
+            add(tr("Price series shows persistence", "Deret harga menunjukkan persistensi"), True,
+                detail + tr("trending by more than the estimate's own error, so trend tools "
+                            "have something to work with",
+                            "bertren melebihi galat estimasinya sendiri, jadi alat tren punya "
+                            "sesuatu untuk dikerjakan"))
         elif verdict == "meanReverting":
-            add("Price series shows persistence", False,
-                detail + "mean-reverting; falls tend to be given back")
+            add(tr("Price series shows persistence", "Deret harga menunjukkan persistensi"), False,
+                detail + tr("mean-reverting; falls tend to be given back",
+                            "berbalik ke rata-rata; penurunan cenderung dikembalikan"))
         else:
             low = hurst_reading.get("randomWalkLow") or 0.0
             high = hurst_reading.get("randomWalkHigh") or 0.0
-            add("Price series shows persistence", None,
-                detail + f"inside {low:.2f}-{high:.2f}, which is what a random walk produces "
-                         f"at this sample size. Trend signals here are probably noise")
+            add(tr("Price series shows persistence", "Deret harga menunjukkan persistensi"), None,
+                detail + tr(f"inside {low:.2f}-{high:.2f}, which is what a random walk produces "
+                            f"at this sample size. Trend signals here are probably noise",
+                            f"di dalam {low:.2f}-{high:.2f}, yang dihasilkan jalan acak pada ukuran "
+                            "sampel ini. Sinyal tren di sini kemungkinan derau"))
     else:
-        add("Price series shows persistence", None, "needs ~100 bars")
+        add(tr("Price series shows persistence", "Deret harga menunjukkan persistensi"), None, tr("needs ~100 bars",
+                                                       "perlu sekitar 100 batang"))
 
     if slope is not None and r_squared is not None:
-        add("Long-run trend line rising", slope > 0,
-            f"{slope * 100:+.1f}% a year fitted, R2 {r_squared:.0%}"
-            + ("" if r_squared >= 0.5 else " — a loose fit, so read the slope loosely"))
+        add(tr("Long-run trend line rising", "Garis tren jangka panjang naik"), slope > 0,
+            tr(f"{slope * 100:+.1f}% a year fitted, R2 {r_squared:.0%}",
+               f"{slope * 100:+.1f}% per tahun hasil pencocokan, R2 {r_squared:.0%}")
+            + ("" if r_squared >= 0.5 else tr(" — a loose fit, so read the slope loosely",
+                                              " — kecocokannya longgar, jadi baca kemiringannya dengan longgar")))
     else:
-        add("Long-run trend line rising", None, "insufficient history")
+        add(tr("Long-run trend line rising", "Garis tren jangka panjang naik"), None, tr("insufficient history", "riwayat tidak cukup"))
 
     # --- position ---------------------------------------------------------
     if position.get("usable") and position.get("fromHigh52w") is not None:
         near_high = position["fromHigh52w"] > -0.10
-        add("Near its 52-week high", near_high,
-            f"{position['fromHigh52w'] * 100:+.1f}% from the 52-week high, "
-            f"{position['fromAllTimeHigh'] * 100:+.1f}% from the record")
+        add(tr("Near its 52-week high", "Dekat puncak 52 minggu"), near_high,
+            tr(f"{position['fromHigh52w'] * 100:+.1f}% from the 52-week high, "
+               f"{position['fromAllTimeHigh'] * 100:+.1f}% from the record",
+               f"{position['fromHigh52w'] * 100:+.1f}% dari puncak 52 minggu, "
+               f"{position['fromAllTimeHigh'] * 100:+.1f}% dari rekornya"))
 
     # --- what holding cost ------------------------------------------------
     if drawdown.get("usable"):
         depth = drawdown["maxDrawdown"]
         tolerable = depth > -0.50
-        add("Worst drawdown survivable", tolerable,
-            f"{depth * 100:.0f}% peak to trough, longest {drawdown['timeUnderWaterDays']} "
-            f"trading days under water", horizon="risk")
+        add(tr("Worst drawdown survivable", "Penurunan terburuk masih tertahankan"), tolerable,
+            tr(f"{depth * 100:.0f}% peak to trough, longest {drawdown['timeUnderWaterDays']} "
+               f"trading days under water",
+               f"{depth * 100:.0f}% dari puncak ke dasar, terlama "
+               f"{drawdown['timeUnderWaterDays']} hari perdagangan di bawah puncak"), horizon="risk")
 
     if risk.get("usable") and risk.get("sortino") is not None:
-        add("Paid for its downside risk", risk["sortino"] > 0.5,
+        add(tr("Paid for its downside risk", "Terbayar atas risiko penurunannya"), risk["sortino"] > 0.5,
             f"Sortino {risk['sortino']:.2f}, Calmar "
             + (f"{risk['calmar']:.2f}" if risk.get("calmar") is not None else "n/a"),
             horizon="risk")
@@ -570,16 +612,19 @@ def long_term_view(frame: pd.DataFrame, drawdown: dict, risk: dict,
 
     if not scored:
         verdict, tone = "NO READING", "neutral"
-        headline = "Not enough history to say anything about the long horizon."
+        headline = tr("Not enough history to say anything about the long horizon.",
+                      "Riwayatnya tidak cukup untuk mengatakan apa pun tentang jangka panjang.")
     elif passed >= len(scored) * 0.75:
         verdict, tone = "CONSTRUCTIVE", "bull"
-        headline = "The long-horizon evidence mostly points the same way, upward."
+        headline = tr("The long-horizon evidence mostly points the same way, upward.",
+                      "Bukti jangka panjang sebagian besar menunjuk ke arah yang sama, ke atas.")
     elif passed <= len(scored) * 0.25:
         verdict, tone = "WEAK", "bear"
-        headline = "The long-horizon evidence mostly points down."
+        headline = tr("The long-horizon evidence mostly points down.",
+                      "Bukti jangka panjang sebagian besar menunjuk ke bawah.")
     else:
         verdict, tone = "MIXED", "neutral"
-        headline = "The long-horizon evidence is split."
+        headline = tr("The long-horizon evidence is split.", "Bukti jangka panjangnya terbelah.")
 
     return {
         "verdict": verdict,
@@ -589,9 +634,13 @@ def long_term_view(frame: pd.DataFrame, drawdown: dict, risk: dict,
         "scored": len(scored),
         "checks": checks,
         "caveat": (
-            "A checklist of what the price history has done, not a recommendation. "
-            "Every line here is computed from price and volume alone and knows "
-            "nothing about the business — see the Value and Quality lenses for that."
+            tr("A checklist of what the price history has done, not a recommendation. "
+               "Every line here is computed from price and volume alone and knows "
+               "nothing about the business — see the Value and Quality lenses for that.",
+               "Daftar periksa tentang apa yang telah dilakukan riwayat harga, bukan "
+               "rekomendasi. Setiap baris di sini dihitung dari harga dan volume saja "
+               "dan tidak tahu apa pun tentang bisnisnya — lihat lensa Nilai dan "
+               "Kualitas untuk itu.")
         ),
     }
 
@@ -618,7 +667,9 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
     data = fetch_data(ticker, start_date, end_date)
     if data.empty:
         raise TechnicalError(
-            f"No market data came back for '{ticker}'. {symbols.hint(ticker)}"
+            tr(f"No market data came back for '{ticker}'. {symbols.hint(ticker)}",
+               f"Tidak ada data pasar yang kembali untuk '{ticker}'. "
+               f"{symbols.hint(ticker)}")
         )
 
     data = calculate_indicators(data)
@@ -660,9 +711,11 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
             "date": index.strftime("%Y-%m-%d"),
             "type": row["Signal"],
             "description": (
-                "Golden cross · fast average moved above slow"
+                tr("Golden cross · fast average moved above slow",
+                   "Golden cross · rata-rata cepat bergerak di atas yang lambat")
                 if row["Signal"] == "Buy"
-                else "Death cross · fast average moved below slow"
+                else tr("Death cross · fast average moved below slow",
+                        "Death cross · rata-rata cepat bergerak di bawah yang lambat")
             ),
             "price": float(row["Close"]),
             "changeSince": (price / float(row["Close"]) - 1.0) * 100.0,

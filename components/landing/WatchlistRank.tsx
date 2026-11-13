@@ -7,6 +7,7 @@ import { useRanking } from "@/lib/api";
 import { writeSession } from "@/lib/session";
 import { marketOf } from "@/lib/symbols";
 import { marketsHref } from "@/lib/url";
+import { useT } from "@/lib/i18n";
 
 /**
  * "Rank these" for the watchlist — the one place the list leaves the browser,
@@ -22,6 +23,7 @@ import { marketsHref } from "@/lib/url";
  * the wrong market. A mixed watchlist ranks its larger half and says so.
  */
 export function WatchlistRank({ symbols }: { symbols: string[] }) {
+  const t = useT();
   const router = useRouter();
   const { scan } = useRanking();
   const idx = symbols.filter((s) => marketOf(s) === "ID");
@@ -43,11 +45,11 @@ export function WatchlistRank({ symbols }: { symbols: string[] }) {
     <div className="flex flex-wrap items-center gap-3 border-t border-ruleSoft pt-4">
       <Button variant="secondary" size="sm" onClick={run}>
         <ListOrdered aria-hidden className="h-4 w-4" />
-        Rank these {list.length} against each other
+        {t("Rank these {length} against each other", { length: list.length })}
       </Button>
       <span className="text-micro text-ash">
-        Sends the list to rank it, in the request body — never in a link.
-        {left > 0 && ` ${left} from the other market ${left === 1 ? "is" : "are"} left out.`}
+        {t("Sends the list to rank it, in the request body — never in a link.{value}", { value: left > 0 && (left === 1 ? t(" {count} from the other market is left out.", { count: left })
+                                      : t(" {count} from the other market are left out.", { count: left })) })}
       </span>
     </div>
   );

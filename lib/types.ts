@@ -1688,12 +1688,23 @@ export interface ScanRow {
 }
 
 /**
+ * What this deployment serves. `privateTier` is the server's own answer to
+ * whether the scanner's score and local report exist here — false on any
+ * deployment, true where the owner runs the app (api/index.py
+ * `private_tier_enabled`).
+ */
+export interface Capabilities {
+  privateTier: boolean;
+}
+
+/**
  * A scan that already ran, read off disk.
  *
  * NEVER RUN FROM THE BROWSER. A whole-exchange sweep is about an hour and the
  * serverless function has sixty seconds. This reads the report the script
  * wrote, so `available` is false on the deployed app — `reports/` is local and
- * gitignored — and the panel says so rather than erroring.
+ * gitignored, and the route refuses outside a local run — and the panel says so
+ * rather than erroring.
  */
 export interface ScanResponse {
   available: boolean;

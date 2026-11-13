@@ -261,6 +261,8 @@ import pandas as pd
 
 from . import market_data
 from .valuation import _get_row
+from . import lang
+from .lang import Bilingual, tr
 
 # How many measured names a field needs before a rank in it means anything.
 # Three is the smallest number for which "largest" beats more than one rival.
@@ -388,24 +390,41 @@ def _profile_reading(industry: str, sector: str, summary: str, state: str,
                      kind: Optional[str] = None) -> str:
     where = industry or sector
     if state == "described":
-        return (f"Classified as {where}. " if where else "") + _trim(summary)
+        return (tr(f"Classified as {where}. ", f"Digolongkan sebagai {where}. ") if where else "") + _trim(summary)
     if state == "not a company":
-        return (f"This listing is {kind}, not a company, so there is no business for the "
-                f"data source to describe and no sector or industry to file it under.")
+        return (tr(f"This listing is {kind}, not a company, so there is no business for the "
+                   f"data source to describe and no sector or industry to file it under.",
+                   f"Saham ini adalah {kind}, bukan perusahaan, jadi tidak ada bisnis untuk "
+                   "digambarkan sumber data dan tidak ada sektor atau industri untuk "
+                   "menggolongkannya."))
     if state == "none published":
-        return (f"Classified as {where}, and the data source publishes no description "
-                f"of what it does beyond that label.")
+        return (tr(f"Classified as {where}, and the data source publishes no description "
+                   f"of what it does beyond that label.",
+                   f"Digolongkan sebagai {where}, dan sumber data tidak menerbitkan gambaran "
+                   "apa pun tentang kegiatannya di luar label itu."))
     if state == "not returned":
-        return ("No sector, industry or description came back for this listing. That "
-                "is the signature of a throttled fetch rather than a company nobody "
-                "describes — the same one the accounting screens refuse to score on — "
-                "so it says nothing about the business and an unhurried refetch will "
-                "usually resolve it.")
-    return ((f"Classified as {where}. No business description was fetched for this "
-             f"record — it predates the app asking for one, and a refetch will "
-             f"supply it.") if where else
-            "No business description was fetched for this record, which predates the "
-            "app asking for one. A refetch will supply it.")
+        return (tr("No sector, industry or description came back for this listing. That "
+                   "is the signature of a throttled fetch rather than a company nobody "
+                   "describes — the same one the accounting screens refuse to score on — "
+                   "so it says nothing about the business and an unhurried refetch will "
+                   "usually resolve it.",
+                   "Tidak ada sektor, industri, atau gambaran usaha yang kembali untuk "
+                   "saham ini. Itu ciri pengambilan data yang dibatasi, bukan perusahaan "
+                   "yang tidak digambarkan siapa pun — ciri yang sama yang membuat "
+                   "penyaring akuntansi menolak memberi skor — jadi ini tidak berkata apa "
+                   "pun tentang bisnisnya dan pengambilan ulang yang tidak terburu-buru "
+                   "biasanya menyelesaikannya."))
+    return ((tr(f"Classified as {where}. No business description was fetched for this "
+                f"record — it predates the app asking for one, and a refetch will "
+                f"supply it.",
+                f"Digolongkan sebagai {where}. Tidak ada gambaran usaha yang diambil "
+                "untuk catatan ini — catatannya lebih tua daripada saat aplikasi mulai "
+                "memintanya, dan pengambilan ulang akan melengkapinya.")) if where else
+            tr("No business description was fetched for this record, which predates the "
+               "app asking for one. A refetch will supply it.",
+               "Tidak ada gambaran usaha yang diambil untuk catatan ini, yang lebih tua "
+               "daripada saat aplikasi mulai memintanya. Pengambilan ulang akan "
+               "melengkapinya."))
 
 
 def revenue_of(company: Optional[dict]) -> dict:
@@ -450,7 +469,8 @@ def revenue_of(company: Optional[dict]) -> dict:
     currency = (record.get("currency") or "").upper() or None
     reporting = (record.get("financial_currency") or "").upper() or None
     converted = _finite(record.get("fx_rate")) is not None
-    figures = "statements" if source == "statement" else "summary figures"
+    figures = (tr("statements", "laporan keuangan") if source == "statement"
+               else tr("summary figures", "angka ringkasan"))
     # The summary's trailing year for EVERY name that has one, filed or not, so a
     # comparison between the two kinds can be re-made on one kind. See
     # `standings` on DIVA.JK. Converted with the statements by `market_data`.
@@ -460,9 +480,12 @@ def revenue_of(company: Optional[dict]) -> dict:
     if value is None or value <= 0:
         return {"usable": False, "value": None, "currency": currency, "asOf": as_of,
                 "source": None,
-                "reason": ("no revenue line came back on the income statement" if filed
-                           else "no statements came back, and the provider's summary "
-                                "carries no revenue figure either")}
+                "reason": (tr("no revenue line came back on the income statement",
+                              "tidak ada baris pendapatan yang kembali pada laporan laba rugi") if filed
+                           else tr("no statements came back, and the provider's summary "
+                                   "carries no revenue figure either",
+                                   "tidak ada laporan keuangan yang kembali, dan ringkasan penyedia data "
+                                   "juga tidak memuat angka pendapatan"))}
 
     # A CONVERSION DELIBERATELY DECLINED IS NOT A CONVERSION MISSING.
     # `market_data._apply_fx` refuses to scale statements whose currency label
@@ -479,9 +502,12 @@ def revenue_of(company: Optional[dict]) -> dict:
             and not converted and not skipped):
         return {"usable": False, "value": None, "currency": currency, "asOf": as_of,
                 "source": source,
-                "reason": (f"the {figures} are written in {reporting} and the shares "
-                           f"trade in {currency}, and no exchange rate was applied, so "
-                           f"this figure is not on the same scale as its peers")}
+                "reason": (tr(f"the {figures} are written in {reporting} and the shares "
+                              f"trade in {currency}, and no exchange rate was applied, so "
+                              f"this figure is not on the same scale as its peers",
+                              f"{figures} ditulis dalam {reporting} dan sahamnya diperdagangkan dalam "
+                              f"{currency}, dan tidak ada kurs yang diterapkan, jadi angka ini tidak "
+                              "berada pada skala yang sama dengan saham sejenisnya"))}
 
     # THE UNITS SANITY TEST, AND IT ONLY RUNS ON A CONVERTED FIGURE.
     #
@@ -515,13 +541,18 @@ def revenue_of(company: Optional[dict]) -> dict:
         if not (low <= after <= high) and low <= before <= high:
             return {"usable": False, "value": None, "currency": currency, "asOf": as_of,
                     "source": source,
-                    "reason": (f"the {figures} are labelled {reporting} and were "
-                               f"converted at {rate:,.4g}, which puts revenue at "
-                               f"{value:,.0f} against a market value of {cap:,.0f} — a "
-                               f"price-to-sales ratio of {after:,.4g}, where the "
-                               f"unconverted figure gives {before:,.4g}. The label "
-                               f"looks wrong and the converted figure is not "
-                               f"comparable with its peers")}
+                    "reason": (tr(f"the {figures} are labelled {reporting} and were "
+                                  f"converted at {rate:,.4g}, which puts revenue at "
+                                  f"{value:,.0f} against a market value of {cap:,.0f} — a "
+                                  f"price-to-sales ratio of {after:,.4g}, where the "
+                                  f"unconverted figure gives {before:,.4g}. The label "
+                                  f"looks wrong and the converted figure is not "
+                                  f"comparable with its peers",
+                                  f"{figures} berlabel {reporting} dan dikonversi dengan kurs {rate:,.4g}, "
+                                  f"yang menempatkan pendapatan di {value:,.0f} dibandingkan nilai pasar "
+                                  f"{cap:,.0f} — rasio harga terhadap penjualan {after:,.4g}, sedangkan "
+                                  f"angka yang belum dikonversi memberi {before:,.4g}. Labelnya tampak "
+                                  "salah dan angka hasil konversi tidak sebanding dengan saham sejenisnya"))}
 
     return {"usable": True, "value": value, "currency": currency, "asOf": as_of,
             # "statement" for a filed year, "summary" for the provider's trailing
@@ -735,13 +766,15 @@ def standings(entries: list[dict]) -> dict:
         # so the count of what could not be ranked still accounts for it.
         if describes_itself_as_a_fund(entry.get("summary")):
             unplaced.append({"ticker": entry.get("ticker"),
-                             "why": "describes itself as a fund"})
+                             "why": tr("describes itself as a fund",
+                                       "menggambarkan dirinya sebagai reksa dana")})
             if industry:
                 unranked.setdefault(industry, []).append(entry.get("ticker"))
             continue
         if not industry or revenue is None or revenue <= 0:
             unplaced.append({"ticker": entry.get("ticker"),
-                             "why": "no industry" if not industry else "no usable revenue"})
+                             "why": tr("no industry", "tidak ada industri") if not industry else tr("no usable revenue",
+                                                                          "tidak ada pendapatan yang bisa dipakai")})
             if industry:
                 unranked.setdefault(industry, []).append(entry.get("ticker"))
             continue
@@ -856,7 +889,7 @@ def standings(entries: list[dict]) -> dict:
                 "noCloseRival": bool(rank == 1 and (len(members) == 1 or clears)),
                 "leader": leader["ticker"],
                 "leaderName": leader.get("name"),
-                "basis": BASIS,
+                "basis": _basis(),
                 "reading": _position_reading(
                     industry, rank, len(members), row, leader, margin, named, pool,
                     len(missing), mixed, trailing_margin, clears)
@@ -872,11 +905,12 @@ def standings(entries: list[dict]) -> dict:
         "leaders": sorted((i for i, f in fields.items() if f["leader"]),
                           key=lambda i: -(fields[i]["revenue"] or 0)),
         "thresholds": {"minPeers": MIN_PEERS, "leadMargin": LEAD_MARGIN},
-        "basis": BASIS,
+        "basis": _basis(),
     }
 
 
-_KIND = {"statement": "filed year", "summary": "trailing twelve months"}
+_KIND = Bilingual({"statement": ("filed year", "tahun buku yang dilaporkan"),
+                   "summary": ("trailing twelve months", "dua belas bulan terakhir")})
 
 
 def _position_reading(industry: str, rank: int, peers: int, row: dict, leader: dict,
@@ -886,57 +920,97 @@ def _position_reading(industry: str, rank: int, peers: int, row: dict, leader: d
                       clears: bool = False) -> str:
     share = (row["revenue"] / pool * 100) if pool else None
     if peers == 1 and unranked:
-        return (f"The only scanned name in {industry} whose revenue could be read, but "
-                f"{unranked} other listing{'' if unranked == 1 else 's'} carr"
-                f"{'ies' if unranked == 1 else 'y'} the same label and did not return "
-                f"filings this scan could use. It is not alone in its field; it is the "
-                f"only one that could be measured.")
+        return (tr(f"The only scanned name in {industry} whose revenue could be read, but "
+                   f"{unranked} other listing{'' if unranked == 1 else 's'} carr"
+                   f"{'ies' if unranked == 1 else 'y'} the same label and did not return "
+                   f"filings this scan could use. It is not alone in its field; it is the "
+                   f"only one that could be measured.",
+                   f"Satu-satunya saham yang dipindai di {industry} yang pendapatannya bisa "
+                   f"dibaca, tetapi {unranked} saham lain memiliki label yang sama dan tidak "
+                   "mengembalikan laporan keuangan yang bisa dipakai pemindaian ini. Ia "
+                   "tidak sendirian di bidangnya; ia satu-satunya yang bisa diukur."))
     if peers == 1:
-        return (f"The only scanned name carrying the {industry} label, so there is "
-                f"nothing here to be largest of. Whoever it competes with is private, "
-                f"listed elsewhere, or is not listed on this exchange.")
+        return (tr(f"The only scanned name carrying the {industry} label, so there is "
+                   f"nothing here to be largest of. Whoever it competes with is private, "
+                   f"listed elsewhere, or is not listed on this exchange.",
+                   f"Satu-satunya saham yang dipindai dengan label {industry}, jadi tidak "
+                   "ada yang bisa diungguli di sini. Siapa pun pesaingnya bersifat privat, "
+                   "tercatat di tempat lain, atau tidak tercatat di bursa ini."))
     if peers < MIN_PEERS and rank == 1 and clears:
-        both = (f", {trailing_margin:.1f}x on both companies' trailing twelve months"
+        both = (tr(f", {trailing_margin:.1f}x on both companies' trailing twelve months",
+                   f", {trailing_margin:.1f}x pada dua belas bulan terakhir kedua perusahaan")
                 if mixed and trailing_margin is not None else "")
-        return (f"Only {peers} scanned names carry the {industry} label, too few to "
-                f"name a leader, but the other is under half its size: it sells "
-                f"{margin:.1f}x as much{both}. Private and overseas competitors are not "
-                f"counted.")
+        return (tr(f"Only {peers} scanned names carry the {industry} label, too few to "
+                   f"name a leader, but the other is under half its size: it sells "
+                   f"{margin:.1f}x as much{both}. Private and overseas competitors are not "
+                   f"counted.",
+                   f"Hanya {peers} saham yang dipindai berlabel {industry}, terlalu sedikit "
+                   "untuk menyebut pemimpin, tetapi yang lain kurang dari separuh "
+                   f"ukurannya: penjualannya {margin:.1f}x lebih besar{both}. Pesaing privat "
+                   "dan luar negeri tidak dihitung."))
     if peers < MIN_PEERS:
-        return (f"Only {peers} scanned names carry the {industry} label, which is too "
-                f"few for a rank in it to mean anything — being the largest of {peers} "
-                f"is not a position.")
+        return (tr(f"Only {peers} scanned names carry the {industry} label, which is too "
+                   f"few for a rank in it to mean anything — being the largest of {peers} "
+                   f"is not a position.",
+                   f"Hanya {peers} saham yang dipindai berlabel {industry}, terlalu sedikit "
+                   f"agar peringkat di dalamnya berarti — menjadi yang terbesar dari {peers} "
+                   "bukanlah sebuah posisi."))
     if rank == 1 and named:
-        both = (f" — {trailing_margin:.1f}x on both companies' trailing twelve months —"
+        both = (tr(f" — {trailing_margin:.1f}x on both companies' trailing twelve months —",
+                   f" — {trailing_margin:.1f}x pada dua belas bulan terakhir kedua "
+                   "perusahaan —")
                 if mixed and trailing_margin is not None else "")
-        text = (f"The largest of the {peers} scanned names in {industry}, on "
-                f"{margin:.1f}x the revenue of the next one{both} and "
-                f"{share:.0f}% of what the group sells between them. "
-                f"Private and overseas competitors are not counted.")
+        text = (tr(f"The largest of the {peers} scanned names in {industry}, on "
+                   f"{margin:.1f}x the revenue of the next one{both} and "
+                   f"{share:.0f}% of what the group sells between them. "
+                   f"Private and overseas competitors are not counted.",
+                   f"Yang terbesar dari {peers} saham yang dipindai di {industry}, dengan "
+                   f"pendapatan {margin:.1f}x saham berikutnya{both} dan {share:.0f}% dari "
+                   "total penjualan kelompok itu. Pesaing privat dan luar negeri tidak "
+                   "dihitung."))
         if unranked:
-            text += (f" {unranked} further listing"
-                     f"{'' if unranked == 1 else 's'} carr"
-                     f"{'ies' if unranked == 1 else 'y'} this label and returned no "
-                     f"usable revenue, so the lead is over the measured group only.")
+            text += (tr(f" {unranked} further listing"
+                        f"{'' if unranked == 1 else 's'} carr"
+                        f"{'ies' if unranked == 1 else 'y'} this label and returned no "
+                        f"usable revenue, so the lead is over the measured group only.",
+                        f" {unranked} saham lain memiliki label ini dan tidak mengembalikan "
+                        "pendapatan yang bisa dipakai, jadi keunggulannya hanya atas kelompok "
+                        "yang terukur."))
         return text
     if rank == 1 and mixed and margin is not None and margin >= LEAD_MARGIN:
         mine = _KIND.get(leader.get("source"), "filed year")
         theirs = _KIND["summary" if leader.get("source") == "statement" else "statement"]
-        remade = (f"on both companies' trailing twelve months it is "
-                  f"{trailing_margin:.2f}x" if trailing_margin is not None else
-                  "the comparison could not be re-made on one kind of figure for both")
-        return (f"Nominally the largest of the {peers} scanned names in {industry}, on "
-                f"{margin:.2f}x the next one, but that compares its {mine} with the "
-                f"next one's {theirs}, and {remade} — so no leader is named for this "
-                f"field.")
+        remade = (tr(f"on both companies' trailing twelve months it is "
+                     f"{trailing_margin:.2f}x",
+                     "pada dua belas bulan terakhir kedua perusahaan angkanya "
+                     f"{trailing_margin:.2f}x") if trailing_margin is not None else
+                  tr("the comparison could not be re-made on one kind of figure for both",
+                     "perbandingannya tidak bisa diulang dengan satu jenis angka untuk "
+                     "keduanya"))
+        return (tr(f"Nominally the largest of the {peers} scanned names in {industry}, on "
+                   f"{margin:.2f}x the next one, but that compares its {mine} with the "
+                   f"next one's {theirs}, and {remade} — so no leader is named for this "
+                   f"field.",
+                   f"Secara nominal yang terbesar dari {peers} saham yang dipindai di "
+                   f"{industry}, dengan {margin:.2f}x saham berikutnya, tetapi itu "
+                   f"membandingkan {mine} miliknya dengan {theirs} milik saham berikutnya, "
+                   f"dan {remade} — jadi tidak ada pemimpin yang disebut untuk bidang ini."))
     if rank == 1:
-        return (f"Nominally the largest of the {peers} scanned names in {industry}, "
-                f"but only {margin:.2f}x the next one — inside the range one "
-                f"disposal or one reporting change can reverse, so no leader is "
-                f"named for this field.")
-    return (f"{_ordinal(rank)} of the {peers} scanned names in {industry}, on "
-            f"{share:.0f}% of the group's revenue. {leader['ticker']} is the "
-            f"largest.")
+        return (tr(f"Nominally the largest of the {peers} scanned names in {industry}, "
+                   f"but only {margin:.2f}x the next one — inside the range one "
+                   f"disposal or one reporting change can reverse, so no leader is "
+                   f"named for this field.",
+                   f"Secara nominal yang terbesar dari {peers} saham yang dipindai di "
+                   f"{industry}, tetapi hanya {margin:.2f}x saham berikutnya — masih dalam "
+                   "jangkauan yang bisa dibalikkan oleh satu pelepasan aset atau satu "
+                   "perubahan pelaporan, jadi tidak ada pemimpin yang disebut untuk bidang "
+                   "ini."))
+    return (tr(f"{_ordinal(rank)} of the {peers} scanned names in {industry}, on "
+               f"{share:.0f}% of the group's revenue. {leader['ticker']} is the "
+               f"largest.",
+               f"Urutan {_ordinal(rank)} dari {peers} saham yang dipindai di {industry}, "
+               f"dengan {share:.0f}% dari pendapatan kelompok itu. {leader['ticker']} "
+               "adalah yang terbesar."))
 
 
 def _source_note(row: dict, peers: int, summary: int) -> str:
@@ -953,27 +1027,52 @@ def _source_note(row: dict, peers: int, summary: int) -> str:
         return ""
     own = row.get("source") == "summary"
     if summary == peers:
-        return (" Every figure here is the provider's trailing-twelve-month summary, "
-                "because it carries no statements for any of these listings.")
+        return (tr(" Every figure here is the provider's trailing-twelve-month summary, "
+                   "because it carries no statements for any of these listings.",
+                   " Setiap angka di sini adalah ringkasan dua belas bulan terakhir dari "
+                   "penyedia data, karena ia tidak memuat laporan keuangan untuk "
+                   "saham-saham ini."))
     if own:
         others = summary - 1
-        like = (f", like {others} other{'' if others == 1 else 's'} here," if others
+        like = (tr(f", like {others} other{'' if others == 1 else 's'} here,",
+                   f", seperti {others} saham lain di sini,") if others
                 else "")
-        return (f" Its figure{like} is the provider's trailing-twelve-month summary, "
-                f"used because it carries no statements for this listing, so not "
-                f"every figure in the comparison covers the same twelve months.")
-    which = (f"The other {summary} figures here are" if summary == peers - 1 > 1 else
-             "The other figure here is" if summary == peers - 1 else
-             f"{summary} of the other figures here {'is' if summary == 1 else 'are'}")
-    return (f" {which} the provider's trailing-twelve-month summary, used where it "
-            f"carries no statements, so not every figure in the comparison covers the "
-            f"same twelve months.")
+        return (tr(f" Its figure{like} is the provider's trailing-twelve-month summary, "
+                   f"used because it carries no statements for this listing, so not "
+                   f"every figure in the comparison covers the same twelve months.",
+                   f" Angkanya{like} adalah ringkasan dua belas bulan terakhir dari penyedia "
+                   "data, dipakai karena tidak ada laporan keuangan untuk saham ini, jadi "
+                   "tidak setiap angka dalam perbandingan mencakup dua belas bulan yang "
+                   "sama."))
+    which = (tr(f"The other {summary} figures here are", f"{summary} angka lainnya di sini adalah") if summary == peers - 1 > 1 else
+             tr("The other figure here is", "Angka lainnya di sini adalah") if summary == peers - 1 else
+             tr(f"{summary} of the other figures here {'is' if summary == 1 else 'are'}",
+                f"{summary} dari angka lainnya di sini adalah"))
+    return (tr(f" {which} the provider's trailing-twelve-month summary, used where it "
+               f"carries no statements, so not every figure in the comparison covers the "
+               f"same twelve months.",
+               f" {which} ringkasan dua belas bulan terakhir dari penyedia data, dipakai "
+               "ketika tidak ada laporan keuangan, jadi tidak setiap angka dalam "
+               "perbandingan mencakup dua belas bulan yang sama."))
 
 
 _ORDINAL_SUFFIX = {1: "st", 2: "nd", 3: "rd"}
 
 
+def _basis() -> str:
+    return tr(BASIS,
+              "Diperingkatkan di antara saham yang dipindai dengan label industri yang sama. "
+              "Perusahaan privat, perusahaan yang tercatat di tempat lain, dan divisi dari grup "
+              "yang lebih besar tidak termasuk, dan saham yang pendapatannya tidak bisa dibaca "
+              "tidak ada di dalamnya, jadi ini posisi di antara saham sejenis yang terukur, "
+              "bukan pangsa pasar. Setiap angka adalah tahun buku terakhir yang dilaporkan, "
+              "atau dua belas bulan terakhir dari penyedia data jika tidak ada laporan "
+              "keuangan.")
+
+
 def _ordinal(n: int) -> str:
+    if lang.current() == "id":
+        return f"ke-{n}"
     if 10 <= n % 100 <= 20:
         return f"{n}th"
     return f"{n}{_ORDINAL_SUFFIX.get(n % 10, 'th')}"

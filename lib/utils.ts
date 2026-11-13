@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
+import { getLang, msg, t } from "./i18n";
 
 /**
  * tailwind-merge, told about this app's type scale.
@@ -98,12 +99,13 @@ export const TONE: Record<string, string> = {
  * panel spends three paragraphs insisting it is not.
  */
 export const VERDICT_LABEL: Record<string, string> = {
-  UNDERVALUED: "Below model range",
-  OVERVALUED: "Above model range",
-  "FAIRLY VALUED": "Within model range",
+  UNDERVALUED: msg("Below model range"),
+  OVERVALUED: msg("Above model range"),
+  "FAIRLY VALUED": msg("Within model range"),
 };
 
-export const verdictLabel = (v: string) => VERDICT_LABEL[v] ?? v;
+/** The verdict code as words, in the language the page is drawn in. */
+export const verdictLabel = (v: string) => (VERDICT_LABEL[v] ? t(VERDICT_LABEL[v]) : v);
 
 /**
  * English ordinal suffix. "72th" is the kind of small wrongness that makes a
@@ -111,6 +113,9 @@ export const verdictLabel = (v: string) => VERDICT_LABEL[v] ?? v;
  * everybody forgets.
  */
 export function ordinal(n: number) {
+  // Indonesian writes the number alone in a column ("persentil 72"), so there
+  // is no suffix to choose.
+  if (getLang() === "id") return "";
   const value = Math.round(n);
   const teens = value % 100;
   if (teens >= 11 && teens <= 13) return "th";

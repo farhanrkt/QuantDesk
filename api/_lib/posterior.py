@@ -93,6 +93,7 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
+from .lang import tr
 
 # --------------------------------------------------------------------------- #
 # The published operating characteristics
@@ -164,6 +165,41 @@ PRIOR_STOPS: tuple[float, ...] = (
 )
 
 
+# Each anchor's words in Bahasa Indonesia, keyed by the English. The citations
+# are names and stay as published.
+_ANCHOR_ID: dict[str, str] = {
+    "Beneish's own population estimate": "estimasi populasi Beneish sendiri",
+    "the prior his weighted (WESML) probit assumes":
+        "prior yang diasumsikan probit tertimbang (WESML)-nya",
+    "manipulation as his enforcement sample defined it":
+        "manipulasi sebagaimana didefinisikan sampel penegakan hukumnya",
+    "detected financial fraud, low end": "penipuan keuangan yang terdeteksi, batas bawah",
+    "fraud that was actually caught": "penipuan yang benar-benar tertangkap",
+    "the sample these coefficients were fitted on": "sampel tempat koefisien ini dicocokkan",
+    "the prior Beneish's unweighted probit assumes":
+        "prior yang diasumsikan probit tak tertimbang Beneish",
+    "detected financial fraud, high end": "penipuan keuangan yang terdeteksi, batas atas",
+    "all securities fraud, bottom of the interval":
+        "semua penipuan sekuritas, batas bawah interval",
+    "Dyck, Morse & Zingales (2024), 95% interval": "Dyck, Morse & Zingales (2024), interval 95%",
+    "securities fraud including the undetected":
+        "penipuan sekuritas termasuk yang tidak terdeteksi",
+    "all securities fraud, central estimate": "semua penipuan sekuritas, estimasi tengah",
+    "accounting restatements": "penyajian ulang laporan keuangan",
+    "any failure to apply accounting rules": "setiap kegagalan menerapkan aturan akuntansi",
+    "all securities fraud, top of the interval": "semua penipuan sekuritas, batas atas interval",
+}
+
+
+def _local(text: Optional[str]) -> Optional[str]:
+    return tr(text, _ANCHOR_ID.get(text, text)) if text else text
+
+
+def _anchors() -> list[dict]:
+    return [{**a, "label": _local(a["label"]), "source": _local(a["source"]),
+             "event": _local(a["event"])} for a in PRIOR_ANCHORS]
+
+
 def _pct(value: float, digits: int = 1) -> str:
     return f"{value * 100:.{digits}f}%"
 
@@ -217,9 +253,9 @@ def curve() -> list[dict]:
         out.append({
             "prior": float(stop),
             "priorText": _pct(stop, 2 if stop < 0.01 else 1),
-            "label": (anchor or {}).get("label"),
-            "source": (anchor or {}).get("source"),
-            "event": (anchor or {}).get("event"),
+            "label": _local((anchor or {}).get("label")),
+            "source": _local((anchor or {}).get("source")),
+            "event": _local((anchor or {}).get("event")),
             "extrapolated": bool((anchor or {}).get("extrapolated")),
             "isDefault": abs(stop - BENEISH_MODEL_PRIOR) < 1e-9,
             "givenFlag": flagged,
@@ -283,35 +319,58 @@ def for_beneish(band: Optional[str], prior: Optional[float] = None,
             "specificity": 1.0 - BENEISH_FALSE_POSITIVE,
             "citation": BENEISH_CITATION,
             "note": (
-                f"At the {BENEISH_CUTOFF} cutoff the model catches about "
-                f"{_pct(BENEISH_SENSITIVITY, 0)} of manipulators and misclassifies about "
-                f"{_pct(BENEISH_FALSE_POSITIVE, 1)} of everyone else — a trade-off chosen "
-                f"at a 30-to-1 cost of missing a manipulator, on the paper's own data."),
+                tr(f"At the {BENEISH_CUTOFF} cutoff the model catches about "
+                   f"{_pct(BENEISH_SENSITIVITY, 0)} of manipulators and misclassifies about "
+                   f"{_pct(BENEISH_FALSE_POSITIVE, 1)} of everyone else — a trade-off chosen "
+                   f"at a 30-to-1 cost of missing a manipulator, on the paper's own data.",
+                   f"Pada ambang {BENEISH_CUTOFF}, model menangkap sekitar "
+                   f"{_pct(BENEISH_SENSITIVITY, 0)} manipulator dan salah menggolongkan "
+                   f"sekitar {_pct(BENEISH_FALSE_POSITIVE, 1)} dari yang lain — kompromi "
+                   "yang dipilih dengan biaya 30 banding 1 untuk melewatkan manipulator, "
+                   "berdasarkan data makalahnya sendiri.")),
         },
         "curve": points,
-        "anchors": PRIOR_ANCHORS,
+        "anchors": _anchors(),
         # The strongest thing the arithmetic supports, and it is strong BECAUSE
         # it survives every prior anyone has published rather than resting on one.
         "robustRange": {
             "lowText": _pct(min(flags), 0), "highText": _pct(max(flags), 0),
             "sentence": (
-                f"Across every prevalence the literature supports — from "
-                f"{_pct(min(a['prior'] for a in PRIOR_ANCHORS), 2)} to "
-                f"{_pct(max(a['prior'] for a in PRIOR_ANCHORS), 0)} — a flag comes out "
-                f"between {_pct(posterior_given_flag(min(a['prior'] for a in PRIOR_ANCHORS)), 0)} "
-                f"and {_pct(posterior_given_flag(max(a['prior'] for a in PRIOR_ANCHORS)), 0)} "
-                f"likely to be a real manipulator. It never reaches even odds, so the "
-                f"conclusion does not depend on agreeing about the prior."),
+                tr(f"Across every prevalence the literature supports — from "
+                   f"{_pct(min(a['prior'] for a in PRIOR_ANCHORS), 2)} to "
+                   f"{_pct(max(a['prior'] for a in PRIOR_ANCHORS), 0)} — a flag comes out "
+                   f"between {_pct(posterior_given_flag(min(a['prior'] for a in PRIOR_ANCHORS)), 0)} "
+                   f"and {_pct(posterior_given_flag(max(a['prior'] for a in PRIOR_ANCHORS)), 0)} "
+                   f"likely to be a real manipulator. It never reaches even odds, so the "
+                   f"conclusion does not depend on agreeing about the prior.",
+                   "Di setiap prevalensi yang didukung literatur — dari "
+                   f"{_pct(min(a['prior'] for a in PRIOR_ANCHORS), 2)} hingga "
+                   f"{_pct(max(a['prior'] for a in PRIOR_ANCHORS), 0)} — sebuah tanda "
+                   "menghasilkan kemungkinan antara "
+                   f"{_pct(posterior_given_flag(min(a['prior'] for a in PRIOR_ANCHORS)), 0)} "
+                   "dan "
+                   f"{_pct(posterior_given_flag(max(a['prior'] for a in PRIOR_ANCHORS)), 0)} "
+                   "sebagai manipulator sungguhan. Ia tidak pernah mencapai peluang setara, "
+                   "jadi kesimpulannya tidak bergantung pada kesepakatan soal prior.")),
         },
         "partialScore": partial,
         "partialNote": (
-            f"This score was assembled from {indices_available} of {indices_total} "
-            f"indices. The error rates above were measured on the complete eight-index "
-            f"model, so they describe a classifier slightly different from the one that "
-            f"produced the number beside them." if partial else None),
+            tr(f"This score was assembled from {indices_available} of {indices_total} "
+               f"indices. The error rates above were measured on the complete eight-index "
+               f"model, so they describe a classifier slightly different from the one that "
+               f"produced the number beside them.",
+               f"Skor ini disusun dari {indices_available} dari {indices_total} indeks. "
+               "Tingkat galat di atas diukur pada model delapan indeks yang lengkap, "
+               "jadi tingkat itu menggambarkan pengklasifikasi yang sedikit berbeda "
+               "dari yang menghasilkan angka di sebelahnya.") if partial else None),
         "caveat": (
-            "Bayes' theorem on two published constants — nothing here is fitted or "
-            "measured by this app. The error rates come from companies caught by SEC "
-            "enforcement between 1982 and 1988; how far that sits from the company on "
-            "screen is set out under 'where these numbers come from'."),
+            tr("Bayes' theorem on two published constants — nothing here is fitted or "
+               "measured by this app. The error rates come from companies caught by SEC "
+               "enforcement between 1982 and 1988; how far that sits from the company on "
+               "screen is set out under 'where these numbers come from'.",
+               "Teorema Bayes atas dua konstanta terbitan — tidak ada yang dicocokkan "
+               "atau diukur oleh aplikasi ini. Tingkat galatnya berasal dari perusahaan "
+               "yang tertangkap penegakan hukum SEC antara 1982 dan 1988; seberapa jauh "
+               "itu dari perusahaan di layar dijelaskan di bagian 'dari mana "
+               "angka-angka ini berasal'.")),
     }

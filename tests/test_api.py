@@ -156,7 +156,9 @@ def test_health_is_exempt_from_rate_limiting(client):
         assert client.get("/api/health").status_code == 200
 
 
-def test_rate_limit_is_per_ip(client):
+def test_rate_limit_is_per_ip(client, monkeypatch):
+    # On Vercel, where the edge writes the forwarded address and a client cannot.
+    monkeypatch.setenv("VERCEL", "1")
     limit, _ = index.RATE_LIMITS["/api/screener"]
     for _ in range(limit + 1):
         client.get("/api/screener", params={"tickers": "AAPL"},
@@ -167,13 +169,60 @@ def test_rate_limit_is_per_ip(client):
     assert other.status_code != 429
 
 
-def test_client_ip_prefers_the_original_forwarded_hop():
-    class FakeRequest:
-        def __init__(self):
-            self.headers = {"x-forwarded-for": "203.0.113.9, 70.41.3.18, 150.172.238.178"}
-            self.client = None
+class _FakeRequest:
+    def __init__(self, host=None, extra=None):
+        self.headers = {"x-forwarded-for": "203.0.113.9, 70.41.3.18, 150.172.238.178",
+                        **(extra or {})}
+        self.client = type("Client", (), {"host": host})() if host else None
 
-    assert index.client_ip(FakeRequest()) == "203.0.113.9"
+
+def test_the_forwarded_hop_is_trusted_through_vercels_edge_without_the_variables(monkeypatch):
+    """A project with system variables hidden still runs behind the edge that
+    overwrites the header, and the edge marks every request it routes."""
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.delenv("VERCEL_ENV", raising=False)
+    request = _FakeRequest(host="10.0.0.9", extra={"x-vercel-id": "sin1::abc"})
+    assert index.client_ip(request) == "203.0.113.9"
+
+
+def test_client_ip_prefers_the_original_forwarded_hop(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    assert index.client_ip(_FakeRequest()) == "203.0.113.9"
+
+
+def test_a_forwarded_header_is_ignored_where_the_client_can_write_it(monkeypatch):
+    """Off Vercel nothing overwrites the header, so it was a free fresh bucket
+    per request: eight of eight rotated requests passed a limit of three."""
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.delenv("VERCEL_ENV", raising=False)
+    assert index.client_ip(_FakeRequest(host="198.51.100.4")) == "198.51.100.4"
+
+
+def test_paths_no_route_answers_share_one_bucket(client):
+    """Each made-up path used to be a bucket of its own, so one client could
+    mint thousands under the default limit and flush the whole table."""
+    limit, _ = index.RATE_LIMITS[None]
+    codes = [client.get(f"/api/no-such-route-{n}").status_code for n in range(limit + 1)]
+    assert codes[:limit] == [404] * limit
+    assert codes[-1] == 429
+    # A real route keeps its own budget.
+    assert client.get("/api/symbols", params={"q": "bank"}).status_code == 200
+
+
+def test_a_full_table_drops_stale_buckets_before_a_limited_client(client, monkeypatch):
+    """The table used to be cleared outright when full, which handed every
+    limited client a fresh budget at once."""
+    import time
+    from collections import deque
+    monkeypatch.setattr(index, "_RATE_MAX_KEYS", 3)
+    limit, _ = index.RATE_LIMITS["/api/screener"]
+    for _ in range(limit):
+        client.get("/api/screener", params={"tickers": "@@@"})
+    long_ago = time.monotonic() - 3600
+    for n in range(10):
+        index._RATE_HITS[(f"192.0.2.{n}", "/api/rank")] = deque([long_ago])
+    assert client.get("/api/screener", params={"tickers": "@@@"}).status_code == 429
+    assert len(index._RATE_HITS) <= 3
 
 
 # --------------------------------------------------------------------------- #

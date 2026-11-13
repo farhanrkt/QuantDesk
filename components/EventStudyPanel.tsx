@@ -8,6 +8,7 @@ import { cn, num, pct } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { StateCard } from "@/components/ui/state";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { useT } from "@/lib/i18n";
 
 const UP = palette.acc;
 const DOWN = palette.dist;
@@ -40,11 +41,12 @@ function carTone(summary: CarSummary | null): string {
 }
 
 function CarRow({ horizon, summary }: { horizon: string; summary: CarSummary | null }) {
+  const t = useT();
   if (!summary) {
     return (
       <tr className="border-b border-ruleSoft last:border-0">
         <td className="num px-5 py-2">+{horizon}d</td>
-        <td colSpan={5} className="px-5 py-2 text-ash">too few events to test</td>
+        <td colSpan={5} className="px-5 py-2 text-ash">{t("too few events to test")}</td>
       </tr>
     );
   }
@@ -82,19 +84,17 @@ export function EventStudyPanel({
   ticker: string;
   onValidate: () => void;
 }) {
+  const t = useT();
   if (state.status === "idle") {
     return (
       <Card>
-        <CardHeader><CardTitle>Has this signal ever worked?</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("Has this signal ever worked?")}</CardTitle></CardHeader>
         <CardBody className="space-y-3">
           <p className="text-meta leading-relaxed text-ash">
-            Measure the cumulative abnormal return after every anomaly detected on{" "}
-            <span className="font-mono text-body">{ticker || "this ticker"}</span> over five
-            years, against a market model fitted on the 120 trading days ending ten days before
-            each event. The answer is frequently that there is no measurable effect — which is
-            worth knowing before acting on the panel above.
+            {t("Measure the cumulative abnormal return after every anomaly detected on")}{" "}
+            <span className="font-mono text-body">{ticker || t("this ticker")}</span>{" "}{t("over five years, against a market model fitted on the 120 trading days ending ten days before each event. The answer is frequently that there is no measurable effect — which is worth knowing before acting on the panel above.")}
           </p>
-          <ApplyButton onClick={onValidate}>Run the event study</ApplyButton>
+          <ApplyButton onClick={onValidate}>{t("Run the event study")}</ApplyButton>
         </CardBody>
       </Card>
     );
@@ -104,7 +104,7 @@ export function EventStudyPanel({
 
   if (state.status === "error") {
     return (
-      <StateCard kind="error" title="The study could not run">{state.failure.message}</StateCard>
+      <StateCard kind="error" title={t("The study could not run")}>{state.failure.message}</StateCard>
     );
   }
 
@@ -113,7 +113,7 @@ export function EventStudyPanel({
   if (!study.usable) {
     return (
       <Card>
-        <CardHeader><CardTitle>Signal validation</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("Signal validation")}</CardTitle></CardHeader>
         <CardBody>
           <p className="text-base leading-relaxed text-ash">{study.reason}</p>
         </CardBody>
@@ -128,22 +128,22 @@ export function EventStudyPanel({
     <div className="space-y-4">
       <Card accent={palette.flow}>
         <CardHeader>
-          <CardTitle>Abnormal returns after each anomaly</CardTitle>
+          <CardTitle>{t("Abnormal returns after each anomaly")}</CardTitle>
           <span className="font-mono text-micro text-ash">
-            {study.events} of {anomalies} events · {period} · vs {benchmark}
+            {t("{events} of {anomalies} events · {period} · vs {benchmark}", { events: study.events, anomalies, period, benchmark })}
           </span>
         </CardHeader>
         <CardBody className="px-0">
-          <ScrollRegion label="Abnormal returns after each anomaly">
+          <ScrollRegion label={t("Abnormal returns after each anomaly")}>
             <table className="w-full text-left text-meta">
               <thead>
                 <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                  <th>Horizon</th>
-                  <th className="text-right">Mean abnormal return</th>
-                  <th className="text-right">Median</th>
+                  <th>{t("Horizon")}</th>
+                  <th className="text-right">{t("Mean abnormal return")}</th>
+                  <th className="text-right">{t("Median")}</th>
                   <th className="text-right">t</th>
-                  <th className="text-right">Significance</th>
-                  <th className="text-right">Hit rate</th>
+                  <th className="text-right">{t("Significance")}</th>
+                  <th className="text-right">{t("Hit rate")}</th>
                   <th className="text-right">n</th>
                 </tr>
               </thead>
@@ -160,22 +160,22 @@ export function EventStudyPanel({
                                ? "border-acc/40 bg-acc/5 text-body"
                                : "border-rule bg-raised/40 text-ash")}>
             {anySignificant
-              ? "At least one horizon shows abnormal returns distinguishable from zero at the 5% level. In-sample, on one ticker, with overlapping windows — treat it as a reason to test further, not as a result."
-              : "No horizon shows abnormal returns distinguishable from zero. On this ticker, over this window, the anomaly flag does not predict what happens next — which is the most common outcome and the reason this panel exists."}
+              ? t("At least one horizon shows abnormal returns distinguishable from zero at the 5% level. In-sample, on one ticker, with overlapping windows — treat it as a reason to test further, not as a result.")
+              : t("No horizon shows abnormal returns distinguishable from zero. On this ticker, over this window, the anomaly flag does not predict what happens next — which is the most common outcome and the reason this panel exists.")}
           </div>
         </CardBody>
       </Card>
 
       {Object.keys(study.byDirection).length > 0 && (
         <Card>
-          <CardHeader><CardTitle>By flow direction</CardTitle></CardHeader>
+          <CardHeader><CardTitle>{t("By flow direction")}</CardTitle></CardHeader>
           <CardBody className="px-0">
-            <ScrollRegion label="Abnormal returns by flow direction">
+            <ScrollRegion label={t("Abnormal returns by flow direction")}>
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                    <th>Direction</th><th>Horizon</th>
-                    <th className="text-right">Mean abnormal return</th>
+                    <th>{t("Direction")}</th><th>{t("Horizon")}</th>
+                    <th className="text-right">{t("Mean abnormal return")}</th>
                     <th className="text-right">t</th>
                     <th className="text-right">n</th>
                   </tr>
@@ -204,10 +204,9 @@ export function EventStudyPanel({
               </table>
             </ScrollRegion>
             <div className="px-5 pt-3">
-              <Explainer summary="If both rows look alike, the buying/selling label means nothing">
-                The question here is not whether unusual days predict returns. It is whether
-                days labelled <em>buying</em> behave differently from days labelled
-                <em>selling</em>. If the two rows match, that label is not carrying information.
+              <Explainer summary={t("If both rows look alike, the buying/selling label means nothing")}>
+                {t("The question here is not whether unusual days predict returns. It is whether days labelled")}{" "}<em>{t("buying")}</em>{" "}{t("behave differently from days labelled")}
+                <em>{t("selling")}</em>{t(". If the two rows match, that label is not carrying information.")}
               </Explainer>
             </div>
           </CardBody>
@@ -216,10 +215,7 @@ export function EventStudyPanel({
 
       {earningsProximity.available && earningsProximity.tagged > 0 && (
         <div className="rounded border border-warn/40 bg-warn/5 px-4 py-3 text-meta leading-relaxed text-warn">
-          {earningsProximity.tagged} of {earningsProximity.total} anomalies fall within{" "}
-          {earningsProximity.window} days of an earnings release. Those are the market repricing
-          an announcement rather than anyone&apos;s footprint, and the drift afterwards is a
-          documented effect (Bernard &amp; Thomas 1989) rather than a discovery.
+          {t("{tagged} of {total} anomalies fall within {window} days of an earnings release. Those are the market repricing an announcement rather than anyone's footprint, and the drift afterwards is a documented effect (Bernard & Thomas 1989) rather than a discovery.", { tagged: earningsProximity.tagged, total: earningsProximity.total, window: earningsProximity.window })}
         </div>
       )}
 

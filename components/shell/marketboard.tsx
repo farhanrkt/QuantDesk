@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspace } from "@/components/shell/workspace";
 import { fetchMarketBoard, fetchMarketCalendar, fetchWatchlistEarnings } from "@/lib/api";
+import { t, useLang } from "@/lib/i18n";
 import { BOARD_REFRESH_MS, type BoardFocus } from "@/lib/marketboard";
 import type {
   Engine, EngineFailure, Market, MarketBoard, MarketCalendar, WatchlistEarnings,
@@ -106,6 +107,7 @@ export function MarketBoardProvider({ children }: { children: React.ReactNode })
     } catch { /* private mode: defaults stand */ }
   }, []);
 
+  const lang = useLang();
   const load = useCallback(() => {
     inFlight.current?.abort();
     const controller = new AbortController();
@@ -123,7 +125,7 @@ export function MarketBoardProvider({ children }: { children: React.ReactNode })
         // A failed refresh keeps the board already on screen; its "as of" time
         // says how old it is. Only a board that never loaded becomes an error.
         setState((current) => (current.status === "ready" ? current
-          : { status: "error", failure: failureOf(failure, "The board did not load.") }));
+          : { status: "error", failure: failureOf(failure, t("The board did not load.")) }));
       })
       .finally(() => {
         if (!controller.signal.aborted) setRefreshing(false);
@@ -137,7 +139,7 @@ export function MarketBoardProvider({ children }: { children: React.ReactNode })
         setCalendar({ status: "ready", data, at: calendarReceived.current });
       })
       .catch((failure) => setCalendar((current) => (current.status === "ready" ? current
-        : { status: "error", failure: failureOf(failure, "The calendar did not load.") })));
+        : { status: "error", failure: failureOf(failure, t("The calendar did not load.")) })));
   }, []);
 
   useEffect(() => {
@@ -158,7 +160,9 @@ export function MarketBoardProvider({ children }: { children: React.ReactNode })
       document.removeEventListener("visibilitychange", tick);
       inFlight.current?.abort();
     };
-  }, [load, loadCalendar]);
+    // `lang`: the board's readings and the calendar's words are written in the
+    // reader's language, so a switch asks for both again.
+  }, [load, loadCalendar, lang]);
 
   // The watchlist's report dates: asked for when the list changes, at most
   // twenty names, in a body. Nothing is asked for an empty list.
@@ -175,12 +179,12 @@ export function MarketBoardProvider({ children }: { children: React.ReactNode })
         .then((data) => { if (!controller.signal.aborted) setEarnings({ status: "ready", data, at: Date.now() }); })
         .catch((failure) => {
           if (!controller.signal.aborted) {
-            setEarnings({ status: "error", failure: failureOf(failure, "Report dates did not load.") });
+            setEarnings({ status: "error", failure: failureOf(failure, t("Report dates did not load.")) });
           }
         });
     }, 800);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [watchKey]);
+  }, [watchKey, lang]);
 
   const chooseMarket = useCallback((market: Market) => {
     setChosen(market);

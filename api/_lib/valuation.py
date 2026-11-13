@@ -17,12 +17,14 @@ arguments carrying the SAME default values the widgets had. Nothing else.
 
 from __future__ import annotations
 
+import datetime as dt
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 
 from . import market_data, riskmodel, symbols
+from .lang import tr
 
 # =============================================================================
 # 1. MARKET CONVENTIONS
@@ -272,9 +274,10 @@ def detect_engine(sector: str, industry: str):
     s = (sector or "").strip().lower()
     i = (industry or "").strip().lower()
     if s == "financial services" or "bank" in i:
-        reason = "sector = Financial Services" if s == "financial services" else "industry mentions banking"
+        reason = tr("sector = Financial Services", "sektor = Jasa Keuangan") if s == "financial services" else tr("industry mentions banking",
+                                                                                    "industrinya menyebut perbankan")
         return "DDM", reason
-    return "DCF", "non-financial sector"
+    return "DCF", tr("non-financial sector", "sektor nonkeuangan")
 
 
 # =============================================================================
@@ -327,9 +330,10 @@ def extract_balance_items(balance):
     """
     liquid = _first_valid(_get_row(balance, "cash_and_short_term"), np.nan)
     if np.isfinite(liquid):
-        cash, label = liquid, "Cash & short-term investments"
+        cash, label = liquid, tr("Cash & short-term investments", "Kas & investasi jangka pendek")
     else:
-        cash, label = _first_valid(_get_row(balance, "cash"), 0.0), "Cash & equivalents"
+        cash, label = _first_valid(_get_row(balance, "cash"), 0.0), tr("Cash & equivalents",
+                                                                       "Kas & setara kas")
     total_debt = _first_valid(_get_row(balance, "total_debt"), np.nan)
     if not np.isfinite(total_debt):
         st_debt = _first_valid(_get_row(balance, "short_term_debt"), 0.0)
@@ -473,7 +477,8 @@ def _dividend_candidate(value, price: float, label: str, fx: Optional[float]):
     if low <= dps / price <= high:
         return dps, label
     if fx and low <= (dps * fx) / price <= high:
-        return dps * fx, f"{label}, converted at the reporting-currency rate"
+        return dps * fx, tr(f"{label}, converted at the reporting-currency rate",
+                            f"{label}, dikonversi dengan kurs mata uang pelaporan")
     return None
 
 
@@ -483,9 +488,12 @@ def resolve_dividend(data: dict, price: float):
 
     # Ordered by how far each is from what the company actually paid.
     for value, label in (
-        (data.get("ttm_dividend"), "trailing 12m payments (actual)"),
-        (data.get("trailing_dividend_rate"), "trailing annual rate (yfinance)"),
-        (data.get("dividend_rate"), "forward annual rate (yfinance)"),
+        (data.get("ttm_dividend"), tr("trailing 12m payments (actual)",
+                                      "pembayaran 12 bulan terakhir (aktual)")),
+        (data.get("trailing_dividend_rate"), tr("trailing annual rate (yfinance)",
+                                                "laju tahunan 12 bulan terakhir (yfinance)")),
+        (data.get("dividend_rate"), tr("forward annual rate (yfinance)",
+                                       "laju tahunan ke depan (yfinance)")),
     ):
         candidate = _dividend_candidate(value, price, label, fx)
         if candidate:
@@ -494,9 +502,26 @@ def resolve_dividend(data: dict, price: float):
     for key in ("trailing_dividend_yield_raw", "dividend_yield_raw"):
         y = normalize_yield(data.get(key), price, is_percent=YIELD_IS_PERCENT[key])
         if np.isfinite(y) and y > 0 and np.isfinite(price):
-            return y * price, "derived from dividend yield"
+            return y * price, tr("derived from dividend yield",
+                                 "diturunkan dari imbal hasil dividen")
 
     return np.nan, "unavailable"
+
+
+def complete_years(div_history) -> pd.DataFrame:
+    """The dividend record's whole calendar years, newest first — never this one.
+
+    `dividend_history` sums payments by calendar year, so the current year is a
+    year to date. The DDM's "Last full year" basis used to take the SECOND row
+    on the assumption that the first was always that partial year — which picked
+    the year before last whenever nothing had been paid yet this year — and the
+    "3-year average" averaged the partial year in, understating the base (0.90
+    against 1.05 for a semi-annual payer one instalment into the year).
+    """
+    if not isinstance(div_history, pd.DataFrame) or div_history.empty:
+        return pd.DataFrame(columns=["Year", "Dividend / Share"])
+    years = pd.to_numeric(div_history["Year"], errors="coerce")
+    return div_history[years < dt.date.today().year].reset_index(drop=True)
 
 
 def bank_diagnostics(data: dict, dps: float, price: float, shares: float) -> dict:
@@ -689,13 +714,13 @@ def sensitivity_grid(engine, base, growth, rate, terminal_growth, *, cash=0.0, d
     fmt = fmt or (lambda v: f"{v:,.2f}")
     if engine == "RI":
         rows, row_at = _axis(growth, growth_steps, RI_ROE_BOUNDS)
-        row_axis = {"name": "roe", "label": "Return on equity", "values": rows, "assumedIndex": row_at}
+        row_axis = {"name": "roe", "label": tr("Return on equity", "Imbal hasil ekuitas"), "values": rows, "assumedIndex": row_at}
     else:
         rows, row_at = _axis(growth, growth_steps, SENS_GROWTH_BOUNDS)
-        row_axis = {"name": "growth", "label": "Growth, years 1-5", "values": rows,
+        row_axis = {"name": "growth", "label": tr("Growth, years 1-5", "Pertumbuhan, tahun 1-5"), "values": rows,
                     "assumedIndex": row_at}
     cols, col_at = _axis(rate, rate_steps, SENS_RATE_BOUNDS)
-    rate_label = "WACC" if engine == "DCF" else "Cost of equity"
+    rate_label = "WACC" if engine == "DCF" else tr("Cost of equity", "Biaya ekuitas")
 
     g_grid, r_grid = np.meshgrid(np.array(rows), np.array(cols), indexing="ij")
     if engine == "RI":
@@ -752,15 +777,29 @@ def sensitivity_grid(engine, base, growth, rate, terminal_growth, *, cash=0.0, d
         "price": float(price_f) if np.isfinite(price_f) else None,
         "priceLabel": fmt(float(price_f)) if np.isfinite(price_f) else None,
         "impliedRow": implied_row,
-        "impliedRowReason": RI_IMPLIED_REASON if engine == "RI" else None,
-        "refusals": {"spread": SPREAD_REFUSAL,
-                     "unreachable": ("Today's price lies outside what any growth rate between "
-                                     "-60% and +60% a year can produce at this discount rate.")},
-        "reading": ("Each cell is the model's base-case value per share at that "
-                    f"{'return on equity' if engine == 'RI' else 'growth rate'} and "
-                    f"{rate_label if rate_label.isupper() else rate_label.lower()}, with every "
-                    "other input as assumed. It is not a "
-                    "forecast, and the market price sits beside the grid rather than inside it."),
+        "impliedRowReason": tr(RI_IMPLIED_REASON,
+                               "Pendapatan residual menilai nilai buku ditambah imbal hasil "
+                               "lebih, bukan aliran yang bertumbuh, jadi tidak ada satu tingkat "
+                               "pertumbuhan pun yang menjadi tuas yang disiratkan harga.")
+        if engine == "RI" else None,
+        "refusals": {"spread": tr(SPREAD_REFUSAL,
+                                  "Dalam jarak 1.5 poin dari pertumbuhan abadi, nilai terminal "
+                                  "menjadi tak hingga, jadi tidak ada nilai yang ditampilkan di "
+                                  "sini alih-alih angka terpotong yang akan dihasilkan model."),
+                     "unreachable": (tr("Today's price lies outside what any growth rate between "
+                                        "-60% and +60% a year can produce at this discount rate.",
+                                        "Harga hari ini berada di luar jangkauan tingkat pertumbuhan berapa pun "
+                                        "antara -60% dan +60% per tahun pada tingkat diskonto ini."))},
+        "reading": (tr("Each cell is the model's base-case value per share at that "
+                       f"{'return on equity' if engine == 'RI' else 'growth rate'} and "
+                       f"{rate_label if rate_label.isupper() else rate_label.lower()}, with every "
+                       "other input as assumed. It is not a "
+                       "forecast, and the market price sits beside the grid rather than inside it.",
+                       "Setiap sel adalah nilai kasus dasar per saham dari model pada "
+                       f"{'imbal hasil ekuitas' if engine == 'RI' else 'tingkat pertumbuhan'} "
+                       f"dan {rate_label if rate_label.isupper() else rate_label.lower()} "
+                       "tersebut, dengan semua masukan lain sesuai asumsi. Ini bukan ramalan, "
+                       "dan harga pasar berada di samping kisi, bukan di dalamnya.")),
     }
 
 
@@ -1008,10 +1047,14 @@ def analyze(
     kind = market_data.non_company(data, symbol)
     if kind and choice == "auto":
         raise ValuationError(
-            f"{symbol} is {kind}, not a company. A valuation discounts a business's "
-            f"cash flows or dividends, and {kind} has no business of its own to "
-            f"value, so this lens does not apply. That is what the listing is, not "
-            f"a gap in the data.", cause="not-a-company")
+            tr(f"{symbol} is {kind}, not a company. A valuation discounts a business's "
+               f"cash flows or dividends, and {kind} has no business of its own to "
+               f"value, so this lens does not apply. That is what the listing is, not "
+               f"a gap in the data.",
+               f"{symbol} adalah {kind}, bukan perusahaan. Valuasi mendiskontokan arus "
+               f"kas atau dividen sebuah bisnis, dan {kind} tidak punya bisnis sendiri "
+               "untuk dinilai, jadi lensa ini tidak berlaku. Begitulah wujud instrumen "
+               "ini, bukan celah data."), cause="not-a-company")
 
     # AN UNKNOWN SECTOR IS NOT A NON-FINANCIAL SECTOR — the rule `quality.py`
     # has followed since an IDX bank was scored as a manufacturer. This engine
@@ -1033,21 +1076,28 @@ def analyze(
                   and not (data.get("industry") or "").strip())
     if sectorless and not _reports_cost_of_revenue(data.get("income")):
         raise ValuationError(
-            f"No sector or industry came back for {symbol}, so there is no way to "
-            f"tell whether it is a bank, and a bank cannot be valued on free cash "
-            f"flow. This is the signature of a throttled fetch rather than a "
-            f"company with no sector, and running the lenses again in a couple of "
-            f"minutes will usually resolve it.", cause="unknown-sector")
+            tr(f"No sector or industry came back for {symbol}, so there is no way to "
+               f"tell whether it is a bank, and a bank cannot be valued on free cash "
+               f"flow. This is the signature of a throttled fetch rather than a "
+               f"company with no sector, and running the lenses again in a couple of "
+               f"minutes will usually resolve it.",
+               f"Tidak ada sektor atau industri yang kembali untuk {symbol}, jadi tidak "
+               "ada cara mengetahui apakah ia bank, dan bank tidak bisa dinilai dengan "
+               "arus kas bebas. Ini ciri pengambilan data yang dibatasi, bukan "
+               "perusahaan tanpa sektor, dan menjalankan lensa lagi dalam beberapa "
+               "menit biasanya menyelesaikannya."), cause="unknown-sector")
 
     auto_engine, route_reason = detect_engine(data.get("sector"), data.get("industry"))
     if sectorless:
-        route_reason = "no sector came back; its income statement reports a cost of revenue, which no bank's does"
+        route_reason = tr("no sector came back; its income statement reports a cost of revenue, which no bank's does",
+                          "tidak ada sektor yang kembali; laporan laba ruginya mencantumkan beban "
+                          "pokok pendapatan, yang tidak dimiliki laporan bank mana pun")
     if choice == "dcf":
-        engine, route_reason = "DCF", "manual override"
+        engine, route_reason = "DCF", tr("manual override", "pilihan manual")
     elif choice == "ddm":
-        engine, route_reason = "DDM", "manual override"
+        engine, route_reason = "DDM", tr("manual override", "pilihan manual")
     elif choice == "ri":
-        engine, route_reason = "RI", "manual override"
+        engine, route_reason = "RI", tr("manual override", "pilihan manual")
     else:
         engine = auto_engine
 
@@ -1069,12 +1119,17 @@ def analyze(
     trading = (data.get("currency") or "").upper()
     if reporting and trading and reporting != trading and not data.get("fx_rate"):
         raise ValuationError(
-            f"{symbol} reports its accounts in {reporting} but its shares trade in "
-            f"{trading}, and no {reporting}/{trading} rate could be fetched to reconcile "
-            f"them. Valuing the cash flows without it would be out by the exchange rate. "
-            f"Enter the figures yourself in {trading} to value it anyway.",
+            tr(f"{symbol} reports its accounts in {reporting} but its shares trade in "
+               f"{trading}, and no {reporting}/{trading} rate could be fetched to reconcile "
+               f"them. Valuing the cash flows without it would be out by the exchange rate. "
+               f"Enter the figures yourself in {trading} to value it anyway.",
+               f"{symbol} melaporkan keuangannya dalam {reporting} tetapi sahamnya "
+               f"diperdagangkan dalam {trading}, dan tidak ada kurs {reporting}/{trading}"
+               " yang bisa diambil untuk menyelaraskannya. Menilai arus kasnya tanpa "
+               "kurs itu akan meleset sebesar nilai tukarnya. Masukkan angkanya sendiri "
+               f"dalam {trading} untuk tetap menilainya."),
             manual_required=True,
-            missing=[f"{reporting}/{trading} exchange rate"],
+            missing=[tr(f"{reporting}/{trading} exchange rate", f"kurs {reporting}/{trading}")],
             engine=engine,
             suggested={"price": _nullable(data.get("price")),
                        "shares": _nullable(data.get("shares"))},
@@ -1082,8 +1137,11 @@ def analyze(
 
     if not data["ok"] or not np.isfinite(data["price"]):
         raise ValuationError(
-            f"No usable market data returned for '{symbol}'. {symbols.hint(symbol)} "
-            f"Or supply the base figures yourself in manual input mode.",
+            tr(f"No usable market data returned for '{symbol}'. {symbols.hint(symbol)} "
+               f"Or supply the base figures yourself in manual input mode.",
+               f"Tidak ada data pasar yang bisa dipakai untuk '{symbol}'. "
+               f"{symbols.hint(symbol)} Atau masukkan sendiri angka dasarnya dalam mode "
+               "masukan manual."),
             manual_required=True,
             missing=["price"],
             engine=engine,
@@ -1125,22 +1183,32 @@ def analyze(
     beta_clipped = abs(beta_final - beta_used) > 1e-6
     if beta_clipped:
         notices.append({"tone": "warn", "text":
-                        f"Measured beta of {beta_used:.2f} falls outside the [0.40, 2.50] "
-                        f"sanity bound, so {beta_final:.2f} was used for the cost of equity. "
-                        f"A beta this far from the market usually means a single-factor model "
-                        f"describes this security poorly, not that its risk is really that low."})
+                        tr(f"Measured beta of {beta_used:.2f} falls outside the [0.40, 2.50] "
+                           f"sanity bound, so {beta_final:.2f} was used for the cost of equity. "
+                           f"A beta this far from the market usually means a single-factor model "
+                           f"describes this security poorly, not that its risk is really that low.",
+                           f"Beta terukur {beta_used:.2f} berada di luar batas kewajaran [0.40, "
+                           f"2.50], jadi {beta_final:.2f} yang dipakai untuk biaya ekuitas. Beta "
+                           "sejauh ini dari pasar biasanya berarti model satu faktor menggambarkan "
+                           "efek ini dengan buruk, bukan berarti risikonya memang serendah itu.")})
 
     if data.get("fx_rate"):
         notices.append({"tone": "warn", "text": (
-            f"{symbol} reports its accounts in {reporting} but trades in {trading}. The "
-            f"statements were converted at the current spot rate of "
-            f"{data['fx_rate']:,.0f} {trading} per {reporting} so that the model and the "
-            f"share price are in the same units. A five-year projection converted at "
-            f"today's rate carries the currency's risk as well as the company's, and a "
-            f"move in the exchange rate moves this valuation with it.")})
+            tr(f"{symbol} reports its accounts in {reporting} but trades in {trading}. The "
+               f"statements were converted at the current spot rate of "
+               f"{data['fx_rate']:,.0f} {trading} per {reporting} so that the model and the "
+               f"share price are in the same units. A five-year projection converted at "
+               f"today's rate carries the currency's risk as well as the company's, and a "
+               f"move in the exchange rate moves this valuation with it.",
+               f"{symbol} melaporkan keuangannya dalam {reporting} tetapi diperdagangkan "
+               f"dalam {trading}. Laporan keuangannya dikonversi dengan kurs spot saat "
+               f"ini {data['fx_rate']:,.0f} {trading} per {reporting} agar model dan "
+               "harga saham berada dalam satuan yang sama. Proyeksi lima tahun yang "
+               "dikonversi dengan kurs hari ini membawa risiko mata uang selain risiko "
+               "perusahaan, dan pergerakan nilai tukar ikut menggerakkan valuasi ini."))})
 
     cash_used = debt_used = 0.0
-    cash_label = "Cash & equivalents"
+    cash_label = tr("Cash & equivalents", "Kas & setara kas")
     diagnostics_rows = []
     history_table = []
     bank = None
@@ -1159,7 +1227,8 @@ def analyze(
             probe = ri_inputs(data, price, shares)
             if probe["usable"]:
                 engine = "RI"
-                route_reason = "financial with no usable dividend data"
+                route_reason = tr("financial with no usable dividend data",
+                                  "lembaga keuangan tanpa data dividen yang bisa dipakai")
                 RATE_NAME = "Cost of Equity"
                 defaults = DEFAULTS["RI"]
                 if growth is None:
@@ -1167,32 +1236,50 @@ def analyze(
                 if sd_growth is None:
                     sd_g = defaults["sd"][0]
                 notices.append({"tone": "info", "text":
-                                "No usable dividend data, so this is valued on residual "
-                                "income (book value plus discounted excess returns) rather "
-                                "than on dividends. Ohlson (1995)."})
+                                tr("No usable dividend data, so this is valued on residual "
+                                   "income (book value plus discounted excess returns) rather "
+                                   "than on dividends. Ohlson (1995).",
+                                   "Tidak ada data dividen yang bisa dipakai, jadi saham ini dinilai dengan "
+                                   "pendapatan residual (nilai buku ditambah imbal hasil lebih yang "
+                                   "didiskontokan), bukan dengan dividen. Ohlson (1995).")})
 
     if sectorless:
         notices.append({"tone": "warn", "text":
-                        "No sector or industry came back for this listing — usually a throttled "
-                        "fetch. It is valued as an ordinary company because its income statement "
-                        "reports a cost of revenue, which a bank's does not; if it is a financial "
-                        "firm after all, this model does not describe it."})
+                        tr("No sector or industry came back for this listing — usually a throttled "
+                           "fetch. It is valued as an ordinary company because its income statement "
+                           "reports a cost of revenue, which a bank's does not; if it is a financial "
+                           "firm after all, this model does not describe it.",
+                           "Tidak ada sektor atau industri yang kembali untuk saham ini — biasanya "
+                           "karena pengambilan data dibatasi. Ia dinilai sebagai perusahaan biasa "
+                           "karena laporan laba ruginya mencantumkan beban pokok pendapatan, yang "
+                           "tidak dimiliki bank; jika ternyata ia perusahaan keuangan, model ini "
+                           "tidak menggambarkannya.")})
     if auto_engine == "DDM" and engine == "DDM":
         notices.append({"tone": "info", "text":
-                        "Financial institution detected. Routed from DCF to Dividend Discount Model."})
+                        tr("Financial institution detected. Routed from DCF to Dividend Discount Model.",
+                           "Lembaga keuangan terdeteksi. Dialihkan dari DCF ke Model Diskonto "
+                           "Dividen.")})
     elif auto_engine == "DDM" and engine == "DCF":
         notices.append({"tone": "warn", "text":
-                        "This is a financial institution, but DCF has been forced. Free cash flow is "
-                        "not a meaningful measure for a bank."})
+                        tr("This is a financial institution, but DCF has been forced. Free cash flow is "
+                           "not a meaningful measure for a bank.",
+                           "Ini lembaga keuangan, tetapi DCF dipaksakan. Arus kas bebas bukan "
+                           "ukuran yang bermakna untuk bank.")})
     elif engine == "RI" and auto_engine == "DCF":
         notices.append({"tone": "warn", "text":
-                        "Residual income has been forced on a non-financial company. It "
-                        "anchors on book value, which understates a business whose value "
-                        "is mostly intangible."})
+                        tr("Residual income has been forced on a non-financial company. It "
+                           "anchors on book value, which understates a business whose value "
+                           "is mostly intangible.",
+                           "Pendapatan residual dipaksakan pada perusahaan nonkeuangan. Ia "
+                           "berjangkar pada nilai buku, yang mengecilkan bisnis yang nilainya "
+                           "sebagian besar tak berwujud.")})
     elif auto_engine == "DCF" and engine == "DDM":
         notices.append({"tone": "info", "text":
-                        "DDM has been forced on a non-financial company. This values only distributed "
-                        "cash, so it will understate a business that reinvests."})
+                        tr("DDM has been forced on a non-financial company. This values only distributed "
+                           "cash, so it will understate a business that reinvests.",
+                           "DDM dipaksakan pada perusahaan nonkeuangan. Ini hanya menilai kas yang "
+                           "dibagikan, jadi akan mengecilkan bisnis yang menginvestasikan kembali "
+                           "labanya.")})
 
     # ---------------- ENGINE 1 — DCF ----------------
     if engine == "DCF":
@@ -1223,20 +1310,26 @@ def analyze(
             # Manual mode mirrors the original: the user gives NET debt, so the
             # bridge carries it entirely on the debt side and cash is zero.
             base_value = float(manual_base_f)
-            basis_label = "manual input"
+            basis_label = tr("manual input", "masukan manual")
             net_debt = _safe_float(manual_net_debt)
             if not np.isfinite(net_debt):
                 net_debt = float(debt_auto - cash_auto)
             cash_used, debt_used = 0.0, float(net_debt)
             notices.append({"tone": "info", "text":
-                            "Manual input mode: base free cash flow, net debt, shares and price "
-                            "are the figures you supplied, not Yahoo's."})
+                            tr("Manual input mode: base free cash flow, net debt, shares and price "
+                               "are the figures you supplied, not Yahoo's.",
+                               "Mode masukan manual: arus kas bebas dasar, utang bersih, jumlah saham, "
+                               "dan harga adalah angka yang Anda masukkan, bukan dari Yahoo.")})
         else:
             if fcf_history.empty:
                 raise ValuationError(
-                    "Yahoo returned no usable cash-flow statement for this ticker, so there is "
-                    "no base free cash flow to grow. Enter a normalised free cash flow in manual "
-                    "input mode, force the DDM engine, or try another symbol.",
+                    tr("Yahoo returned no usable cash-flow statement for this ticker, so there is "
+                       "no base free cash flow to grow. Enter a normalised free cash flow in manual "
+                       "input mode, force the DDM engine, or try another symbol.",
+                       "Yahoo tidak mengembalikan laporan arus kas yang bisa dipakai untuk "
+                       "ticker ini, jadi tidak ada arus kas bebas dasar untuk ditumbuhkan. "
+                       "Masukkan arus kas bebas yang dinormalkan dalam mode masukan manual, "
+                       "paksakan mesin DDM, atau coba simbol lain."),
                     manual_required=True,
                     missing=["base"],
                     engine="DCF",
@@ -1258,9 +1351,13 @@ def analyze(
 
         if not np.isfinite(base_value) or base_value <= 0:
             raise ValuationError(
-                "Base free cash flow is negative or zero. A growth-multiple DCF cannot value "
-                "this — the model would simply scale a negative number. Enter a normalised free "
-                "cash flow in manual input mode, or value the company on another basis.",
+                tr("Base free cash flow is negative or zero. A growth-multiple DCF cannot value "
+                   "this — the model would simply scale a negative number. Enter a normalised free "
+                   "cash flow in manual input mode, or value the company on another basis.",
+                   "Arus kas bebas dasarnya negatif atau nol. DCF berbasis kelipatan "
+                   "pertumbuhan tidak bisa menilai ini — model hanya akan menskalakan angka "
+                   "negatif. Masukkan arus kas bebas yang dinormalkan dalam mode masukan "
+                   "manual, atau nilai perusahaan ini dengan dasar lain."),
                 manual_required=True,
                 missing=["base"],
                 engine="DCF",
@@ -1270,7 +1367,9 @@ def analyze(
             )
         if not np.isfinite(shares) or shares <= 0:
             raise ValuationError(
-                "Shares outstanding unavailable for this ticker. Enter it in manual input mode.",
+                tr("Shares outstanding unavailable for this ticker. Enter it in manual input mode.",
+                   "Jumlah saham beredar tidak tersedia untuk ticker ini. Masukkan dalam "
+                   "mode masukan manual."),
                 manual_required=True,
                 missing=["shares"],
                 engine="DCF",
@@ -1287,13 +1386,13 @@ def analyze(
         discount_rate = float(rate_override) if rate_override is not None else rate_parts["wacc"]
 
         diagnostics_rows = [
-            ("Base FCF anchor", basis_label),
-            ("Cost of equity (CAPM)", f"{rate_parts['cost_equity']:.2%}"),
-            ("Cost of debt (pre-tax)", f"{rate_parts['cost_debt']:.2%}"),
-            ("Effective tax rate", f"{tax_rate:.1%}"),
-            ("Equity / debt weight", f"{rate_parts['weight_equity']:.0%} / {rate_parts['weight_debt']:.0%}"),
-            ("Beta (clipped)", f"{rate_parts['beta']:.2f}"),
-            ("Risk-free source", rf_source),
+            (tr("Base FCF anchor", "Jangkar FCF dasar"), basis_label),
+            (tr("Cost of equity (CAPM)", "Biaya ekuitas (CAPM)"), f"{rate_parts['cost_equity']:.2%}"),
+            (tr("Cost of debt (pre-tax)", "Biaya utang (sebelum pajak)"), f"{rate_parts['cost_debt']:.2%}"),
+            (tr("Effective tax rate", "Tarif pajak efektif"), f"{tax_rate:.1%}"),
+            (tr("Equity / debt weight", "Bobot ekuitas / utang"), f"{rate_parts['weight_equity']:.0%} / {rate_parts['weight_debt']:.0%}"),
+            (tr("Beta (clipped)", "Beta (dipotong)"), f"{rate_parts['beta']:.2f}"),
+            (tr("Risk-free source", "Sumber suku bunga bebas risiko"), rf_source),
         ]
 
         history_table = [
@@ -1335,18 +1434,24 @@ def analyze(
 
         if np.isfinite(manual_base_f) and manual_base_f > 0:
             book_per_share = float(manual_base_f)
-            basis_label = "manual input"
+            basis_label = tr("manual input", "masukan manual")
             notices.append({"tone": "info", "text":
-                            "Manual input mode: book value per share is the figure you "
-                            "supplied, not Yahoo's."})
+                            tr("Manual input mode: book value per share is the figure you "
+                               "supplied, not Yahoo's.",
+                               "Mode masukan manual: nilai buku per saham adalah angka yang Anda "
+                               "masukkan, bukan dari Yahoo.")})
         elif inputs["usable"]:
             book_per_share = float(inputs["bookPerShare"])
-            basis_label = "book value per share (latest balance sheet)"
+            basis_label = tr("book value per share (latest balance sheet)",
+                             "nilai buku per saham (neraca terbaru)")
         else:
             raise ValuationError(
-                "Residual income needs book value per share and a return on equity, and "
-                "neither could be derived from these filings. Supply book value per share "
-                "in manual input mode, or force the DCF engine.",
+                tr("Residual income needs book value per share and a return on equity, and "
+                   "neither could be derived from these filings. Supply book value per share "
+                   "in manual input mode, or force the DCF engine.",
+                   "Pendapatan residual butuh nilai buku per saham dan imbal hasil ekuitas, "
+                   "dan keduanya tidak bisa diturunkan dari laporan keuangan ini. Masukkan "
+                   "nilai buku per saham dalam mode masukan manual, atau paksakan mesin DCF."),
                 manual_required=True,
                 missing=["base"],
                 engine="RI",
@@ -1394,20 +1499,24 @@ def analyze(
         excess = roe_used - discount_rate
         if excess <= 0:
             notices.append({"tone": "warn", "text":
-                            f"Return on equity of {roe_used:.1%} is at or below the "
-                            f"{discount_rate:.1%} cost of equity, so residual income is "
-                            f"negative and the model values the company below its book. "
-                            f"That is a real result, not an error."})
+                            tr(f"Return on equity of {roe_used:.1%} is at or below the "
+                               f"{discount_rate:.1%} cost of equity, so residual income is "
+                               f"negative and the model values the company below its book. "
+                               f"That is a real result, not an error.",
+                               f"Imbal hasil ekuitas {roe_used:.1%} berada di bawah atau setara biaya "
+                               f"ekuitas {discount_rate:.1%}, jadi pendapatan residualnya negatif dan "
+                               "model menilai perusahaan di bawah nilai bukunya. Itu hasil sungguhan, "
+                               "bukan kesalahan.")})
 
         diagnostics_rows = [
-            ("Book value per share", fmt_price(book_per_share, market)),
-            ("Return on equity (sustained)", f"{roe_used:.1%}"),
-            ("Cost of equity (CAPM)", f"{rate_parts['cost_equity']:.2%}"),
-            ("Excess return (ROE - r)", f"{excess:+.1%}"),
-            ("Retention ratio", f"{1 - payout_used:.0%}"),
-            ("Abnormal earnings persistence", f"{RI_PERSISTENCE:.2f} (Dechow-Hutton-Sloan 1999)"),
-            ("Beta (clipped)", f"{rate_parts['beta']:.2f}"),
-            ("Risk-free source", rf_source),
+            (tr("Book value per share", "Nilai buku per saham"), fmt_price(book_per_share, market)),
+            (tr("Return on equity (sustained)", "Imbal hasil ekuitas (berkelanjutan)"), f"{roe_used:.1%}"),
+            (tr("Cost of equity (CAPM)", "Biaya ekuitas (CAPM)"), f"{rate_parts['cost_equity']:.2%}"),
+            (tr("Excess return (ROE - r)", "Imbal hasil lebih (ROE - r)"), f"{excess:+.1%}"),
+            (tr("Retention ratio", "Rasio laba ditahan"), f"{1 - payout_used:.0%}"),
+            (tr("Abnormal earnings persistence", "Persistensi laba abnormal"), f"{RI_PERSISTENCE:.2f} (Dechow-Hutton-Sloan 1999)"),
+            (tr("Beta (clipped)", "Beta (dipotong)"), f"{rate_parts['beta']:.2f}"),
+            (tr("Risk-free source", "Sumber suku bunga bebas risiko"), rf_source),
         ]
 
         div_history = data.get("dividend_history", pd.DataFrame())
@@ -1428,6 +1537,7 @@ def analyze(
     else:
         auto_dps, dps_source = resolve_dividend(data, price)
         div_history = data.get("dividend_history", pd.DataFrame())
+        complete = complete_years(div_history)
 
         manual_base_f = _safe_float(manual_base)
         suggested_dps = (float(auto_dps) if np.isfinite(auto_dps) and auto_dps > 0
@@ -1436,30 +1546,39 @@ def analyze(
 
         if np.isfinite(manual_base_f) and manual_base_f > 0:
             base_value = float(manual_base_f)
-            dps_source = "manual input"
-            basis_label = "manual input"
+            dps_source = tr("manual input", "masukan manual")
+            basis_label = tr("manual input", "masukan manual")
             notices.append({"tone": "info", "text":
-                            "Manual input mode: the dividend per share is the figure you "
-                            "supplied, not Yahoo's."})
+                            tr("Manual input mode: the dividend per share is the figure you "
+                               "supplied, not Yahoo's.",
+                               "Mode masukan manual: dividen per saham adalah angka yang Anda masukkan, "
+                               "bukan dari Yahoo.")})
         else:
             if not np.isfinite(auto_dps) or auto_dps <= 0:
                 raise ValuationError(
-                    "No usable dividend data returned, so a Dividend Discount Model has nothing "
-                    "to discount. Bank dividend fields are frequently empty on Yahoo, especially "
-                    "for IDX listings — enter the figure in manual input mode. If the company "
-                    "genuinely pays no dividend, force the DCF engine instead.",
+                    tr("No usable dividend data returned, so a Dividend Discount Model has nothing "
+                       "to discount. Bank dividend fields are frequently empty on Yahoo, especially "
+                       "for IDX listings — enter the figure in manual input mode. If the company "
+                       "genuinely pays no dividend, force the DCF engine instead.",
+                       "Tidak ada data dividen yang bisa dipakai, jadi Model Diskonto Dividen "
+                       "tidak punya apa pun untuk didiskontokan. Kolom dividen bank sering "
+                       "kosong di Yahoo, terutama untuk saham BEI — masukkan angkanya dalam "
+                       "mode masukan manual. Jika perusahaan memang tidak membagikan dividen, "
+                       "paksakan mesin DCF."),
                     manual_required=True,
                     missing=["base"],
                     engine="DDM",
                     suggested={"base": suggested_dps, "price": _nullable(price),
                                "payout": 0.40},
                 )
-            if dps_basis == "Last full year" and len(div_history) >= 2:
-                base_value = float(div_history["Dividend / Share"].iloc[1])
-                dps_source = f"FY{div_history['Year'].iloc[1]} declared"
-            elif dps_basis == "3-year average" and len(div_history) >= 3:
-                base_value = float(div_history["Dividend / Share"].iloc[:3].mean())
-                dps_source = "3-year average of declared dividends"
+            if dps_basis == "Last full year" and len(complete) >= 1:
+                base_value = float(complete["Dividend / Share"].iloc[0])
+                dps_source = tr(f"FY{complete['Year'].iloc[0]} declared",
+                                f"FY{complete['Year'].iloc[0]} diumumkan")
+            elif dps_basis == "3-year average" and len(complete) >= 3:
+                base_value = float(complete["Dividend / Share"].iloc[:3].mean())
+                dps_source = tr("3-year average of declared dividends",
+                                "rata-rata 3 tahun dividen yang diumumkan")
             else:
                 base_value = float(auto_dps)
                 dps_basis = "Trailing 12 months"
@@ -1483,31 +1602,34 @@ def analyze(
         discount_rate = float(rate_override) if rate_override is not None else rate_parts["cost_equity"]
 
         diagnostics_rows = [
-            ("Base DPS source", dps_source),
-            ("Current dividend yield",
+            (tr("Base DPS source", "Sumber DPS dasar"), dps_source),
+            (tr("Current dividend yield", "Imbal hasil dividen saat ini"),
              f"{bank['dividend_yield']:.2%}" if np.isfinite(bank["dividend_yield"]) else "n/a"),
-            ("Payout ratio", f"{bank['payout']:.1%}" if np.isfinite(bank["payout"]) else "n/a"),
-            ("Return on equity", f"{bank['roe']:.1%}" if np.isfinite(bank["roe"]) else "n/a"),
-            ("Sustainable growth (ROE x retention)",
+            (tr("Payout ratio", "Rasio pembayaran dividen"), f"{bank['payout']:.1%}" if np.isfinite(bank["payout"]) else "n/a"),
+            (tr("Return on equity", "Imbal hasil ekuitas"), f"{bank['roe']:.1%}" if np.isfinite(bank["roe"]) else "n/a"),
+            (tr("Sustainable growth (ROE x retention)",
+                "Pertumbuhan berkelanjutan (ROE x laba ditahan)"),
              f"{bank['sustainable_growth']:.1%}" if np.isfinite(bank["sustainable_growth"]) else "n/a"),
-            ("Cost of equity (CAPM)", f"{rate_parts['cost_equity']:.2%}"),
-            ("Beta (clipped)", f"{rate_parts['beta']:.2f}"),
-            ("Risk-free source", rf_source),
+            (tr("Cost of equity (CAPM)", "Biaya ekuitas (CAPM)"), f"{rate_parts['cost_equity']:.2%}"),
+            (tr("Beta (clipped)", "Beta (dipotong)"), f"{rate_parts['beta']:.2f}"),
+            (tr("Risk-free source", "Sumber suku bunga bebas risiko"), rf_source),
         ]
 
         history_table = [
             {"period": row["Year"], "dividendPerShare": fmt_dps(row["Dividend / Share"], market)}
             for _, row in div_history.iterrows()
         ] if isinstance(div_history, pd.DataFrame) and not div_history.empty else []
-        if sd_growth is None and isinstance(div_history, pd.DataFrame) and not div_history.empty:
-            declared = list(div_history["Dividend / Share"].astype(float))[::-1]
+        # Complete years only: a year to date read as a year is a dividend cut,
+        # and one of those among three observations sets the fan's whole width.
+        if sd_growth is None and not complete.empty:
+            declared = list(complete["Dividend / Share"].astype(float))[::-1]
             sd_growth_calibrated = riskmodel.shrunk_growth_volatility(declared)
             sd_g = sd_growth_calibrated["sd"]
 
         basis_options = ["Trailing 12 months"]
-        if len(div_history) >= 2:
+        if len(complete) >= 1:
             basis_options.append("Last full year")
-        if len(div_history) >= 3:
+        if len(complete) >= 3:
             basis_options.append("3-year average")
 
         manual_defaults = {
@@ -1529,9 +1651,12 @@ def analyze(
         terminal_growth = min(terminal_input, discount_rate - MIN_SPREAD)
         if terminal_growth < terminal_input:
             notices.append({"tone": "warn", "text":
-                            f"Perpetual growth capped at {terminal_growth:.2%} to hold 150bp below the "
-                            f"{discount_rate:.2%} {RATE_NAME}. At or above it the Gordon Growth terminal "
-                            f"value diverges to infinity."})
+                            tr(f"Perpetual growth capped at {terminal_growth:.2%} to hold 150bp below the "
+                               f"{discount_rate:.2%} {RATE_NAME}. At or above it the Gordon Growth terminal "
+                               f"value diverges to infinity.",
+                               f"Pertumbuhan abadi dibatasi {terminal_growth:.2%} agar tetap 150bp di "
+                               f"bawah {RATE_NAME} {discount_rate:.2%}. Pada atau di atasnya, nilai "
+                               "terminal Gordon Growth menjadi tak hingga.")})
 
     # ---------------- Run ----------------
     if engine == "RI":
@@ -1614,42 +1739,55 @@ def analyze(
     # ---------------- Post-run sanity checks ----------------
     if np.isfinite(summary["terminal_share"]) and summary["terminal_share"] > 0.80:
         notices.append({"tone": "warn", "text":
-                        f"Terminal value is {summary['terminal_share']:.0%} of total value. The answer "
-                        f"rests on the perpetuity assumption rather than the five-year forecast."})
+                        tr(f"Terminal value is {summary['terminal_share']:.0%} of total value. The answer "
+                           f"rests on the perpetuity assumption rather than the five-year forecast.",
+                           f"Nilai terminal adalah {summary['terminal_share']:.0%} dari total nilai. "
+                           "Jawabannya bertumpu pada asumsi perpetuitas, bukan ramalan lima tahun.")})
 
     if engine == "DDM" and bank is not None:
         sustainable = _safe_float(bank.get("sustainable_growth"))
         if np.isfinite(sustainable) and growth_input > sustainable + 0.03:
             notices.append({"tone": "warn", "text":
-                            f"Dividend growth of {growth_input:.1%} exceeds the sustainable rate of "
-                            f"{sustainable:.1%} (ROE x retention). The bank would have to raise equity "
-                            f"or run down its capital ratios to fund that path."})
+                            tr(f"Dividend growth of {growth_input:.1%} exceeds the sustainable rate of "
+                               f"{sustainable:.1%} (ROE x retention). The bank would have to raise equity "
+                               f"or run down its capital ratios to fund that path.",
+                               f"Pertumbuhan dividen {growth_input:.1%} melampaui laju berkelanjutan "
+                               f"{sustainable:.1%} (ROE x laba ditahan). Bank harus menambah modal atau "
+                               "menggerus rasio permodalannya untuk mendanai jalur itu.")})
         payout_check = _safe_float(bank.get("payout"))
         if np.isfinite(payout_check) and payout_check > 0.90:
             notices.append({"tone": "warn", "text":
-                            f"Payout ratio is {payout_check:.0%}. There is little retained earnings "
-                            f"cushion, so the dividend growth assumption is fragile."})
+                            tr(f"Payout ratio is {payout_check:.0%}. There is little retained earnings "
+                               f"cushion, so the dividend growth assumption is fragile.",
+                               f"Rasio pembayaran dividen {payout_check:.0%}. Bantalan laba ditahan "
+                               "tipis, jadi asumsi pertumbuhan dividennya rapuh.")})
 
     if beta_estimate.method == "vasicek":
-        trail = (f"{beta_estimate.raw:.2f} raw (se {beta_estimate.stderr:.2f}, "
-                 f"R2 {beta_estimate.r_squared:.0%}, {beta_estimate.observations}d vs "
-                 f"{beta_estimate.index_symbol}) -> {beta_estimate.adjusted:.2f} shrunk")
+        trail = (tr(f"{beta_estimate.raw:.2f} raw (se {beta_estimate.stderr:.2f}, "
+                    f"R2 {beta_estimate.r_squared:.0%}, {beta_estimate.observations}d vs "
+                    f"{beta_estimate.index_symbol}) -> {beta_estimate.adjusted:.2f} shrunk",
+                    f"{beta_estimate.raw:.2f} mentah (se {beta_estimate.stderr:.2f}, R2 "
+                    f"{beta_estimate.r_squared:.0%}, {beta_estimate.observations}h vs "
+                    f"{beta_estimate.index_symbol}) -> {beta_estimate.adjusted:.2f} disusutkan"))
         if beta_clipped:
-            trail += f" -> {beta_final:.2f} clipped (used)"
-        diagnostics_rows.append(("Beta estimate", trail))
+            trail += tr(f" -> {beta_final:.2f} clipped (used)",
+                        f" -> {beta_final:.2f} dipotong (dipakai)")
+        diagnostics_rows.append((tr("Beta estimate", "Estimasi beta"), trail))
     if sd_growth_calibrated is not None:
         source = sd_growth_calibrated["source"]
         diagnostics_rows.append((
-            "Growth dispersion (sigma)",
-            f"{sd_growth_calibrated['sd']:.1%} from {source}"
-            + (f", {sd_growth_calibrated['observations']} observations"
+            tr("Growth dispersion (sigma)", "Sebaran pertumbuhan (sigma)"),
+            tr(f"{sd_growth_calibrated['sd']:.1%} from {source}",
+               f"{sd_growth_calibrated['sd']:.1%} dari {source}")
+            + (tr(f", {sd_growth_calibrated['observations']} observations",
+                  f", {sd_growth_calibrated['observations']} pengamatan")
                if sd_growth_calibrated["observations"] else ""),
         ))
 
     diagnostics_rows += [
-        ("Terminal value as % of total",
+        (tr("Terminal value as % of total", "Nilai terminal sebagai % dari total"),
          f"{summary['terminal_share']:.0%}" if np.isfinite(summary["terminal_share"]) else "n/a"),
-        ("P5 - P95 range", f"{fmt_price(p05, market)} - {fmt_price(p95, market)}"),
+        (tr("P5 - P95 range", "Rentang P5 - P95"), f"{fmt_price(p05, market)} - {fmt_price(p95, market)}"),
     ]
 
     if engine == "RI":
@@ -1667,14 +1805,15 @@ def analyze(
             for _, row in schedule.iterrows()
         ]
         bridge = [
-            ("Book value per share", fmt_price(base_value, market)),
-            ("+ PV of Year 1-5 residual income", fmt_dps(summary["pv_explicit"], market)),
-            (f"+ PV of fading residual income (w={RI_PERSISTENCE:.2f})",
+            (tr("Book value per share", "Nilai buku per saham"), fmt_price(base_value, market)),
+            (tr("+ PV of Year 1-5 residual income", "+ PV pendapatan residual tahun 1-5"), fmt_dps(summary["pv_explicit"], market)),
+            (tr(f"+ PV of fading residual income (w={RI_PERSISTENCE:.2f})",
+                f"+ PV pendapatan residual yang memudar (w={RI_PERSISTENCE:.2f})"),
              fmt_dps(summary["pv_terminal"], market)),
-            ("Implied price (base case)", fmt_price(summary["implied_price"], market)),
-            ("Implied price / book",
+            (tr("Implied price (base case)", "Harga tersirat (kasus dasar)"), fmt_price(summary["implied_price"], market)),
+            (tr("Implied price / book", "Harga tersirat / nilai buku"),
              f"{summary['implied_price'] / base_value:.2f}x" if base_value else "n/a"),
-            ("Market price", fmt_price(price, market)),
+            (tr("Market price", "Harga pasar"), fmt_price(price, market)),
         ]
         stream_label_out = stream_label
     else:
@@ -1699,25 +1838,25 @@ def analyze(
         pass                      # bridge already built above
     elif engine == "DCF":
         bridge = [
-            ("PV of Year 1-5 FCF", fmt_big(summary["pv_explicit"], market)),
-            ("PV of terminal value", fmt_big(summary["pv_terminal"], market)),
-            ("Enterprise value", fmt_big(summary["gross"], market)),
+            (tr("PV of Year 1-5 FCF", "PV FCF tahun 1-5"), fmt_big(summary["pv_explicit"], market)),
+            (tr("PV of terminal value", "PV nilai terminal"), fmt_big(summary["pv_terminal"], market)),
+            (tr("Enterprise value", "Nilai perusahaan"), fmt_big(summary["gross"], market)),
             (f"+ {cash_label}", fmt_big(cash_used, market)),
-            ("- Total debt", fmt_big(debt_used, market)),
-            ("Equity value", fmt_big(summary["equity_value"], market)),
-            ("/ Shares outstanding", f"{shares:,.0f}"),
-            ("Implied price (base case)", fmt_price(summary["implied_price"], market)),
+            (tr("- Total debt", "- Total utang"), fmt_big(debt_used, market)),
+            (tr("Equity value", "Nilai ekuitas"), fmt_big(summary["equity_value"], market)),
+            (tr("/ Shares outstanding", "/ Saham beredar"), f"{shares:,.0f}"),
+            (tr("Implied price (base case)", "Harga tersirat (kasus dasar)"), fmt_price(summary["implied_price"], market)),
         ]
     else:
         bridge = [
-            ("PV of Year 1-5 dividends", fmt_dps(summary["pv_explicit"], market)),
-            ("PV of terminal value", fmt_dps(summary["pv_terminal"], market)),
-            ("Implied price (base case)", fmt_price(summary["implied_price"], market)),
-            ("Terminal value at Y5", fmt_dps(summary["terminal_value"], market)),
-            ("Implied forward yield",
+            (tr("PV of Year 1-5 dividends", "PV dividen tahun 1-5"), fmt_dps(summary["pv_explicit"], market)),
+            (tr("PV of terminal value", "PV nilai terminal"), fmt_dps(summary["pv_terminal"], market)),
+            (tr("Implied price (base case)", "Harga tersirat (kasus dasar)"), fmt_price(summary["implied_price"], market)),
+            (tr("Terminal value at Y5", "Nilai terminal pada T5"), fmt_dps(summary["terminal_value"], market)),
+            (tr("Implied forward yield", "Imbal hasil ke depan tersirat"),
              f"{base_value * (1 + growth_input) / summary['implied_price']:.2%}"
              if summary["implied_price"] else "n/a"),
-            ("Market price", fmt_price(price, market)),
+            (tr("Market price", "Harga pasar"), fmt_price(price, market)),
         ]
 
     manual_applied = {
@@ -1752,8 +1891,14 @@ def analyze(
         # the unconverted figures are in line with it. It is a rare and loud
         # thing to do, so it is said rather than done quietly — a reader must
         # not meet it as an unexplained difference from the filing.
-        "fxLabelOverride": data.get("fx_skipped"),
-        "priceSource": ("manual entry" if np.isfinite(manual_price_f) and manual_price_f > 0
+        # The provider record is cached for every reader, so it carries both
+        # languages and this request takes its own.
+        "fxLabelOverride": ({**data["fx_skipped"],
+                             "reason": tr(data["fx_skipped"].get("reason"),
+                                          data["fx_skipped"].get("reasonId")
+                                          or data["fx_skipped"].get("reason"))}
+                            if data.get("fx_skipped") else None),
+        "priceSource": (tr("manual entry", "entri manual") if np.isfinite(manual_price_f) and manual_price_f > 0
                         else data.get("price_source")),
         "priceAsOf": (None if np.isfinite(manual_price_f) and manual_price_f > 0
                       else data.get("price_as_of")),

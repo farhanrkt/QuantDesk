@@ -15,6 +15,7 @@ import { byDay, dayHeading, earningsEvents, todayIn, upcoming } from "@/lib/cale
 import { clockText, marksFor, relatedFirst, stripFor } from "@/lib/marketboard";
 import type { CalendarEvent, Market } from "@/lib/types";
 import { marketsHref } from "@/lib/url";
+import { useT } from "@/lib/i18n";
 
 /** The events a reader of one market sees: every release and decision, and only that market's closures. */
 export function eventsFor(
@@ -38,6 +39,7 @@ export function eventsFor(
  * band (`MarketBand`) instead.
  */
 export function MarketRail() {
+  const t = useT();
   const {
     state, calendar, earnings, market, chooseMarket, focus, fullBoard, railOpen, setRailOpen,
   } = useMarketBoard();
@@ -84,7 +86,7 @@ export function MarketRail() {
       <div className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-12 shrink-0 justify-center border-l
                       border-rule pt-4 xl:flex print:hidden">
         <Button ref={showRef} variant="quiet" size="icon" aria-expanded={false}
-                aria-label="Show the markets panel" onClick={() => toggle(true)}>
+                aria-label={t("Show the markets panel")} onClick={() => toggle(true)}>
           <PanelRightOpen aria-hidden className="h-4 w-4" />
         </Button>
       </div>
@@ -98,24 +100,24 @@ export function MarketRail() {
   const pending = calendar.status === "ready" ? calendar.data.pending : [];
 
   return (
-    <aside aria-label="Markets"
+    <aside aria-label={t("Markets")}
            className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-[22rem] shrink-0 border-l border-rule
                       xl:block print:hidden">
-      <ScrollRegion label="Markets panel" vertical className="h-full">
+      <ScrollRegion label={t("Markets panel")} vertical className="h-full">
         <div className="space-y-6 px-4 py-5">
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="text-h3">Markets</h2>
+              <h2 className="text-h3">{t("Markets")}</h2>
               <div className="flex items-center gap-1.5">
                 {focus ? (
                   <span className="text-micro text-ash">
-                    {focus.market === "ID" ? "IDX" : "US"} · for {focus.symbol}
+                    {t("{value} · for {symbol}", { value: focus.market === "ID" ? t("IDX") : t("US"), symbol: focus.symbol })}
                   </span>
                 ) : (
                   <MarketSwitch market={market} onChange={chooseMarket} />
                 )}
                 <Button ref={hideRef} variant="quiet" size="icon" className="h-8 w-8" aria-expanded
-                        aria-label="Hide the markets panel" onClick={() => toggle(false)}>
+                        aria-label={t("Hide the markets panel")} onClick={() => toggle(false)}>
                   <PanelRightClose aria-hidden className="h-4 w-4" />
                 </Button>
               </div>
@@ -125,8 +127,8 @@ export function MarketRail() {
 
           <section aria-labelledby="rail-prices" className="space-y-2">
             <div className="flex items-baseline justify-between gap-2">
-              <h3 id="rail-prices" className="text-meta font-semibold text-chalk">Prices</h3>
-              {clock && <span className="text-micro text-ash">as of {clock}</span>}
+              <h3 id="rail-prices" className="text-meta font-semibold text-chalk">{t("Prices")}</h3>
+              {clock && <span className="text-micro text-ash">{t("as of {clock}", { clock })}</span>}
             </div>
             {board ? (
               <ul className="grid grid-cols-2 gap-2">
@@ -138,17 +140,17 @@ export function MarketRail() {
               </ul>
             ) : (
               <p className="text-meta text-ash" role="status">
-                {state.status === "error" ? "The prices did not load." : "Fetching prices…"}
+                {state.status === "error" ? t("The prices did not load.") : t("Fetching prices…")}
               </p>
             )}
             <Link href={marketsHref("today")}
                   className="inline-flex min-h-[24px] items-center gap-1 text-meta text-tech hover:underline">
-              All 22, and what moved unusually <ArrowRight aria-hidden className="h-3.5 w-3.5" />
+              {t("All 22, and what moved unusually")}{" "}<ArrowRight aria-hidden className="h-3.5 w-3.5" />
             </Link>
           </section>
 
           <section aria-labelledby="rail-calendar" className="space-y-2">
-            <h3 id="rail-calendar" className="text-meta font-semibold text-chalk">Calendar</h3>
+            <h3 id="rail-calendar" className="text-meta font-semibold text-chalk">{t("Calendar")}</h3>
             {calendar.status === "ready" ? (
               <>
                 <CalendarMonth events={month} today={todayIn(new Date(now))}
@@ -156,33 +158,33 @@ export function MarketRail() {
                                selected={picked} onSelect={setPicked} />
                 <div className="flex min-h-[24px] items-center justify-between gap-2 border-t border-ruleSoft pt-2">
                   <p aria-live="polite" className="text-micro text-ash">
-                    {picked ? `Showing ${dayHeading(picked)}` : "The next 14 days"}
+                    {picked ? t("Showing {day}", { day: dayHeading(picked) }) : t("The next 14 days")}
                   </p>
                   {picked && (
                     <button type="button" onClick={() => setPicked(null)}
                             className="inline-flex min-h-[24px] items-center text-micro text-tech hover:underline">
-                      Back to the next 14 days
+                      {t("Back to the next 14 days")}
                     </button>
                   )}
                 </div>
                 {list.length > 0
                   ? <CalendarList events={list} kinds={calendar.data.kinds} board={board} compact />
-                  : <p className="text-meta text-ash">Nothing on the calendar in the next fortnight.</p>}
+                  : <p className="text-meta text-ash">{t("Nothing on the calendar in the next fortnight.")}</p>}
               </>
             ) : (
               <p className="text-meta text-ash" role="status">
-                {calendar.status === "error" ? "The calendar did not load." : "Fetching the calendar…"}
+                {calendar.status === "error" ? t("The calendar did not load.") : t("Fetching the calendar…")}
               </p>
             )}
             {pending.length > 0 && (
               <p className="text-micro leading-snug text-ash">
-                Not shown: {pending.map((p) => p.note.replace(/\.$/, "")).join("; ")}.
+                {t("Not shown: {pending}.", { pending: pending.map((p) => p.note.replace(/\.$/, "")).join("; ") })}
               </p>
             )}
           </section>
 
           <section aria-labelledby="rail-news" className="space-y-2">
-            <h3 id="rail-news" className="text-meta font-semibold text-chalk">Headlines</h3>
+            <h3 id="rail-news" className="text-meta font-semibold text-chalk">{t("Headlines")}</h3>
             {board && <NewsCompact board={board} market={market} />}
           </section>
         </div>

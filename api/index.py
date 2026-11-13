@@ -23,22 +23,38 @@ request value BBCA.JK while charting the BBCA ETF. See `_lib/symbols.py`.
 
 Endpoints
 ---------
-GET /api/health                     liveness + engine inventory
-GET /api/isolation-forest           Engine 1 — whale / anomaly detection
-GET /api/technical-analysis         Engine 2 — QuantDash technicals
-GET /api/intrinsic-value            Engine 3 — INTRINSIC DCF/DDM + Monte Carlo
-GET /api/intrinsic-value/simulation Engine 3 — full Monte Carlo draw set as CSV
-GET /api/screener                   Engine 1 — multi-ticker watchlist scan
-GET /api/quality                    Engine 4 — Piotroski / Altman / Beneish
-GET /api/event-study                abnormal returns after each anomaly
-GET /api/news                       contextual catalyst headlines
-GET /api/confluence                 every lens at once, in ONE invocation
+GET  /api/health                     liveness + engine inventory
+GET  /api/capabilities               what this deployment serves (the private tier)
+GET  /api/confluence                 every lens at once, in ONE invocation
+GET  /api/isolation-forest           Engine 1 — whale / anomaly detection
+GET  /api/technical-analysis         Engine 2 — QuantDash technicals
+GET  /api/intrinsic-value            Engine 3 — INTRINSIC DCF/DDM + Monte Carlo
+GET  /api/intrinsic-value/simulation Engine 3 — full Monte Carlo draw set as CSV
+GET  /api/quality                    Engine 4 — Piotroski / Altman / Beneish
+GET  /api/company                    what the company is, year by year
+GET  /api/event-study                abnormal returns after each anomaly
+GET  /api/news                       contextual catalyst headlines
+GET  /api/symbols                    the command palette's listing search
+GET  /api/screener                   Engine 1 — multi-ticker watchlist scan
+GET  /api/rank, /api/rank/universes  rank a universe on price signals
+POST /api/rank/list                  rank a reader's own list
+GET  /api/rank/deepen                quality and valuation for a shortlist
+GET  /api/peers                      one ticker placed among its index
+GET  /api/exposure                   what a universe moves with
+POST /api/portfolio                  a candidate against a book of holdings
+GET  /api/markets/today              what moved the markets
+GET  /api/markets/calendar           the dates that move markets
+POST /api/markets/earnings           report dates for a reader's watchlist
+GET  /api/markets/headlines          the past day's market headlines
+GET  /api/verdict                    the PRIVATE scanner's score — local runs only
+GET  /api/scan/latest                the last local scan report — local runs only
 """
 
 from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import functools
 import io
 import math
 import os
@@ -62,12 +78,13 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from _lib import (accumulation, chartlayers, econcalendar, eventstudy, explain, exposure,
-                  field, listings, market_data, marketboard, microstructure, news,
+                  field, lang, listings, market_data, marketboard, microstructure, news,
                   ownership, patterns, portfolio, pretrade, quality, ranking,
                   riskmodel, structure, symbols, tape, technical, trackrecord,
                   universes, valuation, verdict, volumeprofile)
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
+from _lib.lang import tr
 
 app = FastAPI(title="QuantDesk API", version="1.1.0", docs_url="/api/docs")
 
@@ -87,6 +104,53 @@ def _allowed_origins() -> list[str]:
     if configured:
         return configured
     return [] if os.environ.get("VERCEL_ENV") == "production" else ["*"]
+
+
+def on_vercel(request: Optional[Request] = None) -> bool:
+    """Whether the app is running on Vercel, judged two ways, either enough.
+
+    The system environment variables exist at runtime only when the project has
+    "Enable access to System Environment Variables" turned on, so they cannot be
+    the only signal. The edge also adds `x-vercel-id` to every request it routes
+    to a function, which covers a project that has the setting off. Off Vercel a
+    client could send that header itself; the most that buys is the forwarded-
+    address trust this app gave every request before November 2026.
+    """
+    if os.environ.get("VERCEL") or os.environ.get("VERCEL_ENV"):
+        return True
+    return bool(request is not None and request.headers.get("x-vercel-id"))
+
+
+def private_tier_enabled(request: Optional[Request] = None) -> bool:
+    """Whether this deployment serves the private scanner's score and report.
+
+    THE SCANNER WAS PRIVATE BY DESCRIPTION ONLY. PRODUCT.md constraint 1 keeps a
+    composite buy/hold/sell off the published single-company view and says the
+    per-name score and the local report live "locally". Nothing enforced the
+    second half: `/api/verdict` computed a score, an action and a position size
+    for any ticker on any deployment, the stock page offered it as the "Score
+    it" tab, and the only fence was that `reports/` is gitignored — which hides
+    a FILE, not a route that computes live. Found in the November 2026 analysis.
+
+    So the tier is ON where the owner runs the app and OFF on a deployment, and
+    neither needs a setting. "A deployment" is any Vercel build, previews
+    included, because a preview URL is as public as production. Set
+    QUANTDESK_PRIVATE_TIER=1 to turn it on where it would be off, or =0 to turn
+    it off locally.
+
+    Read per request rather than at import, so a test can flip it and so the
+    routes it guards and `/api/capabilities` can never disagree.
+    """
+    raw = (os.environ.get("QUANTDESK_PRIVATE_TIER") or "").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return not on_vercel(request)
+
+
+PRIVATE_TIER_OFF = ("The private scanner is not served by this deployment. It runs where its "
+                    "owner runs the app, and the published views never carry a score.")
 
 
 # POST is permitted for exactly one route. `/api/portfolio` takes a body rather
@@ -116,6 +180,16 @@ app.add_middleware(
 # header.
 CACHE = "public, max-age=0, must-revalidate, s-maxage=60"
 CDN_CACHE = "public, s-maxage=60, stale-while-revalidate=300"
+
+# A RESPONSE CARRYING A PROVIDER FAILURE IS HELD FOR SECONDS, NOT MINUTES. Every
+# such response used to go out under the two lines above, so a ten-second
+# throttle at Yahoo became up to six minutes of "no data" served by the edge to
+# every reader of that URL — after the provider had recovered. Fifteen seconds
+# with no stale window still absorbs a burst of identical requests, which is the
+# part of caching worth keeping during an outage. `lib/cache.ts` already refuses
+# to keep a failure in the browser; this is the same rule at the edge.
+CACHE_FAILED = "public, max-age=0, must-revalidate, s-maxage=15"
+CDN_CACHE_FAILED = "public, s-maxage=15"
 
 # The wire cap for daily series. `period=max` on a long-listed US name is ~11k
 # rows x 10 fields, which is megabytes of JSON and as many Recharts points.
@@ -220,11 +294,25 @@ def client_ip(request: Request) -> str:
     `x-forwarded-for` is only trustworthy behind a proxy that sets it, which is
     the case on Vercel — the platform edge overwrites it. The FIRST entry is the
     original client; the rest are hops.
+
+    NOWHERE ELSE, because anywhere else the client writes it. Off Vercel this
+    read the header anyway, so rotating it gave every request a fresh bucket —
+    measured in the November 2026 analysis, eight of eight rotated requests
+    passed a limit of three. Uvicorn already resolves `request.client` from the
+    header for proxies it trusts (`--forwarded-allow-ips`, 127.0.0.1 by
+    default, which covers the Next dev proxy), so that is what is read instead.
     """
-    forwarded = request.headers.get("x-forwarded-for", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    if on_vercel(request):
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
+
+
+@functools.lru_cache(maxsize=1)
+def _known_paths() -> frozenset:
+    """Every path a route is registered at, read once all routes exist."""
+    return frozenset(getattr(route, "path", None) for route in app.routes)
 
 
 @app.middleware("http")
@@ -266,12 +354,19 @@ async def rate_limit(request: Request, call_next):
         return await call_next(request)
 
     limit, window = RATE_LIMITS.get(path, RATE_LIMITS[None])
-    key = (client_ip(request), path)
+    # EVERY PATH NO ROUTE ANSWERS SHARES ONE BUCKET. Keyed by the raw path, each
+    # made-up URL got a bucket of its own, so one client could mint ten
+    # thousand of them in a minute — every one under the default limit — and the
+    # full reset below then wiped every client's count, its own included. In the
+    # November 2026 analysis a client already refused at `/api/screener` was
+    # served again after 10,050 such 404s.
+    bucket = path if path in _known_paths() else "(unrouted)"
+    key = (client_ip(request), bucket)
     now = time.monotonic()
 
     with _RATE_LOCK:
         if len(_RATE_HITS) > _RATE_MAX_KEYS:
-            _RATE_HITS.clear()
+            _evict_rate_keys(now)
         hits = _RATE_HITS[key]
         while hits and now - hits[0] >= window:
             hits.popleft()
@@ -279,9 +374,11 @@ async def rate_limit(request: Request, call_next):
             retry_after = max(1, int(window - (now - hits[0])) + 1)
             return JSONResponse(
                 status_code=429,
-                content={"detail": f"Rate limit reached for this endpoint "
-                                   f"({limit} requests per {window}s). "
-                                   f"Try again in {retry_after}s."},
+                content={"detail": tr(f"Rate limit reached for this endpoint "
+                                      f"({limit} requests per {window}s). "
+                                      f"Try again in {retry_after}s.",
+                                      f"Batas permintaan untuk endpoint ini tercapai ({limit} permintaan per "
+                                      f"{window} detik). Coba lagi dalam {retry_after} detik.")},
                 headers={"Retry-After": str(retry_after),
                          "Cache-Control": "no-store"},
             )
@@ -290,17 +387,55 @@ async def rate_limit(request: Request, call_next):
     return await call_next(request)
 
 
-def ok(payload: dict) -> JSONResponse:
+def _evict_rate_keys(now: float) -> None:
+    """Make room in the bucket table without forgetting anyone still counting.
+
+    It used to be cleared outright when full, which handed every limited client
+    a fresh budget at once. Now the buckets whose last request is older than the
+    longest window go first — they no longer count anything — and only if the
+    table is still full, during a flood from thousands of addresses, do the
+    least recently active go after them. Called under `_RATE_LOCK`.
+    """
+    horizon = now - max(window for _, window in RATE_LIMITS.values())
+    for stale in [key for key, hits in _RATE_HITS.items() if not hits or hits[-1] <= horizon]:
+        del _RATE_HITS[stale]
+    excess = len(_RATE_HITS) - _RATE_MAX_KEYS
+    if excess > 0:
+        for key in sorted(_RATE_HITS, key=lambda k: _RATE_HITS[k][-1])[:excess]:
+            del _RATE_HITS[key]
+
+
+@app.middleware("http")
+async def language(request: Request, call_next):
+    """Answer this request in the language it asked for — `lang=id` or English.
+
+    Registered after the rate limiter, so it wraps it and even a refusal is
+    worded in the reader's language. The value lives in a contextvar for the
+    life of the request; see `_lib/lang.py` for how it reaches worker threads.
+    The parameter is in the URL, so the edge keeps one copy per language.
+    """
+    token = lang.use(request.query_params.get("lang"))
+    try:
+        return await call_next(request)
+    finally:
+        lang.reset(token)
+
+
+def ok(payload: dict, *, failed: bool = False) -> JSONResponse:
     # Cache at the edge: quotes move, but not within 60s, and every engine
     # re-runs a network fetch that we do not want to pay for on each keystroke.
-    return JSONResponse(content=clean(payload),
-                        headers={"Cache-Control": CACHE, "CDN-Cache-Control": CDN_CACHE})
+    # `failed` marks a payload that carries a TRANSIENT failure — see
+    # CACHE_FAILED — and is never set for one that is about the symbol itself.
+    return JSONResponse(content=clean(payload), headers={
+        "Cache-Control": CACHE_FAILED if failed else CACHE,
+        "CDN-Cache-Control": CDN_CACHE_FAILED if failed else CDN_CACHE})
 
 
 def private_ok(payload: dict) -> JSONResponse:
     """A response that no cache anywhere may keep a copy of.
 
-    THE ONLY ROUTE IN THIS APP WHOSE INPUT IS PERSONAL. Every other request says
+    FOR THE ROUTES WHOSE INPUT IS PERSONAL — holdings, a reader's own list, the
+    watchlist's report dates — and for the private score. Every other request says
     "tell me about this company"; the portfolio route says "here is what I own",
     which is a different kind of fact about the person asking.
 
@@ -336,8 +471,10 @@ def parse_ticker_list(tickers: str, market: str) -> list[str]:
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                   f"{'...' if len(bad) > 5 else ''}.")
+            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}.",
+                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}."))
     return list(dict.fromkeys(resolved(t, market) for t in raw))
 
 
@@ -379,6 +516,18 @@ def health():
                     "quality"],
         "extras": ["screener", "news", "simulation-csv", "event-study"],
     })
+
+
+@app.get("/api/capabilities")
+def capabilities(request: Request):
+    """What this deployment serves, so the client draws only what it can reach.
+
+    The client hides the Score tab and the local-scan view when `privateTier`
+    is false, rather than drawing a tab whose only possible answer is a refusal.
+    The same function decides the flag and guards the two routes, so the page
+    and the server cannot disagree about it.
+    """
+    return ok({"privateTier": private_tier_enabled(request)})
 
 
 # --------------------------------------------------------------------------- #
@@ -563,17 +712,23 @@ def screener(
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                   f"{'...' if len(bad) > 5 else ''}.",
+            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}.",
+                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}."),
         )
     universe = list(dict.fromkeys(resolved(t, market) for t in raw))
     if not universe:
-        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+        raise HTTPException(status_code=400, detail=tr("Provide at least one ticker.",
+                                                       "Masukkan setidaknya satu ticker."))
     if len(universe) > SCREENER_MAX_UNIVERSE:
         raise HTTPException(
             status_code=400,
-            detail=f"Universe too large. Limit the scan to {SCREENER_MAX_UNIVERSE} symbols — "
-                   f"each one costs an upstream fetch and a model fit.",
+            detail=tr(f"Universe too large. Limit the scan to {SCREENER_MAX_UNIVERSE} symbols — "
+                      f"each one costs an upstream fetch and a model fit.",
+                      f"Semesta terlalu besar. Batasi pemindaian hingga {SCREENER_MAX_UNIVERSE} "
+                      "simbol — masing-masing butuh satu pengambilan data dan satu pencocokan "
+                      "model."),
         )
     # Walk-forward is roughly an order of magnitude more expensive per ticker
     # than the other modes even with the fit budget applied, so a large universe
@@ -582,9 +737,13 @@ def screener(
     if mode == "walkforward" and len(universe) > SCREENER_MAX_WALKFORWARD:
         raise HTTPException(
             status_code=400,
-            detail=f"Walk-forward refits per step and cannot scan {len(universe)} symbols "
-                   f"inside the request limit. Use at most {SCREENER_MAX_WALKFORWARD} symbols "
-                   f"on this mode, or scan with Threshold or Robust (MAD).",
+            detail=tr(f"Walk-forward refits per step and cannot scan {len(universe)} symbols "
+                      f"inside the request limit. Use at most {SCREENER_MAX_WALKFORWARD} symbols "
+                      f"on this mode, or scan with Threshold or Robust (MAD).",
+                      "Walk-forward mencocokkan ulang di setiap langkah dan tidak bisa "
+                      f"memindai {len(universe)} simbol dalam batas waktu permintaan. Gunakan "
+                      f"paling banyak {SCREENER_MAX_WALKFORWARD} simbol pada mode ini, atau "
+                      "pindai dengan Threshold atau Robust (MAD)."),
         )
 
     config = AnalysisConfig(
@@ -623,7 +782,7 @@ def screener(
         "config": {"period": period, "mode": mode},
         "rows": significance["rows"],
         "significance": {k: v for k, v in significance.items() if k != "rows"},
-    })
+    }, failed=not significance["rows"])
 
 
 # --------------------------------------------------------------------------- #
@@ -697,7 +856,8 @@ def rank(
         if entry is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Unknown universe '{universe}'. See /api/rank/universes.")
+                detail=tr(f"Unknown universe '{universe}'. See /api/rank/universes.",
+                          f"Semesta '{universe}' tidak dikenal. Lihat /api/rank/universes."))
         symbols_list = entry["tickers"]
         market_code = entry["market"]
         label = entry["name"]
@@ -706,26 +866,33 @@ def rank(
         if not tickers:
             raise HTTPException(
                 status_code=400,
-                detail="Provide either a `universe` id or a `tickers` list.")
+                detail=tr("Provide either a `universe` id or a `tickers` list.",
+                          "Masukkan id `universe` atau daftar `tickers`."))
         symbols_list = parse_ticker_list(tickers, market)
         market_code = market.upper()
-        label = "Custom list"
+        label = tr("Custom list", "Daftar khusus")
         as_of = None
 
-    return ok(_ranked(symbols_list, market_code, label, as_of, universe))
+    payload = _ranked(symbols_list, market_code, label, as_of, universe)
+    # Nothing ranked is a fetch that failed, not a universe with no names in it.
+    return ok(payload, failed=not payload.get("ranked"))
 
 
 def _ranked(symbols_list: list, market_code: str, label: str,
             as_of: Optional[str], universe: Optional[str]) -> dict:
     """The ranking payload for a resolved list — shared by the GET and the POST."""
     if not symbols_list:
-        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+        raise HTTPException(status_code=400, detail=tr("Provide at least one ticker.",
+                                                       "Masukkan setidaknya satu ticker."))
     if len(symbols_list) > RANK_MAX_UNIVERSE:
         raise HTTPException(
             status_code=400,
-            detail=f"Universe too large. The ranking tier scans up to "
-                   f"{RANK_MAX_UNIVERSE} symbols per request; this one has "
-                   f"{len(symbols_list)}. Split it, or narrow the list.")
+            detail=tr(f"Universe too large. The ranking tier scans up to "
+                      f"{RANK_MAX_UNIVERSE} symbols per request; this one has "
+                      f"{len(symbols_list)}. Split it, or narrow the list.",
+                      "Semesta terlalu besar. Tingkat peringkat memindai hingga "
+                      f"{RANK_MAX_UNIVERSE} simbol per permintaan; yang ini punya "
+                      f"{len(symbols_list)}. Pecah, atau persempit daftarnya."))
 
     result = ranking.scan(symbols_list, market_code=market_code)
     # THE PANEL THAT PRESENTS A RANKING CARRIES THE FINDING ABOUT WHETHER THAT
@@ -766,7 +933,7 @@ class RankListRequest(BaseModel):
 def rank_list(body: RankListRequest):
     """Rank a reader's own list. Same engine and caps as `/api/rank`."""
     symbols_list = parse_ticker_list(",".join(body.tickers), body.market)
-    return private_ok(_ranked(symbols_list, body.market.upper(), "Your list", None, None))
+    return private_ok(_ranked(symbols_list, body.market.upper(), tr("Your list", "Daftar Anda"), None, None))
 
 
 @app.get("/api/peers")
@@ -804,24 +971,32 @@ def peers(
         if entry is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Unknown peer group '{universe}'. See /api/rank/universes.")
+                detail=tr(f"Unknown peer group '{universe}'. See /api/rank/universes.",
+                          f"Kelompok sejenis '{universe}' tidak dikenal. Lihat /api/rank/universes."))
     elif candidates:
         entry = universes.get(candidates[0]["id"])
     else:
         raise HTTPException(
             status_code=404,
-            detail=f"{symbol} is not in any of the predefined universes, so there is no "
-                   f"peer group to place it against. Pass `universe` explicitly, or use "
-                   f"the Scan & rank tab with a list of your own.")
+            detail=tr(f"{symbol} is not in any of the predefined universes, so there is no "
+                      f"peer group to place it against. Pass `universe` explicitly, or use "
+                      f"the Scan & rank tab with a list of your own.",
+                      f"{symbol} tidak termasuk semesta mana pun yang sudah ditentukan, jadi "
+                      "tidak ada kelompok sejenis untuk menempatkannya. Teruskan `universe` "
+                      "secara eksplisit, atau gunakan tab Pindai & peringkat dengan daftar "
+                      "Anda sendiri."))
 
     result = ranking.scan(entry["tickers"], market_code=entry["market"])
     row = next((r for r in result["rows"] if r["ticker"] == symbol), None)
     if row is None:
         raise HTTPException(
             status_code=422,
-            detail=f"{symbol} could not be ranked against {entry['name']}: it needs at "
-                   f"least {ranking.MIN_BARS} trading days of history, and either the "
-                   f"fetch failed or the listing is too recent.")
+            detail=tr(f"{symbol} could not be ranked against {entry['name']}: it needs at "
+                      f"least {ranking.MIN_BARS} trading days of history, and either the "
+                      f"fetch failed or the listing is too recent.",
+                      f"{symbol} tidak bisa diperingkatkan terhadap {entry['name']}: ia butuh "
+                      f"riwayat setidaknya {ranking.MIN_BARS} hari perdagangan, dan pengambilan "
+                      "datanya gagal atau sahamnya terlalu baru."))
 
     context = {"id": entry["id"], "name": entry["name"], "market": entry["market"],
                "asOf": entry["asOf"], "count": entry["count"],
@@ -860,6 +1035,7 @@ def peers(
 # --------------------------------------------------------------------------- #
 @app.get("/api/verdict")
 async def name_verdict(
+    request: Request,
     ticker: str = Query(..., pattern=TICKER_PATTERN),
     market: str = Query("US", pattern="^(US|ID|us|id)$"),
     universe: Optional[str] = Query(
@@ -881,7 +1057,14 @@ async def name_verdict(
     Every response carries `provenance`: the measured finding that this app's
     price ranking showed no detectable relationship to subsequent returns. A
     caller rendering the score without it is misrepresenting what it is.
+
+    REFUSED BEFORE ANYTHING RUNS where the private tier is off — see
+    `private_tier_enabled` — and never cached anywhere when it is on: a score
+    and a position size are the most advice-shaped thing this app produces, and
+    a shared edge copy of one is a copy nobody chose to publish.
     """
+    if not private_tier_enabled(request):
+        raise HTTPException(status_code=404, detail=PRIVATE_TIER_OFF)
     symbol, market = resolved_with_market(ticker, market)
 
     entry = None
@@ -890,7 +1073,8 @@ async def name_verdict(
         if entry is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Unknown peer group '{universe}'. See /api/rank/universes.")
+                detail=tr(f"Unknown peer group '{universe}'. See /api/rank/universes.",
+                          f"Kelompok sejenis '{universe}' tidak dikenal. Lihat /api/rank/universes."))
     else:
         candidates = universes.containing(symbol)
         if candidates:
@@ -934,6 +1118,24 @@ async def name_verdict(
     )
     legs = dict(results)
 
+    # EVERYTHING AFTER THE LENSES RUNS IN ONE WORKER THREAD, IN ORDER. It ran on
+    # the event loop itself: a blocking two-year price fetch, the share register
+    # and the benchmark, plus the tape, formation, profile and chart arithmetic —
+    # about a third of a second of CPU on a planted two-year frame before any
+    # network — during which this process could answer nothing else, the command
+    # palette's symbol search included. Still strictly sequential, for the reason
+    # the universe scan above is: nothing here may overlap another yfinance call.
+    return private_ok(await asyncio.to_thread(
+        _verdict_reading, symbol, entry, scan, legs, risk_budget, max_weight))
+
+
+def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], legs: dict,
+                     risk_budget: float, max_weight: float) -> dict:
+    """The rest of `/api/verdict`, once the universe scan and the four lenses are in.
+
+    Synchronous on purpose, and called through `asyncio.to_thread` by the route:
+    every fetch below is sequential, which the route's comments explain.
+    """
     row = None
     universe_context = None
     if scan is not None and entry is not None:
@@ -1000,7 +1202,7 @@ async def name_verdict(
     # a batched yfinance call runs beside the per-symbol ones.
     try:
         register_result = ownership.read(
-            await asyncio.to_thread(market_data.share_register, symbol),
+            market_data.share_register(symbol),
             median_volume=(float(frame["Volume"].tail(21).median())
                            if frame is not None else None))
     except Exception:
@@ -1027,12 +1229,12 @@ async def name_verdict(
     try:
         benchmark_symbol = riskmodel.MARKET_INDEX.get(symbols.market_of(symbol), "^GSPC")
         market_regime = structure.regime(
-            await asyncio.to_thread(market_data.ohlcv, benchmark_symbol, period="2y"),
+            market_data.ohlcv(benchmark_symbol, period="2y"),
             symbol=benchmark_symbol)
     except Exception:
         pass
 
-    return ok({
+    return {
         **scored,
         "rank": (row or {}).get("rank"),
         "universe": universe_context,
@@ -1070,7 +1272,7 @@ async def name_verdict(
         "provenance": verdict.provenance(),
         "blendBacktest": verdict.blend_validation(symbols.market_of(symbol)),
         "preTrade": checks,
-    })
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -1225,14 +1427,21 @@ def _latest_scan(market: str) -> Optional[Path]:
 
 
 @app.get("/api/scan/latest")
-def latest_scan(market: str = Query("ID", pattern="^(US|ID|us|id)$")):
+def latest_scan(request: Request, market: str = Query("ID", pattern="^(US|ID|us|id)$")):
     """The most recent local scan for this market, trimmed to a listable shape.
 
     Returns `available: false` rather than a 404 when there is no scan: a
     missing report is the normal state on a fresh checkout and on the deployed
     app, and the panel says so in words instead of rendering an error.
+
+    A deployment never reads the directory at all — see `private_tier_enabled`.
+    `reports/` is gitignored, but a command-line deploy uploads what is on disk
+    unless `.vercelignore` says otherwise, so the absence of the file was never
+    a fence anyone had checked.
     """
     market = market.upper()
+    if not private_tier_enabled(request):
+        return private_ok({"available": False, "market": market, "reason": PRIVATE_TIER_OFF})
     path = _latest_scan(market)
     if path is None:
         return private_ok({
@@ -1327,23 +1536,28 @@ def exposure_scan(
         if entry is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"Unknown universe '{universe}'. See /api/rank/universes.")
+                detail=tr(f"Unknown universe '{universe}'. See /api/rank/universes.",
+                          f"Semesta '{universe}' tidak dikenal. Lihat /api/rank/universes."))
         symbols_list, market_code = entry["tickers"], entry["market"]
         label, as_of = entry["name"], entry["asOf"]
     elif tickers:
         symbols_list = parse_ticker_list(tickers, market)
-        market_code, label, as_of = market.upper(), "Your list", None
+        market_code, label, as_of = market.upper(), tr("Your list", "Daftar Anda"), None
     else:
         raise HTTPException(status_code=400,
-                            detail="Pass either `universe` or `tickers`.")
+                            detail=tr("Pass either `universe` or `tickers`.",
+                                      "Masukkan `universe` atau `tickers`."))
 
     if not symbols_list:
-        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+        raise HTTPException(status_code=400, detail=tr("Provide at least one ticker.",
+                                                       "Masukkan setidaknya satu ticker."))
     if len(symbols_list) > RANK_MAX_UNIVERSE:
         raise HTTPException(
             status_code=400,
-            detail=f"This scans up to {RANK_MAX_UNIVERSE} names at a time; "
-                   f"this list has {len(symbols_list)}.")
+            detail=tr(f"This scans up to {RANK_MAX_UNIVERSE} names at a time; "
+                      f"this list has {len(symbols_list)}.",
+                      f"Ini memindai hingga {RANK_MAX_UNIVERSE} saham sekaligus; daftar ini "
+                      f"punya {len(symbols_list)}."))
 
     result = exposure.scan(symbols_list, market_code=market_code)
     return ok({
@@ -1351,7 +1565,7 @@ def exposure_scan(
                      "asOf": as_of, "count": len(symbols_list)},
         **result,
         "explain": explain.for_exposure_scan(result),
-    })
+    }, failed=not result.get("rows"))
 
 
 @app.get("/api/rank/deepen")
@@ -1371,17 +1585,24 @@ def rank_deepen(
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                   f"{'...' if len(bad) > 5 else ''}.")
+            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}.",
+                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}."))
     shortlist = list(dict.fromkeys(resolved(t, market) for t in raw))
     if not shortlist:
-        raise HTTPException(status_code=400, detail="Provide at least one ticker.")
+        raise HTTPException(status_code=400, detail=tr("Provide at least one ticker.",
+                                                       "Masukkan setidaknya satu ticker."))
     if len(shortlist) > DEEPEN_MAX:
         raise HTTPException(
             status_code=400,
-            detail=f"Deepening runs the filings-based lenses one symbol at a time and "
-                   f"cannot do {len(shortlist)} inside the request limit. Pick at most "
-                   f"{DEEPEN_MAX} from the ranking above.")
+            detail=tr(f"Deepening runs the filings-based lenses one symbol at a time and "
+                      f"cannot do {len(shortlist)} inside the request limit. Pick at most "
+                      f"{DEEPEN_MAX} from the ranking above.",
+                      "Pendalaman menjalankan lensa berbasis laporan keuangan satu simbol demi "
+                      f"satu simbol dan tidak bisa mengerjakan {len(shortlist)} dalam batas "
+                      f"waktu permintaan. Pilih paling banyak {DEEPEN_MAX} dari peringkat di "
+                      "atas."))
 
     rows = []
     for symbol in shortlist:
@@ -1402,9 +1623,13 @@ def rank_deepen(
 
     return ok({
         "rows": rows,
-        "caveat": ("Quality and valuation are computed one symbol at a time because the "
-                   "filings behind them cannot be fetched in batch. That is why they are "
-                   "a shortlist step rather than a column in the ranking table."),
+        "caveat": (tr("Quality and valuation are computed one symbol at a time because the "
+                      "filings behind them cannot be fetched in batch. That is why they are "
+                      "a shortlist step rather than a column in the ranking table.",
+                      "Kualitas dan valuasi dihitung satu simbol demi satu simbol karena "
+                      "laporan keuangan di baliknya tidak bisa diambil secara massal. Itulah "
+                      "sebabnya keduanya menjadi langkah daftar pendek, bukan kolom di tabel "
+                      "peringkat.")),
     })
 
 
@@ -1433,7 +1658,9 @@ def _deepen_valuation(symbol: str, market: str) -> dict:
 # --------------------------------------------------------------------------- #
 # Portfolio context — where a candidate sits against what is already owned
 #
-# THE ONE POST IN THIS APP, AND THE REASON IS THE INPUT RATHER THAN THE SIZE.
+# THE FIRST POST IN THIS APP, AND THE REASON IS THE INPUT RATHER THAN THE SIZE.
+# (Two have followed for the same reason: `/api/rank/list` for a reader's own
+# list and `/api/markets/earnings` for the watchlist's report dates.)
 # Everything else here answers "tell me about this company", and a company name
 # in a URL is not a fact about anybody. A holdings list is. URLs are logged by
 # every hop that handles them — the platform's access log, any proxy, the
@@ -1479,16 +1706,19 @@ def _validated_weights(raw: dict) -> dict:
         symbol = str(ticker).strip().upper()
         if not TICKER_RE.match(symbol):
             raise HTTPException(status_code=400,
-                                detail=f"Not a valid ticker symbol in weights: {symbol!r}.")
+                                detail=tr(f"Not a valid ticker symbol in weights: {symbol!r}.",
+                                          f"Bukan simbol ticker yang valid dalam bobot: {symbol!r}."))
         try:
             weight = float(value)
         except (TypeError, ValueError) as exc:
             raise HTTPException(
                 status_code=400,
-                detail=f"Weight for {symbol} must be a number.") from exc
+                detail=tr(f"Weight for {symbol} must be a number.",
+                          f"Bobot untuk {symbol} harus berupa angka.")) from exc
         if not (weight > 0) or not math.isfinite(weight):
             raise HTTPException(status_code=400,
-                                detail=f"Weight for {symbol} must be above zero.")
+                                detail=tr(f"Weight for {symbol} must be above zero.",
+                                          f"Bobot untuk {symbol} harus di atas nol."))
         out[symbol] = weight
     return out
 
@@ -1511,7 +1741,7 @@ def portfolio_context(body: PortfolioRequest):
     correlations run higher in the worst quarters, so an ordinary year's
     reading is a floor.
 
-    A POST, alone in this app, because the input is a fact about the reader
+    A POST, like the other two personal routes, because the input is a fact about the reader
     rather than about a company and URLs are logged by every hop that handles
     them. Nothing is stored either — see the note above the route.
     """
@@ -1520,10 +1750,13 @@ def portfolio_context(body: PortfolioRequest):
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                   f"{'...' if len(bad) > 5 else ''}.")
+            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}.",
+                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
+                      f"{'...' if len(bad) > 5 else ''}."))
     if not raw:
-        raise HTTPException(status_code=400, detail="Provide at least one holding.")
+        raise HTTPException(status_code=400, detail=tr("Provide at least one holding.",
+                                                       "Masukkan setidaknya satu kepemilikan."))
 
     market = body.market
     # THE MARKET FOLLOWS THE SYMBOL, NOT THE DROPDOWN, and this route needed it
@@ -1538,13 +1771,17 @@ def portfolio_context(body: PortfolioRequest):
     if not book:
         raise HTTPException(
             status_code=400,
-            detail="Provide at least one holding other than the candidate itself.")
+            detail=tr("Provide at least one holding other than the candidate itself.",
+                      "Masukkan setidaknya satu kepemilikan selain kandidat itu sendiri."))
     if len(book) > PORTFOLIO_MAX_HOLDINGS:
         raise HTTPException(
             status_code=400,
-            detail=f"This compares up to {PORTFOLIO_MAX_HOLDINGS} holdings at a time; "
-                   f"this list has {len(book)}. A correlation matrix that size is also "
-                   f"more than anyone reads.")
+            detail=tr(f"This compares up to {PORTFOLIO_MAX_HOLDINGS} holdings at a time; "
+                      f"this list has {len(book)}. A correlation matrix that size is also "
+                      f"more than anyone reads.",
+                      f"Ini membandingkan hingga {PORTFOLIO_MAX_HOLDINGS} kepemilikan "
+                      f"sekaligus; daftar ini punya {len(book)}. Matriks korelasi sebesar itu "
+                      "juga lebih dari yang akan dibaca siapa pun."))
 
     result = portfolio.analyse(symbol, book, weights=_validated_weights(body.weights),
                                market_code=market)
@@ -1727,9 +1964,12 @@ def _dividend_record(company: dict) -> dict:
     price = _finite_or_none(company.get("price"))
     if not isinstance(history, pd.DataFrame) or history.empty:
         return {"available": False, "perShare": [],
-                "reading": ("No dividend payments in the provider's record for this listing. "
-                            "That is either a company that does not pay one or a record that "
-                            "is incomplete; the data cannot say which.")}
+                "reading": (tr("No dividend payments in the provider's record for this listing. "
+                               "That is either a company that does not pay one or a record that "
+                               "is incomplete; the data cannot say which.",
+                               "Tidak ada pembayaran dividen dalam catatan penyedia data untuk saham "
+                               "ini. Itu bisa perusahaan yang tidak membagikan dividen atau catatan "
+                               "yang tidak lengkap; datanya tidak bisa membedakan keduanya."))}
     this_year = str(dt.date.today().year)
     rows = []
     for _, row in history.iloc[::-1].iterrows():
@@ -1742,18 +1982,26 @@ def _dividend_record(company: dict) -> dict:
     low, high = valuation.PLAUSIBLE_YIELD_BAND
     if complete and price and not (low <= complete[-1]["amount"] / price <= high):
         return {"available": False, "perShare": [],
-                "reading": (f"The provider's dividend record implies a "
-                            f"{complete[-1]['amount'] / price * 100:.3g}% yield against "
-                            f"today's price, which is a units problem rather than a dividend, "
-                            f"so the series is withheld.")}
+                "reading": (tr(f"The provider's dividend record implies a "
+                               f"{complete[-1]['amount'] / price * 100:.3g}% yield against "
+                               f"today's price, which is a units problem rather than a dividend, "
+                               f"so the series is withheld.",
+                               "Catatan dividen penyedia data menyiratkan imbal hasil "
+                               f"{complete[-1]['amount'] / price * 100:.3g}% terhadap harga hari ini, "
+                               "yang merupakan masalah satuan, bukan dividen, jadi deretnya ditahan."))}
     paid = len(complete)
-    reading = (f"Paid in each of the {paid} complete calendar year{'' if paid == 1 else 's'} the "
-               f"record covers" if paid else "No complete calendar year in the record")
-    reading += ("; the current year is year to date." if any(r["partial"] for r in rows) else ".")
+    reading = (tr(f"Paid in each of the {paid} complete calendar year{'' if paid == 1 else 's'} the "
+                  f"record covers",
+                  f"Dibayarkan di setiap {paid} tahun kalender lengkap yang dicakup "
+                  "catatannya") if paid else tr("No complete calendar year in the record",
+                                                "Tidak ada tahun kalender lengkap dalam catatannya"))
+    reading += (tr("; the current year is year to date.",
+                   "; tahun berjalan dihitung sejak awal tahun.") if any(r["partial"] for r in rows) else ".")
     return {
         "available": bool(rows),
         "perShare": rows,
-        "basis": "calendar year, as paid, in the trading currency",
+        "basis": tr("calendar year, as paid, in the trading currency",
+                    "tahun kalender, sesuai pembayaran, dalam mata uang perdagangan"),
         "ttm": _finite_or_none(company.get("ttm_dividend")),
         "reading": reading,
     }
@@ -1777,7 +2025,9 @@ def company_payload(symbol: str) -> dict:
     if not company.get("ok"):
         raise HTTPException(
             status_code=404,
-            detail=f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+            detail=tr(f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+                      f"Tidak ada data perusahaan yang kembali untuk '{symbol}'. "
+                      f"{symbols.hint(symbol)}"),
         )
     market_code = symbols.market_of(symbol)
     record = trackrecord.read(company, market_code)
@@ -1801,9 +2051,12 @@ def company_payload(symbol: str) -> dict:
             "trading": trading,
             "reporting": reporting,
             "fxRate": fx_rate,
-            "note": (f"The statements are in {reporting} and were converted to {trading} at "
-                     f"today's rate, so the history carries the currency's moves as well as "
-                     f"the company's." if fx_rate and reporting and reporting != trading
+            "note": (tr(f"The statements are in {reporting} and were converted to {trading} at "
+                        f"today's rate, so the history carries the currency's moves as well as "
+                        f"the company's.",
+                        f"Laporan keuangannya dalam {reporting} dan dikonversi ke {trading} "
+                        "dengan kurs hari ini, jadi riwayatnya membawa pergerakan mata uang "
+                        "selain pergerakan perusahaan.") if fx_rate and reporting and reporting != trading
                      else None),
         },
         "history": trackrecord.series(company),
@@ -1811,10 +2064,14 @@ def company_payload(symbol: str) -> dict:
         "nextEarnings": {
             "date": calendar["next"],
             "past": calendar["past"],
-            "source": "the data source's earnings calendar",
-            "reading": ("The provider's date for the next report. It is often an estimate "
-                        "until the company confirms it." if calendar["next"] else
-                        "No upcoming report date in the provider's calendar."),
+            "source": tr("the data source's earnings calendar",
+                         "kalender laporan laba dari sumber data"),
+            "reading": (tr("The provider's date for the next report. It is often an estimate "
+                           "until the company confirms it.",
+                           "Tanggal laporan berikutnya menurut penyedia data. Tanggal ini sering "
+                           "kali perkiraan sampai perusahaan mengonfirmasinya.") if calendar["next"] else
+                        tr("No upcoming report date in the provider's calendar.",
+                           "Tidak ada tanggal laporan mendatang di kalender penyedia data.")),
         },
         "record": record,
         "explain": explain.for_company(record, market_code),
@@ -1837,7 +2094,9 @@ def quality_payload(symbol: str) -> dict:
     if not company.get("ok"):
         raise HTTPException(
             status_code=404,
-            detail=f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+            detail=tr(f"No company data came back for '{symbol}'. {symbols.hint(symbol)}",
+                      f"Tidak ada data perusahaan yang kembali untuk '{symbol}'. "
+                      f"{symbols.hint(symbol)}"),
         )
     # The symbol reaches the lens only so the validation-domain block can say
     # whether THIS use sits inside each screen's published sample. No score
@@ -1918,8 +2177,10 @@ def event_study(
     if market_history is None:
         raise HTTPException(
             status_code=503,
-            detail=f"Could not fetch {index_symbol}, so abnormal returns cannot "
-                   f"be measured against a market model.",
+            detail=tr(f"Could not fetch {index_symbol}, so abnormal returns cannot "
+                      f"be measured against a market model.",
+                      f"Tidak bisa mengambil {index_symbol}, jadi imbal hasil abnormal tidak "
+                      "bisa diukur terhadap model pasar."),
         )
 
     # No timezone stripping here any more. Three frames used to be localised by
@@ -1976,8 +2237,11 @@ def find_symbols(
         "market": market.upper() if market else None,
         "results": results,
         "listings": status,
-        "note": ("The provider's equity listings as of these dates. Funds, indices, crypto "
-                 "and recent listings are not in them; type a full symbol to open it anyway."),
+        "note": (tr("The provider's equity listings as of these dates. Funds, indices, crypto "
+                    "and recent listings are not in them; type a full symbol to open it anyway.",
+                    "Daftar saham dari penyedia data per tanggal-tanggal ini. Reksa dana, "
+                    "indeks, kripto, dan saham yang baru tercatat tidak ada di dalamnya; "
+                    "ketik simbol lengkap untuk tetap membukanya.")),
     }), headers={"Cache-Control": SYMBOLS_CACHE})
 
 
@@ -2006,10 +2270,15 @@ def markets_today():
     matched in the browser from the Trend tab's exposure figures, so no ticker
     is ever sent for it. See `_lib/marketboard.py`.
     """
-    board = marketboard.fetch()
+    # A copy: `fetch` hands back the board its process cache holds, and the
+    # readings written onto it below are in this request's language — written
+    # onto the shared one, a concurrent reader in the other language could be
+    # serialised with them.
+    board = marketboard.localise(dict(marketboard.fetch()))
     if not any(row.get("available") for row in board["rows"]):
         raise HTTPException(status_code=502,
-                            detail="The price provider returned nothing for the board just now.")
+                            detail=tr("The price provider returned nothing for the board just now.",
+                                      "Penyedia harga tidak mengembalikan apa pun untuk papan ini barusan."))
     board["explain"] = explain.for_market_board(board)
     return JSONResponse(content=clean(board),
                         headers={"Cache-Control": BOARD_CACHE, "CDN-Cache-Control": BOARD_CDN_CACHE})
@@ -2056,11 +2325,13 @@ def markets_earnings(body: EarningsRequest):
                 "available": bool(calendar.get("available"))}
 
     with ThreadPoolExecutor(max_workers=4) as pool:
-        items = list(pool.map(one, symbols_list))
+        items = list(pool.map(lang.carry(one), symbols_list))
     return private_ok({
         "items": items,
-        "note": ("The data provider's dates. A date is often an estimate until the company "
-                 "confirms it."),
+        "note": (tr("The data provider's dates. A date is often an estimate until the company "
+                    "confirms it.",
+                    "Tanggal dari penyedia data. Tanggal sering kali perkiraan sampai "
+                    "perusahaan mengonfirmasinya.")),
     })
 
 
@@ -2082,14 +2353,22 @@ def market_headlines(
     unknown = [key for key in keys if key not in news.HEADLINE_TOPICS]
     if unknown:
         raise HTTPException(status_code=422,
-                            detail=f"Unknown topic {', '.join(unknown)}. Known: "
-                                   f"{', '.join(news.HEADLINE_TOPICS)}.")
+                            detail=tr(f"Unknown topic {', '.join(unknown)}. Known: "
+                                      f"{', '.join(news.HEADLINE_TOPICS)}.",
+                                      f"Topik {', '.join(unknown)} tidak dikenal. Yang dikenal: "
+                                      f"{', '.join(news.HEADLINE_TOPICS)}."))
     code = market.upper()
     with ThreadPoolExecutor(max_workers=HEADLINE_TOPICS_MAX) as pool:
-        feeds = list(pool.map(lambda key: news.fetch_headlines(key, code, limit=limit), keys))
-    return JSONResponse(content=clean({"market": code, "topics": feeds}),
-                        headers={"Cache-Control": HEADLINES_CACHE,
-                                 "CDN-Cache-Control": HEADLINES_CDN_CACHE})
+        # `carry`: a bare pool does not inherit the request's language, and a
+        # feed's "could not be read" is a sentence the reader reads.
+        feeds = list(pool.map(lang.carry(lambda key: news.fetch_headlines(key, code, limit=limit)),
+                              keys))
+    # A feed that could not be read is held for seconds, like every other
+    # transient failure — not the ten minutes plus twenty a good answer gets.
+    failed = any(not feed.get("available") for feed in feeds)
+    return JSONResponse(content=clean({"market": code, "topics": feeds}), headers={
+        "Cache-Control": CACHE_FAILED if failed else HEADLINES_CACHE,
+        "CDN-Cache-Control": CDN_CACHE_FAILED if failed else HEADLINES_CDN_CACHE})
 
 
 # --------------------------------------------------------------------------- #
@@ -2121,7 +2400,39 @@ def ticker_news(
 ):
     """Third-party headlines. Display-only context — never an instruction source."""
     symbol, market = resolved_with_market(ticker, market)
-    return ok({"ticker": symbol, "items": news.fetch_news(symbol, limit=limit)})
+    return ok(news_payload(symbol, limit))
+
+
+def news_payload(symbol: str, limit: int) -> dict:
+    """The stock page's headlines, or a 502 that says the feed could not be read.
+
+    A failed feed and a company with no headlines are different facts and the
+    panel draws them differently; this is what lets it tell them apart.
+    """
+    try:
+        items = news.fetch_news(symbol, limit=limit, strict=True)
+    except news.NewsUnavailable as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"ticker": symbol, "items": items}
+
+
+# The legs whose data comes from the price-and-filings provider. The headlines
+# come from a different one, so a failed feed is never read as that outage.
+YAHOO_LEGS = ("anomaly", "technical", "valuation", "quality", "company")
+
+
+def _throttled(leg: dict) -> bool:
+    """Whether a leg came back with the signature of a throttled company fetch.
+
+    No sector and no industry is what a throttle looks like — the valuation
+    and quality lenses both say so in words, as `cause: "unknown-sector"` — and
+    it clears in minutes, so the payload carrying it is a transient failure and
+    not a fact about the company for the edge to keep.
+    """
+    if leg.get("ok"):
+        return (leg.get("data") or {}).get("cause") == "unknown-sector"
+    error = leg.get("error")
+    return isinstance(error, dict) and error.get("cause") == "unknown-sector"
 
 
 # --------------------------------------------------------------------------- #
@@ -2193,11 +2504,24 @@ async def confluence(
         )),
         leg("valuation", lambda: valuation_payload(symbol, market_code=market.upper())),
         leg("quality", lambda: quality_payload(symbol)),
-        leg("news", lambda: {"ticker": symbol,
-                             "items": news.fetch_news(symbol, limit=news_limit)}),
+        leg("news", lambda: news_payload(symbol, news_limit)),
         leg("company", lambda: company_payload(symbol)),
     )
     legs = dict(results)
+
+    # WHEN THE PROVIDER IS DOWN, SAY SO — and do not let the edge keep it. With
+    # the provider unreachable, every leg used to report the symbol's fault
+    # ("non-US listings need their exchange suffix", for AAPL) inside a 200 that
+    # the edge then served for six minutes. Both price legs failing is the
+    # signature; the benchmark index decides which of the two causes it is.
+    outage = (not legs["anomaly"]["ok"] and not legs["technical"]["ok"]
+              and not market_data.provider_answering(symbols.market_of(symbol)))
+    if outage:
+        message = market_data.provider_outage_message(symbol)
+        for name in YAHOO_LEGS:
+            if not legs[name]["ok"]:
+                legs[name] = {"ok": False, "error": message}
+    transient = outage or any(_throttled(value) for value in legs.values())
     # THE COMPANY BLOCK IS NOT A LENS, and the two readers of the assembled
     # payload are handed the lenses only — so neither can start quoting a
     # description as if it were evidence.
@@ -2207,7 +2531,7 @@ async def confluence(
     # must quote the figures the panels actually render, and a parallel
     # computation would eventually drift from them. A failed leg becomes a
     # stated blind spot inside it rather than an exception.
-    return ok({"ticker": symbol, **legs,
+    return ok({"ticker": symbol, **legs, "providerAnswering": not outage,
                # The market reaches the synthesis for the same reason it reaches
                # `pretrade.assess`, and is taken from the RESOLVED symbol for the
                # same reason too: the measured agreement between the two families
@@ -2221,4 +2545,5 @@ async def confluence(
                # takes it from there: the suffix is what actually determines the
                # listing, and a bare code with the wrong market selected would
                # otherwise be scored against the wrong universe.
-               "preTrade": pretrade.assess(lenses, market=symbols.market_of(symbol))})
+               "preTrade": pretrade.assess(lenses, market=symbols.market_of(symbol))},
+              failed=transient)

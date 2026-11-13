@@ -21,6 +21,7 @@
  *
  * Pure: compiled into the frontend assertions and pinned there.
  */
+import type { Lang } from "./i18n";
 import { isTicker, resolveSymbol } from "./symbols";
 
 /** Detection and look-back knobs a run can carry, beside the ticker itself. */
@@ -157,3 +158,13 @@ export function marketsHref(view: MarketView = "today"): string {
 export function parseMarketView(raw: string | null): MarketView {
   return (MARKET_VIEWS as readonly string[]).includes(raw ?? "") ? (raw as MarketView) : "today";
 }
+
+/**
+ * The field manual in the reader's language. The Indonesian page is built from
+ * the English one by scripts/build_glossary.py, and `predev`/`prebuild` copy
+ * every page in docs/ into public/docs/, so both resolve in production.
+ */
+export const MANUAL_HREF: Record<Lang, string> = {
+  en: "/docs/field-manual.html",
+  id: "/docs/field-manual.id.html",
+};

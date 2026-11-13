@@ -87,6 +87,7 @@ it fetched them.
 from __future__ import annotations
 
 import copy
+import re
 import datetime as dt
 import threading
 import time
@@ -96,7 +97,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from . import econcalendar, exposure, market_data
+from . import econcalendar, exposure, lang, market_data
 
 # A move at or above this percentile of its own past year is "unusual".
 UNUSUAL_AT = 95.0
@@ -518,6 +519,112 @@ def build(frames: dict[str, pd.DataFrame], fetched_at: Optional[str] = None) -> 
         "source": "Yahoo Finance",
         "delay": ("Quotes come from the provider and can be up to about twenty minutes "
                   "behind the market."),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# The board in Bahasa Indonesia
+# --------------------------------------------------------------------------- #
+# THE CACHE HOLDS ONE BOARD FOR EVERY READER, in English, and each request
+# re-words its own copy here. Translating inside `build` would freeze whichever
+# language filled the cache for the next four minutes of readers. Only words
+# move: keys, symbols, figures and the declared order are untouched.
+_GROUPS_ID = {"stocks": "Saham", "volatility": "Volatilitas", "rates": "Suku bunga AS",
+              "fx": "Dolar dan mata uang", "energy": "Energi", "metals": "Logam",
+              "crypto": "Kripto"}
+_UNITS_ID = {"index points": "poin indeks", "percent a year": "persen per tahun",
+             "% yield": "% imbal hasil", "rupiah per dollar": "rupiah per dolar",
+             "dollars per euro": "dolar per euro", "dollars a barrel": "dolar per barel",
+             "dollars per MMBtu": "dolar per MMBtu", "dollars an ounce": "dolar per ons",
+             "dollars a pound": "dolar per pon", "dollars": "dolar", "index": "indeks"}
+_ROWS_ID: dict[str, dict[str, str]] = {
+    "sp500": {"note": "Lima ratus perusahaan besar AS, dibobot menurut ukuran."},
+    "nasdaq": {"note": "Semua saham yang tercatat di Nasdaq, didominasi teknologi."},
+    "dow": {"note": "Tiga puluh perusahaan besar AS, dibobot menurut harga saham."},
+    "russell": {"note": "Dua ribu perusahaan AS yang lebih kecil."},
+    "jkse": {"name": "IHSG", "note": "Semua saham yang tercatat di Jakarta."},
+    "lq45": {"note": "Empat puluh lima saham paling likuid di Jakarta."},
+    "hangseng": {"note": "Perusahaan terbesar yang tercatat di Hong Kong."},
+    "shanghai": {"note": "Bursa utama Tiongkok daratan."},
+    "vix": {"note": ("Seberapa besar harga opsi menyiratkan S&P 500 akan berayun selama 30 hari "
+                     "ke depan, sebagai persentase tahunan.")},
+    "t13w": {"name": "Surat utang AS 13 minggu",
+             "note": ("Imbal hasil terpendek di sini. Ia berada dekat suku bunga kebijakan "
+                      "Federal Reserve.")},
+    "t10y": {"name": "Obligasi AS 10 tahun",
+             "note": "Suku bunga yang menjadi dasar tingkat diskonto valuasi AS di aplikasi ini."},
+    "t30y": {"name": "Obligasi AS 30 tahun", "note": "Imbal hasil terpanjang di sini."},
+    "dollar": {"name": "Indeks dolar", "note": "Dolar terhadap enam mata uang utama."},
+    "usdidr": {"note": "Rupiah per dolar, jadi kenaikan berarti rupiah melemah."},
+    "eurusd": {"note": "Dolar per euro, jadi kenaikan berarti dolar melemah."},
+    "oil": {"name": "Minyak WTI",
+            "note": "Kontrak berjangka minyak WTI, mewakili harga energi secara umum."},
+    "brent": {"name": "Minyak Brent", "note": "Patokan minyak mentah internasional."},
+    "natgas": {"name": "Gas alam AS", "short": "Gas alam",
+               "note": "Henry Hub, patokan AS. Ini bukan harga yang dibayar pembeli LNG di Asia."},
+    "gold": {"name": "Emas", "short": "Emas",
+             "note": "Kontrak berjangka emas, dalam dolar per troy ons."},
+    "silver": {"name": "Perak", "short": "Perak",
+               "note": "Kontrak berjangka perak, dalam dolar per troy ons."},
+    "copper": {"name": "Tembaga", "short": "Tembaga",
+               "note": "Kontrak berjangka tembaga, dalam dolar per pon."},
+    "bitcoin": {"note": ("Diperdagangkan setiap hari, termasuk akhir pekan, jadi setahunnya "
+                         "365 sesi, bukan sekitar 250.")},
+}
+_MISSING_ID: dict[str, dict[str, str]] = {
+    "coal": {"name": "Batu bara Newcastle",
+             "reason": ("Tidak satu pun kontrak batu bara yang tercantum di sumber ini "
+                        "mengembalikan harga saat papan ini dibuat. Perusahaan batu bara di tab "
+                        "Tren diukur terhadap minyak WTI sebagai gantinya, pengganti terdekat yang "
+                        "bisa diperdagangkan menurut studi eksposur.")},
+    "nickel": {"name": "Nikel", "reason": "Tidak ada harga London Metal Exchange di sumber ini."},
+    "tin": {"name": "Timah", "reason": "Tidak ada harga London Metal Exchange di sumber ini."},
+    "palmoil": {"name": "Minyak sawit mentah",
+                "reason": "Kontrak Bursa Malaysia tidak ada di sumber ini."},
+    "idgb10": {"name": "Obligasi Indonesia 10 tahun",
+               "reason": ("Tidak ada di sumber ini. Valuasi saham BEI di aplikasi ini memakai "
+                          "asumsi tetap yang dinyatakan sebagai gantinya.")},
+}
+
+
+def _reason_id(reason: Optional[str]) -> Optional[str]:
+    if reason == NO_QUOTE:
+        return ("Penyedia data tidak mengembalikan harga terbaru untuknya, jadi dibiarkan "
+                "kosong alih-alih ditampilkan dengan harga lama.")
+    if reason == "Fewer than two sessions came back, so there is no move to report.":
+        return "Kurang dari dua sesi yang kembali, jadi tidak ada pergerakan untuk dilaporkan."
+    match = re.fullmatch(r"Fewer than (\d+) of these in the history held\.", reason or "")
+    if match:
+        return f"Kurang dari {match[1]} peristiwa ini dalam riwayat yang tersedia."
+    return reason
+
+
+def _row_id(row: dict, table: dict[str, dict[str, str]]) -> dict:
+    words = table.get(row.get("key"), {})
+    out = {**row, **{k: v for k, v in words.items() if k in row}}
+    if "short" in row and "short" not in words and row.get("short") == row.get("name"):
+        out["short"] = out["name"]
+    if "unit" in row:
+        out["unit"] = _UNITS_ID.get(row["unit"], row["unit"])
+    if "reason" in row and "reason" not in words:
+        out["reason"] = _reason_id(row["reason"])
+    return out
+
+
+def localise(board: dict) -> dict:
+    """The board in this request's language; the cached English one is never touched."""
+    if lang.current() != "id":
+        return board
+    return {
+        **board,
+        "groups": [{**g, "label": _GROUPS_ID.get(g["key"], g["label"])}
+                   for g in board.get("groups") or []],
+        "rows": [_row_id(row, _ROWS_ID) for row in board.get("rows") or []],
+        "missing": [_row_id(item, _MISSING_ID) for item in board.get("missing") or []],
+        "eventHistory": {kind: [_row_id(row, _ROWS_ID) for row in rows]
+                         for kind, rows in (board.get("eventHistory") or {}).items()},
+        "delay": ("Kuotasi berasal dari penyedia data dan bisa tertinggal sekitar dua puluh "
+                  "menit dari pasar."),
     }
 
 

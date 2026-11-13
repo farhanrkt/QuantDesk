@@ -7,6 +7,7 @@ import { ApplyButton } from "@/components/ui/controls";
 import { StateCard } from "@/components/ui/state";
 import type { Engine, EngineFailure } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /** One wrapper so the four lens panels handle loading and failure identically. */
 export function Panel<T>({
@@ -17,13 +18,14 @@ export function Panel<T>({
   /** Rendered inside the error card when the failure is a fixable data gap. */
   rescue?: (failure: EngineFailure) => React.ReactNode;
 }) {
+  const t = useT();
   if (state.status === "loading") return <StateCard kind="loading" />;
   if (state.status === "error") {
     const { failure } = state;
     return (
       <StateCard
         kind="error"
-        title="This engine could not run"
+        title={t("This engine could not run")}
         action={failure.manualRequired ? (
           // A data gap the user can close is a different problem from a
           // business the model cannot value. Only the former gets a form —
@@ -31,9 +33,7 @@ export function Panel<T>({
           // holds it never rendered.
           <div className="space-y-3">
             <p className="prose-col text-meta leading-relaxed text-warn">
-              Yahoo is missing{" "}
-              {failure.missing?.length ? failure.missing.join(", ") : "a required figure"} for
-              this listing. Enter it below to value the company anyway.
+              {t("Yahoo is missing {value} for this listing. Enter it below to value the company anyway.", { value: failure.missing?.length ? failure.missing.join(", ") : t("a required figure") })}
             </p>
             {rescue?.(failure)}
           </div>
@@ -63,15 +63,16 @@ export function Panel<T>({
  * compete with the lens's reading for authority.
  */
 export function PortfolioSignpost({ onOpen }: { onOpen: () => void }) {
+  const t = useT();
   // Navigation, not a reading, so it stays off the tearsheet with the rest of
   // the chrome — printed, it was the first line of the Trend tab.
   return (
     <Card className="print:hidden">
       <CardBody className="flex flex-wrap items-center justify-between gap-3 py-4">
         <p className="max-w-measure text-lead leading-snug text-chalk">
-          Holdings that each look fine on their own can be one bet.
+          {t("Holdings that each look fine on their own can be one bet.")}
         </p>
-        <ApplyButton onClick={onOpen}>Portfolio fit</ApplyButton>
+        <ApplyButton onClick={onOpen}>{t("Portfolio fit")}</ApplyButton>
       </CardBody>
     </Card>
   );
@@ -90,6 +91,7 @@ export function PortfolioSignpost({ onOpen }: { onOpen: () => void }) {
 export function RunStatus({
   symbol, busy, failed, at,
 }: { symbol: string; busy: boolean; failed: number; at: number | null }) {
+  const t = useT();
   const [started, setStarted] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -102,9 +104,17 @@ export function RunStatus({
   }, [busy]);
   const seconds = started ? Math.max(0, Math.round((now - started) / 1000)) : 0;
 
+  // EVERY LENS FAILING IS NOT A FETCH. The stamp below used to say "Fetched
+  // 12:19 · figures are as of the last close" over four failed lenses, which
+  // dates figures that do not exist.
+  const nothing = failed >= 4;
   const announce = busy
-    ? `Reading ${symbol} through four lenses.`
-    : at ? `${symbol} loaded${failed ? `; ${failed} of four lenses did not answer` : ""}.` : "";
+    ? t("Reading {symbol} through four lenses.", { symbol })
+    : !at ? ""
+      : nothing ? t("No lens returned figures for {symbol}.", { symbol })
+        : failed ? t("{symbol} loaded; {failed} of four lenses did not answer.", { symbol, failed })
+          : t("{symbol} loaded.", { symbol });
+  const time = at ? new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
 
   return (
     <>
@@ -114,14 +124,15 @@ export function RunStatus({
           <span className="relative h-1 w-32 overflow-hidden rounded-full bg-rule">
             <span className="absolute inset-y-0 left-0 w-1/3 animate-pulseline rounded-full bg-tech" />
           </span>
-          Reading {symbol} through four lenses · {seconds}s
-          {seconds >= 20 && <span className="text-faint">— the data source is slow today</span>}
+          {t("Reading {symbol} through four lenses · {seconds}s", { symbol, seconds })}
+          {seconds >= 20 && <span className="text-faint">{t("— the data source is slow today")}</span>}
         </div>
       )}
       {!busy && at && (
         <p className="text-micro text-faint">
-          Fetched {new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          {" "}· figures are as of the last close the data source had
+          {nothing
+            ? <>{t("Asked at {time} · no lens returned figures", { time })}</>
+            : <>{t("Fetched {time} · figures are as of the last close the data source had", { time })}</>}
         </p>
       )}
     </>
@@ -144,24 +155,25 @@ export function StockActions({
   onCopy: () => void;
   onPrint: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-wrap items-center gap-1.5 print:hidden">
       <button type="button" onClick={onWatch} aria-pressed={watched} className={actionClass}
-              title={watched ? "Remove from watchlist (w)" : "Add to watchlist (w)"}>
+              title={watched ? t("Remove from watchlist (w)") : t("Add to watchlist (w)")}>
         <Star aria-hidden className={cn("h-3.5 w-3.5", watched && "fill-current text-chalk")} />
-        <span>{watched ? "Watching" : "Watch"}</span>
+        <span>{watched ? t("Watching") : t("Watch")}</span>
       </button>
       <button type="button" onClick={onCompare} className={actionClass}>
         <Columns3 aria-hidden className="h-3.5 w-3.5" />
-        <span>Compare</span>
+        <span>{t("Compare")}</span>
       </button>
-      <button type="button" onClick={onCopy} className={actionClass} aria-label="Copy a link to this page">
+      <button type="button" onClick={onCopy} className={actionClass} aria-label={t("Copy a link to this page")}>
         <Link2 aria-hidden className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Copy link</span>
+        <span className="hidden sm:inline">{t("Copy link")}</span>
       </button>
-      <button type="button" onClick={onPrint} className={actionClass} aria-label="Print this page">
+      <button type="button" onClick={onPrint} className={actionClass} aria-label={t("Print this page")}>
         <Printer aria-hidden className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">Print</span>
+        <span className="hidden sm:inline">{t("Print")}</span>
       </button>
     </div>
   );
@@ -178,17 +190,16 @@ export function StockActions({
 export function PrintHeader({ symbol, name, priceAsOf }: {
   symbol: string; name?: string | null; priceAsOf?: string | null;
 }) {
+  const t = useT();
   const printed = new Date().toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
   return (
     <div className="hidden border-b border-rule pb-3 print:block">
-      <p className="font-mono text-meta font-semibold tracking-[0.16em] text-chalk">QUANTDESK</p>
+      <p className="font-mono text-meta font-semibold tracking-[0.16em] text-chalk">{t("QUANTDESK")}</p>
       <p className="mt-1 text-meta text-body">
-        {symbol}{name ? ` — ${name}` : ""} · printed {printed}
-        {priceAsOf ? ` · prices as of the close of ${priceAsOf}` : ""} · source: Yahoo Finance
+        {t("{symbol}{value} · printed {printed}{value2} · source: Yahoo Finance", { symbol, value: name ? ` — ${name}` : "", printed, value2: priceAsOf ? t(" · prices as of the close of {date}", { date: priceAsOf }) : "" })}
       </p>
       <p className="text-meta text-ash">
-        Educational and research use only — not investment advice. Only the tab that was open
-        is printed; every figure explains itself on screen.
+        {t("Educational and research use only — not investment advice. Only the tab that was open is printed; every figure explains itself on screen.")}
       </p>
     </div>
   );

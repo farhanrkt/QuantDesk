@@ -1,4 +1,5 @@
 import type { BoardRow, Market, MarketBoard } from "./types";
+import { monthShort, msg, t } from "./i18n";
 
 /**
  * The browser's half of the board of what moved the markets.
@@ -56,7 +57,8 @@ export const PRIMARY_HISTORY: Record<string, string> = {
 /** "over the past 5 years", from the weeks an exposure was estimated over. */
 export function periodText(weeks: number | undefined): string {
   if (!weeks || !Number.isFinite(weeks)) return "";
-  return weeks >= 104 ? ` over the past ${Math.round(weeks / 52)} years` : ` over the past ${weeks} weeks`;
+  return " " + (weeks >= 104 ? t("over the past {n} years", { n: Math.round(weeks / 52) })
+    : t("over the past {n} weeks", { n: weeks }));
 }
 
 const OWN_INDEX: Record<Market, string> = { US: "sp500", ID: "jkse" };
@@ -77,30 +79,40 @@ export function marksFor(board: MarketBoard, focus: BoardFocus | null): Record<s
     const row = board.rows.find((r) => r.exposureKey === factor.key);
     if (row) {
       add(row.key, { kind: "movesWith",
-                     text: `${focus.symbol} has moved with ${factor.label}${periodText(factor.weeks)}` });
+                     text: t("{symbol} has moved with {label}{period}", {
+                       symbol: focus.symbol, label: factor.label, period: periodText(factor.weeks) }) });
     }
   }
   const index = OWN_INDEX[focus.market];
-  if (present.has(index)) add(index, { kind: "itsMarket", text: `${focus.symbol}'s own market` });
+  if (present.has(index)) add(index, { kind: "itsMarket", text: t("{symbol}'s own market", { symbol: focus.symbol }) });
   if (focus.market === "US" && present.has("t10y")) {
-    add("t10y", { kind: "discountRate", text: "the rate the Value tab discounts from" });
+    add("t10y", { kind: "discountRate", text: t("the rate the Value tab discounts from") });
   }
   return marks;
 }
 
-/** What each headline topic is about, for a heading that says "mentioning ...". */
+/**
+ * What each headline topic is about, for a heading that says "mentioning ...".
+ * English keys: the heading passes the label through `t()` where it is drawn.
+ */
 export const TOPIC_LABEL: Record<string, Record<Market, string>> = {
-  market: { US: "US stocks", ID: "the Jakarta market" },
-  rates: { US: "US rates", ID: "interest rates" },
-  dollar: { US: "the dollar", ID: "the dollar" },
-  rupiah: { US: "the rupiah", ID: "the rupiah" },
-  oil: { US: "oil", ID: "oil" },
-  gas: { US: "natural gas", ID: "gas" },
-  gold: { US: "gold", ID: "gold" },
-  silver: { US: "silver", ID: "silver" },
-  copper: { US: "copper", ID: "copper" },
-  bitcoin: { US: "bitcoin", ID: "bitcoin" },
+  market: { US: msg("US stocks"), ID: msg("the Jakarta market") },
+  rates: { US: msg("US rates"), ID: msg("interest rates") },
+  dollar: { US: msg("the dollar"), ID: msg("the dollar") },
+  rupiah: { US: msg("the rupiah"), ID: msg("the rupiah") },
+  oil: { US: msg("oil"), ID: msg("oil") },
+  gas: { US: msg("natural gas"), ID: msg("gas") },
+  gold: { US: msg("gold"), ID: msg("gold") },
+  silver: { US: msg("silver"), ID: msg("silver") },
+  copper: { US: msg("copper"), ID: msg("copper") },
+  bitcoin: { US: msg("bitcoin"), ID: msg("bitcoin") },
 };
+
+/** The topic a headline feed is about, in the reader's language. */
+export function topicLabel(topic: string, market: Market): string {
+  const label = TOPIC_LABEL[topic]?.[market];
+  return label ? t(label) : topic;
+}
 
 /** Headlines worth asking for: the market's own feed, then each unusual mover's topic, at most four. */
 export function headlineTopics(board: MarketBoard, market: Market, max = 4): string[] {
@@ -124,9 +136,7 @@ export function dayText(iso: string | null | undefined): string {
   if (!iso) return "—";
   const [year, month, day] = iso.slice(0, 10).split("-").map(Number);
   if (!year || !month || !day) return "—";
-  const name = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][month - 1];
-  return `${day} ${name}`;
+  return `${day} ${monthShort(month)}`;
 }
 
 /** How long ago something was published, in the coarsest unit that is still honest. */
@@ -135,20 +145,25 @@ export function agoText(published: string | null | undefined, now: number): stri
   const at = Date.parse(published);
   if (!Number.isFinite(at)) return null;
   const minutes = Math.round((now - at) / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return t("just now");
+  if (minutes < 60) return t("{minutes} min ago", { minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 48) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} days ago`;
+  if (hours < 48) return t("{hours} h ago", { hours });
+  return t("{n} days ago", { n: Math.round(hours / 24) });
 }
 
 /** "largest fall since 5 Jun 2026", for an unusual move; null otherwise. */
 export function sinceText(row: BoardRow): string | null {
   if (!row.unusual || (row.direction !== "up" && row.direction !== "down")) return null;
-  const word = row.direction === "up" ? "rise" : "fall";
-  if (row.largestSince) return `largest ${word} since ${dayText(row.largestSince)} ${row.largestSince.slice(0, 4)}`;
+  const up = row.direction === "up";
+  if (row.largestSince) {
+    const date = `${dayText(row.largestSince)} ${row.largestSince.slice(0, 4)}`;
+    return up ? t("largest rise since {date}", { date }) : t("largest fall since {date}", { date });
+  }
   if (row.largestInHistory && row.historyFrom) {
-    return `largest ${word} since at least ${dayText(row.historyFrom)} ${row.historyFrom.slice(0, 4)}`;
+    const date = `${dayText(row.historyFrom)} ${row.historyFrom.slice(0, 4)}`;
+    return up ? t("largest rise since at least {date}", { date })
+      : t("largest fall since at least {date}", { date });
   }
   return null;
 }
@@ -175,9 +190,9 @@ export function relatedFirst(rows: BoardRow[], marks: Record<string, Mark[]>): B
 
 /** The few words a tile has room for, for each kind of relation. */
 export function relationLabel(mark: Mark): string {
-  if (mark.kind === "movesWith") return "moves with it";
-  if (mark.kind === "itsMarket") return "its market";
-  return "Value tab's rate";
+  if (mark.kind === "movesWith") return t("moves with it");
+  if (mark.kind === "itsMarket") return t("its market");
+  return t("Value tab's rate");
 }
 
 /**
@@ -188,6 +203,8 @@ export function historyShort(row: {
   name: string; available: boolean; events?: number; above?: number; p?: number;
 }): string | null {
   if (!row.available || row.events == null || row.above == null) return null;
-  return `${row.name}: bigger than a median day on ${row.above} of the last ${row.events}`
-    + ` (half expected)${row.p != null && row.p > 0.05 ? ", within chance" : ""}`;
+  return t("{name}: bigger than a median day on {above} of the last {events} (half expected){chance}", {
+    name: row.name, above: row.above, events: row.events,
+    chance: row.p != null && row.p > 0.05 ? t(", within chance") : "",
+  });
 }

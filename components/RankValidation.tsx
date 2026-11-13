@@ -4,6 +4,7 @@ import { FlaskConical } from "lucide-react";
 import type { RankValidation as Validation } from "@/lib/types";
 import { cn, num, signedPct } from "@/lib/utils";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { useT } from "@/lib/i18n";
 
 /**
  * Does this ranking predict anything?
@@ -25,6 +26,7 @@ import { ScrollRegion } from "@/components/ui/scroll";
  * with their date, the same treatment the constituent lists get.
  */
 export function RankValidation({ data }: { data?: Validation }) {
+  const t = useT();
   if (!data?.available) return null;
 
   const rows = data.universe ?? [];
@@ -35,10 +37,10 @@ export function RankValidation({ data }: { data?: Validation }) {
       <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-rule px-5 py-3">
         <h3 className="text-h3 flex items-center gap-1.5">
           <FlaskConical aria-hidden className="h-3 w-3" />
-          Does this ranking predict anything?
+          {t("Does this ranking predict anything?")}
         </h3>
         <span className="num text-micro text-ash">
-          {data.tests} tests over {data.years} years &middot; measured {data.measuredOn}
+          {t("{tests} tests over {years} years · measured {measuredOn}", { tests: data.tests, years: data.years, measuredOn: data.measuredOn })}
         </span>
       </div>
 
@@ -48,24 +50,24 @@ export function RankValidation({ data }: { data?: Validation }) {
         </p>
 
         {rows.length > 0 && (
-          <ScrollRegion label="Ranking backtest results" className="mt-4">
+          <ScrollRegion label={t("Ranking backtest results")} className="mt-4">
             <table className="w-full text-left text-meta">
               <thead>
                 <tr className="border-b border-rule text-ash">
-                  <th className="py-1.5 pr-3 font-normal">Holding period</th>
-                  <th className="py-1.5 pr-3 text-right font-normal">Periods</th>
-                  <th className="py-1.5 pr-3 text-right font-normal">Rank vs return</th>
-                  <th className="py-1.5 pr-3 text-right font-normal">Top fifth &minus; bottom</th>
-                  <th className="py-1.5 text-right font-normal">Smallest detectable</th>
+                  <th className="py-1.5 pr-3 font-normal">{t("Holding period")}</th>
+                  <th className="py-1.5 pr-3 text-right font-normal">{t("Periods")}</th>
+                  <th className="py-1.5 pr-3 text-right font-normal">{t("Rank vs return")}</th>
+                  <th className="py-1.5 pr-3 text-right font-normal">{t("Top fifth − bottom")}</th>
+                  <th className="py-1.5 text-right font-normal">{t("Smallest detectable")}</th>
                 </tr>
               </thead>
               <tbody className="text-body">
                 {rows.map((r) => (
                   <tr key={r.horizonDays} className="border-b border-ruleSoft last:border-0">
                     <td className="py-1.5 pr-3">
-                      {r.horizonDays} trading days
+                      {t("{horizonDays} trading days", { horizonDays: r.horizonDays })}
                       <span className="ml-1.5 text-ash">
-                        (~{Math.round(r.horizonDays / 21)} month{r.horizonDays > 31 ? "s" : ""})
+                        {t("(~{Math} month{value})", { Math: Math.round(r.horizonDays / 21), value: r.horizonDays > 31 ? "s" : "" })}
                       </span>
                     </td>
                     <td className="num py-1.5 pr-3 text-right">{r.periods}</td>
@@ -89,16 +91,8 @@ export function RankValidation({ data }: { data?: Validation }) {
 
         {/* The distinction the whole panel turns on. */}
         <p className="mt-3 text-meta leading-relaxed text-ash">
-          <span className="text-body">Rank vs return</span> is the correlation, within
-          each period, between where a name ranked and what it did next; zero means the order
-          carried no information. <span className="text-body">q</span> is the p-value after
-          correcting for having run {data.tests} tests &mdash; running that many produces a
-          winner by construction, and {num(data.expectedByChance ?? 0, 1)} of them are expected
-          to clear the usual cutoff by chance alone.{" "}
-          <span className="text-body">Smallest detectable</span> is the weakest relationship
-          this sample could have found. This app sets its own bar for a useful one at 0.03, a
-          judgement rather than a field standard, so a blank result here means <em>too small to
-          see</em> rather than <em>not there</em>.
+          <span className="text-body">{t("Rank vs return")}</span>{" "}{t("is the correlation, within each period, between where a name ranked and what it did next; zero means the order carried no information.")}{" "}<span className="text-body">q</span>{" "}{t("is the p-value after correcting for having run {tests} tests — running that many produces a winner by construction, and {value} of them are expected to clear the usual cutoff by chance alone.", { tests: data.tests, value: num(data.expectedByChance ?? 0, 1) })}{" "}
+          <span className="text-body">{t("Smallest detectable")}</span>{" "}{t("is the weakest relationship this sample could have found. This app sets its own bar for a useful one at 0.03, a judgement rather than a field standard, so a blank result here means")}{" "}<em>{t("too small to see")}</em>{" "}{t("rather than")}{" "}<em>{t("not there")}</em>.
         </p>
 
         {data.caveats && data.caveats.length > 0 && (

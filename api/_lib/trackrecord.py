@@ -80,6 +80,7 @@ import pandas as pd
 
 from .quality import is_financial
 from .valuation import _get_row
+from .lang import tr
 
 # Fewer years than this and "every year" means almost nothing. Three is the
 # floor; the median listing has four, which is itself short — see the docstring.
@@ -147,9 +148,11 @@ def read(company: Optional[dict], market: str = "ID") -> dict:
         return {
             "available": False,
             "yearsAvailable": got,
-            "reason": (f"only {got} year{'' if got == 1 else 's'} of income statement "
-                       f"came back, and {MIN_YEARS} is the fewest on which "
-                       f"'every year' means anything"),
+            "reason": (tr(f"only {got} year{'' if got == 1 else 's'} of income statement "
+                          f"came back, and {MIN_YEARS} is the fewest on which "
+                          f"'every year' means anything",
+                          f"laporan laba rugi yang kembali hanya {got} tahun, dan {MIN_YEARS} "
+                          "adalah jumlah paling sedikit agar 'setiap tahun' berarti apa-apa")),
         }
 
     years = len(net_income)
@@ -260,8 +263,9 @@ def read(company: Optional[dict], market: str = "ID") -> dict:
         "consistentlyProfitable": consistent,
         "financial": financial,
         "thresholds": {"minYears": MIN_YEARS, "growingAt": GROWING_AT},
-        "baseRates": BASE_RATES if measured else None,
-        "baseRatesNote": None if measured else UNMEASURED_NOTE,
+        "baseRates": ({**BASE_RATES, "note": tr(BASE_RATES["note"], _BASE_RATES_NOTE_ID)}
+                      if measured else None),
+        "baseRatesNote": None if measured else tr(UNMEASURED_NOTE, _UNMEASURED_NOTE_ID),
         "reading": _reading(years, profitable, every_year, cash_backed, growth,
                             growing, margin, fcf_years,
                             None if fcf is None else len(fcf), financial,
@@ -292,6 +296,16 @@ BASE_RATES = {
 UNMEASURED_NOTE = ("These figures are compared against nothing: every base rate and median "
                    "in this module was measured on 523 Indonesian listings, and no sample "
                    "has been measured for this listing's market.")
+# The two notes in Bahasa Indonesia; module constants are written at import, in
+# no reader's language, so the payload picks between these per request.
+_BASE_RATES_NOTE_ID = ("Dua pertiga bursa ini untung setiap tahun yang dicakup laporan "
+                       "keuangannya, jadi itu saja bukan keistimewaan. Penyempitannya ada pada "
+                       "gabungannya: 58% juga mencatat arus kas operasional positif, dan 14% "
+                       "juga mencatat pertumbuhan pendapatan setara atau di atas seperempat "
+                       "teratas pasar itu sendiri.")
+_UNMEASURED_NOTE_ID = ("Angka-angka ini tidak dibandingkan dengan apa pun: setiap tingkat dasar "
+                       "dan median dalam modul ini diukur pada 523 saham Indonesia, dan belum ada "
+                       "sampel yang diukur untuk pasar tempat saham ini tercatat.")
 
 
 def _latest(frame, key: str) -> Optional[float]:
@@ -304,34 +318,51 @@ def _reading(years: int, profitable: int, every_year: bool, cash_backed: bool,
              fcf_years: Optional[int], fcf_of: Optional[int],
              financial: bool, net_cash: Optional[bool] = None,
              leverage: Optional[float] = None, measured: bool = True) -> str:
-    window = (f"across the {years} years the filings cover"
-              if years > 1 else "in the one year the filings cover")
+    window = (tr(f"across the {years} years the filings cover",
+                 f"di sepanjang {years} tahun yang dicakup laporan keuangannya")
+              if years > 1 else tr("in the one year the filings cover",
+                                   "dalam satu tahun yang dicakup laporan keuangannya"))
 
     if every_year:
-        head = (f"Profitable in every one of the {years} years the statements cover"
-                + (", which two thirds of this market also manages" if measured else ""))
+        head = (tr(f"Profitable in every one of the {years} years the statements cover",
+                   f"Untung di setiap tahun dari {years} tahun yang dicakup laporan "
+                   "keuangannya")
+                + (tr(", which two thirds of this market also manages",
+                      ", yang juga dicapai dua pertiga pasar ini") if measured else ""))
     else:
-        head = (f"Profitable in {profitable} of {years} years {window}")
+        head = (tr(f"Profitable in {profitable} of {years} years {window}",
+                   f"Untung pada {profitable} dari {years} tahun {window}"))
 
     if margin is not None:
-        head += f", on a {margin * 100:.1f}% net margin last year"
+        head += tr(f", on a {margin * 100:.1f}% net margin last year",
+                   f", dengan margin bersih {margin * 100:.1f}% tahun lalu")
     head += "."
 
     if growth is None:
-        pace = " Revenue growth could not be computed from these statements."
+        pace = tr(" Revenue growth could not be computed from these statements.",
+                  " Pertumbuhan pendapatan tidak bisa dihitung dari laporan keuangan ini.")
     elif not measured:
-        pace = f" Revenue compounded at {growth * 100:.1f}% a year over that window."
+        pace = tr(f" Revenue compounded at {growth * 100:.1f}% a year over that window.",
+                  f" Pendapatan bertumbuh majemuk {growth * 100:.1f}% per tahun selama "
+                  "periode itu.")
     elif growing:
-        pace = (f" Revenue compounded at {growth * 100:.1f}% a year over that window, "
-                f"which is inside this market's top quartile.")
+        pace = (tr(f" Revenue compounded at {growth * 100:.1f}% a year over that window, "
+                   f"which is inside this market's top quartile.",
+                   f" Pendapatan bertumbuh majemuk {growth * 100:.1f}% per tahun selama "
+                   "periode itu, yang berada di dalam seperempat teratas pasar ini."))
     else:
-        pace = (f" Revenue compounded at {growth * 100:.1f}% a year over that window, "
-                f"against a market median of about 5%.")
+        pace = (tr(f" Revenue compounded at {growth * 100:.1f}% a year over that window, "
+                   f"against a market median of about 5%.",
+                   f" Pendapatan bertumbuh majemuk {growth * 100:.1f}% per tahun selama "
+                   "periode itu, dibandingkan median pasar sekitar 5%."))
 
-    cash = (" Operating cash flow was positive last year."
+    cash = (tr(" Operating cash flow was positive last year.",
+               " Arus kas operasional positif tahun lalu.")
             if cash_backed else
-            " Operating cash flow was NOT positive last year, so the profit has not "
-            "arrived as cash.")
+            tr(" Operating cash flow was NOT positive last year, so the profit has not "
+               "arrived as cash.",
+               " Arus kas operasional TIDAK positif tahun lalu, jadi labanya belum "
+               "datang sebagai kas."))
 
     spend = ""
     if not financial and fcf_years is not None and fcf_of:
@@ -339,49 +370,78 @@ def _reading(years: int, profitable: int, every_year: bool, cash_backed: bool,
         if short > fcf_of / 2:
             # THE MAJORITY OF YEARS. Sustained spending beyond what the business
             # generates is a build-out, and describing it that way is a reading.
-            spend = (f" Free cash flow was negative in {short} of those {fcf_of} years "
-                     f"— the business has consistently spent more on assets than it "
-                     f"threw off, which is what a build-out looks like and is neither "
-                     f"good nor bad without knowing what the spending bought.")
+            spend = (tr(f" Free cash flow was negative in {short} of those {fcf_of} years "
+                        f"— the business has consistently spent more on assets than it "
+                        f"threw off, which is what a build-out looks like and is neither "
+                        f"good nor bad without knowing what the spending bought.",
+                        f" Arus kas bebas negatif pada {short} dari {fcf_of} tahun itu — "
+                        "bisnisnya konsisten membelanjakan lebih banyak untuk aset daripada yang "
+                        "dihasilkannya, seperti itulah rupa sebuah pembangunan, dan itu tidak "
+                        "baik maupun buruk tanpa mengetahui apa yang dibeli dari belanja "
+                        "tersebut."))
         elif short:
             # A MINORITY OF YEARS IS NOT A PATTERN, and calling one heavy year a
             # build-out would be a story told over a single observation.
-            spend = (f" Free cash flow was negative in {short} of those {fcf_of} years, "
-                     f"which is a single heavy year rather than a pattern."
+            spend = (tr(f" Free cash flow was negative in {short} of those {fcf_of} years, "
+                        f"which is a single heavy year rather than a pattern.",
+                        f" Arus kas bebas negatif pada {short} dari {fcf_of} tahun itu, yang "
+                        "merupakan satu tahun belanja besar, bukan pola.")
                      if short == 1 else
-                     f" Free cash flow was negative in {short} of those {fcf_of} years.")
+                     tr(f" Free cash flow was negative in {short} of those {fcf_of} years.",
+                        f" Arus kas bebas negatif pada {short} dari {fcf_of} tahun itu."))
         else:
-            spend = (f" Free cash flow was positive in all {fcf_of} years, so the "
-                     f"spending on assets stayed inside what the business generated.")
+            spend = (tr(f" Free cash flow was positive in all {fcf_of} years, so the "
+                        f"spending on assets stayed inside what the business generated.",
+                        f" Arus kas bebas positif di seluruh {fcf_of} tahun, jadi belanja asetnya "
+                        "tetap di dalam kemampuan yang dihasilkan bisnisnya."))
     elif financial:
-        spend = (" Free cash flow is not reported here: capital spending on a lender's "
-                 "accounts is premises and software rather than the engine of the "
-                 "business, so the figure would describe nothing.")
+        spend = (tr(" Free cash flow is not reported here: capital spending on a lender's "
+                    "accounts is premises and software rather than the engine of the "
+                    "business, so the figure would describe nothing.",
+                    " Arus kas bebas tidak dilaporkan di sini: belanja modal dalam pembukuan "
+                    "pemberi pinjaman adalah gedung dan perangkat lunak, bukan mesin "
+                    "bisnisnya, jadi angkanya tidak akan menggambarkan apa pun."))
 
     owed = ""
     if net_cash is True:
-        owed = (" It holds more cash than borrowings, which 39% of this market's "
-                "non-financial listings also do." if measured else
-                " It holds more cash than borrowings.")
+        owed = (tr(" It holds more cash than borrowings, which 39% of this market's "
+                   "non-financial listings also do.",
+                   " Ia memegang kas lebih banyak daripada pinjaman, seperti juga 39% saham "
+                   "nonkeuangan di pasar ini.") if measured else
+                tr(" It holds more cash than borrowings.",
+                   " Ia memegang kas lebih banyak daripada pinjaman."))
     elif leverage is not None and not measured:
-        owed = (f" Net borrowings are {leverage:.1f} times EBITDA. No median has been "
-                f"measured for this market, so the ratio is reported without a comparison.")
+        owed = (tr(f" Net borrowings are {leverage:.1f} times EBITDA. No median has been "
+                   f"measured for this market, so the ratio is reported without a comparison.",
+                   f" Pinjaman bersihnya {leverage:.1f} kali EBITDA. Belum ada median yang "
+                   "diukur untuk pasar ini, jadi rasionya dilaporkan tanpa pembanding."))
     elif leverage is not None:
-        owed = (f" Net borrowings are {leverage:.1f} times EBITDA, against a median of "
-                f"3.0 for the listings here that borrow at all — so this is "
-                f"{'more' if leverage > 3.0 else 'less'} levered than the typical "
-                f"borrower on this exchange, which is a comparison and not a verdict.")
+        owed = (tr(f" Net borrowings are {leverage:.1f} times EBITDA, against a median of "
+                   f"3.0 for the listings here that borrow at all — so this is "
+                   f"{'more' if leverage > 3.0 else 'less'} levered than the typical "
+                   f"borrower on this exchange, which is a comparison and not a verdict.",
+                   f" Pinjaman bersihnya {leverage:.1f} kali EBITDA, dibandingkan median 3.0 "
+                   "untuk saham di sini yang berutang — jadi leverage-nya "
+                   f"{'lebih tinggi' if leverage > 3.0 else 'lebih rendah'} daripada "
+                   "peminjam pada umumnya di bursa ini, sebuah perbandingan dan bukan vonis."))
     elif net_cash is False:
-        owed = (" It carries net borrowings, and there is no EBITDA to measure them "
-                "against, so how heavy they are is not established here.")
+        owed = (tr(" It carries net borrowings, and there is no EBITDA to measure them "
+                   "against, so how heavy they are is not established here.",
+                   " Ia memiliki pinjaman bersih, dan tidak ada EBITDA untuk "
+                   "membandingkannya, jadi seberapa berat pinjamannya belum bisa dipastikan "
+                   "di sini."))
     elif not financial:
         # net_cash is None on a non-financial: the balance sheet did not arrive.
-        owed = (" No balance sheet came back, so whether it holds cash or borrowings "
-                "is unknown here rather than settled either way.")
+        owed = (tr(" No balance sheet came back, so whether it holds cash or borrowings "
+                   "is unknown here rather than settled either way.",
+                   " Tidak ada neraca yang kembali, jadi apakah ia memegang kas atau "
+                   "pinjaman tidak diketahui di sini, bukan sudah pasti salah satunya."))
 
     return head + pace + cash + spend + owed + (
-        f" {years} years is a short window — it does not span a cycle"
-        + (", and on this exchange those years were a commodity upswing." if measured else "."))
+        tr(f" {years} years is a short window — it does not span a cycle",
+           f" {years} tahun adalah periode yang pendek — tidak mencakup satu siklus")
+        + (tr(", and on this exchange those years were a commodity upswing.",
+              ", dan di bursa ini tahun-tahun itu adalah masa naiknya harga komoditas.") if measured else "."))
 
 
 # --------------------------------------------------------------------------- #
@@ -447,7 +507,8 @@ def series(company: Optional[dict]) -> dict:
     years = sorted(set(lines["revenue"]) | set(lines["netIncome"]))
     if not years:
         return {"available": False, "yearsAvailable": 0,
-                "reason": "no income statement came back for this listing"}
+                "reason": tr("no income statement came back for this listing",
+                             "tidak ada laporan laba rugi yang kembali untuk saham ini")}
 
     financial = is_financial(record.get("sector") or "", record.get("industry") or "")
     fcf_method = "reported"
@@ -456,18 +517,22 @@ def series(company: Optional[dict]) -> dict:
         # cash flow is the SUM — and only for years where both arrived.
         lines["freeCashFlow"] = {y: lines["operatingCashFlow"][y] + lines["capex"][y]
                                  for y in lines["operatingCashFlow"] if y in lines["capex"]}
-        fcf_method = "operating cash flow less capital expenditure"
+        fcf_method = tr("operating cash flow less capital expenditure",
+                        "arus kas operasional dikurangi belanja modal")
 
     rows: dict[str, list] = {}
     missing: dict[str, str] = {}
     for key, _, _ in SERIES_ROWS:
         if financial and key in NOT_FOR_LENDERS:
             rows[key] = [None] * len(years)
-            missing[key] = "not meaningful for a lender, whose borrowing and spending are the business"
+            missing[key] = tr("not meaningful for a lender, whose borrowing and spending are the business",
+                              "tidak bermakna bagi pemberi pinjaman, yang pinjaman dan belanjanya "
+                              "adalah bisnis itu sendiri")
             continue
         rows[key] = [lines[key].get(y) for y in years]
         if all(v is None for v in rows[key]):
-            missing[key] = "not reported by the data source for this listing"
+            missing[key] = tr("not reported by the data source for this listing",
+                              "tidak dilaporkan sumber data untuk saham ini")
 
     trading = (record.get("currency") or "").upper() or None
     reporting = (record.get("financial_currency") or "").upper() or None
@@ -475,12 +540,17 @@ def series(company: Optional[dict]) -> dict:
     currency = trading if (converted or not reporting or reporting == trading) else reporting
 
     first, last = years[0], years[-1]
-    reading = (f"{len(years)} fiscal year{'' if len(years) == 1 else 's'} of statements, "
-               f"FY{first}" + (f" to FY{last}" if last != first else "")
-               + f", in {currency or 'the reporting currency'}"
-               + (f" (converted from {reporting} at today's rate)" if converted and reporting else "")
-               + ". Four or five years is what the data source keeps; it does not span a "
-                 "business cycle.")
+    reading = (tr(f"{len(years)} fiscal year{'' if len(years) == 1 else 's'} of statements, "
+                  f"FY{first}",
+                  f"{len(years)} tahun buku laporan keuangan, FY{first}") + (tr(f" to FY{last}", f" hingga FY{last}") if last != first else "")
+               + tr(f", in {currency or 'the reporting currency'}",
+                    f", dalam {currency or 'mata uang pelaporan'}")
+               + (tr(f" (converted from {reporting} at today's rate)",
+                     f" (dikonversi dari {reporting} dengan kurs hari ini)") if converted and reporting else "")
+               + tr(". Four or five years is what the data source keeps; it does not span a "
+                    "business cycle.",
+                    ". Empat atau lima tahun adalah yang disimpan sumber data; itu tidak "
+                    "mencakup satu siklus bisnis."))
     return {
         "available": True,
         "yearsAvailable": len(years),

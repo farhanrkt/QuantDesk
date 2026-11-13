@@ -60,6 +60,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from . import explain as E
+from .lang import Bilingual, names, tr
 
 # --------------------------------------------------------------------------- #
 # Thresholds, each with the reason it sits where it does
@@ -156,14 +157,20 @@ def _sub(data: Optional[dict], key: str) -> dict:
 # is right on the Quality tab where it appears once. Echoed here it appears three
 # times in a row, identical, and a reader scanning "not checked" learns to skip
 # the section — which is the one section on this panel that must not be skipped.
-_NOT_ON_A_FINANCIAL = {
+_NOT_ON_A_FINANCIAL = Bilingual({
     "altman": ("Altman built the Z-score on manufacturers, and working capital and the "
-               "current ratio describe nothing for an institution with no operating cycle"),
+               "current ratio describe nothing for an institution with no operating cycle",
+               "Altman membangun Z-score dari perusahaan manufaktur, dan modal kerja serta "
+               "rasio lancar tidak menggambarkan apa pun bagi lembaga tanpa siklus operasi"),
     "beneish": ("Beneish's indices assume a receivables-and-inventory revenue model, which "
-                "a bank or insurer does not have"),
+                "a bank or insurer does not have",
+                "indeks Beneish mengasumsikan model pendapatan berbasis piutang dan "
+                "persediaan, yang tidak dimiliki bank atau asuransi"),
     "piotroski": ("Piotroski explicitly excluded financial firms from the sample the nine "
-                  "tests were built on"),
-}
+                  "tests were built on",
+                  "Piotroski secara tegas mengeluarkan perusahaan keuangan dari sampel "
+                  "tempat sembilan ujinya dibangun"),
+})
 
 
 def _refusal(quality: dict, model: str) -> str:
@@ -174,40 +181,51 @@ def _refusal(quality: dict, model: str) -> str:
     listing with no statements is missing data somebody might be able to supply.
     """
     if quality.get("cause") != "financial":
-        return ((quality.get("reason") or "the accounting screens could not be run "
-                 "on this company").rstrip("."))
-    return (f"{_NOT_ON_A_FINANCIAL[model]}, so the app refuses a score rather than "
-            f"printing one. That is a designed refusal, not a gap in the data")
+        return ((quality.get("reason") or tr("the accounting screens could not be run "
+                    "on this company",
+                                             "penyaring akuntansi tidak bisa dijalankan pada perusahaan ini")).rstrip("."))
+    return (tr(f"{_NOT_ON_A_FINANCIAL[model]}, so the app refuses a score rather than "
+               f"printing one. That is a designed refusal, not a gap in the data",
+               f"{_NOT_ON_A_FINANCIAL[model]}, jadi aplikasi menolak memberi skor "
+               "alih-alih mencetaknya. Itu penolakan yang disengaja, bukan celah data"))
 
 
 def _altman_distress(payload: dict) -> dict:
     quality = _leg(payload, "quality")
     if quality is None:
-        return cannot("the Quality lens did not run for this company")
+        return cannot(tr("the Quality lens did not run for this company",
+                         "lensa Kualitas tidak berjalan untuk perusahaan ini"))
     if not quality.get("applicable"):
         return cannot(_refusal(quality, "altman"))
     altman = _sub(quality, "altman")
     if not _known(altman.get("score")):
-        return cannot("the filings did not carry the items Altman's score needs")
+        return cannot(tr("the filings did not carry the items Altman's score needs",
+                         "laporan keuangannya tidak memuat pos yang dibutuhkan skor Altman"))
     if altman.get("band") != "distress":
         return quiet()
     return fires(
-        f"Altman's Z''-score reads {altman['score']:.2f}, inside the distress zone. "
-        f"A going-concern question outranks a valuation: a discounted cash flow on a "
-        f"company sliding toward insolvency is arithmetic, not a price.",
+        tr(f"Altman's Z''-score reads {altman['score']:.2f}, inside the distress zone. "
+           f"A going-concern question outranks a valuation: a discounted cash flow on a "
+           f"company sliding toward insolvency is arithmetic, not a price.",
+           f"Altman Z''-score bernilai {altman['score']:.2f}, di dalam zona "
+           "tertekan. Pertanyaan tentang kelangsungan usaha mengalahkan valuasi: "
+           "arus kas terdiskonto pada perusahaan yang meluncur menuju gagal bayar "
+           "hanyalah aritmetika, bukan harga."),
         band="bad", value_text=f"{altman['score']:.2f}")
 
 
 def _beneish_flagged(payload: dict) -> dict:
     quality = _leg(payload, "quality")
     if quality is None:
-        return cannot("the Quality lens did not run for this company")
+        return cannot(tr("the Quality lens did not run for this company",
+                         "lensa Kualitas tidak berjalan untuk perusahaan ini"))
     if not quality.get("applicable"):
         return cannot(_refusal(quality, "beneish"))
     beneish = _sub(quality, "beneish")
     if not _known(beneish.get("score")):
         return cannot(beneish.get("reading")
-                      or "too few of the eight Beneish indices could be computed")
+                      or tr("too few of the eight Beneish indices could be computed",
+                            "terlalu sedikit dari delapan indeks Beneish yang bisa dihitung"))
     if beneish.get("band") != "flagged":
         return quiet()
     # THE POSTERIOR, NOT THE FLAG. "Most flags are false alarms" was the prose
@@ -217,33 +235,46 @@ def _beneish_flagged(payload: dict) -> dict:
     worth = _sub(quality, "manipulationPosterior")
     odds = ""
     if _known(worth.get("posterior")) and worth.get("priorText"):
-        odds = (f" At a {worth['priorText']} base rate for manipulation, a flag like this "
-                f"one is about {worth['posterior'] * 100:.0f}% likely to be real — so most "
-                f"of them are false alarms.")
+        odds = (tr(f" At a {worth['priorText']} base rate for manipulation, a flag like this "
+                   f"one is about {worth['posterior'] * 100:.0f}% likely to be real — so most "
+                   f"of them are false alarms.",
+                   f" Dengan tingkat dasar manipulasi {worth['priorText']}, tanda seperti "
+                   f"ini kira-kira {worth['posterior'] * 100:.0f}% kemungkinan benar — jadi "
+                   "sebagian besar adalah alarm palsu."))
     return fires(
-        f"The M-Score is {beneish['score']:.2f}, above the -1.78 threshold, so the "
-        f"accrual and growth pattern resembles companies later found to have massaged "
-        f"earnings.{odds} It is a reason to read the cash-flow statement against the "
-        f"income statement, not a finding.",
+        tr(f"The M-Score is {beneish['score']:.2f}, above the -1.78 threshold, so the "
+           f"accrual and growth pattern resembles companies later found to have massaged "
+           f"earnings.{odds} It is a reason to read the cash-flow statement against the "
+           f"income statement, not a finding.",
+           f"M-Score bernilai {beneish['score']:.2f}, di atas ambang -1.78, jadi "
+           "pola akrual dan pertumbuhannya mirip perusahaan yang kemudian terbukti "
+           f"memoles labanya.{odds} Ini alasan untuk membaca laporan arus kas "
+           "berdampingan dengan laporan laba rugi, bukan temuan."),
         band="caution", value_text=f"{beneish['score']:.2f}")
 
 
 def _piotroski_weak(payload: dict) -> dict:
     quality = _leg(payload, "quality")
     if quality is None:
-        return cannot("the Quality lens did not run for this company")
+        return cannot(tr("the Quality lens did not run for this company",
+                         "lensa Kualitas tidak berjalan untuk perusahaan ini"))
     if not quality.get("applicable"):
         return cannot(_refusal(quality, "piotroski"))
     piotroski = _sub(quality, "piotroski")
     if piotroski.get("band") in (None, "unknown"):
-        return cannot("there is not enough statement history to score the trend")
+        return cannot(tr("there is not enough statement history to score the trend",
+                         "riwayat laporan keuangan tidak cukup untuk menilai trennya"))
     if piotroski.get("band") != "weak":
         return quiet()
     return fires(
-        f"{piotroski.get('score')} of {piotroski.get('maxScore')} fundamental checks "
-        f"passed — deteriorating on most of the axes Piotroski measures: profitability, "
-        f"leverage and operating efficiency. The direction of the business is against "
-        f"the buyer here, whatever the price.",
+        tr(f"{piotroski.get('score')} of {piotroski.get('maxScore')} fundamental checks "
+           f"passed — deteriorating on most of the axes Piotroski measures: profitability, "
+           f"leverage and operating efficiency. The direction of the business is against "
+           f"the buyer here, whatever the price.",
+           f"{piotroski.get('score')} dari {piotroski.get('maxScore')} pemeriksaan "
+           "fundamental lolos — memburuk di sebagian besar sumbu yang diukur "
+           "Piotroski: profitabilitas, leverage, dan efisiensi operasional. Arah "
+           "bisnisnya merugikan pembeli di sini, berapa pun harganya."),
         band="caution",
         value_text=f"{piotroski.get('score')}/{piotroski.get('maxScore')}")
 
@@ -251,39 +282,54 @@ def _piotroski_weak(payload: dict) -> dict:
 def _terminal_dominant(payload: dict) -> dict:
     valuation = _leg(payload, "valuation")
     if valuation is None:
-        return cannot("the Value lens did not run for this company")
+        return cannot(tr("the Value lens did not run for this company",
+                         "lensa Nilai tidak berjalan untuk perusahaan ini"))
     share = _sub(valuation, "baseCase").get("terminalShare")
     if not _known(share):
-        return cannot("this model produced no terminal value to measure")
+        return cannot(tr("this model produced no terminal value to measure",
+                         "model ini tidak menghasilkan nilai terminal untuk diukur"))
     if share < TERMINAL_SHARE_WARN:
         return quiet()
     return fires(
-        f"{share * 100:.0f}% of the fair value comes from the perpetuity assumption — "
-        f"what the business is worth forever after year five — rather than from the "
-        f"forecast years. Whatever gap to fair value the panel reports is mostly a "
-        f"statement about that one editable input.",
+        tr(f"{share * 100:.0f}% of the fair value comes from the perpetuity assumption — "
+           f"what the business is worth forever after year five — rather than from the "
+           f"forecast years. Whatever gap to fair value the panel reports is mostly a "
+           f"statement about that one editable input.",
+           f"{share * 100:.0f}% dari nilai wajar berasal dari asumsi perpetuitas — "
+           "nilai bisnis selamanya setelah tahun kelima — bukan dari tahun-tahun "
+           "ramalan. Selisih ke nilai wajar apa pun yang dilaporkan panel sebagian "
+           "besar adalah pernyataan tentang satu masukan yang bisa diubah itu."),
         band="caution", value_text=f"{share * 100:.0f}%")
 
 
 def _implied_growth_demanding(payload: dict) -> dict:
     valuation = _leg(payload, "valuation")
     if valuation is None:
-        return cannot("the Value lens did not run for this company")
+        return cannot(tr("the Value lens did not run for this company",
+                         "lensa Nilai tidak berjalan untuk perusahaan ini"))
     base = _sub(valuation, "baseCase")
     implied, assumed = base.get("impliedGrowth"), base.get("assumedGrowth")
     if not _known(implied):
-        return cannot("today's price cannot be reproduced by this model at any growth "
-                      "rate in the solver's range")
+        return cannot(tr("today's price cannot be reproduced by this model at any growth "
+                         "rate in the solver's range",
+                         "harga hari ini tidak bisa direproduksi model ini pada tingkat "
+                         "pertumbuhan berapa pun dalam rentang pemecahnya"))
     if not _known(assumed):
-        return cannot("no growth assumption was recorded to compare against")
+        return cannot(tr("no growth assumption was recorded to compare against",
+                         "tidak ada asumsi pertumbuhan yang tercatat untuk dibandingkan"))
     gap = implied - assumed
     if gap < IMPLIED_GROWTH_GAP:
         return quiet()
     return fires(
-        f"The price implies {implied * 100:.0f}% growth a year for five years against the "
-        f"{assumed * 100:.0f}% this model was run with — {gap * 100:.0f} points a year "
-        f"more than assumed. That is the claim about the world to argue with, and the "
-        f"assumption is editable on the Value tab.",
+        tr(f"The price implies {implied * 100:.0f}% growth a year for five years against the "
+           f"{assumed * 100:.0f}% this model was run with — {gap * 100:.0f} points a year "
+           f"more than assumed. That is the claim about the world to argue with, and the "
+           f"assumption is editable on the Value tab.",
+           f"Harga ini menyiratkan pertumbuhan {implied * 100:.0f}% per tahun selama "
+           f"lima tahun, dibandingkan {assumed * 100:.0f}% yang dipakai untuk "
+           f"menjalankan model ini — {gap * 100:.0f} poin per tahun lebih tinggi "
+           "daripada asumsinya. Itulah klaim tentang dunia yang perlu "
+           "diperdebatkan, dan asumsinya bisa diubah di tab Nilai."),
         band="caution", value_text=f"{implied * 100:.0f}%")
 
 
@@ -297,7 +343,9 @@ def _thin_filings(payload: dict) -> dict:
     quality = _leg(payload, "quality")
     valuation = _leg(payload, "valuation")
     if quality is None and valuation is None:
-        return cannot("neither filings-based lens ran, so there is nothing to assess")
+        return cannot(tr("neither filings-based lens ran, so there is nothing to assess",
+                         "tidak satu pun lensa berbasis laporan keuangan berjalan, jadi tidak ada "
+                         "yang bisa dinilai"))
 
     gaps: list[str] = []
     if quality is not None and quality.get("applicable"):
@@ -305,97 +353,133 @@ def _thin_filings(payload: dict) -> dict:
         available = piotroski.get("signalsAvailable")
         total = piotroski.get("signalsTotal")
         if _known(available) and _known(total) and available < total:
-            gaps.append(f"Piotroski scored {int(available)} of its {int(total)} tests")
+            gaps.append(tr(f"Piotroski scored {int(available)} of its {int(total)} tests",
+                           f"Piotroski menilai {int(available)} dari {int(total)} ujinya"))
         beneish = _sub(quality, "beneish")
         b_available = beneish.get("indicesAvailable")
         b_total = beneish.get("indicesTotal")
         if _known(b_available) and _known(b_total) and b_available < b_total:
-            gaps.append(f"Beneish used {int(b_available)} of its {int(b_total)} indices")
+            gaps.append(tr(f"Beneish used {int(b_available)} of its {int(b_total)} indices",
+                           f"Beneish memakai {int(b_available)} dari {int(b_total)} indeksnya"))
 
     if valuation is not None:
         manual = _sub(_sub(valuation, "assumptions"), "manualApplied")
         supplied = sorted(k for k, v in manual.items() if v)
         if supplied:
-            gaps.append("the valuation used figures you supplied by hand for "
+            gaps.append(tr("the valuation used figures you supplied by hand for ",
+                           "valuasi memakai angka yang Anda masukkan sendiri untuk ")
                         + ", ".join(supplied))
 
     if not gaps:
         return quiet()
     return fires(
         ("; ".join(gaps)).capitalize()
-        + ". A partial score and a complete one are printed identically everywhere else "
-          "in this app, and they do not mean the same thing. Weigh the readings above "
-          "accordingly.",
+        + tr(". A partial score and a complete one are printed identically everywhere else "
+             "in this app, and they do not mean the same thing. Weigh the readings above "
+             "accordingly.",
+             ". Skor parsial dan skor lengkap dicetak sama persis di semua tempat "
+             "lain di aplikasi ini, padahal artinya tidak sama. Timbang pembacaan di "
+             "atas dengan memperhitungkan itu."),
         band="caution", value_text="partial")
 
 
 def _hurst_random_walk(payload: dict) -> dict:
     technical = _leg(payload, "technical")
     if technical is None:
-        return cannot("the Trend lens did not run for this company")
+        return cannot(tr("the Trend lens did not run for this company",
+                         "lensa Tren tidak berjalan untuk perusahaan ini"))
     if not technical.get("hasLongTerm"):
-        return cannot("there is not enough loaded history for the long-horizon section — "
-                      "widen the chart range to 5y or more")
+        return cannot(tr("there is not enough loaded history for the long-horizon section — "
+                         "widen the chart range to 5y or more",
+                         "riwayat yang dimuat tidak cukup untuk bagian jangka panjang — perlebar "
+                         "rentang grafik ke 5y atau lebih"))
     reading = _sub(_sub(technical, "longTerm"), "hurstReading")
     verdict = reading.get("verdict")
     if verdict in (None, "unavailable"):
-        return cannot("the Hurst estimate needs about a hundred bars and this range is "
-                      "shorter")
+        return cannot(tr("the Hurst estimate needs about a hundred bars and this range is "
+                         "shorter",
+                         "estimasi Hurst butuh sekitar seratus batang dan rentang ini lebih pendek"))
     if verdict != "indistinguishable":
         return quiet()
     low = reading.get("randomWalkLow")
     high = reading.get("randomWalkHigh")
-    band_text = (f", inside the {low:.2f}-{high:.2f} a random walk produces here"
+    band_text = (tr(f", inside the {low:.2f}-{high:.2f} a random walk produces here",
+                    f", di dalam rentang {low:.2f}-{high:.2f} yang dihasilkan jalan acak di "
+                    "sini")
                  if _known(low) and _known(high) else "")
     return fires(
-        f"Hurst reads {reading['hurst']:.2f}{band_text}, so this price history cannot be "
-        f"told apart from a random walk. Discount the Trend tab; the filings lenses are "
-        f"unaffected.",
+        tr(f"Hurst reads {reading['hurst']:.2f}{band_text}, so this price history cannot be "
+           f"told apart from a random walk. Discount the Trend tab; the filings lenses are "
+           f"unaffected.",
+           f"Hurst bernilai {reading['hurst']:.2f}{band_text}, jadi riwayat harga "
+           "ini tidak bisa dibedakan dari jalan acak. Kurangi bobot tab Tren; lensa "
+           "laporan keuangan tidak terpengaruh."),
         band="caution", value_text=f"{reading['hurst']:.2f}")
 
 
 def _move_inside_cost(payload: dict) -> dict:
     anomaly = _leg(payload, "anomaly")
     if anomaly is None:
-        return cannot("the Flow lens did not run for this company")
+        return cannot(tr("the Flow lens did not run for this company",
+                         "lensa Arus tidak berjalan untuk perusahaan ini"))
     liquidity = _sub(anomaly, "liquidity")
     if not liquidity.get("spreadResolved"):
-        return cannot("the bid-ask spread on this name sits below what daily bars can "
-                      "resolve, so the round trip cannot be compared with the move — "
-                      "which on a liquid stock means the cost is small, not that it is "
-                      "unknown in a worrying way")
+        return cannot(tr("the bid-ask spread on this name sits below what daily bars can "
+                         "resolve, so the round trip cannot be compared with the move — "
+                         "which on a liquid stock means the cost is small, not that it is "
+                         "unknown in a worrying way",
+                         "spread harga beli-jual saham ini berada di bawah yang bisa ditangkap "
+                         "batang harian, jadi biaya pulang-pergi tidak bisa dibandingkan dengan "
+                         "pergerakannya — yang pada saham likuid berarti biayanya kecil, bukan "
+                         "tidak diketahui dengan cara yang mengkhawatirkan"))
     if not liquidity.get("insideSpreadNoise"):
         return quiet()
     ratio = liquidity.get("moveVsSpread")
-    ratio_text = f"{ratio:.1f}x" if _known(ratio) else "under twice"
+    ratio_text = f"{ratio:.1f}x" if _known(ratio) else tr("under twice", "kurang dari dua kali")
     return fires(
-        f"The latest day's move is {ratio_text} the estimated round-trip cost. A single "
-        f"buy and sell at these prices gives back most of a move this size before the "
-        f"price has done anything, so whatever the models found here is not something a "
-        f"trade could have captured.",
+        tr(f"The latest day's move is {ratio_text} the estimated round-trip cost. A single "
+           f"buy and sell at these prices gives back most of a move this size before the "
+           f"price has done anything, so whatever the models found here is not something a "
+           f"trade could have captured.",
+           f"Pergerakan hari terakhir {ratio_text} perkiraan biaya transaksi "
+           "pulang-pergi. Satu kali beli dan jual pada harga ini mengembalikan "
+           "sebagian besar pergerakan sebesar ini sebelum harga bergerak apa pun, "
+           "jadi apa pun yang ditemukan model di sini bukan sesuatu yang bisa "
+           "ditangkap oleh transaksi."),
         band="bad", value_text=ratio_text)
 
 
 def _deep_drawdown_history(payload: dict) -> dict:
     technical = _leg(payload, "technical")
     if technical is None:
-        return cannot("the Trend lens did not run for this company")
+        return cannot(tr("the Trend lens did not run for this company",
+                         "lensa Tren tidak berjalan untuk perusahaan ini"))
     if not technical.get("hasLongTerm"):
-        return cannot("there is not enough loaded history for a drawdown record — widen "
-                      "the chart range to 5y or more")
+        return cannot(tr("there is not enough loaded history for a drawdown record — widen "
+                         "the chart range to 5y or more",
+                         "riwayat yang dimuat tidak cukup untuk catatan penurunan dari puncak — "
+                         "perlebar rentang grafik ke 5y atau lebih"))
     drawdown = _sub(_sub(technical, "longTerm"), "drawdown")
     if not drawdown.get("usable") or not _known(drawdown.get("maxDrawdown")):
-        return cannot("the loaded history is too short to measure a peak-to-trough fall")
+        return cannot(tr("the loaded history is too short to measure a peak-to-trough fall",
+                         "riwayat yang dimuat terlalu pendek untuk mengukur penurunan dari puncak "
+                         "ke dasar"))
     worst = drawdown["maxDrawdown"]
     if worst > DEEP_DRAWDOWN:
         return quiet()
     under_water = drawdown.get("timeUnderWaterDays")
-    tail = (f", and spent {int(under_water)} trading days below a previous high at its "
-            f"longest" if _known(under_water) else "")
+    tail = (tr(f", and spent {int(under_water)} trading days below a previous high at its "
+               f"longest",
+               f", dan menghabiskan {int(under_water)} hari perdagangan di bawah puncak "
+               "sebelumnya pada rentang terlamanya") if _known(under_water) else "")
     return fires(
-        f"This has fallen {abs(worst) * 100:.0f}% peak to trough inside the loaded "
-        f"history{tail}. That is the number position size exists to survive — not a "
-        f"forecast, a fact about what holding it has already required.",
+        tr(f"This has fallen {abs(worst) * 100:.0f}% peak to trough inside the loaded "
+           f"history{tail}. That is the number position size exists to survive — not a "
+           f"forecast, a fact about what holding it has already required.",
+           f"Saham ini pernah turun {abs(worst) * 100:.0f}% dari puncak ke dasar "
+           f"dalam riwayat yang dimuat{tail}. Itulah angka yang harus sanggup "
+           "dilalui ukuran posisi — bukan ramalan, melainkan fakta tentang apa yang "
+           "sudah dituntut oleh memegangnya."),
         band="bad", value_text=f"{worst * 100:.0f}%")
 
 
@@ -539,6 +623,105 @@ CHECKS: list[dict] = [
 
 CHECK_BY_ID = {check["id"]: check for check in CHECKS}
 
+# The same four fields in Bahasa Indonesia, beside the English rather than in
+# it: CHECKS is read at import by the calibration script and the tests, which
+# want the English, and a reader's request asks `_text` for its own language.
+_CHECK_TEXT_ID: dict[str, dict[str, str]] = {
+    "altmanDistress": {
+        "label": "Neraca di dalam zona tertekan",
+        "where": "tab Kualitas",
+        "what": ("Altman Z''-score menggabungkan empat rasio neraca menjadi satu jarak dari "
+                 "kebangkrutan, memakai varian pasar berkembang sehingga saham BEI dan saham "
+                 "AS berada pada skala yang sama."),
+        "action": ("Baca jadwal utang dan rasio cakupan bunga sebelum hal lain di halaman "
+                   "ini. Pertanyaan solvabilitas membuat valuasi tidak relevan, bukan murah."),
+    },
+    "beneishFlagged": {
+        "label": "Pola akrual ditandai pada penyaring manipulasi",
+        "where": "tab Kualitas",
+        "what": ("Beneish M-Score membandingkan piutang, margin, kualitas aset, dan akrual "
+                 "tahun ini dengan tahun lalu, lalu bertanya apakah polanya mirip perusahaan "
+                 "yang kemudian terbukti memanipulasi labanya."),
+        "action": ("Baca laporan arus kas berdampingan dengan laporan laba rugi. Ini "
+                   "penyaring dengan tingkat positif palsu yang tinggi pada populasi yang "
+                   "jarang memanipulasi, jadi ia mengarahkan perhatian, bukan menyimpulkan."),
+    },
+    "piotroskiWeak": {
+        "label": "Tren fundamental memburuk",
+        "where": "tab Kualitas",
+        "what": ("Sembilan uji biner Piotroski bertanya apakah profitabilitas, leverage, dan "
+                 "efisiensi membaik dari tahun lalu. Pembacaan yang lemah berarti sebagian "
+                 "besar ujinya bergerak ke arah yang salah."),
+        "action": ("Periksa apakah kemerosotannya satu tahun yang buruk atau sebuah tren, di "
+                   "daftar per sinyal pada tab Kualitas. Skornya tidak membedakan keduanya."),
+    },
+    "terminalDominant": {
+        "label": "Sebagian besar valuasi adalah tebakan perpetuitas",
+        "where": "tab Nilai",
+        "what": ("Arus kas terdiskonto meramalkan lima tahun secara eksplisit lalu "
+                 "mengasumsikan bisnisnya berlanjut selamanya dengan laju tetap. Inilah "
+                 "seberapa besar jawabannya berasal dari asumsi selamanya itu."),
+        "action": ("Geser pertumbuhan terminal setengah poin di tab Nilai dan lihat nilai "
+                   "wajarnya bergeser lebih jauh daripada selisih yang sedang Anda lihat. Jika "
+                   "iya, selisih itu produk sampingan masukan tersebut, bukan temuan."),
+    },
+    "impliedGrowthDemanding": {
+        "label": "Harga mengasumsikan pertumbuhan lebih tinggi daripada model",
+        "where": "tab Nilai",
+        "what": ("Menjalankan valuasi secara terbalik memberi tingkat pertumbuhan yang "
+                 "dibutuhkan harga hari ini. Ini membandingkannya dengan tingkat yang benar-"
+                 "benar dipakai untuk menjalankan model."),
+        "action": ("Putuskan apakah Anda percaya tingkat tersirat itu — Anda tahu hal-hal "
+                   "tentang bisnisnya yang tidak diketahui model. Pertanyaan itu jauh lebih "
+                   "mudah dijawab daripada apakah sebuah estimasi nilai wajar itu benar."),
+    },
+    "thinFilings": {
+        "label": "Skor yang dibangun dari data tidak lengkap",
+        "where": "tab Kualitas dan Nilai",
+        "what": ("Apakah skor akuntansi dan valuasi di halaman ini disusun dari semua masukan "
+                 "yang dibutuhkannya, atau dari sebagian yang benar-benar dilaporkan saham "
+                 "ini."),
+        "action": ("Perlakukan pembacaan yang terdampak sebagai lebih lemah, bukan salah. "
+                   "Ketika valuasi memakai angka yang Anda ketik, jawabannya hanya sebaik angka "
+                   "itu."),
+    },
+    "hurstRandomWalk": {
+        "label": "Deret harga tidak bisa dibedakan dari jalan acak",
+        "where": "tab Tren, bagian jangka panjang",
+        "what": ("Eksponen Hurst mengukur apakah deret harga bertren, berbalik, atau tidak "
+                 "keduanya. Pita yang dihitung sebagai 'tidak keduanya' melebar ketika riwayat "
+                 "lebih sedikit, jadi sampel pendek tidak bisa memalsukan keyakinan."),
+        "action": ("Turunkan bobot setiap pembacaan berbasis harga di halaman ini alih-alih "
+                   "bertindak atas salah satunya. Level support, vonis tren, dan angka momentum "
+                   "semuanya mengasumsikan struktur yang menurut ini mungkin tidak ada."),
+    },
+    "moveInsideCost": {
+        "label": "Pergerakan terakhir lebih kecil daripada biaya memperdagangkannya",
+        "where": "tab Arus, bagian likuiditas",
+        "what": ("Perkiraan biaya pulang-pergi spread harga beli-jual dibandingkan besarnya "
+                 "pergerakan harian terakhir. Di bawah sekitar dua kali spread, satu kali beli "
+                 "dan jual mengembalikan sebagian besar pergerakannya dengan sendirinya."),
+        "action": ("Timbang pergerakan yang diharapkan terhadap biaya pulang-pergi sebelum "
+                   "bertransaksi, atau jangan memperdagangkan saham ini berdasarkan sinyal "
+                   "harian sama sekali. Pada saham yang tipis, 'volume besar menggerakkan "
+                   "harga' sering hanya berarti antrean ordernya dangkal."),
+    },
+    "deepDrawdownHistory": {
+        "label": "Pernah turun lebih dari separuh",
+        "where": "tab Tren, ongkos memegangnya",
+        "what": ("Penurunan terburuk dari puncak ke dasar di mana pun dalam riwayat yang "
+                 "dimuat, beserta berapa lama ia berada di bawah puncak sebelumnya."),
+        "action": ("Tentukan ukuran posisi apa pun sehingga terulangnya penurunan itu tidak "
+                   "memaksa Anda keluar. Untuk satu keputusan itulah angka ini ada; ia tidak "
+                   "berkata apa pun tentang apa yang terjadi berikutnya."),
+    },
+}
+
+
+def _text(check: dict, field: str) -> str:
+    """A check's label, location, definition or action in the request's language."""
+    return tr(check[field], (_CHECK_TEXT_ID.get(check["id"]) or {}).get(field, check[field]))
+
 
 def predicates() -> dict[str, Callable[[dict], dict]]:
     """The check functions by id — what the calibration script measures."""
@@ -616,15 +799,16 @@ def _entry(check: dict, outcome: dict, rate: dict, classification: str,
            calibration: Optional[dict]) -> dict:
     """One rendered condition, with the firing rate that makes it readable."""
     share = float(rate["firingRate"])
-    universe_label = rate.get("scope") or "the calibration universe"
+    universe_label = names(rate.get("scope")) or tr("the calibration universe",
+                                                    "semesta kalibrasi")
     # A base condition is never coloured. It is a fact about the market this
     # company trades in, and colouring it would restate a base rate as a finding.
     band = "context" if classification == "base" else outcome["band"]
     explanation = E.make(
-        label=check["label"],
-        what=check["what"],
+        label=_text(check, "label"),
+        what=_text(check, "what"),
         reading=outcome["reading"],
-        action=check["action"],
+        action=_text(check, "action"),
         band=band,
         good_direction="none",
         evidence=check["evidence"],
@@ -633,7 +817,7 @@ def _entry(check: dict, outcome: dict, rate: dict, classification: str,
     return {
         "id": check["id"],
         "classification": classification,
-        "where": check["where"],
+        "where": _text(check, "where"),
         "family": check["family"],
         "firingRate": share,
         "firingRateText": f"{share * 100:.0f}%",
@@ -644,9 +828,12 @@ def _entry(check: dict, outcome: dict, rate: dict, classification: str,
         # be evaluated, and saying so is what stops a coverage gap reading as a
         # low firing rate.
         "rateSentence": (
-            f"Fires on {share * 100:.0f}% of {universe_label}, measured across "
-            f"{int(rate['sampleSize'])} companies"
-            + (f"; a further {int(rate['couldNotRun'])} could not be tested at all"
+            tr(f"Fires on {share * 100:.0f}% of {universe_label}, measured across "
+               f"{int(rate['sampleSize'])} companies",
+               f"Muncul pada {share * 100:.0f}% dari {universe_label}, diukur di "
+               f"{int(rate['sampleSize'])} perusahaan")
+            + (tr(f"; a further {int(rate['couldNotRun'])} could not be tested at all",
+                  f"; {int(rate['couldNotRun'])} lainnya sama sekali tidak bisa diuji")
                if _known(rate.get("couldNotRun")) and rate["couldNotRun"] else "")
             + "."
         ),
@@ -686,18 +873,19 @@ def assess(payload: dict, calibration=_LOAD_FROM_DISK,
             # A check that raises is a check that could not be run. It must not
             # be able to take down the panel whose job is to name what was not
             # tested — and it must not silently read as "clear" either.
-            outcome = cannot("this check could not be evaluated from the data returned")
+            outcome = cannot(tr("this check could not be evaluated from the data returned",
+                                "pemeriksaan ini tidak bisa dievaluasi dari data yang dikembalikan"))
 
         rate = _rate_for(calibration, check["id"], market)
         if rate is None:
             # Never rendered, never counted as clear. Recorded so the panel can
             # say which conditions it is not in a position to test at all.
-            uncalibrated.append({"id": check["id"], "label": check["label"]})
+            uncalibrated.append({"id": check["id"], "label": _text(check, "label")})
             continue
 
         if outcome["state"] == "unchecked":
-            not_checked.append({"id": check["id"], "label": check["label"],
-                                "reason": outcome["reason"], "where": check["where"]})
+            not_checked.append({"id": check["id"], "label": _text(check, "label"),
+                                "reason": outcome["reason"], "where": _text(check, "where")})
             continue
         if outcome["state"] == "quiet":
             continue
@@ -712,7 +900,7 @@ def assess(payload: dict, calibration=_LOAD_FROM_DISK,
         "notChecked": not_checked,
         "uncalibrated": uncalibrated,
         "calibration": ({"measuredOn": calibration.get("measuredOn"),
-                         "universeLabel": calibration.get("universeLabel"),
+                         "universeLabel": names(calibration.get("universeLabel")),
                          "universes": calibration.get("universes"),
                          "market": (market or "").upper() or None,
                          "baseRateMax": BASE_RATE_MAX}

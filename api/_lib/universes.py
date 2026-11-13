@@ -61,6 +61,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from .lang import tr
+
 # The date these lists were last transcribed. Shown on the panel so a stale
 # universe is visible rather than assumed. An entry may override it with its own
 # `asOf` — the curated list below does, because "when the index was transcribed"
@@ -166,6 +168,36 @@ UNIVERSES: dict[str, dict] = {
 # analysed against a basket it belongs to, and why UNTR does not.
 
 
+# Each list's name and note in Bahasa Indonesia, keyed like UNIVERSES. The names
+# of published indices are names and stay; only the curated list has a
+# description for a name.
+_TEXT_ID: dict[str, dict[str, str]] = {
+    "dow30": {"note": "Tiga puluh perusahaan besar AS, dipilih oleh sebuah komite, bukan "
+                      "menurut ukuran."},
+    "nasdaq100": {"note": "Seratus perusahaan nonkeuangan terbesar di Nasdaq. Sangat condong "
+                          "ke teknologi, sehingga pemindaian atasnya kurang terdiversifikasi "
+                          "daripada yang disiratkan jumlahnya."},
+    "idx30": {"note": "Tiga puluh saham Indonesia yang paling likuid. Cakupan data fundamental "
+                      "di Yahoo lebih berlubang di sini dibandingkan saham AS, jadi tahap "
+                      "pendalaman akan punya lebih banyak celah."},
+    "lq45": {"note": "Empat puluh lima saham Indonesia yang dipilih menurut likuiditas dan "
+                     "nilai pasar. Ditinjau dua kali setahun, jadi keanggotaannya bergeser "
+                     "lebih cepat daripada indeks utama AS."},
+    "idxresources": {"name": "Sumber daya BEI (kurasi)",
+                     "note": "Saham batu bara, nikel, kelapa sawit, dan emas Indonesia, "
+                             "dikelompokkan agar sebuah keranjang faktor punya anggota. BUKAN "
+                             "INDEKS — tidak ada yang menerbitkan daftar ini dan tidak ada bursa "
+                             "yang memeliharanya, jadi ia membawa penilaian siapa pun yang "
+                             "terakhir menyuntingnya, bukan otoritas. Enam saham di dalamnya "
+                             "tidak termasuk IDX30 maupun LQ45."},
+}
+
+
+def _text(entry: dict, field: str) -> str:
+    """A list's name or note in the request's language."""
+    return tr(entry[field], (_TEXT_ID.get(entry["id"]) or {}).get(field, entry[field]))
+
+
 def get(universe_id: str) -> Optional[dict]:
     """One universe by id, with its symbols resolved for its own market.
 
@@ -179,6 +211,8 @@ def get(universe_id: str) -> Optional[dict]:
     from . import symbols
     return {
         **entry,
+        "name": _text(entry, "name"),
+        "note": _text(entry, "note"),
         "asOf": entry.get("asOf", AS_OF),
         "tickers": [symbols.resolve(t, entry["market"]) for t in entry["tickers"]],
         "count": len(entry["tickers"]),
@@ -207,8 +241,8 @@ def containing(symbol: str) -> list[dict]:
     for entry in UNIVERSES.values():
         resolved = {sym.resolve(t, entry["market"]) for t in entry["tickers"]}
         if target in resolved:
-            found.append({"id": entry["id"], "name": entry["name"],
-                          "market": entry["market"], "note": entry["note"],
+            found.append({"id": entry["id"], "name": _text(entry, "name"),
+                          "market": entry["market"], "note": _text(entry, "note"),
                           "count": len(entry["tickers"]),
                           "asOf": entry.get("asOf", AS_OF)})
     found.sort(key=lambda e: -e["count"])
@@ -218,8 +252,8 @@ def containing(symbol: str) -> list[dict]:
 def catalogue() -> list[dict]:
     """Every predefined universe, without the ticker lists, for the picker."""
     return [
-        {"id": entry["id"], "name": entry["name"], "market": entry["market"],
-         "note": entry["note"], "count": len(entry["tickers"]),
+        {"id": entry["id"], "name": _text(entry, "name"), "market": entry["market"],
+         "note": _text(entry, "note"), "count": len(entry["tickers"]),
          "asOf": entry.get("asOf", AS_OF)}
         for entry in UNIVERSES.values()
     ]

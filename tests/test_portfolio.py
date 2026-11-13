@@ -348,7 +348,13 @@ def test_the_other_markets_holidays_are_gaps_not_zero_days(monkeypatch):
                                         dt.date.today(), own_sessions=True)
     returns = P.daily_returns(fetched)
     holidays = frames["AAA"].index.difference(frames["BBB.JK"].index)
-    holidays = holidays[holidays >= idx_year[0]]
+    # Each name keeps its own last WINDOW_DAYS sessions, so the frame has a row
+    # only where one of them has a return. BBB.JK's window reaches further back
+    # (it has more closures), and an IDX holiday before AAA's window starts is in
+    # neither column, so it is no row at all. Count from where both have begun:
+    # counted from BBB.JK's start, the check failed on about three end dates in
+    # ten, because the calendars are anchored to today.
+    holidays = holidays[holidays >= max(us_year[0], idx_year[0])]
     assert len(holidays) > 0
     assert returns.loc[holidays, "BBB.JK"].isna().all(), "a holiday is a gap, not a zero"
 

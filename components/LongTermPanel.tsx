@@ -14,6 +14,7 @@ import type { ExplainMap, LongTermBlock } from "@/lib/types";
 import { cn, num, pct, signedPct } from "@/lib/utils";
 import { alpha, palette } from "@/lib/palette";
 import { ScrollRegion } from "@/components/ui/scroll";
+import { useT } from "@/lib/i18n";
 
 const UP = palette.acc;
 const DOWN = palette.dist;
@@ -42,6 +43,7 @@ const DOWN = palette.dist;
  * actually holds long enough to collect the return.
  */
 export function LongTermPanel({ data, currency }: { data: LongTermBlock; currency: string }) {
+  const t = useT();
   const { view, drawdown, risk, rollingReturns, seasonality, position,
           faber, relativeStrength, regression, calendarReturns,
           plainEnglish } = data;
@@ -66,7 +68,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       {plainEnglish && plainEnglish.paragraphs.length > 0 && (
         <Card tone={verdictTone}>
           <CardHeader>
-            <CardTitle>In plain English</CardTitle>
+            <CardTitle>{t("In plain English")}</CardTitle>
             <span className="num text-meta font-semibold" style={{ color: TONE_HEX[verdictTone] }}>
               {view.verdict}
             </span>
@@ -101,9 +103,9 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       {/* ---------------- verdict + checklist ---------------- */}
       <Card>
         <CardHeader>
-          <CardTitle>Long-horizon checklist</CardTitle>
+          <CardTitle>{t("Long-horizon checklist")}</CardTitle>
           <span className="num text-meta font-semibold" style={{ color: TONE_HEX[verdictTone] }}>
-            {view.passed}/{view.scored} pointing up
+            {t("{passed}/{scored} pointing up", { passed: view.passed, scored: view.scored })}
           </span>
         </CardHeader>
         <CardBody className="px-0">
@@ -115,10 +117,10 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                              border-ruleSoft px-5 py-2 last:border-0">
                 <span className="mt-0.5 shrink-0">
                   {check.passed === null
-                    ? <Minus aria-label="no reading" className="h-3.5 w-3.5 text-ash" />
+                    ? <Minus aria-label={t("no reading")} className="h-3.5 w-3.5 text-ash" />
                     : check.passed
-                      ? <Check aria-label="points up" className="h-3.5 w-3.5 text-acc" />
-                      : <X aria-label="points down" className="h-3.5 w-3.5 text-dist" />}
+                      ? <Check aria-label={t("points up")} className="h-3.5 w-3.5 text-acc" />
+                      : <X aria-label={t("points down")} className="h-3.5 w-3.5 text-dist" />}
                 </span>
                 <span className="min-w-0 flex-1 text-meta text-body sm:w-56 sm:flex-none">
                   {check.label}
@@ -134,7 +136,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
             ))}
           </ul>
           <p className="px-5 pt-3 text-meta leading-relaxed text-ash">
-            A tick means that line points upward, not that it is a reason to buy. {view.caveat}
+            {t("A tick means that line points upward, not that it is a reason to buy. {caveat}", { caveat: view.caveat })}
           </p>
         </CardBody>
       </Card>
@@ -143,22 +145,22 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       {rollingReturns.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>If you had bought at any point and held</CardTitle>
-            <span className="font-mono text-micro text-ash">% per year</span>
+            <CardTitle>{t("If you had bought at any point and held")}</CardTitle>
+            <span className="font-mono text-micro text-ash">{t("% per year")}</span>
           </CardHeader>
           <CardBody className="px-0">
-            <ScrollRegion label="Every holding period in the history">
+            <ScrollRegion label={t("Every holding period in the history")}>
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                    <th>Held for</th>
-                    <th className="text-right">Worst</th>
+                    <th>{t("Held for")}</th>
+                    <th className="text-right">{t("Worst")}</th>
                     {!simple && <th className="text-right">P25</th>}
-                    <th className="text-right">Typical</th>
+                    <th className="text-right">{t("Typical")}</th>
                     {!simple && <th className="text-right">P75</th>}
-                    <th className="text-right">Best</th>
-                    <th className="text-right">Made money</th>
-                    {!simple && <th className="text-right">Windows</th>}
+                    <th className="text-right">{t("Best")}</th>
+                    <th className="text-right">{t("Made money")}</th>
+                    {!simple && <th className="text-right">{t("Windows")}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -182,7 +184,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                           </td>
                           <td className="px-5 py-2 text-meta leading-relaxed text-ash"
                               colSpan={simple ? 4 : 7}>
-                            {row.reason ?? "Not enough loaded history for this horizon."}
+                            {row.reason ?? t("Not enough loaded history for this horizon.")}
                           </td>
                         </tr>
                       );
@@ -195,8 +197,8 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                           <span className="flex items-center gap-1.5">
                             {row.years}y
                             {chosen && (
-                              <span className="eyebrow text-tech" title="your stated horizon">
-                                yours
+                              <span className="eyebrow text-tech" title={t("your stated horizon")}>
+                                {t("yours")}
                               </span>
                             )}
                             <Explain explain={ex[`rollingWorst.${row.years}`]} />
@@ -232,11 +234,8 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
               </table>
             </ScrollRegion>
             <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
-              Read a row as: buying on <em>any</em> day in this history and holding that many
-              years, here is the range of yearly returns you would have got. The
-              <span className="font-semibold text-body"> worst </span>column is the one that
-              decides position size — a headline growth rate reports only the single path that
-              happened to occur.
+              {t("Read a row as: buying on")}{" "}<em>{t("any")}</em>{" "}{t("day in this history and holding that many years, here is the range of yearly returns you would have got. The")}
+              <span className="font-semibold text-body"> {t("worst ")}{" "}</span>{t("column is the one that decides position size — a headline growth rate reports only the single path that happened to occur.")}
             </p>
           </CardBody>
         </Card>
@@ -249,9 +248,9 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       {drawdown.usable && (
         <Card tone={ex.maxDrawdown?.tone}>
           <CardHeader>
-            <CardTitle>What holding it cost</CardTitle>
+            <CardTitle>{t("What holding it cost")}</CardTitle>
             <span className="font-mono text-micro text-ash">
-              time spent below a previous high
+              {t("time spent below a previous high")}
             </span>
           </CardHeader>
           <CardBody>
@@ -260,11 +259,11 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                              sub={`${drawdown.maxDrawdownPeak} → ${drawdown.maxDrawdownTrough}`} />
               <ExplainedStat explain={ex.maxDrawdownRecoveryDays}
                              sub={drawdown.maxDrawdownRecovered
-                               ? `back to even ${drawdown.maxDrawdownRecovered}`
-                               : "still below that peak"} />
+                               ? t("back to even {date}", { date: drawdown.maxDrawdownRecovered })
+                               : t("still below that peak")} />
               <ExplainedStat explain={ex.timeUnderWaterDays}
-                             sub="longest run of days with no new high" />
-              <ExplainedStat explain={ex.ulcerIndex} sub="depth and duration combined" />
+                             sub={t("longest run of days with no new high")} />
+              <ExplainedStat explain={ex.ulcerIndex} sub={t("depth and duration combined")} />
             </div>
 
             {!simple && (
@@ -284,23 +283,20 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
                     <Tooltip
                       contentStyle={{ background: alpha(palette.ink, 0.9), border: `1px solid ${palette.rule}`,
                                       borderRadius: 4, fontSize: 12 }}
-                      formatter={(v: number) => [pct(v), "below the high"]} />
+                      formatter={(v: number) => [pct(v), t("below the high")]} />
                     <ReferenceLine y={0} stroke={palette.grid} />
                     <Area type="monotone" dataKey="drawdown" stroke={DOWN} strokeWidth={1}
                           fill="url(#ddFill)" isAnimationActive={false} />
                   </AreaChart>
                 </ResponsiveContainer>
                 <p className="prose-col mt-1 text-meta leading-relaxed text-ash">
-                  How far below its best-ever price it sat each day. Zero is a new high; every
-                  dip is a stretch where holders were down on paper.
+                  {t("How far below its best-ever price it sat each day. Zero is a new high; every dip is a stretch where holders were down on paper.")}
                 </p>
               </>
             )}
 
             <Note>
-              Depth is only half of it. A 30% fall that recovers in a quarter is survivable; a
-              15% one that grinds on for three years is where most people sell. The Ulcer index
-              scores depth and duration together, which is why it sits beside the maximum.
+              {t("Depth is only half of it. A 30% fall that recovers in a quarter is survivable; a 15% one that grinds on for three years is where most people sell. The Ulcer index scores depth and duration together, which is why it sits beside the maximum.")}
             </Note>
           </CardBody>
         </Card>
@@ -310,17 +306,17 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       {risk.usable && !simple && (
         <Card>
           <CardHeader>
-            <CardTitle>Was the risk paid for?</CardTitle>
+            <CardTitle>{t("Was the risk paid for?")}</CardTitle>
             <span className="font-mono text-micro text-ash">
-              over {risk.observations} trading days
+              {t("over {observations} trading days", { observations: risk.observations })}
             </span>
           </CardHeader>
           <CardBody>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <ExplainedStat explain={ex.cagr} />
               <ExplainedStat explain={ex.volatility}
-                             sub={`downside only ${pct(risk.downsideDeviation)}`} />
-              <ExplainedStat explain={ex.sortino} sub={`Sharpe ${num(risk.sharpe ?? 0)}`} />
+                             sub={t("downside only {value}", { value: pct(risk.downsideDeviation) })} />
+              <ExplainedStat explain={ex.sortino} sub={t("Sharpe {value}", { value: num(risk.sharpe ?? 0) })} />
               <ExplainedStat explain={ex.calmar} />
               <ExplainedStat explain={ex.var95} />
               <ExplainedStat explain={ex.cvar95} />
@@ -335,20 +331,20 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       {relativeStrength.usable && relativeStrength.periods && (
         <Card accent={palette.trend}>
           <CardHeader>
-            <CardTitle>Against just owning the index</CardTitle>
+            <CardTitle>{t("Against just owning the index")}</CardTitle>
             <span className="font-mono text-micro text-ash">
-              vs {relativeStrength.benchmark}
+              {t("vs {benchmark}", { benchmark: relativeStrength.benchmark })}
             </span>
           </CardHeader>
           <CardBody className="px-0">
-            <ScrollRegion label="Returns against the index">
+            <ScrollRegion label={t("Returns against the index")}>
               <table className="w-full text-left text-meta">
                 <thead>
                   <tr className="eyebrow border-b border-rule [&>th]:px-5 [&>th]:py-2 [&>th]:font-normal">
-                    <th>Period</th>
-                    <th className="text-right">This stock</th>
+                    <th>{t("Period")}</th>
+                    <th className="text-right">{t("This stock")}</th>
                     <th className="text-right">{relativeStrength.benchmark}</th>
-                    <th className="text-right">Difference</th>
+                    <th className="text-right">{t("Difference")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -382,9 +378,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
               </table>
             </ScrollRegion>
             <p className="prose-col px-5 pt-3 text-meta leading-relaxed text-ash">
-              The real alternative was never cash — it was the index fund you could have bought
-              instead. A stock up 40% while the market rose 60% has cost its holder money in the
-              only sense that matters.
+              {t("The real alternative was never cash — it was the index fund you could have bought instead. A stock up 40% while the market rose 60% has cost its holder money in the only sense that matters.")}
             </p>
           </CardBody>
         </Card>
@@ -395,7 +389,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
         <div className="grid gap-4 lg:grid-cols-2">
           {position.usable && (
             <Card>
-              <CardHeader><CardTitle>Where it sits</CardTitle></CardHeader>
+              <CardHeader><CardTitle>{t("Where it sits")}</CardTitle></CardHeader>
               <CardBody className="space-y-2 text-meta">
                 <ExplainedRow explain={ex.fromHigh52w} />
                 <ExplainedRow explain={ex.rangePosition} />
@@ -414,17 +408,17 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
           {faber.usable && (
             <Card tone={ex.faberDistance?.tone}>
               <CardHeader>
-                <CardTitle>A simple long-term trend rule</CardTitle>
+                <CardTitle>{t("A simple long-term trend rule")}</CardTitle>
                 <span className={cn("num text-meta font-semibold",
                                     faber.signal === "invested" ? "text-acc" : "text-dist")}>
-                  {faber.signal === "invested" ? "Stay invested" : "Stand aside"}
+                  {faber.signal === "invested" ? t("Stay invested") : t("Stand aside")}
                 </span>
               </CardHeader>
               <CardBody className="space-y-2 text-meta">
                 <ExplainedRow explain={ex.faberDistance} />
-                <ExplainedRow label="Months in this stance"
+                <ExplainedRow label={t("Months in this stance")}
                               value={String(faber.monthsInStance ?? 0)} tone="text-chalk" />
-                <ExplainedRow label="Share of history invested"
+                <ExplainedRow label={t("Share of history invested")}
                               value={pct(faber.sharOfTimeInvested, 0)} tone="text-chalk" />
                 {regression && (
                   <>
@@ -444,8 +438,8 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       {calendarReturns.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Year by year</CardTitle>
-            <span className="font-mono text-micro text-ash">total return each year</span>
+            <CardTitle>{t("Year by year")}</CardTitle>
+            <span className="font-mono text-micro text-ash">{t("total return each year")}</span>
           </CardHeader>
           <CardBody>
             <ResponsiveContainer width="100%" height={150}>
@@ -474,8 +468,8 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
       {seasonality.usable && !simple && (
         <Card>
           <CardHeader>
-            <CardTitle>Average return by calendar month</CardTitle>
-            <span className="font-mono text-micro text-warn">descriptive only</span>
+            <CardTitle>{t("Average return by calendar month")}</CardTitle>
+            <span className="font-mono text-micro text-warn">{t("descriptive only")}</span>
           </CardHeader>
           <CardBody>
             <div className="grid grid-cols-6 gap-2 lg:grid-cols-12">

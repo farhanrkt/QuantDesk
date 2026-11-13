@@ -27,6 +27,7 @@
 import {
   readAnomaly, readQuality, readTechnical, readValuation, voteTone,
 } from "@/components/ConfluenceRail";
+import { t as translateNow, type Vars } from "./i18n";
 import { palette } from "./palette";
 import type {
   ConfluenceResponse, Engine, EngineFailure, Explanation, Leg,
@@ -84,10 +85,16 @@ const fromExplain = (e: Explanation | undefined, fallback?: string): CompareCell
   e ? { text: e.valueText ?? fallback ?? "—", tone: e.tone ?? null, sentence: e.reading, explain: e }
     : EMPTY;
 
-/** Build every row for `columns`, in the order given. */
+/**
+ * Build every row for `columns`, in the order given.
+ *
+ * `t` is the caller's translator, so a memo keyed on it rebuilds the rows when
+ * the reader switches language; the default reads the language in force.
+ */
 export function buildCompare(
   columns: { symbol: string; state: Engine<ConfluenceResponse> }[],
   horizon: number,
+  t: (english: string, vars?: Vars) => string = translateNow,
 ): CompareModel {
   const payloads = columns.map((c) => (c.state.status === "ready" ? c.state.data : null));
   const legs = payloads.map((p) => ({
@@ -111,114 +118,115 @@ export function buildCompare(
   });
 
   const lensRow = (read: (i: number) => ReturnType<typeof readAnomaly>): CompareRow =>
-    row("reading", "Reading", (i) => {
+    row("reading", t("Reading"), (i) => {
       const r = read(i);
       return r.verdict === "—" ? EMPTY : { text: r.verdict, tone: voteTone(r), sentence: r.detail };
     });
 
   const sections: CompareSection[] = [
     {
-      key: "company", title: "What it is", hue: palette.company,
-      question: "Who the company is, and what its filings say it has done.",
+      key: "company", title: t("What it is"), hue: palette.company,
+      question: t("Who the company is, and what its filings say it has done."),
       rows: [
-        row("industry", "Industry", (i) => {
+        row("industry", t("Industry"), (i) => {
           const c = legs[i].company;
           return c ? { text: c.profile.industry ?? c.profile.sector ?? "—", tone: null,
                        sentence: c.profile.summaryShort ?? undefined } : EMPTY;
         }),
-        row("listing", "Listed", (i) => {
+        row("listing", t("Listed"), (i) => {
           const c = legs[i].company;
           return c ? { text: [c.listing.exchange, c.currency.trading].filter(Boolean).join(" · ") || "—",
                        tone: null } : EMPTY;
         }),
-        row("marketCap", "Market value", (i) => {
+        row("marketCap", t("Market value"), (i) => {
           const c = legs[i].company;
           return c?.listing.marketCap != null
             ? { text: `${compact(c.listing.marketCap)} ${c.currency.trading ?? ""}`.trim(), tone: null }
             : EMPTY;
         }),
-        row("yearsProfitable", "Years profitable", (i) => fromExplain(legs[i].company?.explain.yearsProfitable)),
-        row("revenueCagr", "Revenue growth", (i) => fromExplain(legs[i].company?.explain.revenueCagr)),
-        row("nextEarnings", "Next report", (i) => {
+        row("yearsProfitable", t("Years profitable"), (i) => fromExplain(legs[i].company?.explain.yearsProfitable)),
+        row("revenueCagr", t("Revenue growth"), (i) => fromExplain(legs[i].company?.explain.revenueCagr)),
+        row("nextEarnings", t("Next report"), (i) => {
           const c = legs[i].company;
           return c ? { text: c.nextEarnings.date ?? "—", tone: null } : EMPTY;
         }),
       ],
     },
     {
-      key: "flow", title: "Who is trading it", hue: palette.flow,
-      question: "Is anyone unusual trading this?",
+      key: "flow", title: t("Who is trading it"), hue: palette.flow,
+      question: t("Is anyone unusual trading this?"),
       rows: [lensRow((i) => readAnomaly(legs[i].anomaly))],
     },
     {
-      key: "trend", title: "What the price did", hue: palette.trend,
-      question: "What has the price been doing, and could you have held it?",
+      key: "trend", title: t("What the price did"), hue: palette.trend,
+      question: t("What has the price been doing, and could you have held it?"),
       rows: [
         lensRow((i) => readTechnical(legs[i].technical)),
-        row("rollingWorst", `Worst ${horizon}-year holding`, (i) => {
-          const t = legs[i].technical;
-          if (t.status !== "ready") return EMPTY;
-          const r = t.data.longTerm?.rollingReturns?.find((x) => x.years === horizon);
+        row("rollingWorst", t("Worst {horizon}-year holding", { horizon }), (i) => {
+          const tech = legs[i].technical;
+          if (tech.status !== "ready") return EMPTY;
+          const r = tech.data.longTerm?.rollingReturns?.find((x) => x.years === horizon);
           if (!r || r.usable === false || r.worst == null) {
-            return { text: "—", tone: null, sentence: r?.reason ?? "Not enough history for this horizon." };
+            return { text: "—", tone: null, sentence: r?.reason ?? t("Not enough history for this horizon.") };
           }
-          return { text: `${signedPct(r.worst, 1)} a year`, tone: null,
-                   sentence: `The worst of ${r.windows} overlapping ${horizon}-year entries; ${pct(r.positiveShare ?? null, 0)} of them made money.` };
+          return { text: t("{value} a year", { value: signedPct(r.worst, 1) }), tone: null,
+                   sentence: t("The worst of {windows} overlapping {horizon}-year entries; {share} of them made money.", {
+                     windows: r.windows, horizon, share: pct(r.positiveShare ?? null, 0) }) };
         }),
-        row("maxDrawdown", "Worst fall", (i) => {
-          const t = legs[i].technical;
-          return t.status === "ready" ? fromExplain(t.data.longTerm?.explain?.maxDrawdown) : EMPTY;
+        row("maxDrawdown", t("Worst fall"), (i) => {
+          const tech = legs[i].technical;
+          return tech.status === "ready" ? fromExplain(tech.data.longTerm?.explain?.maxDrawdown) : EMPTY;
         }),
-        row("volatility", "Volatility", (i) => {
-          const t = legs[i].technical;
-          return t.status === "ready" ? fromExplain(t.data.longTerm?.explain?.volatility) : EMPTY;
+        row("volatility", t("Volatility"), (i) => {
+          const tech = legs[i].technical;
+          return tech.status === "ready" ? fromExplain(tech.data.longTerm?.explain?.volatility) : EMPTY;
         }),
       ],
     },
     {
-      key: "value", title: "What it is worth", hue: palette.value,
-      question: "What is the business worth, on its own cash flows?",
+      key: "value", title: t("What it is worth"), hue: palette.value,
+      question: t("What is the business worth, on its own cash flows?"),
       rows: [
-        row("reading", "Reading", (i) => {
+        row("reading", t("Reading"), (i) => {
           const v = legs[i].valuation;
           if (v.status !== "ready") return EMPTY;
           const r = readValuation(v);
           return { text: verdictLabel(v.data.verdict), tone: voteTone(r), sentence: r.detail };
         }),
-        row("impliedGrowth", "Growth the price implies", (i) => {
+        row("impliedGrowth", t("Growth the price implies"), (i) => {
           const v = legs[i].valuation;
           return v.status === "ready" ? fromExplain(v.data.explain?.impliedGrowth) : EMPTY;
         }),
-        row("terminalShare", "Share that is guesswork", (i) => {
+        row("terminalShare", t("Share that is guesswork"), (i) => {
           const v = legs[i].valuation;
           return v.status === "ready" ? fromExplain(v.data.explain?.terminalShare) : EMPTY;
         }),
       ],
     },
     {
-      key: "quality", title: "Are the numbers real", hue: palette.quality,
-      question: "Is the business sound, and do the accounts look like the real thing?",
+      key: "quality", title: t("Are the numbers real"), hue: palette.quality,
+      question: t("Is the business sound, and do the accounts look like the real thing?"),
       rows: [
         lensRow((i) => readQuality(legs[i].quality)),
-        row("piotroski", "Health checks", (i) => {
+        row("piotroski", t("Health checks"), (i) => {
           const q = legs[i].quality;
           return q.status === "ready" && q.data.applicable ? fromExplain(q.data.explain?.piotroski) : EMPTY;
         }),
-        row("altman", "Distance from distress", (i) => {
+        row("altman", t("Distance from distress"), (i) => {
           const q = legs[i].quality;
           return q.status === "ready" && q.data.applicable ? fromExplain(q.data.explain?.altman) : EMPTY;
         }),
-        row("beneish", "Earnings manipulation screen", (i) => {
+        row("beneish", t("Earnings manipulation screen"), (i) => {
           const q = legs[i].quality;
           return q.status === "ready" && q.data.applicable ? fromExplain(q.data.explain?.beneish) : EMPTY;
         }),
       ],
     },
     {
-      key: "pretrade", title: "What would give a careful buyer pause", hue: palette.pretrade,
-      question: "The conditions that fired for each company, beside nothing else.",
+      key: "pretrade", title: t("What would give a careful buyer pause"), hue: palette.pretrade,
+      question: t("The conditions that fired for each company, beside nothing else."),
       rows: [
-        row("fired", "Fired", (i) => {
+        row("fired", t("Fired"), (i) => {
           const p = legs[i].preTrade;
           if (!p) return EMPTY;
           const fired = p.flags.map((f) => f.explain.label);
@@ -227,7 +235,7 @@ export function buildCompare(
           // list is never "clear": the panel's own caveat says so in words.
           return fired.length
             ? { text: "", tone: null, items: fired }
-            : { text: "None of the calibrated conditions fired", tone: null, sentence: p.caveat };
+            : { text: t("None of the calibrated conditions fired"), tone: null, sentence: p.caveat };
         }),
       ],
     },
@@ -238,8 +246,8 @@ export function buildCompare(
     columns: outColumns,
     sections,
     currencyNote: currencies.length > 1
-      ? `Figures are in each listing's own currency (${currencies.join(", ")}) and are not converted. `
-        + "Nothing on this page is computed across columns."
+      ? t("Figures are in each listing's own currency ({currencies}) and are not converted. Nothing on this page is computed across columns.",
+          { currencies: currencies.join(", ") })
       : null,
   };
 }

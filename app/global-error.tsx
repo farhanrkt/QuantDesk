@@ -1,5 +1,6 @@
 "use client";
 import { palette } from "@/lib/palette";
+import { useT } from "@/lib/i18n";
 
 /**
  * Last-resort boundary: an error thrown by the root layout itself, which
@@ -10,6 +11,7 @@ import { palette } from "@/lib/palette";
 export default function GlobalError({
   error, reset,
 }: { error: Error & { digest?: string }; reset: () => void }) {
+  const t = useT();
   return (
     <html lang="en">
       <body
@@ -29,15 +31,14 @@ export default function GlobalError({
             fontSize: "0.68rem", textTransform: "uppercase", letterSpacing: "0.18em",
             color: palette.dist, marginBottom: "0.75rem",
           }}>
-            QuantDesk failed to start
+            {t("QuantDesk failed to start")}
           </div>
           <p style={{ fontSize: "0.875rem", lineHeight: 1.6, color: "rgba(231,238,245,0.8)", margin: 0 }}>
-            The application shell itself could not render. Reloading is safe — nothing is stored
-            between sessions.
+            {t("The application shell itself could not render. Reloading is safe — nothing is stored between sessions.")}
           </p>
           {error.digest && (
             <p style={{ fontSize: "0.7rem", color: palette.ash, marginTop: "0.75rem" }}>
-              Reference: {error.digest}
+              {t("Reference: {digest}", { digest: error.digest })}
             </p>
           )}
           <button
@@ -50,7 +51,7 @@ export default function GlobalError({
               textTransform: "uppercase", letterSpacing: "0.14em", cursor: "pointer",
             }}
           >
-            Reload
+            {t("Reload")}
           </button>
         </div>
       </body>

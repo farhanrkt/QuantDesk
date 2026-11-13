@@ -9,6 +9,7 @@ import type { Engine, PeersResponse } from "@/lib/types";
 import { cn, ordinal } from "@/lib/utils";
 import { palette } from "@/lib/palette";
 import { StateCard } from "@/components/ui/state";
+import { useT } from "@/lib/i18n";
 
 /**
  * Where this name sits among its own index.
@@ -50,23 +51,20 @@ export function PeersPanel({
   ticker: string;
   onCompare: (universe?: string) => void;
 }) {
+  const t = useT();
   if (state.status === "idle") {
     return (
       <Card>
         <CardBody className="flex flex-wrap items-center justify-between gap-4 py-4">
           <div className="max-w-xl">
             <div className="eyebrow mb-1 flex items-center gap-1.5">
-              <Users aria-hidden className="h-3 w-3" /> Compare with its peers
+              <Users aria-hidden className="h-3 w-3" />{" "}{t("Compare with its peers")}
             </div>
             <p className="text-base leading-relaxed text-ash">
-              Every figure on this tab is absolute. Is a 30% fall bad? Is 25% volatility high?
-              Placing {ticker || "this name"} against the other companies in its index turns
-              those into positions you can read — <span className="text-body">&ldquo;milder
-              than 95% of the Nasdaq-100&rdquo;</span> — on the seven price signals the scanner
-              already computes.
+              {t("Every figure on this tab is absolute. Is a 30% fall bad? Is 25% volatility high? Placing {value} against the other companies in its index turns those into positions you can read —", { value: ticker || t("this name") })}{" "}<span className="text-body">{t("“milder than 95% of the Nasdaq-100”")}</span>{" "}{t("— on the seven price signals the scanner already computes.")}
             </p>
           </div>
-          <Button type="button" onClick={() => onCompare()}>Compare with peers</Button>
+          <Button type="button" onClick={() => onCompare()}>{t("Compare with peers")}</Button>
         </CardBody>
       </Card>
     );
@@ -77,11 +75,10 @@ export function PeersPanel({
       <Card>
         <CardBody className="py-5">
           <div className="eyebrow mb-2 flex items-center gap-1.5">
-            <Users aria-hidden className="h-3 w-3" /> Scanning the peer group
+            <Users aria-hidden className="h-3 w-3" />{" "}{t("Scanning the peer group")}
           </div>
           <p className="text-base text-ash">
-            Downloading a year of history for the whole index. This takes a few seconds &mdash;
-            it is one batch request, not one per company.
+            {t("Downloading a year of history for the whole index. This takes a few seconds — it is one batch request, not one per company.")}
           </p>
         </CardBody>
       </Card>
@@ -90,7 +87,7 @@ export function PeersPanel({
 
   if (state.status === "error") {
     return (
-      <StateCard kind="error" title="No peer group could be built">
+      <StateCard kind="error" title={t("No peer group could be built")}>
         {state.failure.message}
       </StateCard>
     );
@@ -101,13 +98,13 @@ export function PeersPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Against {universe.name}</CardTitle>
+        <CardTitle>{t("Against {name}", { name: universe.name })}</CardTitle>
         {/* WRAPS on a phone: the picker's longest option is "Dow Jones
             Industrial Average (30)", and beside the count it pushed the page
             28px past a 375px screen. */}
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
           {candidates.length > 1 && (
-            <Select value={universe.id} aria-label="Peer group" className="h-8 max-w-full"
+            <Select value={universe.id} aria-label={t("Peer group")} className="h-8 max-w-full"
                     onChange={(e) => onCompare(e.target.value)}>
               {candidates.map((c) => (
                 <option key={c.id} value={c.id}>{c.name} ({c.count})</option>
@@ -115,7 +112,7 @@ export function PeersPanel({
             </Select>
           )}
           <span className="num text-meta text-ash">
-            {universe.scanned} ranked &middot; list as of {universe.asOf}
+            {t("{scanned} ranked · list as of {asOf}", { scanned: universe.scanned, asOf: universe.asOf })}
           </span>
         </div>
       </CardHeader>
@@ -159,7 +156,7 @@ export function PeersPanel({
 
         {rank == null && (
           <p className="text-micro text-ash">
-            No combined placing: too many of the seven signals were unavailable for this name.
+            {t("No combined placing: too many of the seven signals were unavailable for this name.")}
           </p>
         )}
       </CardBody>

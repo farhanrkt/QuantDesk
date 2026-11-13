@@ -54,6 +54,8 @@ from typing import Callable, Optional, Sequence
 
 import numpy as np
 
+from .lang import Bilingual, month_abbr, names, tr
+
 # --------------------------------------------------------------------------- #
 # Bands and tone
 # --------------------------------------------------------------------------- #
@@ -83,6 +85,26 @@ TONE_FOR_BAND: dict[str, str] = {
 # How strongly the published evidence supports acting on a signal. Shown on the
 # panel so a reader can tell a documented effect from folklore.
 EVIDENCE = ("strong", "moderate", "weak", "none")
+# The evidence words where a sentence names them, in Bahasa Indonesia; the codes
+# themselves never change.
+_EVIDENCE_ID = {"strong": "kuat", "moderate": "sedang", "weak": "lemah", "none": "tidak ada"}
+
+
+def _clip(text, limit: int = 220) -> str:
+    """Shorten a quoted message at a sentence or a word, and say it was shortened.
+
+    A hard slice used to end mid-word, so a blind spot read "…rather than a
+    company with no sector, a Everything below is missing that lens".
+    """
+    text = " ".join(str(text).split())
+    if len(text) <= limit:
+        return text
+    head = text[:limit]
+    stop = head.rfind(". ")
+    if stop >= limit // 2:
+        return head[:stop + 1]
+    space = head.rfind(" ")
+    return (head[:space] if space > 0 else head).rstrip(",;:—- ") + "…"
 
 
 def _ladder(value: float, steps: Sequence[tuple[Optional[float], str]]) -> str:
@@ -119,19 +141,26 @@ def _num(value: Optional[float], digits: int = 2) -> str:
 
 CONTEXT_NOT_TRIGGER = "Context, not a trigger — nothing here on its own is a reason to buy or sell."
 
+
+def _not_trigger() -> str:
+    """`CONTEXT_NOT_TRIGGER` in the language of the request reading it."""
+    return tr(CONTEXT_NOT_TRIGGER,
+              "Konteks, bukan pemicu — tidak ada satu pun di sini yang dengan sendirinya "
+              "menjadi alasan untuk membeli atau menjual.")
+
 # Yahoo's index tickers are not words. Writing "^GSPC" inside a sentence meant
 # for a non-specialist undoes the sentence.
-INDEX_NAMES = {
-    "^GSPC": "the S&P 500",
-    "^JKSE": "the Jakarta Composite",
-    "^IXIC": "the Nasdaq Composite",
-    "^DJI": "the Dow",
-}
+INDEX_NAMES = Bilingual({
+    "^GSPC": ("the S&P 500", "S&P 500"),
+    "^JKSE": ("the Jakarta Composite", "IHSG"),
+    "^IXIC": ("the Nasdaq Composite", "Nasdaq Composite"),
+    "^DJI": ("the Dow", "Dow Jones"),
+})
 
 
 def index_name(symbol: Optional[str]) -> str:
     if not symbol:
-        return "the index"
+        return tr("the index", "indeks")
     return INDEX_NAMES.get(symbol.upper(), symbol)
 
 
@@ -168,8 +197,10 @@ def unavailable(label: str, what: str, reason: str) -> dict:
     """A metric the data could not support. Never a pass, never a colour."""
     return make(
         label=label, what=what,
-        reading=f"No reading — {reason}.",
-        action="Nothing to act on until there is enough data to compute it.",
+        reading=tr(f"No reading — {reason}.", f"Tidak ada pembacaan — {reason}."),
+        action=tr("Nothing to act on until there is enough data to compute it.",
+                  "Belum ada yang perlu ditindaklanjuti sampai datanya cukup untuk "
+                  "menghitungnya."),
         band="unavailable", good_direction="none",
     )
 
@@ -239,162 +270,256 @@ def _known(value) -> bool:
 # ============================================================================ #
 @metric("cagr")
 def _cagr(value, **_):
-    label = "Annual return (CAGR)"
-    what = ("The single yearly growth rate that would have taken the price from where it "
-            "started to where it is now — the smoothed speed of the whole journey.")
+    label = tr("Annual return (CAGR)", "Imbal hasil tahunan (CAGR)")
+    what = (tr("The single yearly growth rate that would have taken the price from where it "
+               "started to where it is now — the smoothed speed of the whole journey.",
+               "Satu laju pertumbuhan tahunan yang akan membawa harga dari titik "
+               "awalnya ke posisinya sekarang — kecepatan rata-rata dari seluruh "
+               "perjalanan."))
     if not _known(value):
-        return unavailable(label, what, "needs at least two priced days")
+        return unavailable(label, what, tr("needs at least two priced days",
+                                           "perlu setidaknya dua hari yang memiliki harga"))
     band = _ladder(value, ((0.0, "bad"), (0.05, "poor"), (0.10, "fair"),
                            (0.20, "good"), (None, "excellent")))
     if value < 0:
-        reading = (f"Lost about {_pct(abs(value))} a year. A holder over this whole window "
-                   f"is behind, before counting dividends.")
+        reading = (tr(f"Lost about {_pct(abs(value))} a year. A holder over this whole window "
+                      f"is behind, before counting dividends.",
+                      f"Turun sekitar {_pct(abs(value))} per tahun. Pemegang saham selama "
+                      "seluruh periode ini merugi, sebelum menghitung dividen."))
     elif value < 0.05:
-        reading = (f"Made about {_pct(value)} a year — below what cash or bonds have "
-                   f"typically paid, for equity risk.")
+        reading = (tr(f"Made about {_pct(value)} a year — below what cash or bonds have "
+                      f"typically paid, for equity risk.",
+                      f"Naik sekitar {_pct(value)} per tahun — di bawah imbal hasil kas atau "
+                      "obligasi pada umumnya, padahal risikonya risiko saham."))
     elif value < 0.10:
-        reading = (f"Made about {_pct(value)} a year, a bit under the long-run average for "
-                   f"a broad stock market (roughly 8-10% before inflation).")
+        reading = (tr(f"Made about {_pct(value)} a year, a bit under the long-run average for "
+                      f"a broad stock market (roughly 8-10% before inflation).",
+                      f"Naik sekitar {_pct(value)} per tahun, sedikit di bawah rata-rata jangka "
+                      "panjang pasar saham secara luas (kira-kira 8-10% sebelum inflasi)."))
     elif value < 0.20:
-        reading = (f"Made about {_pct(value)} a year, comfortably ahead of the long-run "
-                   f"stock-market average.")
+        reading = (tr(f"Made about {_pct(value)} a year, comfortably ahead of the long-run "
+                      f"stock-market average.",
+                      f"Naik sekitar {_pct(value)} per tahun, jauh di atas rata-rata jangka "
+                      "panjang pasar saham."))
     else:
-        reading = (f"Made about {_pct(value)} a year. Rates this high are rare and rarely "
-                   f"repeat — they usually come with the drawdowns shown below.")
+        reading = (tr(f"Made about {_pct(value)} a year. Rates this high are rare and rarely "
+                      f"repeat — they usually come with the drawdowns shown below.",
+                      f"Naik sekitar {_pct(value)} per tahun. Laju setinggi ini jarang terjadi "
+                      "dan jarang terulang — biasanya disertai penurunan dari puncak seperti "
+                      "yang terlihat di bawah."))
     return make(label, what, reading,
-                "Compare it against the index row before deciding it is good: beating cash "
-                "is not the test, beating the fund you could have bought instead is.",
+                tr("Compare it against the index row before deciding it is good: beating cash "
+                   "is not the test, beating the fund you could have bought instead is.",
+                   "Bandingkan dengan baris indeks sebelum menilainya bagus: ukurannya "
+                   "bukan mengalahkan kas, melainkan mengalahkan reksa dana yang bisa Anda "
+                   "beli sebagai gantinya."),
                 band, "high", evidence="strong",
                 value_text=_signed_pct(value))
 
 
 @metric("volatility")
 def _volatility(value, **_):
-    label = "Volatility"
-    what = ("How much the price bounces around in a typical year. Bigger means a wilder "
-            "ride, in both directions.")
+    label = tr("Volatility", "Volatilitas")
+    what = (tr("How much the price bounces around in a typical year. Bigger means a wilder "
+               "ride, in both directions.",
+               "Seberapa besar harga naik-turun dalam setahun yang biasa. Makin besar "
+               "berarti makin liar gejolaknya, ke dua arah."))
     if not _known(value):
-        return unavailable(label, what, "needs about a month of history")
+        return unavailable(label, what, tr("needs about a month of history",
+                                           "perlu riwayat sekitar sebulan"))
     band = _ladder(value, ((0.15, "excellent"), (0.25, "good"), (0.35, "fair"),
                            (0.50, "poor"), (None, "bad")))
-    reading = (f"About {_pct(value, 0)} a year. In plain terms, a roughly two-in-three chance "
-               f"that any given year lands within {_pct(value, 0)} either side of the average "
-               f"return. ")
+    reading = (tr(f"About {_pct(value, 0)} a year. In plain terms, a roughly two-in-three chance "
+                  f"that any given year lands within {_pct(value, 0)} either side of the average "
+                  f"return. ",
+                  f"Sekitar {_pct(value, 0)} per tahun. Sederhananya, ada peluang kira-kira "
+                  "dua banding tiga bahwa imbal hasil tahun mana pun berada dalam rentang "
+                  f"{_pct(value, 0)} di atas atau di bawah rata-ratanya. "))
     reading += {
-        "excellent": "That is calm for a single stock — closer to an index fund than a typical listing.",
-        "good": "That is unremarkable for a single stock.",
-        "fair": "That is on the lively side; expect double-digit swings routinely.",
-        "poor": "That is high. Position size, not conviction, is what keeps this holdable.",
-        "bad": "That is extreme. A stock this volatile can halve without anything being wrong.",
+        "excellent": tr("That is calm for a single stock — closer to an index fund than a typical listing.",
+                        "Itu tenang untuk satu saham — lebih mirip reksa dana indeks daripada "
+                        "saham pada umumnya."),
+        "good": tr("That is unremarkable for a single stock.", "Itu biasa saja untuk satu saham."),
+        "fair": tr("That is on the lively side; expect double-digit swings routinely.",
+                   "Itu cukup bergejolak; bersiaplah menghadapi ayunan dua digit secara "
+                   "rutin."),
+        "poor": tr("That is high. Position size, not conviction, is what keeps this holdable.",
+                   "Itu tinggi. Ukuran posisi, bukan keyakinan, yang membuat saham ini "
+                   "sanggup dipegang."),
+        "bad": tr("That is extreme. A stock this volatile can halve without anything being wrong.",
+                  "Itu ekstrem. Saham segejolak ini bisa turun separuh tanpa ada yang "
+                  "salah dengan perusahaannya."),
     }[band]
     return make(label, what, reading,
-                "Use it to size the position: the same money in a name twice as volatile is "
-                "twice the risk, whatever you think of the company.",
+                tr("Use it to size the position: the same money in a name twice as volatile is "
+                   "twice the risk, whatever you think of the company.",
+                   "Gunakan untuk menentukan ukuran posisi: uang yang sama di saham yang "
+                   "dua kali lebih bergejolak berarti risiko dua kali lipat, apa pun "
+                   "pendapat Anda tentang perusahaannya."),
                 band, "low", evidence="strong", value_text=_pct(value, 0))
 
 
 @metric("downsideDeviation")
 def _downside_deviation(value, **_):
-    label = "Downside volatility"
-    what = ("The same bounce measure, but counting only the days the price fell. Rising fast "
-            "is not risk to someone who owns it.")
+    label = tr("Downside volatility", "Volatilitas penurunan")
+    what = (tr("The same bounce measure, but counting only the days the price fell. Rising fast "
+               "is not risk to someone who owns it.",
+               "Ukuran gejolak yang sama, tetapi hanya menghitung hari-hari ketika "
+               "harga turun. Kenaikan cepat bukan risiko bagi pemiliknya."))
     if not _known(value):
-        return unavailable(label, what, "needs more than one down day")
+        return unavailable(label, what, tr("needs more than one down day",
+                                           "perlu lebih dari satu hari turun"))
     band = _ladder(value, ((0.12, "excellent"), (0.20, "good"), (0.28, "fair"),
                            (0.40, "poor"), (None, "bad")))
     return make(label, what,
-                f"About {_pct(value, 0)} a year of downward movement. This is the number the "
-                f"Sortino ratio divides by, which is why Sortino is the fairer of the two "
-                f"risk-adjusted ratios for someone holding rather than trading.",
-                CONTEXT_NOT_TRIGGER, band, "low", evidence="strong",
+                tr(f"About {_pct(value, 0)} a year of downward movement. This is the number the "
+                   f"Sortino ratio divides by, which is why Sortino is the fairer of the two "
+                   f"risk-adjusted ratios for someone holding rather than trading.",
+                   f"Sekitar {_pct(value, 0)} per tahun untuk pergerakan turun. Inilah angka "
+                   "pembagi rasio Sortino, sebabnya Sortino lebih adil di antara kedua "
+                   "rasio yang disesuaikan risiko bagi orang yang memegang saham, bukan "
+                   "memperdagangkannya."),
+                _not_trigger(), band, "low", evidence="strong",
                 value_text=_pct(value, 0))
 
 
 @metric("sharpe")
 def _sharpe(value, riskFree=0.0, **_):
-    label = "Sharpe ratio"
-    what = ("Return earned per unit of price swing. It answers 'was the bumpy ride paid for?' "
-            "with one number.")
+    label = tr("Sharpe ratio", "Rasio Sharpe")
+    what = (tr("Return earned per unit of price swing. It answers 'was the bumpy ride paid for?' "
+               "with one number.",
+               "Imbal hasil yang diperoleh per satuan gejolak harga. Ia menjawab "
+               "'apakah perjalanan yang naik-turun itu terbayar?' dengan satu angka."))
     if not _known(value):
-        return unavailable(label, what, "needs a return and a volatility to divide")
+        return unavailable(label, what, tr("needs a return and a volatility to divide",
+                                           "perlu imbal hasil dan volatilitas untuk dibagi"))
     band = _ladder(value, ((0.0, "bad"), (0.5, "poor"), (1.0, "fair"),
                            (2.0, "good"), (None, "excellent")))
-    reading = (f"{_num(value)} — {_num(value)} units of return above a "
-               f"{_pct(riskFree, 1)} risk-free rate for every unit of price swing. ")
+    reading = (tr(f"{_num(value)} — {_num(value)} units of return above a "
+                  f"{_pct(riskFree, 1)} risk-free rate for every unit of price swing. ",
+                  f"{_num(value)} — {_num(value)} satuan imbal hasil di atas suku bunga "
+                  f"bebas risiko {_pct(riskFree, 1)} untuk setiap satuan gejolak harga. "))
     reading += {
-        "bad": "Below zero: the holding did worse than simply holding cash, and was volatile doing it.",
-        "poor": "Under 0.5 is weak — the swings were not well paid for.",
-        "fair": "Between 0.5 and 1 is ordinary; most individual stocks live here.",
-        "good": "Above 1 is generally considered good.",
-        "excellent": "Above 2 is excellent, and over a short window usually too good to persist.",
+        "bad": tr("Below zero: the holding did worse than simply holding cash, and was volatile doing it.",
+                  "Di bawah nol: saham ini lebih buruk daripada sekadar memegang kas, dan "
+                  "bergejolak pula."),
+        "poor": tr("Under 0.5 is weak — the swings were not well paid for.",
+                   "Di bawah 0.5 tergolong lemah — gejolaknya tidak terbayar dengan baik."),
+        "fair": tr("Between 0.5 and 1 is ordinary; most individual stocks live here.",
+                   "Antara 0.5 dan 1 tergolong biasa; kebanyakan saham individual berada di "
+                   "sini."),
+        "good": tr("Above 1 is generally considered good.", "Di atas 1 umumnya dianggap bagus."),
+        "excellent": tr("Above 2 is excellent, and over a short window usually too good to persist.",
+                        "Di atas 2 sangat bagus, dan dalam periode pendek biasanya terlalu bagus "
+                        "untuk bertahan."),
     }[band]
     return make(label, what, reading,
-                "Sharpe treats a fast rise as risk, which for a holder it is not. Read Sortino "
-                "beside it and trust that one more.",
+                tr("Sharpe treats a fast rise as risk, which for a holder it is not. Read Sortino "
+                   "beside it and trust that one more.",
+                   "Sharpe menganggap kenaikan cepat sebagai risiko, padahal bagi pemegang "
+                   "saham bukan. Baca Sortino di sebelahnya dan lebih percayai yang itu."),
                 band, "high", evidence="strong", value_text=_num(value))
 
 
 @metric("sortino")
 def _sortino(value, riskFree=0.0, **_):
-    label = "Sortino ratio"
-    what = ("Return earned per unit of DOWNSIDE risk — the same idea as Sharpe, but it stops "
-            "penalising the stock for going up quickly.")
+    label = tr("Sortino ratio", "Rasio Sortino")
+    what = (tr("Return earned per unit of DOWNSIDE risk — the same idea as Sharpe, but it stops "
+               "penalising the stock for going up quickly.",
+               "Imbal hasil yang diperoleh per satuan risiko PENURUNAN — gagasannya "
+               "sama dengan Sharpe, tetapi tidak lagi menghukum saham karena naik "
+               "dengan cepat."))
     if not _known(value):
-        return unavailable(label, what, "needs enough down days to measure downside risk")
+        return unavailable(label, what, tr("needs enough down days to measure downside risk",
+                                           "perlu cukup banyak hari turun untuk mengukur risiko penurunan"))
     band = _ladder(value, ((0.0, "bad"), (0.5, "poor"), (1.0, "fair"),
                            (2.0, "good"), (None, "excellent")))
-    reading = (f"{_num(value)} — you earned {_num(value)} units of return above a "
-               f"{_pct(riskFree, 1)} risk-free rate for every unit of downside risk. ")
+    reading = (tr(f"{_num(value)} — you earned {_num(value)} units of return above a "
+                  f"{_pct(riskFree, 1)} risk-free rate for every unit of downside risk. ",
+                  f"{_num(value)} — Anda memperoleh {_num(value)} satuan imbal hasil di "
+                  f"atas suku bunga bebas risiko {_pct(riskFree, 1)} untuk setiap satuan "
+                  "risiko penurunan. "))
     reading += {
-        "bad": "Below zero means the downside was not paid for at all.",
-        "poor": "Under 0.5 is weak.",
-        "fair": "Between 0.5 and 1 is acceptable but not compelling.",
-        "good": "Above 1.0 is generally considered good; above 2.0 is excellent.",
-        "excellent": "Above 2.0 is excellent — check it is not one lucky window before believing it.",
+        "bad": tr("Below zero means the downside was not paid for at all.",
+                  "Di bawah nol berarti risiko penurunannya sama sekali tidak terbayar."),
+        "poor": tr("Under 0.5 is weak.", "Di bawah 0.5 tergolong lemah."),
+        "fair": tr("Between 0.5 and 1 is acceptable but not compelling.",
+                   "Antara 0.5 dan 1 dapat diterima tetapi tidak meyakinkan."),
+        "good": tr("Above 1.0 is generally considered good; above 2.0 is excellent.",
+                   "Di atas 1.0 umumnya dianggap bagus; di atas 2.0 sangat bagus."),
+        "excellent": tr("Above 2.0 is excellent — check it is not one lucky window before believing it.",
+                        "Di atas 2.0 sangat bagus — pastikan itu bukan sekadar satu periode yang "
+                        "beruntung sebelum mempercayainya."),
     }[band]
     return make(label, what, reading,
-                "A persistently negative Sortino is the clearest statistical argument against "
-                "holding: the falls were not compensated. Anything above 1 is context.",
+                tr("A persistently negative Sortino is the clearest statistical argument against "
+                   "holding: the falls were not compensated. Anything above 1 is context.",
+                   "Sortino yang terus-menerus negatif adalah argumen statistik paling "
+                   "jelas untuk tidak memegang saham ini: penurunannya tidak terkompensasi. "
+                   "Apa pun di atas 1 hanyalah konteks."),
                 band, "high", evidence="strong", value_text=_num(value))
 
 
 @metric("calmar")
 def _calmar(value, **_):
-    label = "Calmar ratio"
-    what = ("Yearly return divided by the worst fall the holding ever had. It asks: was the "
-            "pain worth the reward?")
+    label = tr("Calmar ratio", "Rasio Calmar")
+    what = (tr("Yearly return divided by the worst fall the holding ever had. It asks: was the "
+               "pain worth the reward?",
+               "Imbal hasil tahunan dibagi penurunan terburuk yang pernah dialami saham "
+               "ini. Pertanyaannya: apakah rasa sakitnya sepadan dengan hasilnya?"))
     if not _known(value):
-        return unavailable(label, what, "needs both a return and a drawdown")
+        return unavailable(label, what, tr("needs both a return and a drawdown",
+                                           "perlu imbal hasil dan penurunan dari puncak"))
     band = _ladder(value, ((0.0, "bad"), (0.5, "poor"), (1.0, "fair"),
                            (3.0, "good"), (None, "excellent")))
-    reading = (f"{_num(value)} — for every 1% of the worst peak-to-trough fall, the holding "
-               f"returned about {_num(value)}% a year. ")
+    reading = (tr(f"{_num(value)} — for every 1% of the worst peak-to-trough fall, the holding "
+                  f"returned about {_num(value)}% a year. ",
+                  f"{_num(value)} — untuk setiap 1% penurunan terburuk dari puncak ke "
+                  f"dasar, saham ini menghasilkan sekitar {_num(value)}% per tahun. "))
     reading += {
-        "bad": "Negative: the fall happened and the return did not.",
-        "poor": "Under 0.5 means the worst drawdown was several years of returns deep.",
-        "fair": "Around 1 means roughly a year of returns to recover the worst fall.",
-        "good": "Above 1 is solid for a single stock.",
-        "excellent": "Above 3 is exceptional and usually reflects a short, kind history.",
+        "bad": tr("Negative: the fall happened and the return did not.",
+                  "Negatif: penurunannya terjadi, imbal hasilnya tidak."),
+        "poor": tr("Under 0.5 means the worst drawdown was several years of returns deep.",
+                   "Di bawah 0.5 berarti penurunan terburuknya sedalam imbal hasil beberapa "
+                   "tahun."),
+        "fair": tr("Around 1 means roughly a year of returns to recover the worst fall.",
+                   "Sekitar 1 berarti kira-kira butuh imbal hasil setahun untuk memulihkan "
+                   "penurunan terburuk."),
+        "good": tr("Above 1 is solid for a single stock.",
+                   "Di atas 1 tergolong solid untuk satu saham."),
+        "excellent": tr("Above 3 is exceptional and usually reflects a short, kind history.",
+                        "Di atas 3 luar biasa dan biasanya mencerminkan riwayat yang pendek dan "
+                        "bersahabat."),
     }[band]
     return make(label, what, reading,
-                "This is the ratio that predicts whether you actually hold on. Below 0.5, "
-                "assume you will be tested.",
+                tr("This is the ratio that predicts whether you actually hold on. Below 0.5, "
+                   "assume you will be tested.",
+                   "Inilah rasio yang memperkirakan apakah Anda benar-benar sanggup "
+                   "bertahan. Di bawah 0.5, anggap saja kesabaran Anda akan diuji."),
                 band, "high", evidence="moderate", value_text=_num(value))
 
 
 @metric("var95")
 def _var95(value, **_):
-    label = "Bad-day loss (VaR 95%)"
-    what = "How much the price falls on a genuinely bad day — the worst 1 day in 20."
+    label = tr("Bad-day loss (VaR 95%)", "Kerugian di hari buruk (VaR 95%)")
+    what = tr("How much the price falls on a genuinely bad day — the worst 1 day in 20.",
+              "Seberapa jauh harga turun pada hari yang benar-benar buruk — 1 hari "
+              "terburuk dari 20.")
     if not _known(value):
-        return unavailable(label, what, "needs about a month of returns")
+        return unavailable(label, what, tr("needs about a month of returns",
+                                           "perlu data imbal hasil sekitar sebulan"))
     magnitude = abs(value)
     band = _ladder(magnitude, ((0.02, "good"), (0.035, "fair"), (0.06, "poor"), (None, "bad")))
     return make(label, what,
-                f"On the worst day in a typical month, this fell about {_pct(magnitude)}. One "
-                f"trading day in twenty was at least this bad.",
-                "Use it as a nerve test. If a one-day fall of this size in your position size "
-                "would make you sell, the position is too big.",
+                tr(f"On the worst day in a typical month, this fell about {_pct(magnitude)}. One "
+                   f"trading day in twenty was at least this bad.",
+                   "Pada hari terburuk dalam sebulan yang biasa, saham ini turun sekitar "
+                   f"{_pct(magnitude)}. Satu dari dua puluh hari perdagangan setidaknya "
+                   "seburuk ini."),
+                tr("Use it as a nerve test. If a one-day fall of this size in your position size "
+                   "would make you sell, the position is too big.",
+                   "Gunakan sebagai uji mental. Jika penurunan sehari sebesar ini pada "
+                   "ukuran posisi Anda akan membuat Anda menjual, posisinya terlalu besar."),
                 # HIGH, and the SIGN is the whole reason. This is shown as a
                 # NEGATIVE percentage, so the better outcome is the LARGER
                 # number: -8% beats -60%. Declaring "low" printed an arrow
@@ -407,20 +532,27 @@ def _var95(value, **_):
 
 @metric("cvar95")
 def _cvar95(value, var95=None, **_):
-    label = "Worst-days average (CVaR)"
-    what = ("When it does have one of those genuinely bad days, this is the average size of "
-            "the fall. It measures how bad 'bad' gets.")
+    label = tr("Worst-days average (CVaR)", "Rata-rata hari terburuk (CVaR)")
+    what = (tr("When it does have one of those genuinely bad days, this is the average size of "
+               "the fall. It measures how bad 'bad' gets.",
+               "Ketika hari yang benar-benar buruk itu datang, inilah rata-rata "
+               "besarnya penurunan. Ia mengukur seberapa buruk 'buruk' itu."))
     if not _known(value):
-        return unavailable(label, what, "needs enough tail days to average")
+        return unavailable(label, what, tr("needs enough tail days to average",
+                                           "perlu cukup banyak hari ekstrem untuk dirata-ratakan"))
     magnitude = abs(value)
     band = _ladder(magnitude, ((0.03, "good"), (0.05, "fair"), (0.08, "poor"), (None, "bad")))
-    reading = f"Across the worst 5% of days, the average fall was {_pct(magnitude)}."
+    reading = tr(f"Across the worst 5% of days, the average fall was {_pct(magnitude)}.",
+                 f"Pada 5% hari terburuk, rata-rata penurunannya {_pct(magnitude)}.")
     if _known(var95) and abs(var95) > 0:
         ratio = magnitude / abs(var95)
-        reading += (f" That is {_num(ratio, 1)}x the bad-day threshold above — the further "
-                    f"past 1.0 this gets, the more the really bad days cluster far out.")
+        reading += (tr(f" That is {_num(ratio, 1)}x the bad-day threshold above — the further "
+                       f"past 1.0 this gets, the more the really bad days cluster far out.",
+                       f" Itu {_num(ratio, 1)}x ambang hari buruk di atas — makin jauh di atas "
+                       "1.0, makin jauh pula hari-hari yang sangat buruk itu mengumpul di ujung."))
     return make(label, what, reading,
-                CONTEXT_NOT_TRIGGER + " It tells you the shape of the tail, not when it arrives.",
+                _not_trigger() + tr(" It tells you the shape of the tail, not when it arrives.",
+                                         " Ini menggambarkan bentuk ekornya, bukan kapan ia datang."),
                 # HIGH, and the SIGN is the whole reason. This is shown as a
                 # NEGATIVE percentage, so the better outcome is the LARGER
                 # number: -8% beats -60%. Declaring "low" printed an arrow
@@ -433,74 +565,108 @@ def _cvar95(value, var95=None, **_):
 
 @metric("skew")
 def _skew(value, **_):
-    label = "Lopsidedness (skew)"
-    what = ("Whether the surprises come as sharp falls or sharp jumps. Negative means the "
-            "violent days tend to be down days.")
+    label = tr("Lopsidedness (skew)", "Kemencengan (skew)")
+    what = (tr("Whether the surprises come as sharp falls or sharp jumps. Negative means the "
+               "violent days tend to be down days.",
+               "Apakah kejutan datang sebagai penurunan tajam atau lonjakan tajam. "
+               "Negatif berarti hari-hari bergejolak cenderung hari turun."))
     if not _known(value):
-        return unavailable(label, what, "needs about a month of returns")
+        return unavailable(label, what, tr("needs about a month of returns",
+                                           "perlu data imbal hasil sekitar sebulan"))
     if value < -0.5:
-        reading = (f"{_num(value)} — clearly negative. The big moves in this name have mostly "
-                   f"been falls: it drips up and gaps down.")
+        reading = (tr(f"{_num(value)} — clearly negative. The big moves in this name have mostly "
+                      f"been falls: it drips up and gaps down.",
+                      f"{_num(value)} — jelas negatif. Pergerakan besar saham ini sebagian "
+                      "besar berupa penurunan: naiknya pelan-pelan, turunnya tiba-tiba."))
     elif value < 0.5:
-        reading = (f"{_num(value)} — near zero, so up-surprises and down-surprises have been "
-                   f"about the same size. That is the normal case.")
+        reading = (tr(f"{_num(value)} — near zero, so up-surprises and down-surprises have been "
+                      f"about the same size. That is the normal case.",
+                      f"{_num(value)} — mendekati nol, jadi kejutan naik dan kejutan turun "
+                      "kira-kira sama besarnya. Itu kondisi yang normal."))
     else:
-        reading = (f"{_num(value)} — positive. The outsized days have mostly been jumps up, "
-                   f"which is the friendlier shape to hold.")
+        reading = (tr(f"{_num(value)} — positive. The outsized days have mostly been jumps up, "
+                      f"which is the friendlier shape to hold.",
+                      f"{_num(value)} — positif. Hari-hari ekstremnya sebagian besar berupa "
+                      "lonjakan naik, bentuk yang lebih bersahabat untuk dipegang."))
     return make(label, what, reading,
-                CONTEXT_NOT_TRIGGER + " Skew describes the past shape of surprises; it does "
-                "not forecast the next one.",
+                _not_trigger() + tr(" Skew describes the past shape of surprises; it does "
+                   "not forecast the next one.",
+                                         " Skew menggambarkan bentuk kejutan di masa lalu; ia tidak meramalkan "
+                                         "kejutan berikutnya."),
                 "context", "none", evidence="moderate", value_text=_num(value))
 
 
 @metric("kurtosis")
 def _kurtosis(value, **_):
-    label = "Fat tails (excess kurtosis)"
-    what = ("How often this stock does something extreme. Zero would mean it behaves like a "
-            "textbook bell curve; higher means shock days happen far more often than that.")
+    label = tr("Fat tails (excess kurtosis)", "Ekor tebal (kurtosis berlebih)")
+    what = (tr("How often this stock does something extreme. Zero would mean it behaves like a "
+               "textbook bell curve; higher means shock days happen far more often than that.",
+               "Seberapa sering saham ini melakukan sesuatu yang ekstrem. Nol berarti "
+               "perilakunya seperti kurva lonceng di buku teks; makin tinggi berarti "
+               "hari-hari kejutan jauh lebih sering terjadi daripada itu."))
     if not _known(value):
-        return unavailable(label, what, "needs about a month of returns")
+        return unavailable(label, what, tr("needs about a month of returns",
+                                           "perlu data imbal hasil sekitar sebulan"))
     if value < 1:
-        reading = (f"{_num(value, 1)} — close to a normal bell curve. Extreme days are about "
-                   f"as rare as the textbook says.")
+        reading = (tr(f"{_num(value, 1)} — close to a normal bell curve. Extreme days are about "
+                      f"as rare as the textbook says.",
+                      f"{_num(value, 1)} — mendekati kurva lonceng normal. Hari-hari ekstrem "
+                      "kira-kira sejarang yang dikatakan buku teks."))
     elif value < 5:
-        reading = (f"{_num(value, 1)} — fatter tails than a bell curve. Shock days happen "
-                   f"noticeably more often than a standard risk model assumes. This is "
-                   f"completely normal for a single stock.")
+        reading = (tr(f"{_num(value, 1)} — fatter tails than a bell curve. Shock days happen "
+                      f"noticeably more often than a standard risk model assumes. This is "
+                      f"completely normal for a single stock.",
+                      f"{_num(value, 1)} — ekornya lebih tebal daripada kurva lonceng. "
+                      "Hari-hari kejutan terjadi jauh lebih sering daripada asumsi model "
+                      "risiko standar. Ini sepenuhnya wajar untuk satu saham."))
     else:
-        reading = (f"{_num(value, 1)} — very fat tails. This name has a real history of days "
-                   f"that no normal-distribution model would predict in a lifetime.")
+        reading = (tr(f"{_num(value, 1)} — very fat tails. This name has a real history of days "
+                      f"that no normal-distribution model would predict in a lifetime.",
+                      f"{_num(value, 1)} — ekornya sangat tebal. Saham ini benar-benar punya "
+                      "riwayat hari-hari yang tidak akan diprediksi model distribusi normal "
+                      "mana pun seumur hidup."))
     return make(label, what, reading,
-                "It is the reason the loss figures above are measured from actual history "
-                "rather than from a formula. " + CONTEXT_NOT_TRIGGER,
+                tr("It is the reason the loss figures above are measured from actual history "
+                   "rather than from a formula. ",
+                   "Inilah sebabnya angka kerugian di atas diukur dari riwayat nyata, bukan "
+                   "dari rumus. ") + _not_trigger(),
                 "context", "none", evidence="strong", value_text=_num(value, 1))
 
 
 @metric("positiveDays")
 def _positive_days(value, **_):
-    label = "Up days"
-    what = "The share of trading days that finished higher than the day before."
+    label = tr("Up days", "Hari naik")
+    what = tr("The share of trading days that finished higher than the day before.",
+              "Porsi hari perdagangan yang ditutup lebih tinggi daripada hari "
+              "sebelumnya.")
     if not _known(value):
-        return unavailable(label, what, "needs a return series")
+        return unavailable(label, what, tr("needs a return series", "perlu deret imbal hasil"))
     return make(label, what,
-                f"{_pct(value, 0)} of days closed up. Almost every stock sits near 50% — "
-                f"returns come from the SIZE of the up days, not from how many there are, "
-                f"so this number is much less informative than it looks.",
-                CONTEXT_NOT_TRIGGER, "context", "none", evidence="strong",
+                tr(f"{_pct(value, 0)} of days closed up. Almost every stock sits near 50% — "
+                   f"returns come from the SIZE of the up days, not from how many there are, "
+                   f"so this number is much less informative than it looks.",
+                   f"{_pct(value, 0)} hari ditutup naik. Hampir setiap saham berada di "
+                   "sekitar 50% — imbal hasil datang dari BESARNYA hari-hari naik, bukan "
+                   "dari berapa banyak jumlahnya, jadi angka ini jauh kurang informatif "
+                   "daripada kelihatannya."),
+                _not_trigger(), "context", "none", evidence="strong",
                 value_text=_pct(value, 0))
 
 
 @metric("worstDay")
 def _worst_day(value, **_):
-    label = "Worst single day"
-    what = "The largest one-day fall in this history."
+    label = tr("Worst single day", "Hari tunggal terburuk")
+    what = tr("The largest one-day fall in this history.",
+              "Penurunan satu hari terbesar dalam riwayat ini.")
     if not _known(value):
-        return unavailable(label, what, "needs a return series")
+        return unavailable(label, what, tr("needs a return series", "perlu deret imbal hasil"))
     magnitude = abs(value)
     band = _ladder(magnitude, ((0.07, "good"), (0.12, "fair"), (0.20, "poor"), (None, "bad")))
     return make(label, what,
-                f"The worst day here fell {_pct(magnitude)}. It has happened once, so it can "
-                f"happen again.",
+                tr(f"The worst day here fell {_pct(magnitude)}. It has happened once, so it can "
+                   f"happen again.",
+                   f"Hari terburuk di sini turun {_pct(magnitude)}. Itu pernah terjadi "
+                   "sekali, jadi bisa terjadi lagi."),
                 # HIGH, and the SIGN is the whole reason. This is shown as a
                 # NEGATIVE percentage, so the better outcome is the LARGER
                 # number: -8% beats -60%. Declaring "low" printed an arrow
@@ -508,20 +674,24 @@ def _worst_day(value, **_):
                 # tells a reader that a deeper fall is the good one. The
                 # colour ladder was right throughout; only the arrow
                 # contradicted it, and no test compared the two.
-                CONTEXT_NOT_TRIGGER, band, "high", evidence="strong", value_text=_pct(value))
+                _not_trigger(), band, "high", evidence="strong", value_text=_pct(value))
 
 
 @metric("bestDay")
 def _best_day(value, **_):
-    label = "Best single day"
-    what = "The largest one-day rise in this history."
+    label = tr("Best single day", "Hari tunggal terbaik")
+    what = tr("The largest one-day rise in this history.",
+              "Kenaikan satu hari terbesar dalam riwayat ini.")
     if not _known(value):
-        return unavailable(label, what, "needs a return series")
+        return unavailable(label, what, tr("needs a return series", "perlu deret imbal hasil"))
     return make(label, what,
-                f"The best day here rose {_pct(value)}. Big up days and big down days tend to "
-                f"arrive in the same weeks, so this is a volatility reading as much as a "
-                f"good-news one.",
-                CONTEXT_NOT_TRIGGER, "context", "none", evidence="strong",
+                tr(f"The best day here rose {_pct(value)}. Big up days and big down days tend to "
+                   f"arrive in the same weeks, so this is a volatility reading as much as a "
+                   f"good-news one.",
+                   f"Hari terbaik di sini naik {_pct(value)}. Hari naik besar dan hari turun "
+                   "besar cenderung datang di minggu-minggu yang sama, jadi ini sama-sama "
+                   "pembacaan volatilitas dan kabar baik."),
+                _not_trigger(), "context", "none", evidence="strong",
                 value_text=_signed_pct(value))
 
 
@@ -530,28 +700,42 @@ def _best_day(value, **_):
 # ============================================================================ #
 @metric("maxDrawdown")
 def _max_drawdown(value, **_):
-    label = "Worst fall (max drawdown)"
-    what = ("The deepest peak-to-bottom fall in this history — how much someone who bought at "
-            "the worst possible moment was down before it turned.")
+    label = tr("Worst fall (max drawdown)", "Penurunan terburuk (max drawdown)")
+    what = (tr("The deepest peak-to-bottom fall in this history — how much someone who bought at "
+               "the worst possible moment was down before it turned.",
+               "Penurunan terdalam dari puncak ke dasar dalam riwayat ini — seberapa "
+               "besar rugi orang yang membeli di saat terburuk sebelum harga berbalik."))
     if not _known(value):
-        return unavailable(label, what, "needs at least three priced days")
+        return unavailable(label, what, tr("needs at least three priced days",
+                                           "perlu setidaknya tiga hari yang memiliki harga"))
     depth = abs(value)
     band = _ladder(depth, ((0.20, "good"), (0.35, "fair"), (0.50, "poor"), (None, "bad")))
     recovery = 1.0 / (1.0 - depth) - 1.0 if depth < 0.999 else None
-    reading = f"Fell {_pct(depth, 0)} from its high at the worst point. "
+    reading = tr(f"Fell {_pct(depth, 0)} from its high at the worst point. ",
+                 f"Pada titik terburuknya turun {_pct(depth, 0)} dari puncaknya. ")
     if recovery is not None:
-        reading += (f"Getting back to even from there needed a {_pct(recovery, 0)} rise, "
-                    f"because a fall and its recovery are not the same percentage. ")
+        reading += (tr(f"Getting back to even from there needed a {_pct(recovery, 0)} rise, "
+                       f"because a fall and its recovery are not the same percentage. ",
+                       f"Untuk kembali impas dari sana dibutuhkan kenaikan {_pct(recovery, 0)}, "
+                       "karena penurunan dan pemulihannya tidak sama persentasenya. "))
     reading += {
-        "good": "Under 20% is mild for a single stock.",
-        "fair": "A fall of this size is normal for an individual stock over a long window.",
-        "poor": "A fall this deep tests most holders. Assume it repeats.",
-        "bad": "Over half the value gone. Whatever the return figures say, this is the number "
-               "that decides whether the position was ever holdable.",
+        "good": tr("Under 20% is mild for a single stock.",
+                   "Di bawah 20% tergolong ringan untuk satu saham."),
+        "fair": tr("A fall of this size is normal for an individual stock over a long window.",
+                   "Penurunan sebesar ini wajar bagi saham individual dalam periode panjang."),
+        "poor": tr("A fall this deep tests most holders. Assume it repeats.",
+                   "Penurunan sedalam ini menguji kebanyakan pemegang saham. Anggaplah ia "
+                   "akan terulang."),
+        "bad": tr("Over half the value gone. Whatever the return figures say, this is the number "
+                  "that decides whether the position was ever holdable.",
+                  "Lebih dari separuh nilainya hilang. Apa pun kata angka imbal hasilnya, "
+                  "inilah angka yang menentukan apakah posisi ini pernah sanggup dipegang."),
     }[band]
     return make(label, what, reading,
-                "Size the position so a repeat of this fall does not force you out. That is "
-                "the decision this number is for.",
+                tr("Size the position so a repeat of this fall does not force you out. That is "
+                   "the decision this number is for.",
+                   "Tentukan ukuran posisi sehingga terulangnya penurunan ini tidak memaksa "
+                   "Anda keluar. Untuk keputusan itulah angka ini ada."),
                 # HIGH, and the SIGN is the whole reason. This is shown as a
                 # NEGATIVE percentage, so the better outcome is the LARGER
                 # number: -8% beats -60%. Declaring "low" printed an arrow
@@ -564,23 +748,31 @@ def _max_drawdown(value, **_):
 
 @metric("currentDrawdown")
 def _current_drawdown(value, **_):
-    label = "Below its high right now"
-    what = "How far the price currently sits under its own best-ever level."
+    label = tr("Below its high right now", "Di bawah puncaknya saat ini")
+    what = tr("How far the price currently sits under its own best-ever level.",
+              "Seberapa jauh harga saat ini berada di bawah level terbaiknya sepanjang "
+              "masa.")
     if not _known(value):
-        return unavailable(label, what, "needs a price history")
+        return unavailable(label, what, tr("needs a price history", "perlu riwayat harga"))
     depth = abs(value)
     if depth < 0.02:
         return make(label, what,
-                    f"{_pct(depth)} below its peak, which is effectively at the high — "
-                    f"everyone who has ever owned it is in profit.",
-                    CONTEXT_NOT_TRIGGER, "good", "high", evidence="strong",
+                    tr(f"{_pct(depth)} below its peak, which is effectively at the high — "
+                       f"everyone who has ever owned it is in profit.",
+                       f"{_pct(depth)} di bawah puncaknya, yang praktis berarti berada di puncak "
+                       "— setiap orang yang pernah memilikinya sedang untung."),
+                    _not_trigger(), "good", "high", evidence="strong",
                     value_text=_pct(value, 1))
     band = _ladder(depth, ((0.10, "good"), (0.25, "fair"), (0.45, "poor"), (None, "bad")))
     return make(label, what,
-                f"Currently {_pct(depth)} below its peak. Anyone who bought at that peak is "
-                f"still down by that much.",
-                CONTEXT_NOT_TRIGGER + " Being far below a high is neither cheap nor broken on "
-                "its own — the Value and Quality lenses are what settle that.",
+                tr(f"Currently {_pct(depth)} below its peak. Anyone who bought at that peak is "
+                   f"still down by that much.",
+                   f"Saat ini {_pct(depth)} di bawah puncaknya. Siapa pun yang membeli di "
+                   "puncak itu masih rugi sebesar itu."),
+                _not_trigger() + tr(" Being far below a high is neither cheap nor broken on "
+                   "its own — the Value and Quality lenses are what settle that.",
+                                         " Berada jauh di bawah puncak tidak dengan sendirinya berarti murah atau "
+                                         "rusak — lensa Nilai dan Kualitas yang memutuskannya."),
                 # HIGH, and the SIGN is the whole reason. This is shown as a
                 # NEGATIVE percentage, so the better outcome is the LARGER
                 # number: -8% beats -60%. Declaring "low" printed an arrow
@@ -595,75 +787,116 @@ def _current_drawdown(value, **_):
 
 @metric("timeUnderWaterDays")
 def _time_under_water(value, **_):
-    label = "Longest time under water"
-    what = ("The longest unbroken stretch spent below a previous high — how long a holder went "
-            "without seeing a new best price.")
+    label = tr("Longest time under water", "Masa terlama di bawah puncak")
+    what = (tr("The longest unbroken stretch spent below a previous high — how long a holder went "
+               "without seeing a new best price.",
+               "Rentang tak terputus terlama di bawah puncak sebelumnya — berapa lama "
+               "pemegang saham menunggu tanpa melihat harga terbaik baru."))
     if not _known(value):
-        return unavailable(label, what, "needs a price history")
+        return unavailable(label, what, tr("needs a price history", "perlu riwayat harga"))
     days = float(value)
     band = _ladder(days, ((60, "good"), (250, "fair"), (500, "poor"), (None, "bad")))
     years = days / 252.0
-    span = (f"{days:.0f} trading days — about {years:.1f} years"
-            if days >= 252 else f"{days:.0f} trading days — about {days / 21:.0f} months")
-    reading = f"{span} of holding without a new high. "
+    span = (tr(f"{days:.0f} trading days — about {years:.1f} years",
+               f"{days:.0f} hari perdagangan — sekitar {years:.1f} tahun")
+            if days >= 252 else tr(f"{days:.0f} trading days — about {days / 21:.0f} months",
+                                   f"{days:.0f} hari perdagangan — sekitar {days / 21:.0f} bulan"))
+    reading = tr(f"{span} of holding without a new high. ", f"{span} memegang tanpa puncak baru. ")
     reading += {
-        "good": "Short enough that impatience was never really tested.",
-        "fair": "Long enough to be uncomfortable, short enough to be normal.",
-        "poor": "A stretch this long is where most people give up and sell.",
-        "bad": "Years of no progress. Depth is not what breaks conviction — this is.",
+        "good": tr("Short enough that impatience was never really tested.",
+                   "Cukup singkat sehingga kesabaran tidak pernah benar-benar diuji."),
+        "fair": tr("Long enough to be uncomfortable, short enough to be normal.",
+                   "Cukup lama untuk terasa tidak nyaman, cukup singkat untuk tergolong "
+                   "wajar."),
+        "poor": tr("A stretch this long is where most people give up and sell.",
+                   "Rentang selama ini adalah saat kebanyakan orang menyerah dan menjual."),
+        "bad": tr("Years of no progress. Depth is not what breaks conviction — this is.",
+                  "Bertahun-tahun tanpa kemajuan. Bukan dalamnya penurunan yang mematahkan "
+                  "keyakinan — melainkan ini."),
     }[band]
     return make(label, what, reading,
-                "If a period this long with nothing to show would make you abandon the "
-                "position, this is not a holding you can size large.",
-                band, "low", evidence="moderate", value_text=f"{days:.0f} d")
+                tr("If a period this long with nothing to show would make you abandon the "
+                   "position, this is not a holding you can size large.",
+                   "Jika periode selama ini tanpa hasil apa pun akan membuat Anda "
+                   "meninggalkan posisi, ini bukan saham yang bisa Anda pegang dalam porsi "
+                   "besar."),
+                band, "low", evidence="moderate", value_text=tr(f"{days:.0f} d", f"{days:.0f} hr"))
 
 
 @metric("ulcerIndex")
 def _ulcer(value, **_):
-    label = "Ulcer index"
-    what = ("A single score for how uncomfortable holding this has been — it combines how far "
-            "the price fell below its highs with how LONG it stayed there. A long shallow "
-            "grind scores worse than a sharp fall that recovers, because that is how it feels.")
+    label = tr("Ulcer index", "Indeks Ulcer")
+    what = (tr("A single score for how uncomfortable holding this has been — it combines how far "
+               "the price fell below its highs with how LONG it stayed there. A long shallow "
+               "grind scores worse than a sharp fall that recovers, because that is how it feels.",
+               "Satu skor untuk seberapa tidak nyamannya memegang saham ini — "
+               "menggabungkan seberapa jauh harga turun di bawah puncaknya dengan "
+               "seberapa LAMA ia tertahan di sana. Penurunan dangkal yang "
+               "berlarut-larut mendapat skor lebih buruk daripada penurunan tajam yang "
+               "lalu pulih, karena memang begitulah rasanya."))
     if not _known(value):
-        return unavailable(label, what, "needs a price history")
+        return unavailable(label, what, tr("needs a price history", "perlu riwayat harga"))
     band = _ladder(value, ((5, "excellent"), (10, "good"), (20, "fair"),
                            (30, "poor"), (None, "bad")))
     reading = f"{_num(value, 1)}. "
     reading += {
-        "excellent": "Very low — this has spent most of its life at or near its highs.",
-        "good": "Low. Falls have been shallow, or brief, or both.",
-        "fair": "Middling. There have been real stretches below the highs, but not punishing ones.",
-        "poor": "High. This has spent a lot of its life meaningfully underwater.",
-        "bad": "Very high — long, deep periods below the high. Hard to hold, whatever it returned.",
+        "excellent": tr("Very low — this has spent most of its life at or near its highs.",
+                        "Sangat rendah — saham ini menghabiskan sebagian besar hidupnya di "
+                        "puncak atau dekat puncak."),
+        "good": tr("Low. Falls have been shallow, or brief, or both.",
+                   "Rendah. Penurunannya dangkal, atau singkat, atau keduanya."),
+        "fair": tr("Middling. There have been real stretches below the highs, but not punishing ones.",
+                   "Sedang. Ada rentang nyata di bawah puncak, tetapi tidak menyiksa."),
+        "poor": tr("High. This has spent a lot of its life meaningfully underwater.",
+                   "Tinggi. Saham ini menghabiskan banyak waktunya jauh di bawah puncak."),
+        "bad": tr("Very high — long, deep periods below the high. Hard to hold, whatever it returned.",
+                  "Sangat tinggi — periode panjang dan dalam di bawah puncak. Sulit "
+                  "dipegang, berapa pun imbal hasilnya."),
     }[band]
-    reading += (" Lower is better; roughly, under 5 is calm, over 20 is a difficult holding. "
-                "The scale is in percentage points, so it is comparable between stocks but not "
-                "meaningful in isolation.")
+    reading += (tr(" Lower is better; roughly, under 5 is calm, over 20 is a difficult holding. "
+                   "The scale is in percentage points, so it is comparable between stocks but not "
+                   "meaningful in isolation.",
+                   " Makin rendah makin baik; kira-kira, di bawah 5 tergolong tenang, di "
+                   "atas 20 sulit dipegang. Skalanya dalam poin persentase, jadi bisa "
+                   "dibandingkan antarsaham tetapi tidak bermakna jika berdiri sendiri."))
     return make(label, what, reading,
-                "Read it next to the worst-fall number. A modest worst fall with a high Ulcer "
-                "index means the pain was slow rather than sharp.",
+                tr("Read it next to the worst-fall number. A modest worst fall with a high Ulcer "
+                   "index means the pain was slow rather than sharp.",
+                   "Baca berdampingan dengan angka penurunan terburuk. Penurunan terburuk "
+                   "yang sedang dengan indeks Ulcer yang tinggi berarti rasa sakitnya "
+                   "lambat, bukan tajam."),
                 band, "low", evidence="moderate", value_text=_num(value, 1))
 
 
 @metric("maxDrawdownRecoveryDays")
 def _recovery_days(value, **_):
-    label = "Time to recover"
-    what = "How long it took to climb back to the old high after that worst fall."
+    label = tr("Time to recover", "Waktu pemulihan")
+    what = tr("How long it took to climb back to the old high after that worst fall.",
+              "Berapa lama waktu yang dibutuhkan untuk naik kembali ke puncak lama "
+              "setelah penurunan terburuk itu.")
     if not _known(value):
         return make(label, what,
-                    "It has not recovered. The price is still below the peak it fell from, so "
-                    "this history contains no example of it coming back.",
-                    "An unrecovered drawdown is not a verdict — but it means every recovery "
-                    "figure here is a hope rather than an observation.",
-                    "caution", "low", evidence="strong", value_text="not yet")
+                    tr("It has not recovered. The price is still below the peak it fell from, so "
+                       "this history contains no example of it coming back.",
+                       "Belum pulih. Harga masih di bawah puncak tempat ia jatuh, jadi riwayat "
+                       "ini tidak punya contoh harga kembali pulih."),
+                    tr("An unrecovered drawdown is not a verdict — but it means every recovery "
+                       "figure here is a hope rather than an observation.",
+                       "Penurunan yang belum pulih bukanlah vonis — tetapi artinya setiap angka "
+                       "pemulihan di sini adalah harapan, bukan pengamatan."),
+                    "caution", "low", evidence="strong", value_text=tr("not yet", "belum"))
     days = float(value)
     band = _ladder(days, ((180, "good"), (500, "fair"), (1000, "poor"), (None, "bad")))
     return make(label, what,
-                f"{days:.0f} calendar days — about {days / 365.25:.1f} years to get back to "
-                f"where it had already been.",
-                CONTEXT_NOT_TRIGGER + " It is the closest thing here to an estimate of how "
-                "long a bad entry takes to forgive.",
-                band, "low", evidence="moderate", value_text=f"{days:.0f} d")
+                tr(f"{days:.0f} calendar days — about {days / 365.25:.1f} years to get back to "
+                   f"where it had already been.",
+                   f"{days:.0f} hari kalender — sekitar {days / 365.25:.1f} tahun untuk "
+                   "kembali ke posisi yang pernah dicapainya."),
+                _not_trigger() + tr(" It is the closest thing here to an estimate of how "
+                   "long a bad entry takes to forgive.",
+                                         " Inilah yang paling mendekati perkiraan berapa lama sebuah pembelian "
+                                         "yang buruk butuh waktu untuk termaafkan."),
+                band, "low", evidence="moderate", value_text=tr(f"{days:.0f} d", f"{days:.0f} hr"))
 
 
 # ============================================================================ #
@@ -671,11 +904,15 @@ def _recovery_days(value, **_):
 # ============================================================================ #
 @metric("hurst")
 def _hurst(value, stderr=None, verdict=None, low=None, high=None, observations=None, **_):
-    label = "Trend or noise? (Hurst exponent)"
-    what = ("A test of whether this price series has real memory or is essentially a coin "
-            "flip. 0.5 means a random walk — moves tell you nothing about the next move.")
+    label = tr("Trend or noise? (Hurst exponent)", "Tren atau derau? (eksponen Hurst)")
+    what = (tr("A test of whether this price series has real memory or is essentially a coin "
+               "flip. 0.5 means a random walk — moves tell you nothing about the next move.",
+               "Uji apakah deret harga ini benar-benar punya memori atau pada dasarnya "
+               "seperti lempar koin. 0.5 berarti jalan acak — pergerakan tidak memberi "
+               "tahu apa pun tentang pergerakan berikutnya."))
     if not _known(value):
-        return unavailable(label, what, "needs roughly 100 bars of history")
+        return unavailable(label, what, tr("needs roughly 100 bars of history",
+                                           "perlu riwayat sekitar 100 batang"))
 
     # THE ERROR BAR IS NOT DECORATION. This measure is noisy: on five years of
     # daily bars its standard error is about 0.05, so the fixed 0.45-0.55 band
@@ -685,269 +922,402 @@ def _hurst(value, stderr=None, verdict=None, low=None, high=None, observations=N
     # there is less history — which is why a short range says "cannot tell"
     # instead of confidently saying the wrong thing.
     figure = f"{_num(value)}" + (f" ± {_num(stderr)}" if _known(stderr) else "")
-    span = (f"{_num(low)} to {_num(high)}" if _known(low) and _known(high)
-            else "0.45 to 0.55")
+    span = (tr(f"{_num(low)} to {_num(high)}", f"{_num(low)} hingga {_num(high)}") if _known(low) and _known(high)
+            else tr("0.45 to 0.55", "0.45 hingga 0.55"))
 
     if verdict == "persistent":
         band, reading = "good", (
-            f"{figure} — above {_num(high)}, which is further from 0.5 than the estimate's own "
-            f"error. Moves have tended to continue, so trend-following tools have something "
-            f"real to work with on this name.")
+            tr(f"{figure} — above {_num(high)}, which is further from 0.5 than the estimate's own "
+               f"error. Moves have tended to continue, so trend-following tools have something "
+               f"real to work with on this name.",
+               f"{figure} — di atas {_num(high)}, yang lebih jauh dari 0.5 daripada "
+               "galat estimasinya sendiri. Pergerakan cenderung berlanjut, jadi alat "
+               "pengikut tren punya sesuatu yang nyata untuk dikerjakan pada saham ini."))
     elif verdict == "meanReverting":
         band, reading = "caution", (
-            f"{figure} — below {_num(low)}, meaning moves have tended to REVERSE. Rallies here "
-            f"have historically been given back, and trend-following would have been punished.")
+            tr(f"{figure} — below {_num(low)}, meaning moves have tended to REVERSE. Rallies here "
+               f"have historically been given back, and trend-following would have been punished.",
+               f"{figure} — di bawah {_num(low)}, artinya pergerakan cenderung BERBALIK. "
+               "Reli di sini secara historis dikembalikan lagi, dan strategi mengikuti "
+               "tren akan merugi."))
     else:
         band, reading = "caution", (
-            f"{figure} — inside {span}, which is the range a genuine random walk produces at "
-            f"this sample size. The measure simply cannot tell this series apart from a coin "
-            f"flip, so every trend line, moving average and momentum reading on this page is "
-            f"probably describing noise.")
+            tr(f"{figure} — inside {span}, which is the range a genuine random walk produces at "
+               f"this sample size. The measure simply cannot tell this series apart from a coin "
+               f"flip, so every trend line, moving average and momentum reading on this page is "
+               f"probably describing noise.",
+               f"{figure} — di dalam {span}, yaitu rentang yang dihasilkan jalan acak "
+               "sungguhan pada ukuran sampel ini. Ukuran ini sama sekali tidak bisa "
+               "membedakan deret ini dari lempar koin, jadi setiap garis tren, "
+               "rata-rata bergerak, dan pembacaan momentum di halaman ini kemungkinan "
+               "besar sedang menggambarkan derau."))
     if _known(observations) and observations < 750:
-        reading += (f" Note it has only {int(observations)} days to work with; this measure "
-                    f"needs several years before it can say much at all, so widen the range "
-                    f"before reading anything into it.")
+        reading += (tr(f" Note it has only {int(observations)} days to work with; this measure "
+                       f"needs several years before it can say much at all, so widen the range "
+                       f"before reading anything into it.",
+                       f" Perhatikan bahwa datanya hanya {int(observations)} hari; ukuran ini "
+                       "butuh beberapa tahun sebelum bisa berkata banyak, jadi perlebar "
+                       "rentangnya sebelum menyimpulkan apa pun."))
     return make(label, what, reading,
-                "This is the honesty check on the rest of the technical lens. When it cannot "
-                "separate the series from a random walk, downgrade everything else here rather "
-                "than acting on it.",
+                tr("This is the honesty check on the rest of the technical lens. When it cannot "
+                   "separate the series from a random walk, downgrade everything else here rather "
+                   "than acting on it.",
+                   "Inilah pemeriksa kejujuran bagi seluruh lensa teknikal. Ketika ia tidak "
+                   "bisa membedakan deret harga dari jalan acak, turunkan bobot semua hal "
+                   "lain di sini alih-alih bertindak berdasarkan itu."),
                 band, "none", evidence="moderate", value_text=_num(value))
 
 
 @metric("momentum12_1")
 def _momentum_12_1(value, **_):
-    label = "12-1 month momentum"
-    what = ("How much the price rose over the twelve months ending ONE month ago. The recent "
-            "month is deliberately skipped, because very short-term moves tend to snap back "
-            "and would pollute the reading.")
+    label = tr("12-1 month momentum", "Momentum 12-1 bulan")
+    what = (tr("How much the price rose over the twelve months ending ONE month ago. The recent "
+               "month is deliberately skipped, because very short-term moves tend to snap back "
+               "and would pollute the reading.",
+               "Seberapa besar harga naik selama dua belas bulan yang berakhir SATU "
+               "bulan lalu. Bulan terakhir sengaja dilewati, karena pergerakan jangka "
+               "sangat pendek cenderung berbalik dan akan mengotori pembacaan."))
     if not _known(value):
-        return unavailable(label, what, "needs about a year of history")
+        return unavailable(label, what, tr("needs about a year of history",
+                                           "perlu riwayat sekitar setahun"))
     band = "good" if value > 0 else "poor"
-    reading = (f"{_signed_pct(value)} over that window. "
-               + ("Positive, which historically is the side of this measure that has done "
-                  "better across large groups of stocks."
+    reading = (tr(f"{_signed_pct(value)} over that window. ",
+                  f"{_signed_pct(value)} dalam periode itu. ")
+               + (tr("Positive, which historically is the side of this measure that has done "
+                     "better across large groups of stocks.",
+                     "Positif, dan secara historis sisi ukuran ini yang kinerjanya lebih baik "
+                     "pada kelompok saham yang besar.")
                   if value > 0 else
-                  "Negative. Across large samples, names on this side have tended to keep "
-                  "lagging for a while."))
+                  tr("Negative. Across large samples, names on this side have tended to keep "
+                     "lagging for a while.",
+                     "Negatif. Pada sampel besar, saham di sisi ini cenderung terus "
+                     "tertinggal untuk sementara waktu.")))
     return make(label, what, reading,
-                "One of the few technical signals with decades of out-of-sample support "
-                "across many markets — but it is a statement about averages over hundreds of "
-                "stocks, not a forecast for this one.",
+                tr("One of the few technical signals with decades of out-of-sample support "
+                   "across many markets — but it is a statement about averages over hundreds of "
+                   "stocks, not a forecast for this one.",
+                   "Salah satu dari sedikit sinyal teknikal yang didukung bukti di luar "
+                   "sampel selama puluhan tahun di banyak pasar — tetapi ini pernyataan "
+                   "tentang rata-rata ratusan saham, bukan ramalan untuk saham yang satu "
+                   "ini."),
                 band, "high", evidence="strong", value_text=_signed_pct(value))
 
 
 @metric("roc252")
 def _roc252(value, **_):
-    label = "One-year price change"
-    what = "How much the price has moved over the last twelve months, as a percentage."
+    label = tr("One-year price change", "Perubahan harga setahun")
+    what = tr("How much the price has moved over the last twelve months, as a percentage.",
+              "Seberapa besar harga bergerak selama dua belas bulan terakhir, dalam "
+              "persen.")
     if not _known(value):
         # NOT "NEEDS A YEAR OF HISTORY", which it said of Apple in the November
         # audit: the one-year view holds about 250 sessions and this needs 253,
         # so the missing year was the range on screen, not the company's.
         return unavailable(label, what,
-                           "it needs 253 trading days of the range on screen, and a one-year "
-                           "range holds about 250 — choose two years or more, unless the "
-                           "listing itself is younger than a year")
+                           tr("it needs 253 trading days of the range on screen, and a one-year "
+                              "range holds about 250 — choose two years or more, unless the "
+                              "listing itself is younger than a year",
+                              "butuh 253 hari perdagangan dari rentang di layar, sedangkan rentang "
+                              "satu tahun hanya memuat sekitar 250 — pilih dua tahun atau lebih, "
+                              "kecuali sahamnya sendiri baru tercatat kurang dari setahun"))
     return make(label, what,
-                f"{value:+.1f}% over the past year. That is the whole twelve months including "
-                f"the most recent weeks, so it is a plainer number than the 12-1 momentum "
-                f"reading above and a slightly less useful one.",
-                CONTEXT_NOT_TRIGGER, "good" if value > 0 else "poor", "high",
+                tr(f"{value:+.1f}% over the past year. That is the whole twelve months including "
+                   f"the most recent weeks, so it is a plainer number than the 12-1 momentum "
+                   f"reading above and a slightly less useful one.",
+                   f"{value:+.1f}% selama setahun terakhir. Itu mencakup dua belas bulan "
+                   "penuh termasuk minggu-minggu terakhir, jadi angkanya lebih polos "
+                   "daripada pembacaan momentum 12-1 di atas dan sedikit kurang berguna."),
+                _not_trigger(), "good" if value > 0 else "poor", "high",
                 evidence="moderate", value_text=f"{value:+.1f}%")
 
 
 @metric("roc63")
 def _roc63(value, **_):
-    label = "Three-month price change"
-    what = "How much the price has moved over the last quarter, as a percentage."
+    label = tr("Three-month price change", "Perubahan harga tiga bulan")
+    what = tr("How much the price has moved over the last quarter, as a percentage.",
+              "Seberapa besar harga bergerak selama satu kuartal terakhir, dalam "
+              "persen.")
     if not _known(value):
-        return unavailable(label, what, "needs a quarter of history")
+        return unavailable(label, what, tr("needs a quarter of history",
+                                           "perlu riwayat satu kuartal"))
     return make(label, what,
-                f"{value:+.1f}% over the past three months — a quarter is short enough that "
-                f"one earnings report can account for the whole figure.",
-                CONTEXT_NOT_TRIGGER, "good" if value > 0 else "poor", "high",
+                tr(f"{value:+.1f}% over the past three months — a quarter is short enough that "
+                   f"one earnings report can account for the whole figure.",
+                   f"{value:+.1f}% selama tiga bulan terakhir — satu kuartal cukup pendek "
+                   "sehingga satu laporan laba bisa menjelaskan seluruh angkanya."),
+                _not_trigger(), "good" if value > 0 else "poor", "high",
                 evidence="moderate", value_text=f"{value:+.1f}%")
 
 
 @metric("faberDistance")
 def _faber_distance(value, signal=None, monthsInStance=None, **_):
-    label = "Faber 10-month rule"
-    what = ("A very simple published rule: stay invested while the month-end price is above "
-            "its average of the last ten month-ends, step aside when it drops below. It trades "
-            "once or twice a year at most.")
+    label = tr("Faber 10-month rule", "Aturan 10 bulan Faber")
+    what = (tr("A very simple published rule: stay invested while the month-end price is above "
+               "its average of the last ten month-ends, step aside when it drops below. It trades "
+               "once or twice a year at most.",
+               "Aturan terbitan yang sangat sederhana: tetap berinvestasi selama harga "
+               "akhir bulan berada di atas rata-rata sepuluh akhir bulan terakhir, "
+               "menepi ketika turun di bawahnya. Paling banyak ia bertransaksi sekali "
+               "atau dua kali setahun."))
     if not _known(value):
-        return unavailable(label, what, "needs about a year of month-end closes")
+        return unavailable(label, what, tr("needs about a year of month-end closes",
+                                           "perlu harga penutupan akhir bulan sekitar setahun"))
     invested = signal == "invested"
-    stance = (f"{monthsInStance} month{'s' if monthsInStance != 1 else ''} in this stance"
+    stance = (tr(f"{monthsInStance} month{'s' if monthsInStance != 1 else ''} in this stance",
+                 f"{monthsInStance} bulan dalam posisi ini")
               if _known(monthsInStance) else "")
-    reading = (f"The latest monthly close is {_signed_pct(value)} versus its 10-month average, "
-               f"so the rule says {'STAY INVESTED' if invested else 'STAND ASIDE'}"
+    reading = (tr(f"The latest monthly close is {_signed_pct(value)} versus its 10-month average, "
+                  f"so the rule says {'STAY INVESTED' if invested else 'STAND ASIDE'}",
+                  f"Penutupan bulanan terakhir {_signed_pct(value)} dibandingkan rata-rata "
+                  "10 bulannya, jadi aturan ini berkata "
+                  f"{'TETAP BERINVESTASI' if invested else 'MENEPI'}")
                + (f" — {stance}." if stance else "."))
     return make(label, what, reading,
-                "Its documented benefit is shallower falls, not higher returns. If you would "
-                "not actually sell on a signal flip, treat it as context rather than a rule.",
+                tr("Its documented benefit is shallower falls, not higher returns. If you would "
+                   "not actually sell on a signal flip, treat it as context rather than a rule.",
+                   "Manfaatnya yang terdokumentasi adalah penurunan yang lebih dangkal, "
+                   "bukan imbal hasil yang lebih tinggi. Jika Anda tidak benar-benar akan "
+                   "menjual saat sinyalnya berbalik, perlakukan sebagai konteks, bukan "
+                   "aturan."),
                 "good" if invested else "poor", "high", evidence="moderate",
                 value_text=_signed_pct(value))
 
 
 @metric("fromHigh52w")
 def _from_high(value, **_):
-    label = "Distance from the 52-week high"
-    what = "How far below (or above) its best price of the past year it is trading."
+    label = tr("Distance from the 52-week high", "Jarak dari puncak 52 minggu")
+    what = tr("How far below (or above) its best price of the past year it is trading.",
+              "Seberapa jauh di bawah (atau di atas) harga terbaiknya dalam setahun "
+              "terakhir ia diperdagangkan.")
     if not _known(value):
-        return unavailable(label, what, "needs a year of history")
+        return unavailable(label, what, tr("needs a year of history", "perlu riwayat setahun"))
     gap = abs(value)
     band = _ladder(gap, ((0.05, "excellent"), (0.15, "good"), (0.30, "fair"),
                          (0.50, "poor"), (None, "bad")))
-    reading = (f"{_signed_pct(value)} from its 52-week high. "
-               + ("Right at the top of its yearly range." if gap < 0.05
-                  else "Well off its yearly high." if gap > 0.30
-                  else "Somewhat below its yearly high."))
+    reading = (tr(f"{_signed_pct(value)} from its 52-week high. ",
+                  f"{_signed_pct(value)} dari puncak 52 minggunya. ")
+               + (tr("Right at the top of its yearly range.", "Tepat di puncak rentang tahunannya.") if gap < 0.05
+                  else tr("Well off its yearly high.", "Jauh dari puncak tahunannya.") if gap > 0.30
+                  else tr("Somewhat below its yearly high.", "Agak di bawah puncak tahunannya.")))
     return make(label, what, reading,
-                "Nearness to the 52-week high is itself a documented momentum variable — "
-                "names near their highs have on average kept doing better. It is an average "
-                "across many stocks, not a promise about this one.",
+                tr("Nearness to the 52-week high is itself a documented momentum variable — "
+                   "names near their highs have on average kept doing better. It is an average "
+                   "across many stocks, not a promise about this one.",
+                   "Kedekatan dengan puncak 52 minggu sendiri adalah variabel momentum yang "
+                   "terdokumentasi — saham yang dekat dengan puncaknya rata-rata terus "
+                   "berkinerja lebih baik. Ini rata-rata dari banyak saham, bukan janji "
+                   "untuk saham yang satu ini."),
                 band, "high", evidence="moderate", value_text=_signed_pct(value))
 
 
 @metric("fromAllTimeHigh")
 def _from_ath(value, **_):
-    label = "Distance from the all-time high"
-    what = "How far below its best price ever it is trading, over the window loaded here."
+    label = tr("Distance from the all-time high", "Jarak dari puncak sepanjang masa")
+    what = tr("How far below its best price ever it is trading, over the window loaded here.",
+              "Seberapa jauh di bawah harga terbaiknya sepanjang masa ia "
+              "diperdagangkan, dalam periode yang dimuat di sini.")
     if not _known(value):
-        return unavailable(label, what, "needs a price history")
+        return unavailable(label, what, tr("needs a price history", "perlu riwayat harga"))
     gap = abs(value)
     band = _ladder(gap, ((0.05, "excellent"), (0.20, "good"), (0.40, "fair"),
                          (0.60, "poor"), (None, "bad")))
     return make(label, what,
-                f"{_signed_pct(value)} from the highest price in this window. "
-                + ("At or near a record." if gap < 0.05 else
-                   f"Recovering this alone needs a {_pct(gap / (1 - gap), 0)} rise."),
-                CONTEXT_NOT_TRIGGER + " A large gap is not cheapness; the business decides that.",
+                tr(f"{_signed_pct(value)} from the highest price in this window. ",
+                   f"{_signed_pct(value)} dari harga tertinggi dalam periode ini. ")
+                + (tr("At or near a record.", "Di rekor tertinggi atau mendekatinya.") if gap < 0.05 else
+                   tr(f"Recovering this alone needs a {_pct(gap / (1 - gap), 0)} rise.",
+                      f"Untuk memulihkan ini saja dibutuhkan kenaikan {_pct(gap / (1 - gap), 0)}"
+                      ".")),
+                _not_trigger() + tr(" A large gap is not cheapness; the business decides that.",
+                                         " Jarak yang besar bukan berarti murah; bisnisnya yang menentukan."),
                 band, "high", evidence="weak", value_text=_signed_pct(value))
 
 
 @metric("rangePosition")
 def _range_position(value, **_):
-    label = "Position in the 52-week range"
-    what = ("Where today's price sits between the lowest and highest price of the past year. "
-            "0% is the year's low, 100% is the year's high.")
+    label = tr("Position in the 52-week range", "Posisi dalam rentang 52 minggu")
+    what = (tr("Where today's price sits between the lowest and highest price of the past year. "
+               "0% is the year's low, 100% is the year's high.",
+               "Di mana harga hari ini berada di antara harga terendah dan tertinggi "
+               "setahun terakhir. 0% adalah titik terendah tahun ini, 100% adalah titik "
+               "tertingginya."))
     if not _known(value):
-        return unavailable(label, what, "needs a year of history")
+        return unavailable(label, what, tr("needs a year of history", "perlu riwayat setahun"))
     band = _ladder(value, ((0.2, "poor"), (0.45, "fair"), (0.75, "good"), (None, "excellent")))
     return make(label, what,
-                f"{_pct(value, 0)} of the way up its yearly range.",
-                CONTEXT_NOT_TRIGGER, band, "high", evidence="weak",
+                tr(f"{_pct(value, 0)} of the way up its yearly range.",
+                   f"{_pct(value, 0)} dari rentang tahunannya, dihitung dari bawah."),
+                _not_trigger(), band, "high", evidence="weak",
                 value_text=_pct(value, 0))
 
 
 @metric("regressionSlope")
 def _regression_slope(value, rSquared=None, **_):
-    label = "Fitted long-run trend"
-    what = ("A straight line drawn through the price history, reported as the yearly slope of "
-            "that line. It is the plainest possible summary of direction.")
+    label = tr("Fitted long-run trend", "Tren jangka panjang hasil pencocokan")
+    what = (tr("A straight line drawn through the price history, reported as the yearly slope of "
+               "that line. It is the plainest possible summary of direction.",
+               "Garis lurus yang ditarik melewati riwayat harga, dilaporkan sebagai "
+               "kemiringan tahunan garis itu. Inilah ringkasan arah yang paling polos."))
     if not _known(value):
-        return unavailable(label, what, "needs about a year of history")
+        return unavailable(label, what, tr("needs about a year of history",
+                                           "perlu riwayat sekitar setahun"))
     band = "good" if value > 0 else "poor"
-    reading = f"The fitted line rises {_signed_pct(value)} a year."
+    reading = tr(f"The fitted line rises {_signed_pct(value)} a year.",
+                 f"Garis hasil pencocokan naik {_signed_pct(value)} per tahun.")
     if _known(rSquared):
         if rSquared < 0.3:
             band = "caution"
-            reading += (f" But the fit is poor (R² {_pct(rSquared, 0)}) — the price is nowhere "
-                        f"near that line, so the slope is close to meaningless here.")
+            reading += (tr(f" But the fit is poor (R² {_pct(rSquared, 0)}) — the price is nowhere "
+                           f"near that line, so the slope is close to meaningless here.",
+                           f" Tetapi kecocokannya buruk (R² {_pct(rSquared, 0)}) — harga sama sekali "
+                           "tidak dekat dengan garis itu, jadi kemiringannya nyaris tak bermakna di "
+                           "sini."))
         elif rSquared < 0.5:
-            reading += (f" The fit is loose (R² {_pct(rSquared, 0)}), so read the slope as a "
-                        f"rough direction rather than a rate.")
+            reading += (tr(f" The fit is loose (R² {_pct(rSquared, 0)}), so read the slope as a "
+                           f"rough direction rather than a rate.",
+                           f" Kecocokannya longgar (R² {_pct(rSquared, 0)}), jadi baca kemiringannya "
+                           "sebagai arah kasar, bukan laju."))
         else:
-            reading += f" The fit is reasonable (R² {_pct(rSquared, 0)})."
+            reading += tr(f" The fit is reasonable (R² {_pct(rSquared, 0)}).",
+                          f" Kecocokannya wajar (R² {_pct(rSquared, 0)}).")
     return make(label, what, reading,
-                "A trend line describes the past exactly and forecasts nothing. Check the "
-                "Hurst reading before giving it any weight.",
+                tr("A trend line describes the past exactly and forecasts nothing. Check the "
+                   "Hurst reading before giving it any weight.",
+                   "Garis tren menggambarkan masa lalu dengan tepat dan tidak meramalkan "
+                   "apa pun. Periksa pembacaan Hurst sebelum memberinya bobot."),
                 band, "high", evidence="weak", value_text=_signed_pct(value))
 
 
 @metric("regressionR2")
 def _regression_r2(value, **_):
-    label = "Trend fit (R²)"
-    what = ("How closely the price has actually hugged that straight trend line. 100% would "
-            "be a perfect ruler-straight rise; 0% means the line explains nothing.")
+    label = tr("Trend fit (R²)", "Kecocokan tren (R²)")
+    what = (tr("How closely the price has actually hugged that straight trend line. 100% would "
+               "be a perfect ruler-straight rise; 0% means the line explains nothing.",
+               "Seberapa dekat harga benar-benar mengikuti garis tren lurus itu. 100% "
+               "berarti kenaikan yang lurus sempurna seperti penggaris; 0% berarti "
+               "garis itu tidak menjelaskan apa pun."))
     if not _known(value):
-        return unavailable(label, what, "needs about a year of history")
+        return unavailable(label, what, tr("needs about a year of history",
+                                           "perlu riwayat sekitar setahun"))
     band = _ladder(value, ((0.3, "caution"), (0.5, "fair"), (0.75, "good"), (None, "excellent")))
     reading = (f"{_pct(value, 0)}. "
-               + {"caution": "The price barely follows the line at all — do not read the slope as a rate.",
-                  "fair": "A loose fit. The direction is indicative, the rate is not.",
-                  "good": "A reasonable fit; the trend line is a fair summary of the path.",
-                  "excellent": "A tight fit — the price has tracked this line closely."}[band])
+               + {"caution": tr("The price barely follows the line at all — do not read the slope as a rate.",
+                                "Harga nyaris tidak mengikuti garis sama sekali — jangan baca "
+                                "kemiringannya sebagai laju."),
+                  "fair": tr("A loose fit. The direction is indicative, the rate is not.",
+                             "Kecocokan longgar. Arahnya bisa jadi petunjuk, lajunya tidak."),
+                  "good": tr("A reasonable fit; the trend line is a fair summary of the path.",
+                             "Kecocokan yang wajar; garis tren adalah ringkasan jalur yang cukup adil."),
+                  "excellent": tr("A tight fit — the price has tracked this line closely.",
+                                  "Kecocokan yang rapat — harga mengikuti garis ini dengan dekat.")}[band])
     return make(label, what, reading,
-                "This is a quality check on the line above, not a signal in itself.",
+                tr("This is a quality check on the line above, not a signal in itself.",
+                   "Ini pemeriksaan kualitas atas garis di atas, bukan sinyal tersendiri."),
                 band, "high", evidence="weak", value_text=_pct(value, 0))
 
 
 @metric("relativeExcess")
 def _relative_excess(value, period=None, benchmark=None, **_):
-    label = f"Versus the index{f' ({period})' if period else ''}"
-    what = ("How much better or worse this did than simply buying the market index over the "
-            "same stretch. The index fund is the real alternative — not cash.")
+    label = tr(f"Versus the index{f' ({period})' if period else ''}",
+               f"Dibandingkan indeks{f' ({period})' if period else ''}")
+    what = (tr("How much better or worse this did than simply buying the market index over the "
+               "same stretch. The index fund is the real alternative — not cash.",
+               "Seberapa jauh lebih baik atau lebih buruk kinerjanya dibandingkan "
+               "sekadar membeli indeks pasar dalam rentang yang sama. Reksa dana indeks "
+               "adalah alternatif yang sebenarnya — bukan kas."))
     if not _known(value):
-        return unavailable(label, what, "needs overlapping history with the index")
+        return unavailable(label, what, tr("needs overlapping history with the index",
+                                           "perlu riwayat yang beririsan dengan indeks"))
     band = _ladder(value, ((-0.10, "bad"), (0.0, "poor"), (0.10, "good"), (None, "excellent")))
     name = index_name(benchmark)
-    reading = (f"{_signed_pct(value)} versus {name}. "
-               + ("Ahead of the index over this stretch." if value > 0 else
-                  "Behind the index over this stretch — the same money in an index fund would "
-                  "have done better."))
+    reading = (tr(f"{_signed_pct(value)} versus {name}. ",
+                  f"{_signed_pct(value)} dibandingkan {name}. ")
+               + (tr("Ahead of the index over this stretch.",
+                     "Unggul atas indeks dalam rentang ini.") if value > 0 else
+                  tr("Behind the index over this stretch — the same money in an index fund would "
+                     "have done better.",
+                     "Tertinggal dari indeks dalam rentang ini — uang yang sama di reksa dana "
+                     "indeks akan memberi hasil lebih baik.")))
     return make(label, what, reading,
-                "A stock up 40% while the market rose 60% has cost its holder money in the "
-                "only sense that matters. This row is the one that decides whether picking "
-                "this name was worth the effort.",
+                tr("A stock up 40% while the market rose 60% has cost its holder money in the "
+                   "only sense that matters. This row is the one that decides whether picking "
+                   "this name was worth the effort.",
+                   "Saham yang naik 40% ketika pasar naik 60% telah merugikan pemegangnya "
+                   "dalam satu-satunya arti yang penting. Baris inilah yang menentukan "
+                   "apakah memilih saham ini sepadan dengan usahanya."),
                 band, "high", evidence="strong", value_text=_signed_pct(value))
 
 
 @metric("benchmarkCorrelation")
 def _correlation(value, benchmark=None, **_):
-    label = "Correlation with the index"
-    what = ("How closely this moves in step with the whole market. 1.0 would be perfect "
-            "lockstep, 0 would be completely independent.")
+    label = tr("Correlation with the index", "Korelasi dengan indeks")
+    what = (tr("How closely this moves in step with the whole market. 1.0 would be perfect "
+               "lockstep, 0 would be completely independent.",
+               "Seberapa dekat saham ini bergerak seirama dengan seluruh pasar. 1.0 "
+               "berarti seirama sempurna, 0 berarti sepenuhnya independen."))
     if not _known(value):
-        return unavailable(label, what, "needs overlapping history with the index")
+        return unavailable(label, what, tr("needs overlapping history with the index",
+                                           "perlu riwayat yang beririsan dengan indeks"))
     if value > 0.8:
-        detail = ("Very tightly tied to the market — most of what happens here is just the "
-                  "market happening. It adds little diversification.")
+        detail = (tr("Very tightly tied to the market — most of what happens here is just the "
+                     "market happening. It adds little diversification.",
+                     "Sangat erat terikat pada pasar — sebagian besar yang terjadi di sini "
+                     "hanyalah pasar yang sedang bergerak. Ia hanya sedikit menambah "
+                     "diversifikasi."))
     elif value > 0.5:
-        detail = "Moves broadly with the market, with a real amount of its own behaviour on top."
+        detail = tr("Moves broadly with the market, with a real amount of its own behaviour on top.",
+                    "Bergerak secara umum bersama pasar, dengan porsi perilakunya sendiri "
+                    "yang nyata di atasnya.")
     elif value > 0.2:
-        detail = "Only loosely tied to the market; much of its movement is its own."
+        detail = tr("Only loosely tied to the market; much of its movement is its own.",
+                    "Hanya longgar terikat pada pasar; sebagian besar pergerakannya adalah "
+                    "miliknya sendiri.")
     else:
-        detail = "Largely independent of the market, which is unusual and worth understanding."
-    return make(label, what, f"{_num(value)} against {index_name(benchmark)}. {detail}",
-                CONTEXT_NOT_TRIGGER + " High correlation is not bad — it just means this is "
-                "not a diversifier.",
+        detail = tr("Largely independent of the market, which is unusual and worth understanding.",
+                    "Sebagian besar independen dari pasar, yang tidak biasa dan layak "
+                    "dipahami.")
+    return make(label, what, tr(f"{_num(value)} against {index_name(benchmark)}. {detail}",
+                                f"{_num(value)} terhadap {index_name(benchmark)}. {detail}"),
+                _not_trigger() + tr(" High correlation is not bad — it just means this is "
+                   "not a diversifier.",
+                                         " Korelasi tinggi tidak buruk — artinya saham ini bukan alat "
+                                         "diversifikasi."),
                 "context", "none", evidence="strong", value_text=_num(value))
 
 
 @metric("rollingWorst")
 def _rolling_worst(value, years=None, positiveShare=None, reason=None, windows=None, **_):
-    horizon = f"{years}-year" if years else "multi-year"
-    label = f"Worst {horizon} outcome"
-    what = (f"Out of every possible {horizon} holding period in this history, the one that "
-            f"turned out worst. It answers 'what if I had bought at the worst moment?'")
+    horizon = tr(f"{years}-year", f"{years} tahun") if years else tr("multi-year", "multitahun")
+    label = tr(f"Worst {horizon} outcome", f"Hasil terburuk {horizon}")
+    what = (tr(f"Out of every possible {horizon} holding period in this history, the one that "
+               f"turned out worst. It answers 'what if I had bought at the worst moment?'",
+               f"Dari setiap kemungkinan periode kepemilikan {horizon} dalam riwayat "
+               "ini, inilah yang hasilnya paling buruk. Ia menjawab 'bagaimana jika "
+               "saya membeli di saat terburuk?'"))
     if not _known(value):
         # The row carries WHY, including how much history is missing. A generic
         # "needs more years" would hide that the fix is one dropdown away.
         return unavailable(
             label, what,
-            (reason or f"needs more than {years or 'several'} years of history").rstrip("."))
+            (reason or tr(f"needs more than {years or 'several'} years of history",
+                          f"perlu riwayat lebih dari {years or 'beberapa'} tahun")).rstrip("."))
     band = _ladder(value, ((-0.10, "bad"), (0.0, "poor"), (0.05, "fair"),
                            (0.12, "good"), (None, "excellent")))
-    reading = (f"The unluckiest {horizon} entry still returned {_signed_pct(value)} a year. ")
+    reading = (tr(f"The unluckiest {horizon} entry still returned {_signed_pct(value)} a year. ",
+                  f"Titik masuk {horizon} yang paling sial tetap menghasilkan "
+                  f"{_signed_pct(value)} per tahun. "))
     if _known(positiveShare):
-        reading += (f"{_pct(positiveShare, 0)} of all {horizon} windows finished in profit. ")
-    reading += ("Every one of them made money." if value > 0 else
-                "At least one entry point lost money over the full period.")
+        reading += (tr(f"{_pct(positiveShare, 0)} of all {horizon} windows finished in profit. ",
+                       f"{_pct(positiveShare, 0)} dari semua periode {horizon} berakhir untung. "))
+    reading += (tr("Every one of them made money.", "Semuanya menghasilkan uang.") if value > 0 else
+                tr("At least one entry point lost money over the full period.",
+                   "Setidaknya satu titik masuk merugi selama periode penuhnya."))
     return make(label, what, reading,
-                "This is the number that should set your position size — not the headline "
-                "annual return, which quietly describes one lucky starting date.",
+                tr("This is the number that should set your position size — not the headline "
+                   "annual return, which quietly describes one lucky starting date.",
+                   "Inilah angka yang seharusnya menentukan ukuran posisi Anda — bukan "
+                   "imbal hasil tahunan utama, yang diam-diam hanya menggambarkan satu "
+                   "tanggal awal yang beruntung."),
                 band, "high", evidence="strong", value_text=_signed_pct(value))
 
 
@@ -967,379 +1337,567 @@ def _distance_reading(price, level, name):
     of them leaves the reader matching a percentage against a price.
     """
     gap = price / level - 1.0
-    side = "above" if gap >= 0 else "below"
-    return gap, (f"The {name} sits at {_num(level)}, and the price is "
-                 f"{_pct(abs(gap))} {side} it.")
+    side = tr("above", "di atas") if gap >= 0 else tr("below", "di bawah")
+    return gap, (tr(f"The {name} sits at {_num(level)}, and the price is "
+                    f"{_pct(abs(gap))} {side} it.",
+                    f"{name} berada di {_num(level)}, dan harga {_pct(abs(gap))} {side}nya."))
 
 
 @metric("sma200")
 def _sma200(value, price=None, **_):
-    label = "200-day average"
-    what = ("The average closing price of the last 200 trading days — the most widely watched "
-            "single line in markets, and a rough divide between 'in an uptrend' and not.")
+    label = tr("200-day average", "Rata-rata 200 hari")
+    what = (tr("The average closing price of the last 200 trading days — the most widely watched "
+               "single line in markets, and a rough divide between 'in an uptrend' and not.",
+               "Harga penutupan rata-rata 200 hari perdagangan terakhir — garis tunggal "
+               "yang paling banyak diamati di pasar, dan pembatas kasar antara 'sedang "
+               "dalam tren naik' dan tidak."))
     if not _known(value) or not _known(price):
-        return unavailable(label, what, "needs 200 trading days of history")
-    gap, sentence = _distance_reading(price, value, "200-day average")
+        return unavailable(label, what, tr("needs 200 trading days of history",
+                                           "perlu riwayat 200 hari perdagangan"))
+    gap, sentence = _distance_reading(price, value, tr("200-day average", "Rata-rata 200 hari"))
     above = gap >= 0
     reading = sentence + (
-        " Being above it is the plainest definition of a long-term uptrend."
+        tr(" Being above it is the plainest definition of a long-term uptrend.",
+           " Berada di atasnya adalah definisi paling polos dari tren naik jangka "
+           "panjang.")
         if above else
-        " Being below it is the plainest definition of a long-term downtrend.")
+        tr(" Being below it is the plainest definition of a long-term downtrend.",
+           " Berada di bawahnya adalah definisi paling polos dari tren turun jangka "
+           "panjang."))
     if abs(gap) > 0.30:
-        reading += (" It is a long way from the line, though, which usually means the move is "
-                    "stretched rather than freshly confirmed.")
+        reading += (tr(" It is a long way from the line, though, which usually means the move is "
+                       "stretched rather than freshly confirmed.",
+                       " Namun harga sudah jauh dari garisnya, yang biasanya berarti "
+                       "pergerakannya sudah teregang, bukan baru terkonfirmasi."))
     return make(label, what, reading,
-                "Long-horizon trend rules built on this line are among the better-supported "
-                "technical signals — their documented benefit is smaller falls, not bigger "
-                "gains.",
+                tr("Long-horizon trend rules built on this line are among the better-supported "
+                   "technical signals — their documented benefit is smaller falls, not bigger "
+                   "gains.",
+                   "Aturan tren jangka panjang yang dibangun di atas garis ini termasuk "
+                   "sinyal teknikal yang lebih didukung bukti — manfaatnya yang "
+                   "terdokumentasi adalah penurunan yang lebih kecil, bukan kenaikan yang "
+                   "lebih besar."),
                 "good" if above else "poor", "high", evidence="moderate",
                 value_text=_num(value))
 
 
 @metric("sma100")
 def _sma100(value, price=None, **_):
-    label = "100-day average"
-    what = "The average closing price of the last 100 trading days — a medium-term trend line."
+    label = tr("100-day average", "Rata-rata 100 hari")
+    what = tr("The average closing price of the last 100 trading days — a medium-term trend line.",
+              "Harga penutupan rata-rata 100 hari perdagangan terakhir — garis tren "
+              "jangka menengah.")
     if not _known(value) or not _known(price):
-        return unavailable(label, what, "needs 100 trading days of history")
-    gap, sentence = _distance_reading(price, value, "100-day average")
-    return make(label, what, sentence, CONTEXT_NOT_TRIGGER,
+        return unavailable(label, what, tr("needs 100 trading days of history",
+                                           "perlu riwayat 100 hari perdagangan"))
+    gap, sentence = _distance_reading(price, value, tr("100-day average", "Rata-rata 100 hari"))
+    return make(label, what, sentence, _not_trigger(),
                 "good" if gap >= 0 else "poor", "high", evidence="weak",
                 value_text=_num(value))
 
 
 @metric("sma50")
 def _sma50(value, price=None, **_):
-    label = "50-day average"
-    what = "The average closing price of the last 50 trading days — a short-to-medium trend line."
+    label = tr("50-day average", "Rata-rata 50 hari")
+    what = tr("The average closing price of the last 50 trading days — a short-to-medium trend line.",
+              "Harga penutupan rata-rata 50 hari perdagangan terakhir — garis tren "
+              "jangka pendek ke menengah.")
     if not _known(value) or not _known(price):
-        return unavailable(label, what, "needs 50 trading days of history")
-    gap, sentence = _distance_reading(price, value, "50-day average")
+        return unavailable(label, what, tr("needs 50 trading days of history",
+                                           "perlu riwayat 50 hari perdagangan"))
+    gap, sentence = _distance_reading(price, value, tr("50-day average", "Rata-rata 50 hari"))
     return make(label, what,
-                sentence + " Traders often watch this line as the level a healthy uptrend "
-                           "pulls back to rather than breaks.",
-                CONTEXT_NOT_TRIGGER, "good" if gap >= 0 else "poor", "high",
+                sentence + tr(" Traders often watch this line as the level a healthy uptrend "
+                              "pulls back to rather than breaks.",
+                              " Trader sering mengamati garis ini sebagai level tempat tren naik yang "
+                              "sehat terkoreksi, bukan menembusnya."),
+                _not_trigger(), "good" if gap >= 0 else "poor", "high",
                 evidence="weak", value_text=_num(value))
 
 
 @metric("adx")
 def _adx(value, plusDi=None, minusDi=None, **_):
-    label = "ADX (trend strength)"
-    what = ("How strongly the price is trending — in EITHER direction. A high ADX in a "
-            "collapse looks the same as a high ADX in a rally: it measures conviction, not "
-            "which way.")
+    label = tr("ADX (trend strength)", "ADX (kekuatan tren)")
+    what = (tr("How strongly the price is trending — in EITHER direction. A high ADX in a "
+               "collapse looks the same as a high ADX in a rally: it measures conviction, not "
+               "which way.",
+               "Seberapa kuat harga sedang bertren — ke ARAH MANA PUN. ADX tinggi saat "
+               "harga ambruk terlihat sama dengan ADX tinggi saat reli: ia mengukur "
+               "keyakinan, bukan arah."))
     if not _known(value):
-        return unavailable(label, what, "needs about a month of history")
+        return unavailable(label, what, tr("needs about a month of history",
+                                           "perlu riwayat sekitar sebulan"))
     if value < 20:
         band, verdict = "caution", (
-            f"ADX {value:.0f} — under 20 means there is no real trend. The price is drifting "
-            f"sideways, and trend-following signals here tend to whipsaw.")
+            tr(f"ADX {value:.0f} — under 20 means there is no real trend. The price is drifting "
+               f"sideways, and trend-following signals here tend to whipsaw.",
+               f"ADX {value:.0f} — di bawah 20 berarti tidak ada tren nyata. Harga "
+               "bergerak menyamping, dan sinyal pengikut tren di sini cenderung "
+               "berbalik-balik."))
     elif value < 25:
         band, verdict = "caution", (
-            f"ADX {value:.0f} — borderline. A trend may be forming but has not established itself.")
+            tr(f"ADX {value:.0f} — borderline. A trend may be forming but has not established itself.",
+               f"ADX {value:.0f} — di ambang batas. Tren mungkin sedang terbentuk tetapi "
+               "belum mapan."))
     elif value < 40:
-        band, verdict = "context", f"ADX {value:.0f} — a genuine trend is in place."
+        band, verdict = "context", tr(f"ADX {value:.0f} — a genuine trend is in place.",
+                                      f"ADX {value:.0f} — tren yang nyata sedang berlangsung.")
     else:
         band, verdict = "context", (
-            f"ADX {value:.0f} — a very strong trend, and often a late-stage one; readings this "
-            f"high historically cool off rather than climb further.")
+            tr(f"ADX {value:.0f} — a very strong trend, and often a late-stage one; readings this "
+               f"high historically cool off rather than climb further.",
+               f"ADX {value:.0f} — tren yang sangat kuat, dan sering kali tren tahap "
+               "akhir; pembacaan setinggi ini secara historis mereda alih-alih terus "
+               "naik."))
     if _known(plusDi) and _known(minusDi) and value >= 20:
-        verdict += (" The direction is UP" if plusDi > minusDi else " The direction is DOWN")
-        verdict += f" (+DI {plusDi:.0f} versus -DI {minusDi:.0f})."
+        verdict += (tr(" The direction is UP", " Arahnya NAIK") if plusDi > minusDi else tr(" The direction is DOWN",
+                                                                       " Arahnya TURUN"))
+        verdict += tr(f" (+DI {plusDi:.0f} versus -DI {minusDi:.0f}).",
+                      f" (+DI {plusDi:.0f} dibandingkan -DI {minusDi:.0f}).")
     return make(label, what, verdict,
-                "Use it as a filter, not a signal: it says whether the OTHER trend readings on "
-                "this page deserve any weight.",
+                tr("Use it as a filter, not a signal: it says whether the OTHER trend readings on "
+                   "this page deserve any weight.",
+                   "Gunakan sebagai penyaring, bukan sinyal: ia menunjukkan apakah "
+                   "pembacaan tren LAIN di halaman ini layak diberi bobot."),
                 band, "none", evidence="weak", value_text=f"{value:.0f}")
 
 
 @metric("aroon")
 def _aroon(value, aroonDown=None, **_):
-    label = "Aroon"
-    what = ("How recently the price set a new high versus a new low, each scored 0-100. "
-            "100 on the up side means it made its highest price today.")
+    label = tr("Aroon", "Aroon")
+    what = (tr("How recently the price set a new high versus a new low, each scored 0-100. "
+               "100 on the up side means it made its highest price today.",
+               "Seberapa baru harga mencetak puncak baru dibandingkan titik terendah "
+               "baru, masing-masing diberi skor 0-100. 100 di sisi naik berarti hari "
+               "ini ia mencetak harga tertingginya."))
     if not _known(value) or not _known(aroonDown):
-        return unavailable(label, what, "needs about 25 bars of history")
+        return unavailable(label, what, tr("needs about 25 bars of history",
+                                           "perlu riwayat sekitar 25 batang"))
     up = float(value)
     down = float(aroonDown)
     if up > 70 and down < 30:
-        band, verdict = "good", (f"Up {up:.0f} versus down {down:.0f} — new highs are recent and "
-                                 f"new lows are stale. That is an uptrend by this measure.")
+        band, verdict = "good", (tr(f"Up {up:.0f} versus down {down:.0f} — new highs are recent and "
+                                    f"new lows are stale. That is an uptrend by this measure.",
+                                    f"Naik {up:.0f} dibandingkan turun {down:.0f} — puncak baru masih segar "
+                                    "dan titik terendah baru sudah lama. Menurut ukuran ini, itu tren naik."))
     elif down > 70 and up < 30:
-        band, verdict = "poor", (f"Down {down:.0f} versus up {up:.0f} — new lows are recent and "
-                                 f"new highs are stale. A downtrend by this measure.")
+        band, verdict = "poor", (tr(f"Down {down:.0f} versus up {up:.0f} — new lows are recent and "
+                                    f"new highs are stale. A downtrend by this measure.",
+                                    f"Turun {down:.0f} dibandingkan naik {up:.0f} — titik terendah baru masih "
+                                    "segar dan puncak baru sudah lama. Menurut ukuran ini, tren turun."))
     else:
-        band, verdict = "context", (f"Up {up:.0f} versus down {down:.0f} — neither side dominates, "
-                                    f"so this is a sideways reading.")
-    return make(label, what, verdict, CONTEXT_NOT_TRIGGER, band, "high",
+        band, verdict = "context", (tr(f"Up {up:.0f} versus down {down:.0f} — neither side dominates, "
+                                       f"so this is a sideways reading.",
+                                       f"Naik {up:.0f} dibandingkan turun {down:.0f} — tidak ada sisi yang "
+                                       "mendominasi, jadi ini pembacaan menyamping."))
+    return make(label, what, verdict, _not_trigger(), band, "high",
                 evidence="weak", value_text=f"{up:.0f} / {down:.0f}")
 
 
 @metric("rsi")
 def _rsi_metric(value, **_):
-    label = "RSI (14)"
-    what = ("A 0-100 speedometer of recent buying versus selling pressure. Above 70 is the "
-            "traditional 'overbought' line, below 30 'oversold'.")
+    label = tr("RSI (14)", "RSI (14)")
+    what = (tr("A 0-100 speedometer of recent buying versus selling pressure. Above 70 is the "
+               "traditional 'overbought' line, below 30 'oversold'.",
+               "Spidometer 0-100 untuk tekanan beli dibandingkan tekanan jual "
+               "belakangan ini. Di atas 70 adalah garis tradisional 'jenuh beli', di "
+               "bawah 30 'jenuh jual'."))
     if not _known(value):
-        return unavailable(label, what, "needs 14 bars of history")
+        return unavailable(label, what, tr("needs 14 bars of history", "perlu riwayat 14 batang"))
     if value >= 70:
         band, verdict = "caution", (
-            f"{value:.0f} — traditionally 'overbought'. Be careful with that word: in a strong "
-            f"uptrend RSI can sit above 70 for months, and selling every time it crossed 70 "
-            f"would have been costly. It means stretched, not doomed.")
+            tr(f"{value:.0f} — traditionally 'overbought'. Be careful with that word: in a strong "
+               f"uptrend RSI can sit above 70 for months, and selling every time it crossed 70 "
+               f"would have been costly. It means stretched, not doomed.",
+               f"{value:.0f} — secara tradisional 'jenuh beli'. Hati-hati dengan istilah "
+               "itu: dalam tren naik yang kuat RSI bisa bertahan di atas 70 selama "
+               "berbulan-bulan, dan menjual setiap kali melewati 70 akan mahal "
+               "ongkosnya. Artinya teregang, bukan pasti jatuh."))
     elif value <= 30:
         band, verdict = "caution", (
-            f"{value:.0f} — traditionally 'oversold'. It means the fall has been fast, not that "
-            f"it is over; in a real downtrend RSI stays low for a long time.")
+            tr(f"{value:.0f} — traditionally 'oversold'. It means the fall has been fast, not that "
+               f"it is over; in a real downtrend RSI stays low for a long time.",
+               f"{value:.0f} — secara tradisional 'jenuh jual'. Artinya penurunannya "
+               "cepat, bukan sudah selesai; dalam tren turun yang nyata RSI bertahan "
+               "rendah untuk waktu lama."))
     else:
         band, verdict = "context", (
-            f"{value:.0f} — in the middle of the range, which is where it sits most of the time. "
-            f"No signal either way.")
+            tr(f"{value:.0f} — in the middle of the range, which is where it sits most of the time. "
+               f"No signal either way.",
+               f"{value:.0f} — di tengah rentang, tempat ia berada hampir sepanjang "
+               "waktu. Tidak ada sinyal ke arah mana pun."))
     return make(label, what, verdict,
-                "The evidence that RSI levels predict returns is weak once trading costs are "
-                "counted. Treat it as a description of how stretched the last two weeks were.",
+                tr("The evidence that RSI levels predict returns is weak once trading costs are "
+                   "counted. Treat it as a description of how stretched the last two weeks were.",
+                   "Bukti bahwa level RSI memprediksi imbal hasil lemah setelah biaya "
+                   "transaksi diperhitungkan. Perlakukan sebagai gambaran seberapa teregang "
+                   "dua minggu terakhir."),
                 band, "none", evidence="weak", value_text=f"{value:.0f}")
 
 
 @metric("stochastic")
 def _stochastic(value, stochD=None, **_):
-    label = "Stochastic"
-    what = ("Where today's close sits inside the high-low range of the last two weeks. 100 "
-            "means it closed at the very top of that range.")
+    label = tr("Stochastic", "Stokastik")
+    what = (tr("Where today's close sits inside the high-low range of the last two weeks. 100 "
+               "means it closed at the very top of that range.",
+               "Di mana harga penutupan hari ini berada dalam rentang "
+               "tertinggi-terendah dua minggu terakhir. 100 berarti ditutup tepat di "
+               "puncak rentang itu."))
     if not _known(value):
-        return unavailable(label, what, "needs about 17 bars of history")
+        return unavailable(label, what, tr("needs about 17 bars of history",
+                                           "perlu riwayat sekitar 17 batang"))
     if value >= 80:
-        band, verdict = "caution", f"{value:.0f} — closing near the top of its recent range."
+        band, verdict = "caution", tr(f"{value:.0f} — closing near the top of its recent range.",
+                                      f"{value:.0f} — ditutup dekat puncak rentang terbarunya.")
     elif value <= 20:
-        band, verdict = "caution", f"{value:.0f} — closing near the bottom of its recent range."
+        band, verdict = "caution", tr(f"{value:.0f} — closing near the bottom of its recent range.",
+                                      f"{value:.0f} — ditutup dekat dasar rentang terbarunya.")
     else:
-        band, verdict = "context", f"{value:.0f} — mid-range."
+        band, verdict = "context", tr(f"{value:.0f} — mid-range.",
+                                      f"{value:.0f} — di tengah rentang.")
     if _known(stochD):
-        verdict += f" (%K {value:.0f} against its %D average of {stochD:.0f}.)"
+        verdict += tr(f" (%K {value:.0f} against its %D average of {stochD:.0f}.)",
+                      f" (%K {value:.0f} terhadap rata-rata %D-nya {stochD:.0f}.)")
     return make(label, what, verdict,
-                "A very short-horizon description with little out-of-sample support. It is "
-                "entry timing at most, never a reason to own something.",
+                tr("A very short-horizon description with little out-of-sample support. It is "
+                   "entry timing at most, never a reason to own something.",
+                   "Gambaran jangka sangat pendek dengan sedikit dukungan bukti di luar "
+                   "sampel. Paling jauh untuk menentukan waktu masuk, tidak pernah menjadi "
+                   "alasan untuk memiliki sesuatu."),
                 band, "none", evidence="weak", value_text=f"{value:.0f}")
 
 
 @metric("williamsR")
 def _williams(value, **_):
-    label = "Williams %R"
-    what = ("The same idea as the Stochastic, flipped onto a -100 to 0 scale. Near 0 means "
-            "closing at the top of the recent range, near -100 the bottom.")
+    label = tr("Williams %R", "Williams %R")
+    what = (tr("The same idea as the Stochastic, flipped onto a -100 to 0 scale. Near 0 means "
+               "closing at the top of the recent range, near -100 the bottom.",
+               "Gagasan yang sama dengan Stokastik, dibalik ke skala -100 hingga 0. "
+               "Mendekati 0 berarti ditutup di puncak rentang terbaru, mendekati -100 "
+               "di dasarnya."))
     if not _known(value):
-        return unavailable(label, what, "needs 14 bars of history")
+        return unavailable(label, what, tr("needs 14 bars of history", "perlu riwayat 14 batang"))
     if value >= -20:
         band, verdict = "caution", (
-            f"{value:.0f} — pinned near the top of its two-week range, which the textbooks call "
-            f"overbought. In a strong trend it can stay here for weeks.")
+            tr(f"{value:.0f} — pinned near the top of its two-week range, which the textbooks call "
+               f"overbought. In a strong trend it can stay here for weeks.",
+               f"{value:.0f} — terjepit dekat puncak rentang dua minggunya, yang oleh "
+               "buku teks disebut jenuh beli. Dalam tren yang kuat ia bisa bertahan di "
+               "sini berminggu-minggu."))
     elif value <= -80:
         band, verdict = "caution", (
-            f"{value:.0f} — pinned near the bottom of its two-week range. The fall has been "
-            f"fast; that is not the same as it being over.")
+            tr(f"{value:.0f} — pinned near the bottom of its two-week range. The fall has been "
+               f"fast; that is not the same as it being over.",
+               f"{value:.0f} — terjepit dekat dasar rentang dua minggunya. Penurunannya "
+               "cepat; itu tidak sama dengan sudah selesai."))
     else:
         band, verdict = "context", (
-            f"{value:.0f} — somewhere in the middle of its two-week range, which is where it "
-            f"spends most of its time. Nothing to read into it.")
+            tr(f"{value:.0f} — somewhere in the middle of its two-week range, which is where it "
+               f"spends most of its time. Nothing to read into it.",
+               f"{value:.0f} — di suatu tempat di tengah rentang dua minggunya, tempat "
+               "ia menghabiskan sebagian besar waktunya. Tidak ada yang perlu "
+               "disimpulkan."))
     return make(label, what, verdict,
-                "Near-duplicate of the Stochastic above; if the two disagree it is a rounding "
-                "difference, not information. Weak evidence either way.",
+                tr("Near-duplicate of the Stochastic above; if the two disagree it is a rounding "
+                   "difference, not information. Weak evidence either way.",
+                   "Hampir duplikat dari Stokastik di atas; jika keduanya berbeda, itu "
+                   "perbedaan pembulatan, bukan informasi. Buktinya lemah ke arah mana pun."),
                 band, "none", evidence="weak", value_text=f"{value:.0f}")
 
 
 @metric("cci")
 def _cci(value, **_):
     label = "CCI"
-    what = ("How far the price has strayed from its own recent average, scaled so that most "
-            "readings fall between -100 and +100.")
+    what = (tr("How far the price has strayed from its own recent average, scaled so that most "
+               "readings fall between -100 and +100.",
+               "Seberapa jauh harga menyimpang dari rata-ratanya sendiri belakangan "
+               "ini, diskalakan sehingga sebagian besar pembacaan berada antara -100 "
+               "dan +100."))
     if not _known(value):
-        return unavailable(label, what, "needs 20 bars of history")
+        return unavailable(label, what, tr("needs 20 bars of history", "perlu riwayat 20 batang"))
     if value > 100:
         band, verdict = "caution", (
-            f"{value:.0f} — stretched well above its own recent average. A move this far from "
-            f"the mean is unusual, though a genuine trend can hold there.")
+            tr(f"{value:.0f} — stretched well above its own recent average. A move this far from "
+               f"the mean is unusual, though a genuine trend can hold there.",
+               f"{value:.0f} — teregang jauh di atas rata-ratanya sendiri belakangan "
+               "ini. Pergerakan sejauh ini dari rata-rata tidak biasa, meski tren yang "
+               "nyata bisa bertahan di sana."))
     elif value < -100:
         band, verdict = "caution", (
-            f"{value:.0f} — stretched well below its own recent average, which is unusual but "
-            f"not by itself a floor.")
+            tr(f"{value:.0f} — stretched well below its own recent average, which is unusual but "
+               f"not by itself a floor.",
+               f"{value:.0f} — teregang jauh di bawah rata-ratanya sendiri belakangan "
+               "ini, yang tidak biasa tetapi bukan berarti lantai."))
     else:
         band, verdict = "context", (
-            f"{value:.0f} — inside the -100 to +100 band where roughly three-quarters of all "
-            f"readings fall. The price is not unusually far from its own average.")
+            tr(f"{value:.0f} — inside the -100 to +100 band where roughly three-quarters of all "
+               f"readings fall. The price is not unusually far from its own average.",
+               f"{value:.0f} — di dalam pita -100 hingga +100 tempat kira-kira tiga "
+               "perempat dari semua pembacaan berada. Harga tidak luar biasa jauh dari "
+               "rata-ratanya sendiri."))
     return make(label, what, verdict,
-                "A stretch measure, not a direction. " + CONTEXT_NOT_TRIGGER,
+                tr("A stretch measure, not a direction. ", "Ukuran keteregangan, bukan arah. ") + _not_trigger(),
                 band, "none", evidence="weak", value_text=f"{value:.0f}")
 
 
 @metric("macd")
 def _macd_metric(value, macdSignal=None, **_):
     label = "MACD"
-    what = ("The gap between a fast and a slow average of the price. Above its own signal "
-            "line means the recent trend is accelerating; below means it is fading.")
+    what = (tr("The gap between a fast and a slow average of the price. Above its own signal "
+               "line means the recent trend is accelerating; below means it is fading.",
+               "Selisih antara rata-rata harga yang cepat dan yang lambat. Di atas "
+               "garis sinyalnya sendiri berarti tren terbaru sedang menguat; di "
+               "bawahnya berarti sedang memudar."))
     if not _known(value) or not _known(macdSignal):
-        return unavailable(label, what, "needs about 35 bars of history")
+        return unavailable(label, what, tr("needs about 35 bars of history",
+                                           "perlu riwayat sekitar 35 batang"))
     above = value > macdSignal
     return make(label, what,
-                f"{_num(value)} against a signal line of {_num(macdSignal)} — "
-                + ("above it, so momentum is currently building."
-                   if above else "below it, so momentum is currently fading.")
-                + " The distance between the two matters more than the crossing itself, which "
-                  "arrives late by construction.",
-                "MACD is a smoothed restatement of the trend you can already see on the chart. "
-                "Weak standalone evidence; useful mainly for spotting divergence against price.",
+                tr(f"{_num(value)} against a signal line of {_num(macdSignal)} — ",
+                   f"{_num(value)} terhadap garis sinyal {_num(macdSignal)} — ")
+                + (tr("above it, so momentum is currently building.",
+                      "di atasnya, jadi momentum saat ini sedang terbangun.")
+                   if above else tr("below it, so momentum is currently fading.",
+                                    "di bawahnya, jadi momentum saat ini sedang memudar."))
+                + tr(" The distance between the two matters more than the crossing itself, which "
+                     "arrives late by construction.",
+                     " Jarak antara keduanya lebih penting daripada persilangannya sendiri, "
+                     "yang memang datang terlambat menurut konstruksinya."),
+                tr("MACD is a smoothed restatement of the trend you can already see on the chart. "
+                   "Weak standalone evidence; useful mainly for spotting divergence against price.",
+                   "MACD adalah penyajian ulang yang dihaluskan dari tren yang sudah bisa "
+                   "Anda lihat di grafik. Buktinya lemah jika berdiri sendiri; berguna "
+                   "terutama untuk menemukan divergensi terhadap harga."),
                 "good" if above else "poor", "high", evidence="weak", value_text=_num(value))
 
 
 @metric("bbPercentB")
 def _percent_b(value, **_):
-    label = "Bollinger %B"
-    what = ("Where the price sits inside its volatility bands. 0 is the lower band, 1 is the "
-            "upper band, 0.5 is the middle. Above 1 or below 0 means it has broken out of them.")
+    label = tr("Bollinger %B", "Bollinger %B")
+    what = (tr("Where the price sits inside its volatility bands. 0 is the lower band, 1 is the "
+               "upper band, 0.5 is the middle. Above 1 or below 0 means it has broken out of them.",
+               "Di mana harga berada di dalam pita volatilitasnya. 0 adalah pita bawah, "
+               "1 pita atas, 0.5 di tengah. Di atas 1 atau di bawah 0 berarti harga "
+               "sudah keluar dari pita."))
     if not _known(value):
-        return unavailable(label, what, "needs 20 bars of history")
+        return unavailable(label, what, tr("needs 20 bars of history", "perlu riwayat 20 batang"))
     if value > 1:
         band, verdict = "caution", (
-            f"{_num(value)} — trading ABOVE the upper band. That is an unusually strong move, "
-            f"not automatically an overpriced one: strong trends walk the upper band for weeks.")
+            tr(f"{_num(value)} — trading ABOVE the upper band. That is an unusually strong move, "
+               f"not automatically an overpriced one: strong trends walk the upper band for weeks.",
+               f"{_num(value)} — diperdagangkan DI ATAS pita atas. Itu pergerakan yang "
+               "luar biasa kuat, tidak otomatis kemahalan: tren yang kuat bisa "
+               "menyusuri pita atas berminggu-minggu."))
     elif value < 0:
         band, verdict = "caution", (
-            f"{_num(value)} — trading BELOW the lower band, an unusually weak move.")
+            tr(f"{_num(value)} — trading BELOW the lower band, an unusually weak move.",
+               f"{_num(value)} — diperdagangkan DI BAWAH pita bawah, pergerakan yang "
+               "luar biasa lemah."))
     elif value > 0.8:
-        band, verdict = "context", f"{_num(value)} — in the upper fifth of its band range."
+        band, verdict = "context", tr(f"{_num(value)} — in the upper fifth of its band range.",
+                                      f"{_num(value)} — di seperlima teratas rentang pitanya.")
     elif value < 0.2:
-        band, verdict = "context", f"{_num(value)} — in the lower fifth of its band range."
+        band, verdict = "context", tr(f"{_num(value)} — in the lower fifth of its band range.",
+                                      f"{_num(value)} — di seperlima terbawah rentang pitanya.")
     else:
-        band, verdict = "context", f"{_num(value)} — comfortably inside the bands."
+        band, verdict = "context", tr(f"{_num(value)} — comfortably inside the bands.",
+                                      f"{_num(value)} — dengan nyaman berada di dalam pita.")
     return make(label, what, verdict,
-                "Bands describe volatility, not value. " + CONTEXT_NOT_TRIGGER,
+                tr("Bands describe volatility, not value. ",
+                   "Pita menggambarkan volatilitas, bukan nilai. ") + _not_trigger(),
                 band, "none", evidence="weak", value_text=_num(value))
 
 
 @metric("bbBandwidth")
 def _bandwidth(value, squeezePercentile=None, **_):
-    label = "Bollinger bandwidth"
-    what = ("How wide the volatility bands are right now, as a share of the price. Narrow "
-            "bands mean the price has gone quiet; wide bands mean it is swinging hard.")
+    label = tr("Bollinger bandwidth", "Lebar pita Bollinger")
+    what = (tr("How wide the volatility bands are right now, as a share of the price. Narrow "
+               "bands mean the price has gone quiet; wide bands mean it is swinging hard.",
+               "Seberapa lebar pita volatilitas saat ini, sebagai porsi dari harga. "
+               "Pita sempit berarti harga sedang tenang; pita lebar berarti harga "
+               "sedang berayun keras."))
     if not _known(value):
-        return unavailable(label, what, "needs 20 bars of history")
-    reading = f"{_pct(value, 1)} of price wide."
+        return unavailable(label, what, tr("needs 20 bars of history", "perlu riwayat 20 batang"))
+    reading = tr(f"{_pct(value, 1)} of price wide.", f"Lebarnya {_pct(value, 1)} dari harga.")
     band = "context"
     if _known(squeezePercentile):
-        reading += (f" That is narrower than {_pct(1 - squeezePercentile, 0)} of the past year "
+        reading += (tr(f" That is narrower than {_pct(1 - squeezePercentile, 0)} of the past year ",
+                       f" Itu lebih sempit daripada {_pct(1 - squeezePercentile, 0)} pembacaan ")
                     if squeezePercentile <= 0.5 else
-                    f" That is wider than {_pct(squeezePercentile, 0)} of the past year ")
-        reading += "of readings."
+                    tr(f" That is wider than {_pct(squeezePercentile, 0)} of the past year ",
+                       f" Itu lebih lebar daripada {_pct(squeezePercentile, 0)} pembacaan "))
+        reading += tr("of readings.", "dalam setahun terakhir.")
         if squeezePercentile <= 0.15:
             band = "caution"
-            reading += (" Bands this tight are called a 'squeeze'. Quiet periods do tend to be "
-                        "followed by loud ones — but the squeeze says NOTHING about which "
-                        "direction the loud move goes, which is the part most write-ups skip.")
+            reading += (tr(" Bands this tight are called a 'squeeze'. Quiet periods do tend to be "
+                           "followed by loud ones — but the squeeze says NOTHING about which "
+                           "direction the loud move goes, which is the part most write-ups skip.",
+                           " Pita yang serapat ini disebut 'squeeze'. Periode tenang memang "
+                           "cenderung diikuti periode bergejolak — tetapi squeeze TIDAK berkata apa "
+                           "pun tentang ke arah mana gejolak itu, bagian yang dilewatkan kebanyakan "
+                           "ulasan."))
     return make(label, what, reading,
-                "A squeeze is a volatility forecast, not a direction forecast. Anyone telling "
-                "you it predicts a breakout upward is adding a claim the measure cannot make.",
+                tr("A squeeze is a volatility forecast, not a direction forecast. Anyone telling "
+                   "you it predicts a breakout upward is adding a claim the measure cannot make.",
+                   "Squeeze adalah ramalan volatilitas, bukan ramalan arah. Siapa pun yang "
+                   "berkata ia memprediksi tembusan ke atas sedang menambahkan klaim yang "
+                   "tidak bisa dibuat oleh ukuran ini."),
                 band, "none", evidence="weak", value_text=_pct(value, 1))
 
 
 @metric("atrPct")
 def _atr_pct(value, atr=None, **_):
-    label = "Daily range (ATR)"
-    what = ("How much this typically moves in a single day, including overnight gaps, as a "
-            "percentage of the price. It is the natural unit for setting a stop-loss.")
+    label = tr("Daily range (ATR)", "Rentang harian (ATR)")
+    what = (tr("How much this typically moves in a single day, including overnight gaps, as a "
+               "percentage of the price. It is the natural unit for setting a stop-loss.",
+               "Seberapa besar saham ini biasanya bergerak dalam sehari, termasuk celah "
+               "semalam, sebagai persentase harga. Inilah satuan yang alami untuk "
+               "memasang stop-loss."))
     if not _known(value):
-        return unavailable(label, what, "needs 14 bars of history")
+        return unavailable(label, what, tr("needs 14 bars of history", "perlu riwayat 14 batang"))
     band = _ladder(value, ((0.015, "excellent"), (0.025, "good"), (0.04, "fair"),
                            (0.07, "poor"), (None, "bad")))
-    reading = (f"A typical day moves about {_pct(value, 1)}"
-               + (f" ({_num(atr)} in price terms)" if _known(atr) else "") + ". ")
+    reading = (tr(f"A typical day moves about {_pct(value, 1)}",
+                  f"Pada hari biasa ia bergerak sekitar {_pct(value, 1)}")
+               + (tr(f" ({_num(atr)} in price terms)", f" ({_num(atr)} dalam satuan harga)") if _known(atr) else "") + ". ")
     reading += {
-        "excellent": "Very steady for a single stock.",
-        "good": "Normal daily movement.",
-        "fair": "Livelier than average — stops need room.",
-        "poor": "Large daily swings. A tight stop here gets hit by ordinary noise.",
-        "bad": "Extremely volatile day to day.",
+        "excellent": tr("Very steady for a single stock.", "Sangat stabil untuk satu saham."),
+        "good": tr("Normal daily movement.", "Pergerakan harian yang normal."),
+        "fair": tr("Livelier than average — stops need room.",
+                   "Lebih bergejolak daripada rata-rata — stop butuh ruang."),
+        "poor": tr("Large daily swings. A tight stop here gets hit by ordinary noise.",
+                   "Ayunan harian besar. Stop yang rapat di sini akan tersentuh oleh derau "
+                   "biasa."),
+        "bad": tr("Extremely volatile day to day.", "Sangat bergejolak dari hari ke hari."),
     }[band]
     return make(label, what, reading,
-                "Set stops in multiples of this, not in round percentages: a 5% stop on a name "
-                "that moves 6% a day is a coin flip, not a risk control.",
+                tr("Set stops in multiples of this, not in round percentages: a 5% stop on a name "
+                   "that moves 6% a day is a coin flip, not a risk control.",
+                   "Pasang stop dalam kelipatan angka ini, bukan dalam persentase bulat: "
+                   "stop 5% pada saham yang bergerak 6% sehari sama saja lempar koin, bukan "
+                   "pengendalian risiko."),
                 band, "low", evidence="strong", value_text=_pct(value, 1))
 
 
 @metric("mfi")
 def _mfi(value, **_):
-    label = "Money flow index"
-    what = ("Like RSI, but it weights each day by how much money changed hands. It asks "
-            "whether the buying or the selling had volume behind it.")
+    label = tr("Money flow index", "Indeks arus uang (MFI)")
+    what = (tr("Like RSI, but it weights each day by how much money changed hands. It asks "
+               "whether the buying or the selling had volume behind it.",
+               "Seperti RSI, tetapi setiap hari diberi bobot menurut berapa banyak uang "
+               "yang berpindah tangan. Ia bertanya apakah pembelian atau penjualan itu "
+               "didukung volume."))
     if not _known(value):
-        return unavailable(label, what, "needs 14 bars with volume")
+        return unavailable(label, what, tr("needs 14 bars with volume",
+                                           "perlu 14 batang beserta volumenya"))
     if value >= 80:
         band, verdict = "caution", (
-            f"{value:.0f} — above 80, so recent buying has been unusually concentrated. That is "
-            f"a description of intensity, not a warning that it must stop.")
+            tr(f"{value:.0f} — above 80, so recent buying has been unusually concentrated. That is "
+               f"a description of intensity, not a warning that it must stop.",
+               f"{value:.0f} — di atas 80, jadi pembelian belakangan ini luar biasa "
+               "terkonsentrasi. Itu gambaran intensitas, bukan peringatan bahwa ia "
+               "harus berhenti."))
     elif value <= 20:
         band, verdict = "caution", (
-            f"{value:.0f} — below 20, so recent selling has been unusually concentrated.")
+            tr(f"{value:.0f} — below 20, so recent selling has been unusually concentrated.",
+               f"{value:.0f} — di bawah 20, jadi penjualan belakangan ini luar biasa "
+               "terkonsentrasi."))
     else:
         band, verdict = "context", (
-            f"{value:.0f} — between 20 and 80, the range it sits in most of the time. Money "
-            f"flow is not leaning hard either way.")
-    return make(label, what, verdict, CONTEXT_NOT_TRIGGER, band, "none",
+            tr(f"{value:.0f} — between 20 and 80, the range it sits in most of the time. Money "
+               f"flow is not leaning hard either way.",
+               f"{value:.0f} — antara 20 dan 80, rentang tempat ia berada hampir "
+               "sepanjang waktu. Arus uang tidak condong kuat ke arah mana pun."))
+    return make(label, what, verdict, _not_trigger(), band, "none",
                 evidence="weak", value_text=f"{value:.0f}")
 
 
 @metric("cmf")
 def _cmf(value, **_):
-    label = "Chaikin money flow"
-    what = ("Whether recent days have tended to close near their high (buyers in control) or "
-            "near their low (sellers), weighted by volume. Runs from -1 to +1.")
+    label = tr("Chaikin money flow", "Arus uang Chaikin (CMF)")
+    what = (tr("Whether recent days have tended to close near their high (buyers in control) or "
+               "near their low (sellers), weighted by volume. Runs from -1 to +1.",
+               "Apakah hari-hari terakhir cenderung ditutup dekat puncaknya (pembeli "
+               "berkuasa) atau dekat dasarnya (penjual), dibobot menurut volume. "
+               "Berkisar dari -1 hingga +1."))
     if not _known(value):
-        return unavailable(label, what, "needs 20 bars with volume")
+        return unavailable(label, what, tr("needs 20 bars with volume",
+                                           "perlu 20 batang beserta volumenya"))
     if value > 0.05:
-        band, verdict = "good", f"{_num(value, 3)} — positive, so closes have been in the upper part of their daily ranges on volume."
+        band, verdict = "good", tr(f"{_num(value, 3)} — positive, so closes have been in the upper part of their daily ranges on volume.",
+                                   f"{_num(value, 3)} — positif, jadi penutupan berada di bagian atas "
+                                   "rentang hariannya dengan dukungan volume.")
     elif value < -0.05:
-        band, verdict = "poor", f"{_num(value, 3)} — negative, so closes have been in the lower part of their daily ranges on volume."
+        band, verdict = "poor", tr(f"{_num(value, 3)} — negative, so closes have been in the lower part of their daily ranges on volume.",
+                                   f"{_num(value, 3)} — negatif, jadi penutupan berada di bagian bawah "
+                                   "rentang hariannya dengan dukungan volume.")
     else:
-        band, verdict = "context", f"{_num(value, 3)} — effectively neutral."
-    return make(label, what, verdict, CONTEXT_NOT_TRIGGER, band, "high",
+        band, verdict = "context", tr(f"{_num(value, 3)} — effectively neutral.",
+                                      f"{_num(value, 3)} — praktis netral.")
+    return make(label, what, verdict, _not_trigger(), band, "high",
                 evidence="weak", value_text=_num(value, 3))
 
 
 @metric("volumeTrend")
 def _volume_trend(value, **_):
-    label = "Volume versus its year"
-    what = "How busy trading has been lately compared with a normal day over the past year."
+    label = tr("Volume versus its year", "Volume dibandingkan setahunnya")
+    what = tr("How busy trading has been lately compared with a normal day over the past year.",
+              "Seberapa ramai perdagangan belakangan ini dibandingkan hari normal "
+              "selama setahun terakhir.")
     if not _known(value):
-        return unavailable(label, what, "needs a year of volume history")
+        return unavailable(label, what, tr("needs a year of volume history",
+                                           "perlu riwayat volume setahun"))
     if value > 1.5:
-        band, verdict = "context", f"{_num(value)}x normal — trading is much heavier than usual."
+        band, verdict = "context", tr(f"{_num(value)}x normal — trading is much heavier than usual.",
+                                      f"{_num(value)}x normal — perdagangan jauh lebih ramai daripada biasanya.")
     elif value > 1.2:
-        band, verdict = "context", f"{_num(value)}x normal — participation is picking up."
+        band, verdict = "context", tr(f"{_num(value)}x normal — participation is picking up.",
+                                      f"{_num(value)}x normal — partisipasi mulai meningkat.")
     elif value < 0.7:
-        band, verdict = "caution", f"{_num(value)}x normal — interest has faded, which makes every other reading here noisier."
+        band, verdict = "caution", tr(f"{_num(value)}x normal — interest has faded, which makes every other reading here noisier.",
+                                      f"{_num(value)}x normal — minat memudar, yang membuat setiap pembacaan "
+                                      "lain di sini lebih berderau.")
     else:
-        band, verdict = "context", f"{_num(value)}x normal — ordinary participation."
+        band, verdict = "context", tr(f"{_num(value)}x normal — ordinary participation.",
+                                      f"{_num(value)}x normal — partisipasi biasa.")
     return make(label, what, verdict,
-                "Volume confirms moves rather than causing them. Heavy volume on a breakout is "
-                "worth more than the breakout alone; heavy volume by itself means nothing.",
+                tr("Volume confirms moves rather than causing them. Heavy volume on a breakout is "
+                   "worth more than the breakout alone; heavy volume by itself means nothing.",
+                   "Volume mengonfirmasi pergerakan, bukan menyebabkannya. Volume besar "
+                   "saat tembusan lebih berharga daripada tembusannya saja; volume besar "
+                   "dengan sendirinya tidak berarti apa-apa."),
                 band, "none", evidence="moderate", value_text=f"{_num(value)}x")
 
 
 @metric("coppock")
 def _coppock(value, previous=None, **_):
-    label = "Coppock curve"
-    what = ("A slow, monthly indicator built in the 1960s specifically to spot the end of long "
-            "bear markets. It turning up from below zero is its one classic signal.")
+    label = tr("Coppock curve", "Kurva Coppock")
+    what = (tr("A slow, monthly indicator built in the 1960s specifically to spot the end of long "
+               "bear markets. It turning up from below zero is its one classic signal.",
+               "Indikator bulanan yang lambat, dibuat pada 1960-an khusus untuk "
+               "menemukan akhir pasar bearish yang panjang. Berbalik naik dari bawah "
+               "nol adalah satu-satunya sinyal klasiknya."))
     if not _known(value):
-        return unavailable(label, what, "needs about two years of month-end closes")
+        return unavailable(label, what, tr("needs about two years of month-end closes",
+                                           "perlu harga penutupan akhir bulan sekitar dua tahun"))
     turning_up = _known(previous) and value > previous
     if value < 0 and turning_up:
-        band, verdict = "good", (f"{_num(value, 1)} — below zero and turning UP. That is the "
-                                 f"single setup this indicator was designed to find.")
+        band, verdict = "good", (tr(f"{_num(value, 1)} — below zero and turning UP. That is the "
+                                    f"single setup this indicator was designed to find.",
+                                    f"{_num(value, 1)} — di bawah nol dan berbalik NAIK. Itulah satu-satunya "
+                                    "pola yang ingin ditemukan indikator ini."))
     elif value < 0:
-        band, verdict = "poor", f"{_num(value, 1)} — below zero and still falling."
+        band, verdict = "poor", tr(f"{_num(value, 1)} — below zero and still falling.",
+                                   f"{_num(value, 1)} — di bawah nol dan masih turun.")
     else:
-        band, verdict = "context", (f"{_num(value, 1)} — above zero, where the indicator has no "
-                                    f"defined signal. It only speaks from below.")
+        band, verdict = "context", (tr(f"{_num(value, 1)} — above zero, where the indicator has no "
+                                       f"defined signal. It only speaks from below.",
+                                       f"{_num(value, 1)} — di atas nol, tempat indikator ini tidak punya sinyal "
+                                       "yang terdefinisi. Ia hanya berbicara dari bawah."))
     return make(label, what, verdict,
-                "It fires a handful of times per lifetime. Between signals it is decoration.",
+                tr("It fires a handful of times per lifetime. Between signals it is decoration.",
+                   "Ia hanya menyala beberapa kali seumur hidup. Di antara sinyal, ia "
+                   "hanyalah hiasan."),
                 band, "none", evidence="weak", value_text=_num(value, 1))
 
 
@@ -1348,194 +1906,316 @@ def _coppock(value, previous=None, **_):
 # ============================================================================ #
 @metric("piotroski")
 def _piotroski(value, maxScore=9, **_):
-    label = "Piotroski F-Score"
-    what = ("A nine-point health checklist run on the company's own filings. It asks nine "
-            "yes/no questions — is it profitable, is cash coming in, is debt falling, are "
-            "margins improving — and counts the yeses.")
+    label = tr("Piotroski F-Score", "Piotroski F-Score")
+    what = (tr("A nine-point health checklist run on the company's own filings. It asks nine "
+               "yes/no questions — is it profitable, is cash coming in, is debt falling, are "
+               "margins improving — and counts the yeses.",
+               "Daftar periksa kesehatan sembilan poin yang dijalankan pada laporan "
+               "keuangan perusahaan sendiri. Ia mengajukan sembilan pertanyaan ya/tidak "
+               "— apakah perusahaan untung, apakah kas masuk, apakah utang turun, "
+               "apakah margin membaik — lalu menghitung jawaban ya."))
     if not _known(value):
-        return unavailable(label, what, "the filings needed are not available")
+        return unavailable(label, what, tr("the filings needed are not available",
+                                           "laporan keuangan yang diperlukan tidak tersedia"))
     total = int(maxScore) if _known(maxScore) and maxScore else 9
     score = int(value)
+    # THE SAME EDGES AS THE BAND THAT VOTES, read from the module that owns it.
+    # This ladder had its own (0.45, 0.70, 0.89), so 4, 6 and 8 of 9 read
+    # "weak side", "middling" and "solid" here beside a band that said mixed,
+    # solid and strong — and below the minimum it praised three checks of nine.
+    from .quality import PIOTROSKI_CUTS, PIOTROSKI_MIN_SIGNALS
+    if total < PIOTROSKI_MIN_SIGNALS:
+        return unavailable(label, what,
+                           tr(f"only {total} of the nine checks could be computed from these "
+                              f"filings, too few to call a direction",
+                              f"hanya {total} dari sembilan pemeriksaan yang bisa dihitung dari laporan "
+                              "keuangan ini, terlalu sedikit untuk menyimpulkan arah"))
     ratio = score / total if total else 0.0
-    band = _ladder(ratio, ((0.25, "bad"), (0.45, "poor"), (0.70, "fair"),
-                           (0.89, "good"), (None, "excellent")))
-    reading = f"{score} out of {total} checks passed. "
+    mixed, solid, strong = PIOTROSKI_CUTS
+    band = _ladder(ratio, ((0.25, "bad"), (mixed - 1e-9, "poor"), (solid - 1e-9, "fair"),
+                           (strong - 1e-9, "good"), (None, "excellent")))
+    reading = tr(f"{score} out of {total} checks passed. ",
+                 f"{score} dari {total} pemeriksaan lolos. ")
     reading += {
-        "bad": "That is a weak score — the business is going backwards on most of the axes "
-               "this checklist measures.",
-        "poor": "That is on the weak side; more is deteriorating than improving.",
-        "fair": "That is middling — no clear direction, improving in some places and not others.",
-        "good": "That is a solid score: most fundamental trends are moving the right way.",
-        "excellent": "That is a strong score — almost everything this checklist looks at is "
-                     "improving.",
+        "bad": tr("That is a weak score — the business is going backwards on most of the axes "
+                  "this checklist measures.",
+                  "Itu skor yang lemah — bisnisnya mundur di sebagian besar sumbu yang "
+                  "diukur daftar periksa ini."),
+        "poor": tr("That is on the weak side; more is deteriorating than improving.",
+                   "Itu cenderung lemah; lebih banyak yang memburuk daripada yang membaik."),
+        "fair": tr("That is middling — no clear direction, improving in some places and not others.",
+                   "Itu sedang-sedang saja — tidak ada arah yang jelas, membaik di beberapa "
+                   "tempat dan tidak di tempat lain."),
+        "good": tr("That is a solid score: most fundamental trends are moving the right way.",
+                   "Itu skor yang solid: sebagian besar tren fundamental bergerak ke arah "
+                   "yang benar."),
+        "excellent": tr("That is a strong score — almost everything this checklist looks at is "
+                        "improving.",
+                        "Itu skor yang kuat — hampir semua yang dilihat daftar periksa ini "
+                        "sedang membaik."),
     }[band]
     if total < 9:
-        reading += (f" Note the denominator: only {total} of the nine checks could be computed "
-                    f"from the available filings, and an uncomputable check never counts as a pass.")
+        reading += (tr(f" Note the denominator: only {total} of the nine checks could be computed "
+                       f"from the available filings, and an uncomputable check never counts as a pass.",
+                       f" Perhatikan penyebutnya: hanya {total} dari sembilan pemeriksaan yang "
+                       "bisa dihitung dari laporan keuangan yang tersedia, dan pemeriksaan yang "
+                       "tidak bisa dihitung tidak pernah dihitung lolos."))
     return make(label, what, reading,
-                "Piotroski's original finding was that a high score picked out the winners "
-                "among CHEAP stocks specifically. On its own it is a health reading, not a "
-                "buy case — pair it with the Value lens.",
+                tr("Piotroski's original finding was that a high score picked out the winners "
+                   "among CHEAP stocks specifically. On its own it is a health reading, not a "
+                   "buy case — pair it with the Value lens.",
+                   "Temuan asli Piotroski adalah bahwa skor tinggi menyaring para pemenang "
+                   "di antara saham MURAH secara khusus. Berdiri sendiri, ini pembacaan "
+                   "kesehatan, bukan alasan membeli — pasangkan dengan lensa Nilai."),
                 band, "high", evidence="moderate", value_text=f"{score}/{total}")
 
 
 @metric("altman")
 def _altman(value, **_):
-    label = "Altman Z''-score"
-    what = ("A bankruptcy-distance score built from the balance sheet. It was fitted on "
-            "companies that later went bust versus ones that did not, and it asks how much "
-            "this one resembles the survivors.")
+    label = tr("Altman Z''-score", "Altman Z''-score")
+    what = (tr("A bankruptcy-distance score built from the balance sheet. It was fitted on "
+               "companies that later went bust versus ones that did not, and it asks how much "
+               "this one resembles the survivors.",
+               "Skor jarak dari kebangkrutan yang dibangun dari neraca. Ia dicocokkan "
+               "pada perusahaan yang kemudian bangkrut dibandingkan yang tidak, dan "
+               "bertanya seberapa mirip perusahaan ini dengan yang bertahan."))
     if not _known(value):
-        return unavailable(label, what, "the balance-sheet items needed are not available")
+        return unavailable(label, what, tr("the balance-sheet items needed are not available",
+                                           "pos neraca yang diperlukan tidak tersedia"))
     if value > 5.85:
         band, verdict = "good", (
-            f"{_num(value)} — comfortably above 5.85, which is the line for 'safe'. The balance "
-            f"sheet does not look like a company heading for trouble.")
+            tr(f"{_num(value)} — comfortably above 5.85, which is the line for 'safe'. The balance "
+               f"sheet does not look like a company heading for trouble.",
+               f"{_num(value)} — jauh di atas 5.85, yaitu garis untuk 'aman'. Neracanya "
+               "tidak terlihat seperti perusahaan yang menuju masalah."))
     elif value >= 4.35:
         band, verdict = "caution", (
-            f"{_num(value)} — inside the grey zone between 4.35 and 5.85. Neither clearly safe "
-            f"nor clearly distressed; the model declines to call it.")
+            tr(f"{_num(value)} — inside the grey zone between 4.35 and 5.85. Neither clearly safe "
+               f"nor clearly distressed; the model declines to call it.",
+               f"{_num(value)} — di dalam zona abu-abu antara 4.35 dan 5.85. Tidak jelas "
+               "aman, tidak jelas tertekan; modelnya menolak memutuskan."))
     else:
         band, verdict = "bad", (
-            f"{_num(value)} — below 4.35, inside the distress zone. That does not mean "
-            f"bankruptcy is coming, it means the balance sheet shares features with companies "
-            f"that got there.")
-    verdict += (" This is the emerging-market variant of the score, so an Indonesian listing "
-                "and a US one are on the same scale.")
+            tr(f"{_num(value)} — below 4.35, inside the distress zone. That does not mean "
+               f"bankruptcy is coming, it means the balance sheet shares features with companies "
+               f"that got there.",
+               f"{_num(value)} — di bawah 4.35, di dalam zona tertekan. Itu tidak "
+               "berarti kebangkrutan akan datang, melainkan neracanya punya ciri-ciri "
+               "yang sama dengan perusahaan yang akhirnya bangkrut."))
+    verdict += (tr(" This is the emerging-market variant of the score, so an Indonesian listing "
+                   "and a US one are on the same scale.",
+                   " Ini varian skor untuk pasar berkembang, jadi saham BEI dan saham AS "
+                   "berada pada skala yang sama."))
     return make(label, what, verdict,
-                "A distress reading should override an attractive valuation, not sit beside "
-                "it. A discounted cash flow on a company sliding toward insolvency is "
-                "arithmetic, not a valuation.",
+                tr("A distress reading should override an attractive valuation, not sit beside "
+                   "it. A discounted cash flow on a company sliding toward insolvency is "
+                   "arithmetic, not a valuation.",
+                   "Pembacaan tertekan seharusnya mengalahkan valuasi yang menarik, bukan "
+                   "berdiri di sebelahnya. Arus kas terdiskonto pada perusahaan yang "
+                   "meluncur menuju gagal bayar hanyalah aritmetika, bukan valuasi."),
                 band, "high", evidence="moderate", value_text=_num(value))
 
 
 @metric("beneish")
 def _beneish(value, indicesAvailable=None, indicesTotal=8, **_):
-    label = "Beneish M-Score"
-    what = ("A screen for earnings that may have been massaged. It compares this year's "
-            "receivables, margins, asset quality and accruals against last year's, and asks "
-            "whether the pattern resembles companies later found to have manipulated their "
-            "numbers.")
+    label = tr("Beneish M-Score", "Beneish M-Score")
+    what = (tr("A screen for earnings that may have been massaged. It compares this year's "
+               "receivables, margins, asset quality and accruals against last year's, and asks "
+               "whether the pattern resembles companies later found to have manipulated their "
+               "numbers.",
+               "Penyaring untuk laba yang mungkin telah dipoles. Ia membandingkan "
+               "piutang, margin, kualitas aset, dan akrual tahun ini dengan tahun lalu, "
+               "lalu bertanya apakah polanya mirip perusahaan yang kemudian terbukti "
+               "memanipulasi angkanya."))
     if not _known(value):
         return unavailable(label, what,
-                           "too few of the eight component indices could be computed")
+                           tr("too few of the eight component indices could be computed",
+                              "terlalu sedikit dari delapan indeks komponen yang bisa dihitung"))
     if value > -1.78:
         band, verdict = "bad", (
-            f"{_num(value)} — above the -1.78 threshold, so the accounting pattern FLAGS. "
-            f"Read that carefully: the screen catches roughly three-quarters of real "
-            f"manipulators, but manipulation is rare, so most flags are false alarms. It is a "
-            f"reason to read the filings, not a finding.")
+            tr(f"{_num(value)} — above the -1.78 threshold, so the accounting pattern FLAGS. "
+               f"Read that carefully: the screen catches roughly three-quarters of real "
+               f"manipulators, but manipulation is rare, so most flags are false alarms. It is a "
+               f"reason to read the filings, not a finding.",
+               f"{_num(value)} — di atas ambang -1.78, jadi pola akuntansinya DITANDAI. "
+               "Baca dengan cermat: penyaring ini menangkap kira-kira tiga perempat "
+               "manipulator sungguhan, tetapi manipulasi itu jarang, jadi sebagian "
+               "besar tanda adalah alarm palsu. Ini alasan untuk membaca laporan "
+               "keuangannya, bukan temuan."))
     elif value > -2.22:
         band, verdict = "caution", (
-            f"{_num(value)} — close to the -1.78 threshold without crossing it. Worth a look "
-            f"at the accruals if you are going to own this.")
+            tr(f"{_num(value)} — close to the -1.78 threshold without crossing it. Worth a look "
+               f"at the accruals if you are going to own this.",
+               f"{_num(value)} — dekat ambang -1.78 tanpa melewatinya. Layak melihat "
+               "akrualnya jika Anda akan memiliki saham ini."))
     else:
         band, verdict = "good", (
-            f"{_num(value)} — well below the threshold. No manipulation signature. Note this is "
-            f"the absence of one specific pattern, not a clean bill of health.")
+            tr(f"{_num(value)} — well below the threshold. No manipulation signature. Note this is "
+               f"the absence of one specific pattern, not a clean bill of health.",
+               f"{_num(value)} — jauh di bawah ambang. Tidak ada jejak manipulasi. "
+               "Perhatikan bahwa ini hanya ketiadaan satu pola tertentu, bukan surat "
+               "keterangan sehat."))
     if _known(indicesAvailable) and indicesAvailable < (indicesTotal or 8):
-        verdict += (f" Built from {int(indicesAvailable)} of {int(indicesTotal or 8)} indices, "
-                    f"so it is less reliable than a full score.")
+        verdict += (tr(f" Built from {int(indicesAvailable)} of {int(indicesTotal or 8)} indices, "
+                       f"so it is less reliable than a full score.",
+                       f" Dibangun dari {int(indicesAvailable)} dari {int(indicesTotal or 8)} "
+                       "indeks, jadi kurang andal dibandingkan skor lengkap."))
     return make(label, what, verdict,
-                "Higher is worse here, which is the opposite of the other two quality scores. "
-                "A flag means go and read the cash-flow statement against the income statement.",
+                tr("Higher is worse here, which is the opposite of the other two quality scores. "
+                   "A flag means go and read the cash-flow statement against the income statement.",
+                   "Di sini makin tinggi makin buruk, kebalikan dari dua skor kualitas "
+                   "lainnya. Tanda berarti bacalah laporan arus kas berdampingan dengan "
+                   "laporan laba rugi."),
                 band, "low", evidence="moderate", value_text=_num(value))
 
 
 # The four ratios Altman's Z'' is built from, each explained in ordinary words.
-_ALTMAN_PARTS = {
-    "workingCapitalToAssets": (
-        "Short-term cushion",
-        "Money due in soon minus bills due soon, as a share of everything the company owns. "
-        "Negative means short-term bills exceed short-term resources.",
-        "low"),
-    "retainedToAssets": (
-        "Lifetime profits kept",
-        "How much of what the company owns was paid for by profits it earned and kept, rather "
-        "than by borrowing or issuing shares. Young or loss-making firms score low.",
-        "low"),
-    "ebitToAssets": (
-        "Operating profitability",
-        "Operating profit as a share of everything the company owns — how hard the assets work "
-        "before interest and tax.",
-        "low"),
-    "equityToLiabilities": (
-        "Cushion against debts",
-        "Shareholders' stake divided by everything owed. Under 1 means the company owes more "
-        "than the owners have in it.",
-        "low"),
-}
+def _altman_parts() -> dict:
+    """The four Altman inputs, named for a reader. A function rather than a
+    module constant so each name is written in the language of the request."""
+    return {
+        "workingCapitalToAssets": (
+            tr("Short-term cushion", "Bantalan jangka pendek"),
+            tr("Money due in soon minus bills due soon, as a share of everything the company owns. "
+               "Negative means short-term bills exceed short-term resources.",
+               "Uang yang segera masuk dikurangi tagihan yang segera jatuh tempo, "
+               "sebagai porsi dari semua yang dimiliki perusahaan. Negatif berarti "
+               "tagihan jangka pendek melebihi sumber daya jangka pendek."),
+            "low"),
+        "retainedToAssets": (
+            tr("Lifetime profits kept", "Laba seumur hidup yang ditahan"),
+            tr("How much of what the company owns was paid for by profits it earned and kept, rather "
+               "than by borrowing or issuing shares. Young or loss-making firms score low.",
+               "Seberapa besar aset perusahaan yang dibiayai oleh laba yang diperoleh "
+               "dan ditahannya, bukan oleh pinjaman atau penerbitan saham. Perusahaan "
+               "muda atau yang merugi mendapat skor rendah."),
+            "low"),
+        "ebitToAssets": (
+            tr("Operating profitability", "Profitabilitas operasional"),
+            tr("Operating profit as a share of everything the company owns — how hard the assets work "
+               "before interest and tax.",
+               "Laba operasional sebagai porsi dari semua yang dimiliki perusahaan — "
+               "seberapa keras aset bekerja sebelum bunga dan pajak."),
+            "low"),
+        "equityToLiabilities": (
+            tr("Cushion against debts", "Bantalan terhadap utang"),
+            tr("Shareholders' stake divided by everything owed. Under 1 means the company owes more "
+               "than the owners have in it.",
+               "Ekuitas pemegang saham dibagi seluruh kewajiban. Di bawah 1 berarti "
+               "utang perusahaan lebih besar daripada modal pemiliknya."),
+            "low"),
+    }
 
 
 @metric("altmanComponent")
 def _altman_component(value, part=None, **_):
-    name, what, _direction = _ALTMAN_PARTS.get(
-        part, ("Component", "One input to the distress score.", "low"))
+    name, what, _direction = _altman_parts().get(
+        part, (tr("Component", "Komponen"), tr("One input to the distress score.",
+                               "Satu masukan bagi skor tekanan keuangan."), "low"))
     if not _known(value):
-        return unavailable(name, what, "not available in these filings")
+        return unavailable(name, what, tr("not available in these filings",
+                                          "tidak tersedia di laporan keuangan ini"))
     band = "poor" if value < 0 else "context"
     return make(name, what,
-                f"{_num(value)}. " + ("Negative, which drags the combined distress score down "
-                                      "and is the kind of reading that puts a company in the "
-                                      "grey zone on its own."
+                f"{_num(value)}. " + (tr("Negative, which drags the combined distress score down "
+                                         "and is the kind of reading that puts a company in the "
+                                         "grey zone on its own.",
+                                         "Negatif, yang menarik skor tekanan gabungan ke bawah dan merupakan "
+                                         "jenis pembacaan yang dengan sendirinya bisa menempatkan perusahaan di "
+                                         "zona abu-abu.")
                                       if value < 0 else
-                                      "Positive, which supports the combined distress score."),
-                "One input among four. The combined score above is what carries the meaning.",
+                                      tr("Positive, which supports the combined distress score.",
+                                         "Positif, yang menopang skor tekanan gabungan.")),
+                tr("One input among four. The combined score above is what carries the meaning.",
+                   "Satu masukan di antara empat. Skor gabungan di atas itulah yang membawa "
+                   "makna."),
                 band, "high", evidence="moderate", value_text=_num(value))
 
 
 # Beneish's eight indices are printed as bare acronyms today. Each is a
 # this-year-over-last-year ratio, so 1.0 means "unchanged" for all of them — and
 # that shared anchor is the thing that makes them readable at all.
-_BENEISH_PARTS = {
-    "DSRI": ("Receivables vs sales",
-             "Are customers taking longer to pay, relative to sales growth? A jump can mean "
-             "revenue was booked before the cash was real.", True),
-    "GMI": ("Margin deterioration",
-            "Are gross margins worse than last year? Deteriorating margins create pressure to "
-            "make the numbers look better.", True),
-    "AQI": ("Asset quality",
-            "Is a bigger share of the balance sheet made of soft, hard-to-value assets rather "
-            "than physical ones?", True),
-    "SGI": ("Sales growth",
-            "How fast revenue grew. Fast growth is not manipulation, but it is the environment "
-            "where manipulation most often happens.", True),
-    "DEPI": ("Depreciation slowdown",
-             "Has the company slowed the rate it writes assets down? Doing so flatters profit.",
-             True),
-    "SGAI": ("Overheads vs sales",
-             "Are admin and selling costs growing faster than sales?", True),
-    "LVGI": ("Leverage change",
-             "Is the company carrying more debt relative to its assets than last year?", True),
-    "TATA": ("Accruals",
-             "How much of reported profit is NOT backed by cash actually collected. The single "
-             "most informative of the eight.", True),
-}
+def _beneish_parts() -> dict:
+    """The eight Beneish indices, named for a reader. A function for the same
+    reason as `_altman_parts`."""
+    return {
+        "DSRI": (tr("Receivables vs sales", "Piutang vs penjualan"),
+                 tr("Are customers taking longer to pay, relative to sales growth? A jump can mean "
+                    "revenue was booked before the cash was real.",
+                    "Apakah pelanggan makin lama membayar, relatif terhadap pertumbuhan "
+                    "penjualan? Lonjakan bisa berarti pendapatan dicatat sebelum kasnya "
+                    "nyata."), True),
+        "GMI": (tr("Margin deterioration", "Margin yang memburuk"),
+                tr("Are gross margins worse than last year? Deteriorating margins create pressure to "
+                   "make the numbers look better.",
+                   "Apakah margin kotor lebih buruk daripada tahun lalu? Margin yang "
+                   "memburuk menciptakan tekanan untuk membuat angka tampak lebih baik."), True),
+        "AQI": (tr("Asset quality", "Kualitas aset"),
+                tr("Is a bigger share of the balance sheet made of soft, hard-to-value assets rather "
+                   "than physical ones?",
+                   "Apakah porsi neraca yang lebih besar terdiri dari aset lunak yang sulit "
+                   "dinilai, bukan aset fisik?"), True),
+        "SGI": (tr("Sales growth", "Pertumbuhan penjualan"),
+                tr("How fast revenue grew. Fast growth is not manipulation, but it is the environment "
+                   "where manipulation most often happens.",
+                   "Seberapa cepat pendapatan tumbuh. Pertumbuhan cepat bukan manipulasi, "
+                   "tetapi itulah lingkungan tempat manipulasi paling sering terjadi."), True),
+        "DEPI": (tr("Depreciation slowdown", "Perlambatan depresiasi"),
+                 tr("Has the company slowed the rate it writes assets down? Doing so flatters profit.",
+                    "Apakah perusahaan memperlambat laju penyusutan asetnya? Melakukannya "
+                    "membuat laba tampak lebih bagus."),
+                 True),
+        "SGAI": (tr("Overheads vs sales", "Biaya umum vs penjualan"),
+                 tr("Are admin and selling costs growing faster than sales?",
+                    "Apakah biaya administrasi dan penjualan tumbuh lebih cepat daripada "
+                    "penjualan?"), True),
+        "LVGI": (tr("Leverage change", "Perubahan leverage"),
+                 tr("Is the company carrying more debt relative to its assets than last year?",
+                    "Apakah perusahaan menanggung utang lebih besar relatif terhadap asetnya "
+                    "dibandingkan tahun lalu?"), True),
+        "TATA": (tr("Accruals", "Akrual"),
+                 tr("How much of reported profit is NOT backed by cash actually collected. The single "
+                    "most informative of the eight.",
+                    "Seberapa besar laba yang dilaporkan TIDAK didukung kas yang benar-benar "
+                    "diterima. Yang paling informatif dari kedelapannya."), True),
+    }
 
 
 @metric("beneishIndex")
 def _beneish_index(value, part=None, **_):
-    name, what, higher_worse = _BENEISH_PARTS.get(
-        part, ("Index", "One of the eight Beneish inputs.", True))
+    name, what, higher_worse = _beneish_parts().get(
+        part, (tr("Index", "Indeks"), tr("One of the eight Beneish inputs.",
+                           "Salah satu dari delapan masukan Beneish."), True))
     label = f"{part} · {name}" if part else name
     if not _known(value):
-        return unavailable(label, what, "not computable from these filings")
+        return unavailable(label, what, tr("not computable from these filings",
+                                           "tidak bisa dihitung dari laporan keuangan ini"))
     if part == "TATA":
         band = "caution" if value > 0.03 else "context"
-        reading = (f"{_num(value)} — accruals are {_pct(value, 1)} of total assets. "
-                   + ("A high positive figure means reported profit is running well ahead of "
-                      "cash collected." if value > 0.03 else
-                      "Profit and cash are broadly in step."))
+        reading = (tr(f"{_num(value)} — accruals are {_pct(value, 1)} of total assets. ",
+                      f"{_num(value)} — akrual sebesar {_pct(value, 1)} dari total aset. ")
+                   + (tr("A high positive figure means reported profit is running well ahead of "
+                         "cash collected.",
+                         "Angka positif yang tinggi berarti laba yang dilaporkan berjalan jauh di "
+                         "depan kas yang diterima.") if value > 0.03 else
+                      tr("Profit and cash are broadly in step.",
+                         "Laba dan kas secara umum seiring.")))
     else:
         band = "caution" if value > 1.20 else "context"
-        reading = (f"{_num(value)} — 1.00 would mean unchanged from last year, so this is "
-                   + (f"{_pct(value - 1, 0)} higher. " if value >= 1 else
-                      f"{_pct(1 - value, 0)} lower. ")
-                   + ("A rise of this size is the direction Beneish treats as suspicious."
-                      if value > 1.20 else "Not an unusual year-on-year change."))
+        reading = (tr(f"{_num(value)} — 1.00 would mean unchanged from last year, so this is ",
+                      f"{_num(value)} — 1.00 berarti tidak berubah dari tahun lalu, jadi ini ")
+                   + (tr(f"{_pct(value - 1, 0)} higher. ", f"{_pct(value - 1, 0)} lebih tinggi. ") if value >= 1 else
+                      tr(f"{_pct(1 - value, 0)} lower. ", f"{_pct(1 - value, 0)} lebih rendah. "))
+                   + (tr("A rise of this size is the direction Beneish treats as suspicious.",
+                         "Kenaikan sebesar ini adalah arah yang dianggap mencurigakan oleh "
+                         "Beneish.")
+                      if value > 1.20 else tr("Not an unusual year-on-year change.",
+                                              "Bukan perubahan tahunan yang tidak biasa.")))
     return make(label, what, reading,
-                "One input among eight. No single index means anything alone — the combined "
-                "M-Score is the reading.",
+                tr("One input among eight. No single index means anything alone — the combined "
+                   "M-Score is the reading.",
+                   "Satu masukan di antara delapan. Tidak ada indeks tunggal yang bermakna "
+                   "sendirian — M-Score gabungan itulah pembacaannya."),
                 band, "low" if higher_worse else "high", evidence="moderate",
                 value_text=_num(value))
 
@@ -1545,12 +2225,17 @@ def _beneish_index(value, part=None, **_):
 # ============================================================================ #
 @metric("spread")
 def _spread(value, source=None, floor=None, at_floor=False, **_):
-    label = "Bid-ask spread"
-    what = ("The invisible toll on every trade: the gap between what a buyer pays and what a "
-            "seller receives at the same instant. Buy and sell immediately and you lose this "
-            "much without the price moving at all.")
+    label = tr("Bid-ask spread", "Selisih harga beli-jual (spread)")
+    what = (tr("The invisible toll on every trade: the gap between what a buyer pays and what a "
+               "seller receives at the same instant. Buy and sell immediately and you lose this "
+               "much without the price moving at all.",
+               "Biaya tak terlihat pada setiap transaksi: selisih antara yang dibayar "
+               "pembeli dan yang diterima penjual pada saat yang sama. Beli lalu jual "
+               "seketika dan Anda kehilangan sebesar ini tanpa harga bergerak sedikit "
+               "pun."))
     if not _known(value):
-        return unavailable(label, what, "not enough high-low data to estimate it")
+        return unavailable(label, what, tr("not enough high-low data to estimate it",
+                                           "data tertinggi-terendah tidak cukup untuk memperkirakannya"))
     # AT THE FLOOR, THE FIGURE IS NOT A MEASUREMENT. Both estimators have a
     # noise floor proportional to the stock's own volatility — about 0.15x the
     # daily standard deviation for the headline one — because volatility leaks
@@ -1561,91 +2246,149 @@ def _spread(value, source=None, floor=None, at_floor=False, **_):
     # bound, and the band must not reward or punish a number that is noise.
     if at_floor and _known(floor):
         return make(label, what,
-                    f"At most about {_pct(max(value, floor), 2)} per round trip — and this is a "
-                    f"ceiling, not a measurement. Daily high-low data cannot separate a spread "
-                    f"from ordinary volatility below roughly {_pct(floor, 2)} on a stock that "
-                    f"moves like this one, and the estimate sits inside that range. A genuinely "
-                    f"liquid listing lands here, and so does anything whose real cost is too "
-                    f"small for this method to see.",
-                    "Read it as 'trading costs are small enough that this data cannot see "
-                    "them'. If you need the real number, it comes from a quote feed, not from "
-                    "daily bars.",
+                    tr(f"At most about {_pct(max(value, floor), 2)} per round trip — and this is a "
+                       f"ceiling, not a measurement. Daily high-low data cannot separate a spread "
+                       f"from ordinary volatility below roughly {_pct(floor, 2)} on a stock that "
+                       f"moves like this one, and the estimate sits inside that range. A genuinely "
+                       f"liquid listing lands here, and so does anything whose real cost is too "
+                       f"small for this method to see.",
+                       f"Paling banyak sekitar {_pct(max(value, floor), 2)} per transaksi "
+                       "pulang-pergi — dan ini batas atas, bukan hasil pengukuran. Data harian "
+                       "tertinggi-terendah tidak bisa memisahkan spread dari volatilitas biasa "
+                       f"di bawah kira-kira {_pct(floor, 2)} pada saham yang bergerak seperti "
+                       "ini, dan perkiraannya berada di dalam rentang itu. Saham yang "
+                       "benar-benar likuid jatuh di sini, begitu pula apa pun yang biaya "
+                       "sebenarnya terlalu kecil untuk dilihat metode ini."),
+                    tr("Read it as 'trading costs are small enough that this data cannot see "
+                       "them'. If you need the real number, it comes from a quote feed, not from "
+                       "daily bars.",
+                       "Bacalah sebagai 'biaya transaksinya cukup kecil sehingga data ini tidak "
+                       "bisa melihatnya'. Jika Anda butuh angka sebenarnya, ia datang dari "
+                       "umpan kuotasi, bukan dari batang harian."),
                     "good", "low", evidence="moderate",
                     value_text=f"≤{_pct(max(value, floor), 2)}")
 
     band = _ladder(value, ((0.001, "excellent"), (0.003, "good"), (0.01, "fair"),
                            (0.02, "poor"), (None, "bad")))
-    reading = f"About {_pct(value, 2)} per round trip. "
+    reading = tr(f"About {_pct(value, 2)} per round trip. ",
+                 f"Sekitar {_pct(value, 2)} per transaksi pulang-pergi. ")
     reading += {
-        "excellent": "Very tight — a heavily traded name where costs barely matter.",
-        "good": "Tight. Trading costs are not a concern at ordinary size.",
-        "fair": "Noticeable. Frequent trading here gives back real money.",
-        "poor": "Wide. Any signal worth less than a couple of percent is not worth acting on.",
-        "bad": "Very wide. This is a thin listing and most short-term signals here are illusions.",
+        "excellent": tr("Very tight — a heavily traded name where costs barely matter.",
+                        "Sangat rapat — saham yang ramai diperdagangkan, biayanya nyaris tak "
+                        "berarti."),
+        "good": tr("Tight. Trading costs are not a concern at ordinary size.",
+                   "Rapat. Biaya transaksi bukan masalah pada ukuran biasa."),
+        "fair": tr("Noticeable. Frequent trading here gives back real money.",
+                   "Terasa. Sering bertransaksi di sini mengembalikan uang sungguhan."),
+        "poor": tr("Wide. Any signal worth less than a couple of percent is not worth acting on.",
+                   "Lebar. Sinyal apa pun yang nilainya kurang dari beberapa persen tidak "
+                   "layak ditindaklanjuti."),
+        "bad": tr("Very wide. This is a thin listing and most short-term signals here are illusions.",
+                  "Sangat lebar. Ini saham yang tipis dan sebagian besar sinyal jangka "
+                  "pendek di sini hanyalah ilusi."),
     }[band]
     if source:
-        reading += f" (Estimated from daily high-low data using {source}; there is no quote feed here.)"
+        reading += tr(f" (Estimated from daily high-low data using {source}; there is no quote feed here.)",
+                      f" (Diperkirakan dari data harian tertinggi-terendah dengan {source}; "
+                      "tidak ada umpan kuotasi di sini.)")
     return make(label, what, reading,
-                "It sets the minimum size a move has to clear before it is worth trading. "
-                "Compare it against the move-versus-spread reading beside it.",
+                tr("It sets the minimum size a move has to clear before it is worth trading. "
+                   "Compare it against the move-versus-spread reading beside it.",
+                   "Ia menetapkan ukuran minimum yang harus dilampaui sebuah pergerakan "
+                   "sebelum layak diperdagangkan. Bandingkan dengan pembacaan "
+                   "pergerakan-dibanding-spread di sebelahnya."),
                 band, "low", evidence="strong", value_text=_pct(value, 2))
 
 
 @metric("moveVsSpread")
 def _move_vs_spread(value, resolved=True, **_):
-    label = "Move versus trading cost"
-    what = ("How big the latest day's move was compared with what it costs to trade in and out. "
-            "Below about 2, the move is smaller than the toll.")
+    label = tr("Move versus trading cost", "Pergerakan dibandingkan biaya transaksi")
+    what = (tr("How big the latest day's move was compared with what it costs to trade in and out. "
+               "Below about 2, the move is smaller than the toll.",
+               "Seberapa besar pergerakan hari terakhir dibandingkan biaya untuk masuk "
+               "dan keluar. Di bawah sekitar 2, pergerakannya lebih kecil daripada "
+               "biayanya."))
     if not _known(value):
-        return unavailable(label, what, "needs a spread estimate and a price move")
+        return unavailable(label, what, tr("needs a spread estimate and a price move",
+                                           "perlu perkiraan spread dan pergerakan harga"))
     if not resolved:
         # The denominator is the estimator's noise floor rather than a spread,
         # so this ratio is a LOWER bound on the real one. Reporting it as though
         # it were measured turns "we cannot see the cost" into "the cost is big".
         return make(label, what,
-                    f"At least {_num(value, 1)}x the estimated cost, and in truth more — the "
-                    f"spread this divides by could not be resolved from daily data, so it is "
-                    f"an over-estimate of the real cost and this ratio is an under-estimate of "
-                    f"the real margin. On a liquid name the move clears the cost comfortably.",
-                    "No warning to draw from this. When the cost cannot be measured, the "
-                    "honest conclusion is that it is small, not that it is dangerous.",
+                    tr(f"At least {_num(value, 1)}x the estimated cost, and in truth more — the "
+                       f"spread this divides by could not be resolved from daily data, so it is "
+                       f"an over-estimate of the real cost and this ratio is an under-estimate of "
+                       f"the real margin. On a liquid name the move clears the cost comfortably.",
+                       f"Setidaknya {_num(value, 1)}x biaya yang diperkirakan, dan sebenarnya "
+                       "lebih — spread pembaginya tidak bisa ditentukan dari data harian, jadi "
+                       "ia melebih-lebihkan biaya sebenarnya dan rasio ini mengecilkan selisih "
+                       "sebenarnya. Pada saham yang likuid pergerakannya melampaui biaya dengan "
+                       "nyaman."),
+                    tr("No warning to draw from this. When the cost cannot be measured, the "
+                       "honest conclusion is that it is small, not that it is dangerous.",
+                       "Tidak ada peringatan yang bisa ditarik dari sini. Ketika biayanya tidak "
+                       "bisa diukur, kesimpulan yang jujur adalah biayanya kecil, bukan "
+                       "berbahaya."),
                     "good", "high", evidence="moderate", value_text=f"≥{_num(value, 1)}x")
     band = _ladder(value, ((1.0, "bad"), (2.0, "poor"), (5.0, "fair"), (None, "good")))
-    reading = f"{_num(value, 1)}x the estimated round-trip cost. "
+    reading = tr(f"{_num(value, 1)}x the estimated round-trip cost. ",
+                 f"{_num(value, 1)}x perkiraan biaya transaksi pulang-pergi. ")
     reading += {
-        "bad": "The move is smaller than the cost of trading it. Whatever the model found, it "
-               "is not something you could have captured.",
-        "poor": "Barely above the cost of trading. Treat any signal on this day as noise.",
-        "fair": "Comfortably larger than the trading cost.",
-        "good": "Far larger than the trading cost — a real move, not spread noise.",
+        "bad": tr("The move is smaller than the cost of trading it. Whatever the model found, it "
+                  "is not something you could have captured.",
+                  "Pergerakannya lebih kecil daripada biaya untuk memperdagangkannya. Apa "
+                  "pun yang ditemukan model, itu bukan sesuatu yang bisa Anda tangkap."),
+        "poor": tr("Barely above the cost of trading. Treat any signal on this day as noise.",
+                   "Nyaris di atas biaya transaksi. Perlakukan sinyal apa pun pada hari ini "
+                   "sebagai derau."),
+        "fair": tr("Comfortably larger than the trading cost.",
+                   "Dengan nyaman lebih besar daripada biaya transaksi."),
+        "good": tr("Far larger than the trading cost — a real move, not spread noise.",
+                   "Jauh lebih besar daripada biaya transaksi — pergerakan nyata, bukan "
+                   "derau spread."),
     }[band]
     return make(label, what, reading,
-                "This is the reality check on the anomaly detector. A dramatic-looking volume "
-                "spike on a thin stock often just means the order book is shallow.",
+                tr("This is the reality check on the anomaly detector. A dramatic-looking volume "
+                   "spike on a thin stock often just means the order book is shallow.",
+                   "Inilah pemeriksaan realitas bagi pendeteksi anomali. Lonjakan volume "
+                   "yang tampak dramatis pada saham yang tipis sering kali hanya berarti "
+                   "antrean ordernya dangkal."),
                 band, "high", evidence="strong", value_text=f"{_num(value, 1)}x")
 
 
 @metric("yangZhangVol")
 def _yang_zhang(value, **_):
-    label = "Volatility (gap-aware)"
-    what = ("How much this moves in a typical year, measured using each day's open, high, low "
-            "AND close rather than closes alone — so overnight gaps are not invisible to it.")
+    label = tr("Volatility (gap-aware)", "Volatilitas (memperhitungkan celah)")
+    what = (tr("How much this moves in a typical year, measured using each day's open, high, low "
+               "AND close rather than closes alone — so overnight gaps are not invisible to it.",
+               "Seberapa besar saham ini bergerak dalam setahun yang biasa, diukur "
+               "dengan harga pembukaan, tertinggi, terendah, DAN penutupan setiap hari, "
+               "bukan penutupan saja — sehingga celah semalam tidak luput darinya."))
     if not _known(value):
-        return unavailable(label, what, "needs about a month of full daily bars")
+        return unavailable(label, what, tr("needs about a month of full daily bars",
+                                           "perlu batang harian lengkap sekitar sebulan"))
     band = _ladder(value, ((0.15, "excellent"), (0.25, "good"), (0.35, "fair"),
                            (0.50, "poor"), (None, "bad")))
     return make(label, what,
-                f"About {_pct(value, 0)} a year. Using the full daily bar rather than just "
-                f"closes gives the same answer with far less estimation noise, which is why "
-                f"this figure is preferred to the simple one.",
-                "Position sizing, same as any volatility reading. " + CONTEXT_NOT_TRIGGER,
+                tr(f"About {_pct(value, 0)} a year. Using the full daily bar rather than just "
+                   f"closes gives the same answer with far less estimation noise, which is why "
+                   f"this figure is preferred to the simple one.",
+                   f"Sekitar {_pct(value, 0)} per tahun. Memakai batang harian lengkap, "
+                   "bukan hanya penutupan, memberi jawaban yang sama dengan derau estimasi "
+                   "yang jauh lebih kecil, sebabnya angka ini lebih dipilih daripada yang "
+                   "sederhana."),
+                tr("Position sizing, same as any volatility reading. ",
+                   "Untuk menentukan ukuran posisi, sama seperti pembacaan volatilitas mana "
+                   "pun. ") + _not_trigger(),
                 band, "low", evidence="strong", value_text=_pct(value, 0))
 
 
 def _money(amount: float, currency: Optional[str]) -> str:
     """A large sum written the way a person says it."""
     symbol = {"USD": "$", "IDR": "Rp", "EUR": "\u20ac", "GBP": "\u00a3"}.get(currency or "", "")
-    for cutoff, suffix in ((1e12, "tn"), (1e9, "bn"), (1e6, "m"), (1e3, "k")):
+    for cutoff, suffix in ((1e12, tr("tn", " triliun")), (1e9, tr("bn", " miliar")),
+                           (1e6, tr("m", " juta")), (1e3, tr("k", " ribu"))):
         if abs(amount) >= cutoff:
             return f"{symbol}{amount / cutoff:,.1f}{suffix}"
     return f"{symbol}{amount:,.0f}"
@@ -1653,11 +2396,15 @@ def _money(amount: float, currency: Optional[str]) -> str:
 
 @metric("amihud")
 def _amihud(value, currency=None, **_):
-    label = "Depth (what it takes to move it)"
-    what = ("How much money has to trade before the price actually moves. It is the cost of "
-            "SIZE, as opposed to the spread, which is the cost of being in a hurry.")
+    label = tr("Depth (what it takes to move it)",
+               "Kedalaman (apa yang dibutuhkan untuk menggerakkannya)")
+    what = (tr("How much money has to trade before the price actually moves. It is the cost of "
+               "SIZE, as opposed to the spread, which is the cost of being in a hurry.",
+               "Seberapa banyak uang yang harus diperdagangkan sebelum harga "
+               "benar-benar bergerak. Ini biaya UKURAN, berbeda dengan spread, yang "
+               "merupakan biaya karena terburu-buru."))
     if not _known(value) or value <= 0:
-        return unavailable(label, what, "needs volume data")
+        return unavailable(label, what, tr("needs volume data", "perlu data volume"))
 
     # EXPRESSED AS MONEY, NOT AS A RATIO. The underlying figure is a fractional
     # price move per million traded, which on a mega-cap is around 8e-7 — and
@@ -1665,117 +2412,178 @@ def _amihud(value, currency=None, **_):
     # real quantity rendered into nothing. Inverting it states the same fact in
     # a unit a person can picture: what it costs to move the price one percent.
     to_move_one_percent = 0.01 / value * 1e6
-    reading = (f"It takes roughly {_money(to_move_one_percent, currency)} of trading to move "
-               f"this price by 1%, averaged over the last month. ")
+    reading = (tr(f"It takes roughly {_money(to_move_one_percent, currency)} of trading to move "
+                  f"this price by 1%, averaged over the last month. ",
+                  f"Dibutuhkan transaksi sekitar {_money(to_move_one_percent, currency)} "
+                  "untuk menggerakkan harga ini sebesar 1%, dirata-ratakan selama sebulan "
+                  "terakhir. "))
     if value > 0.05:
         band = "poor"
-        reading += ("That is very little depth — a meaningful order would move the price "
-                    "against itself.")
+        reading += (tr("That is very little depth — a meaningful order would move the price "
+                       "against itself.",
+                       "Itu kedalaman yang sangat tipis — order yang berarti akan menggerakkan "
+                       "harga melawan dirinya sendiri."))
     elif value > 0.005:
         band = "fair"
-        reading += "Moderate depth. Large orders would be felt."
+        reading += tr("Moderate depth. Large orders would be felt.",
+                      "Kedalaman sedang. Order besar akan terasa.")
     else:
         band = "good"
-        reading += "Deep — this absorbs size without much complaint."
-    reading += (" Currencies are not comparable here, so it is most useful ranked against "
-                "other names in the same market.")
+        reading += tr("Deep — this absorbs size without much complaint.",
+                      "Dalam — saham ini menyerap ukuran besar tanpa banyak gejolak.")
+    reading += (tr(" Currencies are not comparable here, so it is most useful ranked against "
+                   "other names in the same market.",
+                   " Mata uang tidak bisa dibandingkan di sini, jadi angka ini paling "
+                   "berguna jika diperingkatkan terhadap saham lain di pasar yang sama."))
     return make(label, what, reading,
-                "It tells you what size this can absorb, not whether to own it. "
-                + CONTEXT_NOT_TRIGGER,
+                tr("It tells you what size this can absorb, not whether to own it. ",
+                   "Ini memberi tahu ukuran yang bisa diserapnya, bukan apakah layak "
+                   "dimiliki. ")
+                + _not_trigger(),
                 band, "low", evidence="moderate",
                 value_text=_money(to_move_one_percent, currency))
 
 
 @metric("anomalyRate")
 def _anomaly_rate(value, totalDays=None, **_):
-    label = "How often this flags"
-    what = ("The share of all days in the history that the detector marked as unusual. It is "
-            "the baseline any fresh flag has to beat.")
+    label = tr("How often this flags", "Seberapa sering ini ditandai")
+    what = (tr("The share of all days in the history that the detector marked as unusual. It is "
+               "the baseline any fresh flag has to beat.",
+               "Porsi semua hari dalam riwayat yang ditandai detektor sebagai tidak "
+               "biasa. Inilah tolok ukur yang harus dikalahkan setiap tanda baru."))
     if not _known(value):
-        return unavailable(label, what, "needs a fitted model")
-    reading = (f"{_pct(value)} of days"
-               + (f" out of {int(totalDays)}" if _known(totalDays) else "")
-               + " were flagged. ")
+        return unavailable(label, what, tr("needs a fitted model",
+                                           "perlu model yang sudah dicocokkan"))
+    reading = (tr(f"{_pct(value)} of days", f"{_pct(value)} hari")
+               + (tr(f" out of {int(totalDays)}", f" dari total {int(totalDays)}") if _known(totalDays) else "")
+               + tr(" were flagged. ", " ditandai. "))
     if value > 0.08:
         band = "caution"
-        reading += ("This name flags often, so a handful of recent flags is not news — it is "
-                    "the normal rate.")
+        reading += (tr("This name flags often, so a handful of recent flags is not news — it is "
+                       "the normal rate.",
+                       "Saham ini sering ditandai, jadi beberapa tanda terbaru bukan berita — "
+                       "itu laju normalnya."))
     else:
         band = "context"
-        reading += ("This name is normally quiet, so recent flags carry more weight than they "
-                    "would on a chronically noisy stock.")
+        reading += (tr("This name is normally quiet, so recent flags carry more weight than they "
+                       "would on a chronically noisy stock.",
+                       "Saham ini biasanya tenang, jadi tanda terbaru lebih berbobot daripada "
+                       "pada saham yang selalu berisik."))
     return make(label, what, reading,
-                "This is the number each recent count is tested against, which is why a quiet "
-                "stock needs less activity to qualify as significant than a noisy one.",
+                tr("This is the number each recent count is tested against, which is why a quiet "
+                   "stock needs less activity to qualify as significant than a noisy one.",
+                   "Inilah angka yang menjadi pembanding setiap hitungan terbaru, sebabnya "
+                   "saham yang tenang butuh lebih sedikit aktivitas untuk dianggap "
+                   "signifikan dibandingkan saham yang berisik."),
                 band, "none", evidence="moderate", value_text=_pct(value))
 
 
 @metric("qValue")
 def _q_value(value, **_):
     label = "q-value"
-    what = ("The chance this particular hit is a false alarm, AFTER accounting for the fact "
-            "that scanning many names produces hits by luck alone.")
+    what = (tr("The chance this particular hit is a false alarm, AFTER accounting for the fact "
+               "that scanning many names produces hits by luck alone.",
+               "Peluang bahwa temuan ini adalah alarm palsu, SETELAH memperhitungkan "
+               "bahwa memindai banyak saham akan menghasilkan temuan semata karena "
+               "kebetulan."))
     if not _known(value):
-        return unavailable(label, what, "not enough history to test against")
+        return unavailable(label, what, tr("not enough history to test against",
+                                           "riwayatnya tidak cukup untuk dijadikan pembanding"))
     if value <= 0.05:
-        band, verdict = "good", (f"{_num(value, 3)} — survives the multiple-testing correction. "
-                                 f"Roughly a 1-in-20 chance or better that this is noise.")
+        band, verdict = "good", (tr(f"{_num(value, 3)} — survives the multiple-testing correction. "
+                                    f"Roughly a 1-in-20 chance or better that this is noise.",
+                                    f"{_num(value, 3)} — lolos koreksi uji berganda. Peluang kira-kira 1 "
+                                    "banding 20 atau lebih baik bahwa ini derau."))
     elif value <= 0.2:
-        band, verdict = "caution", (f"{_num(value, 3)} — suggestive but not significant once the "
-                                    f"size of the scan is accounted for.")
+        band, verdict = "caution", (tr(f"{_num(value, 3)} — suggestive but not significant once the "
+                                       f"size of the scan is accounted for.",
+                                       f"{_num(value, 3)} — memberi petunjuk tetapi tidak signifikan setelah "
+                                       "ukuran pemindaian diperhitungkan."))
     else:
-        band, verdict = "poor", (f"{_num(value, 3)} — not distinguishable from what the scan "
-                                 f"would throw up by chance.")
+        band, verdict = "poor", (tr(f"{_num(value, 3)} — not distinguishable from what the scan "
+                                    f"would throw up by chance.",
+                                    f"{_num(value, 3)} — tidak bisa dibedakan dari apa yang akan muncul dari "
+                                    "pemindaian karena kebetulan."))
     return make(label, what, verdict,
-                "Scan enough names and something always looks interesting. This column is what "
-                "stops that from being mistaken for a discovery.",
+                tr("Scan enough names and something always looks interesting. This column is what "
+                   "stops that from being mistaken for a discovery.",
+                   "Pindai cukup banyak saham dan selalu ada yang tampak menarik. Kolom "
+                   "inilah yang mencegahnya dikira penemuan."),
                 band, "low", evidence="strong", value_text=_num(value, 3))
 
 
 @metric("cusumEpisode")
 def _cusum(value, direction=None, days=None, avgRvol=None, ongoing=False, **_):
-    label = "Sustained flow regime (CUSUM)"
-    what = ("A detector for slow, patient buying or selling. A fund building a position spreads "
-            "it over weeks precisely so no single day looks unusual — this adds up the small "
-            "daily deviations until the total is too big to be chance.")
+    label = tr("Sustained flow regime (CUSUM)", "Rezim arus berkelanjutan (CUSUM)")
+    what = (tr("A detector for slow, patient buying or selling. A fund building a position spreads "
+               "it over weeks precisely so no single day looks unusual — this adds up the small "
+               "daily deviations until the total is too big to be chance.",
+               "Detektor untuk pembelian atau penjualan yang lambat dan sabar. Dana "
+               "yang membangun posisi menyebarnya selama berminggu-minggu justru agar "
+               "tidak ada satu hari pun yang tampak tidak biasa — alat ini menjumlahkan "
+               "penyimpangan harian yang kecil sampai totalnya terlalu besar untuk "
+               "kebetulan."))
     if not _known(days):
-        return unavailable(label, what, "no sustained regime detected in this window")
+        return unavailable(label, what, tr("no sustained regime detected in this window",
+                                           "tidak ada rezim berkelanjutan yang terdeteksi dalam periode ini"))
     # "A Accumulation" — the article has to agree with the word after it.
     word = (direction or "flow").lower()
     article = "An" if word[:1] in "aeiou" else "A"
-    reading = (f"{'An ongoing' if ongoing else article} {word} run lasting "
-               f"{int(days)} days"
-               + (f", at an average of {_num(avgRvol)}x normal volume" if _known(avgRvol) else "")
-               + ". " + ("" if ongoing else "It has since ended. "))
+    reading = (tr(f"{'An ongoing' if ongoing else article} {word} run lasting "
+                  f"{int(days)} days",
+                  "Rangkaian "
+                  f"{'akumulasi' if word == 'accumulation' else 'distribusi' if word == 'distribution' else 'arus'}"
+                  f"{' yang masih berlangsung' if ongoing else ''} selama {int(days)} hari")
+               + (tr(f", at an average of {_num(avgRvol)}x normal volume",
+                     f", dengan rata-rata {_num(avgRvol)}x volume normal") if _known(avgRvol) else "")
+               + ". " + ("" if ongoing else tr("It has since ended. ",
+                                               "Rangkaian itu sudah berakhir. ")))
     if _known(avgRvol) and avgRvol < 1.3:
-        reading += ("Note how ordinary that volume is — this is exactly the pattern a "
-                    "day-by-day detector cannot see, and the reason this test exists.")
+        reading += (tr("Note how ordinary that volume is — this is exactly the pattern a "
+                       "day-by-day detector cannot see, and the reason this test exists.",
+                       "Perhatikan betapa biasa volume itu — inilah pola yang tidak bisa "
+                       "dilihat detektor harian, dan alasan uji ini ada."))
     band = "good" if direction == "Accumulation" else "poor" if direction == "Distribution" else "context"
     return make(label, what, reading,
-                "It says the pattern is statistically unusual, not who caused it. Index "
-                "rebalances, buybacks and fund flows all leave this footprint.",
+                tr("It says the pattern is statistically unusual, not who caused it. Index "
+                   "rebalances, buybacks and fund flows all leave this footprint.",
+                   "Ini berkata polanya tidak biasa secara statistik, bukan siapa "
+                   "penyebabnya. Penyeimbangan ulang indeks, pembelian kembali saham, dan "
+                   "arus dana semuanya meninggalkan jejak ini."),
                 band, "high", evidence="moderate",
-                value_text=f"{int(days)} d" if _known(days) else None)
+                value_text=tr(f"{int(days)} d", f"{int(days)} hr") if _known(days) else None)
 
 
 @metric("flowBias")
 def _flow_bias(value, days=None, count=None, **_):
-    label = f"Flow bias{f' · last {days} days' if days else ''}"
-    what = ("Whether the unusual days recently found looked more like buying or more like "
-            "selling, decided by a four-way vote of volume-based measures.")
+    label = tr(f"Flow bias{f' · last {days} days' if days else ''}",
+               f"Kecenderungan arus{f' · {days} hari terakhir' if days else ''}")
+    what = (tr("Whether the unusual days recently found looked more like buying or more like "
+               "selling, decided by a four-way vote of volume-based measures.",
+               "Apakah hari-hari tidak biasa yang ditemukan belakangan ini lebih mirip "
+               "pembelian atau penjualan, diputuskan lewat pemungutan suara empat "
+               "ukuran berbasis volume."))
     if not value:
-        return unavailable(label, what, "no unusual days in this window")
+        return unavailable(label, what, tr("no unusual days in this window",
+                                           "tidak ada hari yang tidak biasa dalam periode ini"))
     if value == "Accumulation":
-        band, verdict = "good", "Recent unusual activity has leaned toward buying."
+        band, verdict = "good", tr("Recent unusual activity has leaned toward buying.",
+                                   "Aktivitas tidak biasa belakangan ini condong ke pembelian.")
     elif value == "Distribution":
-        band, verdict = "poor", "Recent unusual activity has leaned toward selling."
+        band, verdict = "poor", tr("Recent unusual activity has leaned toward selling.",
+                                   "Aktivitas tidak biasa belakangan ini condong ke penjualan.")
     else:
-        band, verdict = "context", "Recent unusual activity has been mixed, with no clear side."
+        band, verdict = "context", tr("Recent unusual activity has been mixed, with no clear side.",
+                                      "Aktivitas tidak biasa belakangan ini bercampur, tanpa sisi yang jelas.")
     if _known(count):
-        verdict += f" Based on {int(count)} flagged day{'s' if count != 1 else ''}."
+        verdict += tr(f" Based on {int(count)} flagged day{'s' if count != 1 else ''}.",
+                      f" Berdasarkan {int(count)} hari yang ditandai.")
     return make(label, what, verdict,
-                "It cannot tell you WHO traded. Index rebalances, dividend dates, options "
-                "expiry and earnings all produce the same footprint as an institution.",
+                tr("It cannot tell you WHO traded. Index rebalances, dividend dates, options "
+                   "expiry and earnings all produce the same footprint as an institution.",
+                   "Ini tidak bisa memberi tahu SIAPA yang bertransaksi. Penyeimbangan "
+                   "ulang indeks, tanggal dividen, jatuh tempo opsi, dan laporan laba "
+                   "semuanya menghasilkan jejak yang sama dengan institusi."),
                 band, "high", evidence="weak", value_text=str(value))
 
 
@@ -1784,11 +2592,14 @@ def _flow_bias(value, days=None, count=None, **_):
 # ============================================================================ #
 @metric("upside")
 def _upside(value, engine=None, price_label=None, fair_label=None, **_):
-    label = "Gap to fair value"
-    what = ("How far today's share price sits from what the model thinks the business is "
-            "worth. Positive means the model says it is cheap.")
+    label = tr("Gap to fair value", "Selisih ke nilai wajar")
+    what = (tr("How far today's share price sits from what the model thinks the business is "
+               "worth. Positive means the model says it is cheap.",
+               "Seberapa jauh harga saham hari ini dari nilai bisnis menurut model. "
+               "Positif berarti model menganggapnya murah."))
     if not _known(value):
-        return unavailable(label, what, "the model could not produce a value")
+        return unavailable(label, what, tr("the model could not produce a value",
+                                           "model tidak bisa menghasilkan nilai"))
     band = _ladder(value, ((-0.30, "bad"), (-0.10, "poor"), (0.10, "fair"),
                            (0.30, "good"), (None, "excellent")))
     # SAY WHAT THE NUMBER IS A MOVE IN, rather than calling it a discount or a
@@ -1797,22 +2608,34 @@ def _upside(value, engine=None, price_label=None, fair_label=None, **_):
     # beside a $315 price was called "a 64% premium" when the premium the market
     # is paying over that estimate is 180%. Phrased as the move required, the
     # same 64% is exactly right — 315 less 64% is 112.
-    reading = (f"The model's middle estimate is {fair_label or 'its fair value'} against a "
-               f"market price of {price_label or 'today\'s price'} — "
-               + (f"the price would have to rise {_pct(abs(value), 0)} to meet it."
+    reading = (tr(f"The model's middle estimate is {fair_label or 'its fair value'} against a "
+                  f"market price of {price_label or 'today\'s price'} — ",
+                  f"Estimasi tengah model adalah {fair_label or 'nilai wajarnya'} "
+                  f"dibandingkan harga pasar {price_label or 'harga hari ini'} — ")
+               + (tr(f"the price would have to rise {_pct(abs(value), 0)} to meet it.",
+                     f"harga harus naik {_pct(abs(value), 0)} untuk mencapainya.")
                   if value >= 0 else
-                  f"the price would have to fall {_pct(abs(value), 0)} to meet it.") + " ")
+                  tr(f"the price would have to fall {_pct(abs(value), 0)} to meet it.",
+                     f"harga harus turun {_pct(abs(value), 0)} untuk mencapainya.")) + " ")
     if abs(value) > 0.5:
-        reading += ("A gap that large is more often a sign the assumptions are wrong than a "
-                    "genuine mispricing. Check the growth rate and the discount rate before "
-                    "believing it.")
+        reading += (tr("A gap that large is more often a sign the assumptions are wrong than a "
+                       "genuine mispricing. Check the growth rate and the discount rate before "
+                       "believing it.",
+                       "Selisih sebesar itu lebih sering menandakan asumsinya keliru daripada "
+                       "salah harga yang sungguhan. Periksa tingkat pertumbuhan dan tingkat "
+                       "diskonto sebelum mempercayainya."))
     else:
-        reading += ("Gaps of this size are ordinary and well inside the error bars of any "
-                    "discounted-cash-flow exercise.")
+        reading += (tr("Gaps of this size are ordinary and well inside the error bars of any "
+                       "discounted-cash-flow exercise.",
+                       "Selisih sebesar ini biasa saja dan masih jauh di dalam batas galat "
+                       "setiap perhitungan arus kas terdiskonto."))
     return make(label, what, reading,
-                "Treat this as a range, not a target. Move the growth assumption two points "
-                "and watch the answer move further than the gap you are looking at — which is "
-                "why every input on this panel is editable.",
+                tr("Treat this as a range, not a target. Move the growth assumption two points "
+                   "and watch the answer move further than the gap you are looking at — which is "
+                   "why every input on this panel is editable.",
+                   "Perlakukan ini sebagai rentang, bukan target. Geser asumsi pertumbuhan "
+                   "dua poin dan lihat jawabannya bergeser lebih jauh daripada selisih yang "
+                   "sedang Anda lihat — sebabnya setiap masukan di panel ini bisa diubah."),
                 # Whole percents deliberately: a fair-value gap quoted to one
                 # decimal claims a precision the model does not have.
                 band, "high", evidence="weak", value_text=_signed_pct(value, 0))
@@ -1820,80 +2643,128 @@ def _upside(value, engine=None, price_label=None, fair_label=None, **_):
 
 @metric("probUndervalued")
 def _prob_undervalued(value, iterations=None, **_):
-    label = "Share of runs that came out cheap"
-    what = ("The model was run thousands of times with slightly different assumptions each "
-            "time. This is the fraction of those runs where the business came out worth more "
-            "than its market price.")
+    label = tr("Share of runs that came out cheap", "Porsi simulasi yang hasilnya murah")
+    what = (tr("The model was run thousands of times with slightly different assumptions each "
+               "time. This is the fraction of those runs where the business came out worth more "
+               "than its market price.",
+               "Model dijalankan ribuan kali dengan asumsi yang sedikit berbeda setiap "
+               "kali. Ini adalah porsi simulasi yang menilai bisnisnya lebih tinggi "
+               "daripada harga pasarnya."))
     if not _known(value):
-        return unavailable(label, what, "the simulation did not run")
+        return unavailable(label, what, tr("the simulation did not run",
+                                           "simulasinya tidak berjalan"))
     band = _ladder(value, ((0.20, "poor"), (0.45, "fair"), (0.75, "good"), (None, "excellent")))
-    reading = (f"{_pct(value, 0)} of "
+    reading = (tr(f"{_pct(value, 0)} of ", f"{_pct(value, 0)} dari ")
                + (f"{int(iterations):,} " if _known(iterations) else "")
-               + "simulated runs valued it above the market price. ")
+               + tr("simulated runs valued it above the market price. ",
+                    "simulasi menilainya di atas harga pasar. "))
     if value > 0.9:
-        reading += "Almost every version of the assumptions says cheap."
+        reading += tr("Almost every version of the assumptions says cheap.",
+                      "Hampir setiap versi asumsi berkata murah.")
     elif value < 0.1:
-        reading += "Almost every version of the assumptions says expensive."
+        reading += tr("Almost every version of the assumptions says expensive.",
+                      "Hampir setiap versi asumsi berkata mahal.")
     else:
-        reading += "The assumptions genuinely disagree with each other about this one."
-    reading += (" This is NOT a probability that the price will rise. It is a measure of how "
-                "sensitive the model's answer is to its own inputs.")
+        reading += tr("The assumptions genuinely disagree with each other about this one.",
+                      "Asumsi-asumsinya benar-benar saling berselisih tentang saham ini.")
+    reading += (tr(" This is NOT a probability that the price will rise. It is a measure of how "
+                   "sensitive the model's answer is to its own inputs.",
+                   " Ini BUKAN peluang bahwa harganya akan naik. Ini ukuran seberapa peka "
+                   "jawaban model terhadap masukannya sendiri."))
     return make(label, what, reading,
-                "Read it as confidence in the model's own answer, not confidence about the "
-                "future. A tight result on wrong assumptions is still wrong.",
+                tr("Read it as confidence in the model's own answer, not confidence about the "
+                   "future. A tight result on wrong assumptions is still wrong.",
+                   "Bacalah sebagai keyakinan atas jawaban model sendiri, bukan keyakinan "
+                   "tentang masa depan. Hasil yang rapat dari asumsi yang keliru tetaplah "
+                   "keliru."),
                 band, "high", evidence="weak", value_text=_pct(value, 0))
 
 
 @metric("impliedGrowth")
 def _implied_growth(value, assumedGrowth=None, engine=None, **_):
-    label = "What the price is assuming"
-    what = ("The growth rate the market must be expecting for today's share price "
-            "to be correct, working the model backwards. Instead of asking what the "
-            "business is worth, it asks what would have to be true for the current "
-            "price to be right.")
+    label = tr("What the price is assuming", "Apa yang diasumsikan harga")
+    what = (tr("The growth rate the market must be expecting for today's share price "
+               "to be correct, working the model backwards. Instead of asking what the "
+               "business is worth, it asks what would have to be true for the current "
+               "price to be right.",
+               "Tingkat pertumbuhan yang harus diharapkan pasar agar harga saham hari "
+               "ini benar, dengan menjalankan model secara terbalik. Alih-alih bertanya "
+               "berapa nilai bisnisnya, ia bertanya apa yang harus benar agar harga "
+               "saat ini tepat."))
     if not _known(value):
         return unavailable(label, what,
-                           "today's price cannot be reproduced by this model at any "
-                           "growth rate between -60% and +60% a year")
+                           tr("today's price cannot be reproduced by this model at any "
+                              "growth rate between -60% and +60% a year",
+                              "harga hari ini tidak bisa direproduksi model ini pada tingkat "
+                              "pertumbuhan berapa pun antara -60% dan +60% per tahun"))
 
     band = _ladder(value, ((0.03, "good"), (0.10, "fair"), (0.20, "caution"), (None, "bad")))
     gap = ""
     if _known(assumedGrowth):
         difference = value - assumedGrowth
         if abs(difference) < 0.005:
-            gap = (f" That is almost exactly the {_pct(assumedGrowth)} this model was run "
-                   f"with, so the model and the market agree.")
+            gap = (tr(f" That is almost exactly the {_pct(assumedGrowth)} this model was run "
+                      f"with, so the model and the market agree.",
+                      f" Itu hampir persis {_pct(assumedGrowth)} yang dipakai untuk menjalankan "
+                      "model ini, jadi model dan pasar sepakat."))
         elif difference > 0:
-            gap = (f" The model was run at {_pct(assumedGrowth)}, so the market is pricing "
-                   f"in {_pct(difference)} a year MORE growth than you assumed.")
+            gap = (tr(f" The model was run at {_pct(assumedGrowth)}, so the market is pricing "
+                      f"in {_pct(difference)} a year MORE growth than you assumed.",
+                      f" Model dijalankan dengan {_pct(assumedGrowth)}, jadi pasar "
+                      f"memperhitungkan pertumbuhan {_pct(difference)} per tahun LEBIH TINGGI "
+                      "daripada asumsi Anda."))
         else:
-            gap = (f" The model was run at {_pct(assumedGrowth)}, so the market is pricing "
-                   f"in {_pct(abs(difference))} a year LESS growth than you assumed.")
+            gap = (tr(f" The model was run at {_pct(assumedGrowth)}, so the market is pricing "
+                      f"in {_pct(abs(difference))} a year LESS growth than you assumed.",
+                      f" Model dijalankan dengan {_pct(assumedGrowth)}, jadi pasar "
+                      f"memperhitungkan pertumbuhan {_pct(abs(difference))} per tahun LEBIH "
+                      "RENDAH daripada asumsi Anda."))
 
     reading = {
-        "good": (f"The price implies about {_pct(value)} a year for the next five years — "
-                 f"a modest bar for the business to clear."),
-        "fair": (f"The price implies about {_pct(value)} a year for the next five years, "
-                 f"which is a real but ordinary expectation."),
-        "caution": (f"The price implies about {_pct(value)} a year for five years. That is a "
-                    f"demanding assumption; it needs the business to keep compounding hard."),
-        "bad": (f"The price implies about {_pct(value)} a year for five years, which very few "
-                f"companies sustain. The price is carrying an expectation the cash flows would "
-                f"have to work hard to meet."),
+        "good": (tr(f"The price implies about {_pct(value)} a year for the next five years — "
+                    f"a modest bar for the business to clear.",
+                    f"Harga ini menyiratkan sekitar {_pct(value)} per tahun selama lima tahun "
+                    "ke depan — rintangan yang ringan untuk dilampaui bisnisnya.")),
+        "fair": (tr(f"The price implies about {_pct(value)} a year for the next five years, "
+                    f"which is a real but ordinary expectation.",
+                    f"Harga ini menyiratkan sekitar {_pct(value)} per tahun selama lima tahun "
+                    "ke depan, harapan yang nyata tetapi biasa.")),
+        "caution": (tr(f"The price implies about {_pct(value)} a year for five years. That is a "
+                       f"demanding assumption; it needs the business to keep compounding hard.",
+                       f"Harga ini menyiratkan sekitar {_pct(value)} per tahun selama lima "
+                       "tahun. Itu asumsi yang menuntut; bisnisnya harus terus bertumbuh dengan "
+                       "kuat.")),
+        "bad": (tr(f"The price implies about {_pct(value)} a year for five years, which very few "
+                   f"companies sustain. The price is carrying an expectation the cash flows would "
+                   f"have to work hard to meet.",
+                   f"Harga ini menyiratkan sekitar {_pct(value)} per tahun selama lima "
+                   "tahun, yang sanggup dipertahankan sangat sedikit perusahaan. Harga ini "
+                   "memikul harapan yang harus dikejar keras oleh arus kasnya.")),
     }[band]
 
     return make(
         label=label, what=what, reading=reading + gap,
-        action=("The number to argue with. Ask whether you believe THIS company can "
-                "grow at that rate for five years — you know things about the business the "
-                "model does not. If you think it can do better, the price is cheap on this "
-                "model; if worse, expensive. That judgement is yours, and it is a far more "
-                "answerable question than whether a fair-value estimate is right. "
-                "It is NOT independent of the other assumptions, though: it is the growth "
-                "implied GIVEN this discount rate, this terminal growth and this starting "
-                "cash flow. Lower the discount rate and the implied growth falls with it. "
-                "Change one on the panel and watch this move before you treat it as a fact "
-                "about the company."),
+        action=(tr("The number to argue with. Ask whether you believe THIS company can "
+                   "grow at that rate for five years — you know things about the business the "
+                   "model does not. If you think it can do better, the price is cheap on this "
+                   "model; if worse, expensive. That judgement is yours, and it is a far more "
+                   "answerable question than whether a fair-value estimate is right. "
+                   "It is NOT independent of the other assumptions, though: it is the growth "
+                   "implied GIVEN this discount rate, this terminal growth and this starting "
+                   "cash flow. Lower the discount rate and the implied growth falls with it. "
+                   "Change one on the panel and watch this move before you treat it as a fact "
+                   "about the company.",
+                   "Inilah angka yang perlu diperdebatkan. Tanyakan apakah Anda percaya "
+                   "perusahaan INI bisa tumbuh secepat itu selama lima tahun — Anda tahu "
+                   "hal-hal tentang bisnisnya yang tidak diketahui model. Jika menurut Anda "
+                   "ia bisa lebih baik, harganya murah menurut model ini; jika lebih buruk, "
+                   "mahal. Penilaian itu milik Anda, dan pertanyaan itu jauh lebih mudah "
+                   "dijawab daripada apakah sebuah estimasi nilai wajar itu benar. Namun "
+                   "angka ini TIDAK lepas dari asumsi lainnya: ini pertumbuhan yang "
+                   "tersirat DENGAN tingkat diskonto ini, pertumbuhan terminal ini, dan "
+                   "arus kas awal ini. Turunkan tingkat diskonto dan pertumbuhan "
+                   "tersiratnya ikut turun. Ubah salah satunya di panel dan lihat angka ini "
+                   "bergerak sebelum Anda memperlakukannya sebagai fakta tentang perusahaan.")),
         band=band, good_direction="low", evidence="moderate",
         value_text=_pct(value),
     )
@@ -1901,75 +2772,116 @@ def _implied_growth(value, assumedGrowth=None, engine=None, **_):
 
 @metric("terminalShare")
 def _terminal_share(value, **_):
-    label = "Share of value that is guesswork"
-    what = ("A discounted-cash-flow model forecasts five years explicitly and then assumes the "
-            "business carries on forever at a fixed growth rate. This is how much of the answer "
-            "comes from that forever assumption rather than the forecast.")
+    label = tr("Share of value that is guesswork", "Porsi nilai yang berupa tebakan")
+    what = (tr("A discounted-cash-flow model forecasts five years explicitly and then assumes the "
+               "business carries on forever at a fixed growth rate. This is how much of the answer "
+               "comes from that forever assumption rather than the forecast.",
+               "Model arus kas terdiskonto meramalkan lima tahun secara eksplisit lalu "
+               "mengasumsikan bisnisnya berjalan selamanya dengan tingkat pertumbuhan "
+               "tetap. Inilah seberapa besar jawabannya berasal dari asumsi selamanya "
+               "itu, bukan dari ramalannya."))
     if not _known(value):
-        return unavailable(label, what, "no terminal value was computed")
+        return unavailable(label, what, tr("no terminal value was computed",
+                                           "tidak ada nilai terminal yang dihitung"))
     band = _ladder(value, ((0.50, "good"), (0.70, "fair"), (0.85, "poor"), (None, "bad")))
-    reading = f"{_pct(value, 0)} of the valuation comes from the perpetuity assumption. "
+    reading = tr(f"{_pct(value, 0)} of the valuation comes from the perpetuity assumption. ",
+                 f"{_pct(value, 0)} dari valuasi berasal dari asumsi perpetuitas. ")
     reading += {
-        "good": "Under half — unusually well grounded for a cash-flow model.",
-        "fair": "Typical for a DCF, and still means most of the answer rests on a guess.",
-        "poor": "High. The five-year forecast is doing very little of the work here.",
-        "bad": "Almost all of the answer is the forever assumption. The projection table below "
-               "is close to decorative.",
+        "good": tr("Under half — unusually well grounded for a cash-flow model.",
+                   "Di bawah separuh — luar biasa berpijak untuk model arus kas."),
+        "fair": tr("Typical for a DCF, and still means most of the answer rests on a guess.",
+                   "Lazim untuk DCF, dan tetap berarti sebagian besar jawabannya bertumpu "
+                   "pada tebakan."),
+        "poor": tr("High. The five-year forecast is doing very little of the work here.",
+                   "Tinggi. Ramalan lima tahun hanya mengerjakan sangat sedikit di sini."),
+        "bad": tr("Almost all of the answer is the forever assumption. The projection table below "
+                  "is close to decorative.",
+                  "Hampir seluruh jawabannya adalah asumsi selamanya. Tabel proyeksi di "
+                  "bawah nyaris hanya hiasan."),
     }[band]
     return make(label, what, reading,
-                "The higher this is, the more the answer is a statement about the terminal "
-                "growth rate you chose. Change that input and see how far the value moves.",
+                tr("The higher this is, the more the answer is a statement about the terminal "
+                   "growth rate you chose. Change that input and see how far the value moves.",
+                   "Makin tinggi angka ini, makin jawabannya merupakan pernyataan tentang "
+                   "pertumbuhan terminal yang Anda pilih. Ubah masukan itu dan lihat "
+                   "seberapa jauh nilainya bergeser."),
                 band, "low", evidence="strong", value_text=_pct(value, 0))
 
 
 @metric("discountRate")
 def _discount_rate(value, rate_name=None, risk_free=None, beta=None, **_):
-    label = rate_name or "Discount rate"
-    what = ("The yearly return an investor should demand for taking this much risk. Future "
-            "cash is worth less than cash today, and this is the rate used to shrink it.")
+    label = rate_name or tr("Discount rate", "Tingkat diskonto")
+    what = (tr("The yearly return an investor should demand for taking this much risk. Future "
+               "cash is worth less than cash today, and this is the rate used to shrink it.",
+               "Imbal hasil tahunan yang sepatutnya dituntut investor untuk menanggung "
+               "risiko sebesar ini. Uang di masa depan bernilai lebih rendah daripada "
+               "uang hari ini, dan inilah tingkat yang dipakai untuk menyusutkannya."))
     if not _known(value):
-        return unavailable(label, what, "could not be estimated")
-    reading = f"{_pct(value, 1)} a year. "
+        return unavailable(label, what, tr("could not be estimated", "tidak bisa diperkirakan"))
+    reading = tr(f"{_pct(value, 1)} a year. ", f"{_pct(value, 1)} per tahun. ")
     if _known(risk_free) and _known(beta):
-        reading += (f"Built from a {_pct(risk_free, 1)} risk-free rate plus this company's "
-                    f"share of market risk (beta {_num(beta)}). ")
+        reading += (tr(f"Built from a {_pct(risk_free, 1)} risk-free rate plus this company's "
+                       f"share of market risk (beta {_num(beta)}). ",
+                       f"Dibangun dari suku bunga bebas risiko {_pct(risk_free, 1)} ditambah "
+                       f"porsi risiko pasar perusahaan ini (beta {_num(beta)}). "))
     if value > 0.15:
         band = "caution"
-        reading += ("That is a high bar. A high discount rate compresses the valuation hard, so "
-                    "a low answer here may be the rate speaking rather than the business.")
+        reading += (tr("That is a high bar. A high discount rate compresses the valuation hard, so "
+                       "a low answer here may be the rate speaking rather than the business.",
+                       "Itu rintangan yang tinggi. Tingkat diskonto yang tinggi menekan valuasi "
+                       "dengan keras, jadi jawaban rendah di sini mungkin suara tingkat "
+                       "diskontonya, bukan bisnisnya."))
     elif value < 0.06:
         band = "caution"
-        reading += ("That is a low bar for equity risk, and a low rate inflates the valuation. "
-                    "Check it against what you would actually demand to own this.")
+        reading += (tr("That is a low bar for equity risk, and a low rate inflates the valuation. "
+                       "Check it against what you would actually demand to own this.",
+                       "Itu rintangan yang rendah untuk risiko saham, dan tingkat yang rendah "
+                       "menggelembungkan valuasi. Bandingkan dengan imbal hasil yang "
+                       "benar-benar Anda tuntut untuk memiliki saham ini."))
     else:
         band = "context"
-        reading += "That is an ordinary range for a listed equity."
+        reading += tr("That is an ordinary range for a listed equity.",
+                      "Itu rentang yang biasa untuk saham tercatat.")
     return make(label, what, reading,
-                "It is the single input the answer is most sensitive to, after growth. It is "
-                "editable above for exactly that reason.",
+                tr("It is the single input the answer is most sensitive to, after growth. It is "
+                   "editable above for exactly that reason.",
+                   "Inilah satu masukan yang paling memengaruhi jawabannya, setelah "
+                   "pertumbuhan. Justru karena itu ia bisa diubah di atas."),
                 band, "none", evidence="strong", value_text=_pct(value, 1))
 
 
 @metric("valuationSpread")
 def _valuation_spread(value, p25_label=None, p75_label=None, **_):
-    label = "How wide the answer is"
-    what = ("The gap between the pessimistic and optimistic halves of the simulation, as a "
-            "share of the middle estimate. Wide means the model is not confident.")
+    label = tr("How wide the answer is", "Seberapa lebar jawabannya")
+    what = (tr("The gap between the pessimistic and optimistic halves of the simulation, as a "
+               "share of the middle estimate. Wide means the model is not confident.",
+               "Selisih antara separuh pesimistis dan separuh optimistis simulasi, "
+               "sebagai porsi dari estimasi tengah. Lebar berarti modelnya tidak yakin."))
     if not _known(value):
-        return unavailable(label, what, "the simulation did not run")
+        return unavailable(label, what, tr("the simulation did not run",
+                                           "simulasinya tidak berjalan"))
     band = _ladder(value, ((0.25, "good"), (0.60, "fair"), (1.20, "poor"), (None, "bad")))
-    reading = ("The middle half of the runs spans "
-               + (f"{p25_label} to {p75_label}, " if p25_label and p75_label else "")
-               + f"which is {_pct(value, 0)} of the central estimate. ")
+    reading = (tr("The middle half of the runs spans ", "Separuh tengah simulasi membentang ")
+               + (tr(f"{p25_label} to {p75_label}, ", f"{p25_label} hingga {p75_label}, ") if p25_label and p75_label else "")
+               + tr(f"which is {_pct(value, 0)} of the central estimate. ",
+                    f"yaitu {_pct(value, 0)} dari estimasi tengah. "))
     reading += {
-        "good": "That is a narrow range for a model like this.",
-        "fair": "A normal spread. The single median figure is less informative than the range.",
-        "poor": "A wide range. Any single 'fair value' quoted from this is over-precise.",
-        "bad": "Extremely wide. The model is telling you it does not know.",
+        "good": tr("That is a narrow range for a model like this.",
+                   "Itu rentang yang sempit untuk model seperti ini."),
+        "fair": tr("A normal spread. The single median figure is less informative than the range.",
+                   "Sebaran yang normal. Satu angka median kurang informatif daripada "
+                   "rentangnya."),
+        "poor": tr("A wide range. Any single 'fair value' quoted from this is over-precise.",
+                   "Rentang yang lebar. 'Nilai wajar' tunggal apa pun yang dikutip dari "
+                   "sini terlalu presisi."),
+        "bad": tr("Extremely wide. The model is telling you it does not know.",
+                  "Sangat lebar. Model sedang memberi tahu Anda bahwa ia tidak tahu."),
     }[band]
     return make(label, what, reading,
-                "Quote the range, never the median alone. A number with error bars this wide "
-                "does not support a precise decision.",
+                tr("Quote the range, never the median alone. A number with error bars this wide "
+                   "does not support a precise decision.",
+                   "Kutip rentangnya, jangan pernah median saja. Angka dengan batas galat "
+                   "selebar ini tidak mendukung keputusan yang presisi."),
                 band, "low", evidence="strong", value_text=_pct(value, 0))
 
 
@@ -1979,136 +2891,204 @@ def _valuation_spread(value, p25_label=None, p75_label=None, **_):
 # ============================================================================ #
 @metric("riskReward")
 def _risk_reward(value, target_label=None, **_):
-    label = "Reward for the risk"
-    what = ("How much you stand to make if the target is reached, for every unit you lose if "
-            "the stop is hit. 2.0 means twice as much up as down.")
+    label = tr("Reward for the risk", "Imbalan atas risiko")
+    what = (tr("How much you stand to make if the target is reached, for every unit you lose if "
+               "the stop is hit. 2.0 means twice as much up as down.",
+               "Seberapa banyak yang bisa Anda peroleh jika target tercapai, untuk "
+               "setiap satuan yang hilang jika stop tersentuh. 2.0 berarti potensi "
+               "naiknya dua kali potensi turunnya."))
     if not _known(value):
-        return unavailable(label, what, "no entry and stop could be placed")
+        return unavailable(label, what, tr("no entry and stop could be placed",
+                                           "tidak ada titik masuk dan stop yang bisa ditempatkan"))
     band = _ladder(value, ((1.0, "bad"), (1.5, "poor"), (2.5, "good"), (None, "excellent")))
-    reading = f"{_num(value, 1)} to 1"
+    reading = tr(f"{_num(value, 1)} to 1", f"{_num(value, 1)} banding 1")
     if target_label:
-        reading += f", measuring to {target_label.lower()}"
+        reading += tr(f", measuring to {target_label.lower()}",
+                      f", diukur sampai {target_label.lower()}")
     reading += ". "
     reading += {
-        "bad": "You are risking more than you stand to make. That needs a very high hit rate "
-               "to be worth doing, and nothing here estimates the hit rate.",
-        "poor": "Thin. After trading costs there is not much left of the edge.",
-        "good": "A conventional ratio for this kind of setup.",
-        "excellent": "Generous — check the target is a real level and not just the number that "
-                     "made the arithmetic look good.",
+        "bad": tr("You are risking more than you stand to make. That needs a very high hit rate "
+                  "to be worth doing, and nothing here estimates the hit rate.",
+                  "Anda mempertaruhkan lebih banyak daripada yang bisa Anda peroleh. Itu "
+                  "butuh tingkat keberhasilan yang sangat tinggi agar layak dilakukan, dan "
+                  "tidak ada yang memperkirakan tingkat keberhasilan di sini."),
+        "poor": tr("Thin. After trading costs there is not much left of the edge.",
+                   "Tipis. Setelah biaya transaksi, keunggulannya tinggal sedikit."),
+        "good": tr("A conventional ratio for this kind of setup.",
+                   "Rasio yang lazim untuk pola seperti ini."),
+        "excellent": tr("Generous — check the target is a real level and not just the number that "
+                        "made the arithmetic look good.",
+                        "Murah hati — pastikan targetnya level nyata dan bukan sekadar angka "
+                        "yang membuat aritmetikanya tampak bagus."),
     }[band]
     return make(label, what, reading,
-                "A ratio is only half the sum. It tells you the payoff shape, not how often "
-                "the setup works, and this app does not claim to know that.",
+                tr("A ratio is only half the sum. It tells you the payoff shape, not how often "
+                   "the setup works, and this app does not claim to know that.",
+                   "Rasio hanyalah separuh hitungan. Ia memberi tahu bentuk imbalannya, "
+                   "bukan seberapa sering pola ini berhasil, dan aplikasi ini tidak "
+                   "mengklaim mengetahuinya."),
                 band, "high", evidence="moderate", value_text=f"{_num(value, 1)}:1")
 
 
 @metric("stopDistance")
 def _stop_distance(value, atr_multiple=None, basis=None, **_):
-    label = "Distance to the stop"
-    what = ("How far the price would have to fall before the reason for the trade is wrong and "
-            "you would get out.")
+    label = tr("Distance to the stop", "Jarak ke stop")
+    what = (tr("How far the price would have to fall before the reason for the trade is wrong and "
+               "you would get out.",
+               "Seberapa jauh harga harus turun sebelum alasan transaksinya terbukti "
+               "salah dan Anda keluar."))
     if not _known(value):
-        return unavailable(label, what, "no stop could be placed")
-    reading = f"{_pct(value)} below the entry"
+        return unavailable(label, what, tr("no stop could be placed",
+                                           "tidak ada stop yang bisa ditempatkan"))
+    reading = tr(f"{_pct(value)} below the entry", f"{_pct(value)} di bawah harga masuk")
     if _known(atr_multiple):
-        reading += f", which is {_num(atr_multiple, 1)} times an average day's range"
+        reading += tr(f", which is {_num(atr_multiple, 1)} times an average day's range",
+                      f", yaitu {_num(atr_multiple, 1)} kali rentang hari rata-rata")
     reading += ". "
     if basis == "structure":
-        reading += ("It sits just under a level the market has actually defended, so if it is "
-                    "hit, something real has broken rather than the price having wobbled.")
+        reading += (tr("It sits just under a level the market has actually defended, so if it is "
+                       "hit, something real has broken rather than the price having wobbled.",
+                       "Ia berada tepat di bawah level yang benar-benar dipertahankan pasar, "
+                       "jadi jika tersentuh, sesuatu yang nyata telah patah, bukan sekadar "
+                       "harga yang bergoyang."))
         band = "good"
     else:
-        reading += ("There was no defended level below to anchor it to, so it is placed purely "
-                    "by how much this stock normally moves. That is weaker than a structural "
-                    "stop.")
+        reading += (tr("There was no defended level below to anchor it to, so it is placed purely "
+                       "by how much this stock normally moves. That is weaker than a structural "
+                       "stop.",
+                       "Tidak ada level yang dipertahankan di bawahnya untuk dijadikan jangkar, "
+                       "jadi ia ditempatkan semata berdasarkan seberapa besar saham ini "
+                       "biasanya bergerak. Itu lebih lemah daripada stop struktural."))
         band = "caution"
     if _known(atr_multiple) and atr_multiple < 1.2:
         band = "caution"
-        reading += (" It is close enough to the entry that ordinary daily noise could trigger "
-                    "it without anything meaningful happening.")
+        reading += (tr(" It is close enough to the entry that ordinary daily noise could trigger "
+                       "it without anything meaningful happening.",
+                       " Ia cukup dekat dengan harga masuk sehingga derau harian biasa bisa "
+                       "memicunya tanpa terjadi apa pun yang berarti."))
     return make(label, what, reading,
-                "This is the input to position sizing. Halve the distance and you can hold "
-                "twice the position for the same money at risk — and get stopped out twice as "
-                "often.",
+                tr("This is the input to position sizing. Halve the distance and you can hold "
+                   "twice the position for the same money at risk — and get stopped out twice as "
+                   "often.",
+                   "Inilah masukan untuk menentukan ukuran posisi. Kurangi jaraknya separuh "
+                   "dan Anda bisa memegang posisi dua kali lipat dengan uang berisiko yang "
+                   "sama — dan terkena stop dua kali lebih sering."),
                 band, "none", evidence="strong", value_text=_pct(value))
 
 
 @metric("positionShare")
 def _position_share(value, risk_budget=None, uncapped=None, **_):
-    label = "Position size"
-    what = ("How much of your account this position would be, if a stop-out is not allowed to "
-            "cost you more than your chosen risk budget.")
+    label = tr("Position size", "Ukuran posisi")
+    what = (tr("How much of your account this position would be, if a stop-out is not allowed to "
+               "cost you more than your chosen risk budget.",
+               "Seberapa besar porsi akun Anda untuk posisi ini, jika terkena stop "
+               "tidak boleh merugikan Anda lebih dari anggaran risiko yang Anda pilih."))
     if not _known(value):
-        return unavailable(label, what, "no stop distance to size against")
+        return unavailable(label, what, tr("no stop distance to size against",
+                                           "tidak ada jarak stop untuk dijadikan dasar ukuran"))
     budget = risk_budget if _known(risk_budget) else 0.01
-    reading = (f"{_pct(value, 0)} of the account. That is the size at which being stopped out "
-               f"costs {_pct(budget, 0)} of the whole account — no more.")
+    reading = (tr(f"{_pct(value, 0)} of the account. That is the size at which being stopped out "
+                  f"costs {_pct(budget, 0)} of the whole account — no more.",
+                  f"{_pct(value, 0)} dari akun. Itulah ukuran yang membuat terkena stop "
+                  f"merugikan {_pct(budget, 0)} dari seluruh akun — tidak lebih."))
     band = "context"
     if _known(uncapped) and uncapped > 1.0:
         band = "caution"
-        reading += (f" The unconstrained arithmetic says {_pct(uncapped, 0)}, which is more "
-                    f"money than there is. The stop is tight enough that hitting the risk "
-                    f"budget would need borrowing; treat the shown figure as a cap, not a "
-                    f"recommendation.")
+        reading += (tr(f" The unconstrained arithmetic says {_pct(uncapped, 0)}, which is more "
+                       f"money than there is. The stop is tight enough that hitting the risk "
+                       f"budget would need borrowing; treat the shown figure as a cap, not a "
+                       f"recommendation.",
+                       f" Hitungan tanpa batasan berkata {_pct(uncapped, 0)}, yang lebih banyak "
+                       "daripada uang yang ada. Stop-nya cukup rapat sehingga untuk mencapai "
+                       "anggaran risiko dibutuhkan pinjaman; perlakukan angka yang ditampilkan "
+                       "sebagai batas atas, bukan rekomendasi."))
     elif value > 0.25:
         band = "caution"
-        reading += (" That is a large single holding. The arithmetic is correct and "
-                    "concentration is a separate risk it does not measure.")
+        reading += (tr(" That is a large single holding. The arithmetic is correct and "
+                       "concentration is a separate risk it does not measure.",
+                       " Itu kepemilikan tunggal yang besar. Aritmetikanya benar, dan "
+                       "konsentrasi adalah risiko terpisah yang tidak diukurnya."))
     return make(label, what, reading,
-                "Change the risk budget and this moves proportionally. It is the one number "
-                "here that is arithmetic rather than opinion.",
+                tr("Change the risk budget and this moves proportionally. It is the one number "
+                   "here that is arithmetic rather than opinion.",
+                   "Ubah anggaran risiko dan angka ini bergerak sebanding. Inilah satu "
+                   "angka di sini yang berupa aritmetika, bukan opini."),
                 band, "none", evidence="strong", value_text=_pct(value, 0))
 
 
 @metric("distanceToLevel")
 def _distance_to_level(value, side=None, touches=None, price_text=None, **_):
-    label = ("Distance to the nearest ceiling" if side == "resistance"
-             else "Distance to the nearest floor")
-    what = ("How far the price is from the closest level where it has previously turned around. "
-            + ("A ceiling is where sellers showed up before."
-               if side == "resistance" else "A floor is where buyers showed up before."))
+    label = (tr("Distance to the nearest ceiling", "Jarak ke langit-langit terdekat") if side == "resistance"
+             else tr("Distance to the nearest floor", "Jarak ke lantai terdekat"))
+    what = (tr("How far the price is from the closest level where it has previously turned around. ",
+               "Seberapa jauh harga dari level terdekat tempat ia pernah berbalik arah. ")
+            + (tr("A ceiling is where sellers showed up before.",
+                  "Langit-langit adalah tempat penjual pernah muncul.")
+               if side == "resistance" else tr("A floor is where buyers showed up before.",
+                                               "Lantai adalah tempat pembeli pernah muncul.")))
     if not _known(value):
-        return unavailable(label, what, "no confirmed turning point on that side")
+        return unavailable(label, what, tr("no confirmed turning point on that side",
+                                           "tidak ada titik balik terkonfirmasi di sisi itu"))
     reading = (f"{_pct(abs(value))} "
-               + ("above" if side == "resistance" else "below")
-               + " today's price"
-               + (f", at {price_text}" if price_text else "") + ". ")
+               + (tr("above", "di atas") if side == "resistance" else tr("below", "di bawah"))
+               + tr(" today's price", " harga hari ini")
+               + (tr(f", at {price_text}", f", di {price_text}") if price_text else "") + ". ")
     if _known(touches):
-        reading += (f"The price turned there {int(touches)} time"
-                    f"{'s' if touches != 1 else ''} before. "
-                    + ("A level tested once is barely a level."
+        reading += (tr(f"The price turned there {int(touches)} time"
+                       f"{'s' if touches != 1 else ''} before. ",
+                       f"Harga pernah berbalik di sana {int(touches)} kali sebelumnya. ")
+                    + (tr("A level tested once is barely a level.",
+                          "Level yang baru diuji sekali nyaris belum bisa disebut level.")
                        if touches < 2 else
-                       "A level tested repeatedly is one more participants are watching."))
+                       tr("A level tested repeatedly is one more participants are watching.",
+                          "Level yang diuji berulang kali adalah level yang diamati lebih banyak "
+                          "pelaku pasar.")))
     band = "context"
     if abs(value) < 0.02:
         band = "caution"
-        reading += " The price is right on top of it, which is where the decision gets made."
+        reading += tr(" The price is right on top of it, which is where the decision gets made.",
+                      " Harga tepat berada di atasnya, tempat keputusan diambil.")
     return make(label, what, reading,
-                "Levels are where past participants transacted, not forecasts. They are most "
-                "useful for placing a stop beyond, which is what the plan above does.",
+                tr("Levels are where past participants transacted, not forecasts. They are most "
+                   "useful for placing a stop beyond, which is what the plan above does.",
+                   "Level adalah tempat pelaku pasar sebelumnya bertransaksi, bukan "
+                   "ramalan. Level paling berguna untuk menempatkan stop di luarnya, "
+                   "seperti yang dilakukan rencana di atas."),
                 band, "none", evidence="weak", value_text=_signed_pct(value))
 
 
 @metric("vwapDistance")
 def _vwap_distance(value, anchor=None, **_):
-    label = (f"Average price paid since the {anchor.lower()}" if anchor
-             else "Versus the average price paid")
-    what = ("The volume-weighted average price everyone who bought since a chosen date has "
-            "paid. Above it, the average buyer since then is in profit; below it, under water.")
+    label = (tr(f"Average price paid since the {anchor.lower()}",
+                f"Harga rata-rata yang dibayar sejak {anchor.lower()}") if anchor
+             else tr("Versus the average price paid", "Dibandingkan harga rata-rata yang dibayar"))
+    what = (tr("The volume-weighted average price everyone who bought since a chosen date has "
+               "paid. Above it, the average buyer since then is in profit; below it, under water.",
+               "Harga rata-rata tertimbang volume yang dibayar semua orang yang membeli "
+               "sejak tanggal yang dipilih. Di atasnya, pembeli rata-rata sejak saat "
+               "itu sedang untung; di bawahnya, sedang rugi."))
     if not _known(value):
-        return unavailable(label, what, "not enough volume history since that anchor")
+        return unavailable(label, what, tr("not enough volume history since that anchor",
+                                           "riwayat volume sejak jangkar itu tidak cukup"))
     above = value >= 0
-    reading = (f"{_signed_pct(value)} versus that average. "
-               + ("The typical buyer since then is sitting on a gain, so there is less trapped "
-                  "supply overhead."
+    reading = (tr(f"{_signed_pct(value)} versus that average. ",
+                  f"{_signed_pct(value)} dibandingkan rata-rata itu. ")
+               + (tr("The typical buyer since then is sitting on a gain, so there is less trapped "
+                     "supply overhead.",
+                     "Pembeli pada umumnya sejak saat itu sedang untung, jadi pasokan yang "
+                     "terjebak di atas lebih sedikit.")
                   if above else
-                  "The typical buyer since then is under water. People who bought there often "
-                  "sell into any rally back to break even, which is what makes this level act "
-                  "as resistance."))
+                  tr("The typical buyer since then is under water. People who bought there often "
+                     "sell into any rally back to break even, which is what makes this level act "
+                     "as resistance.",
+                     "Pembeli pada umumnya sejak saat itu sedang rugi. Orang yang membeli di "
+                     "sana sering menjual pada reli apa pun untuk kembali impas, yang membuat "
+                     "level ini berperan sebagai resistance.")))
     return make(label, what, reading,
-                "It is a description of who is where, not a signal. Its usefulness is in "
-                "explaining WHY a level might hold.",
+                tr("It is a description of who is where, not a signal. Its usefulness is in "
+                   "explaining WHY a level might hold.",
+                   "Ini gambaran siapa berada di mana, bukan sinyal. Kegunaannya adalah "
+                   "menjelaskan MENGAPA sebuah level mungkin bertahan."),
                 "good" if above else "caution", "high", evidence="weak",
                 value_text=_signed_pct(value))
 
@@ -2119,112 +3099,179 @@ def _squeeze(value, fired=None, **_):
     # it has gone: 94%", where 94 is a percentile meaning *very lively* — a
     # reader scanning the tile takes exactly the wrong reading, and nothing on
     # the face of it corrects them. The value now leads with the word.
-    label = "How much it is moving"
-    what = ("How much the price has been moving lately compared with the rest of the past year. "
-            "Low means unusually calm.")
+    label = tr("How much it is moving", "Seberapa besar ia bergerak")
+    what = (tr("How much the price has been moving lately compared with the rest of the past year. "
+               "Low means unusually calm.",
+               "Seberapa besar harga bergerak belakangan ini dibandingkan sisa setahun "
+               "terakhir. Rendah berarti luar biasa tenang."))
     if not _known(value):
-        return unavailable(label, what, "needs about 40 bars of history")
+        return unavailable(label, what, tr("needs about 40 bars of history",
+                                           "perlu riwayat sekitar 40 batang"))
     if value <= 0.15:
         band = "caution"
-        summary = f"Squeezed ({_pct(value, 0)})"
-        reading = (f"At the {_pct(value, 0)} mark of its own past year — quieter than "
-                   f"{_pct(1 - value, 0)} of it, which is a 'squeeze'. Calm "
-                   f"periods really are followed by loud ones more often than chance, because "
-                   f"volatility clusters. What that does NOT tell you is which direction the "
-                   f"loud move goes, and most write-ups quietly add that part.")
+        summary = tr(f"Squeezed ({_pct(value, 0)})", f"Terjepit ({_pct(value, 0)})")
+        reading = (tr(f"At the {_pct(value, 0)} mark of its own past year — quieter than "
+                      f"{_pct(1 - value, 0)} of it, which is a 'squeeze'. Calm "
+                      f"periods really are followed by loud ones more often than chance, because "
+                      f"volatility clusters. What that does NOT tell you is which direction the "
+                      f"loud move goes, and most write-ups quietly add that part.",
+                      f"Di posisi {_pct(value, 0)} dari setahun terakhirnya sendiri — lebih "
+                      f"tenang daripada {_pct(1 - value, 0)} di antaranya, yang disebut "
+                      "'squeeze'. Periode tenang memang lebih sering diikuti periode "
+                      "bergejolak daripada kebetulan, karena volatilitas cenderung mengumpul. "
+                      "Yang TIDAK diberitahukannya adalah ke arah mana gejolak itu bergerak, "
+                      "dan kebanyakan ulasan diam-diam menambahkan bagian itu."))
     elif value >= 0.85:
         band = "caution"
-        summary = f"Volatile ({_pct(value, 0)})"
-        reading = (f"At the {_pct(value, 0)} mark of its own past year — wider than most of "
-                   f"it, so this is a volatile stretch. "
-                   f"Stops need more room than usual and position sizes less.")
+        summary = tr(f"Volatile ({_pct(value, 0)})", f"Bergejolak ({_pct(value, 0)})")
+        reading = (tr(f"At the {_pct(value, 0)} mark of its own past year — wider than most of "
+                      f"it, so this is a volatile stretch. "
+                      f"Stops need more room than usual and position sizes less.",
+                      f"Di posisi {_pct(value, 0)} dari setahun terakhirnya sendiri — lebih "
+                      "lebar daripada sebagian besar periode itu, jadi ini rentang yang "
+                      "bergejolak. Stop butuh ruang lebih dari biasanya dan ukuran posisi "
+                      "lebih kecil."))
     else:
         band = "context"
-        summary = f"Ordinary ({_pct(value, 0)})"
-        reading = f"Ordinary — around the {_pct(value, 0)} mark of its own past year."
+        summary = tr(f"Ordinary ({_pct(value, 0)})", f"Biasa ({_pct(value, 0)})")
+        reading = tr(f"Ordinary — around the {_pct(value, 0)} mark of its own past year.",
+                     f"Biasa — sekitar posisi {_pct(value, 0)} dari setahun terakhirnya "
+                     "sendiri.")
     if fired:
-        reading += (f" The price has now closed outside the bands to the {fired}side, so the "
-                    f"quiet period has resolved in that direction.")
+        reading += tr(f" The price has now closed outside the bands to the {fired}side, so the "
+                      f"quiet period has resolved in that direction.",
+                      " Harga kini ditutup di luar pita ke arah "
+                      f"{'atas' if fired == 'up' else 'bawah'}, jadi periode tenangnya sudah "
+                      "terselesaikan ke arah itu.")
     return make(label, what, reading,
-                "A volatility forecast, never a direction forecast. Wait for the break rather "
-                "than guessing it.",
+                tr("A volatility forecast, never a direction forecast. Wait for the break rather "
+                   "than guessing it.",
+                   "Ramalan volatilitas, tidak pernah ramalan arah. Tunggu tembusannya "
+                   "alih-alih menebaknya."),
                 band, "none", evidence="weak", value_text=summary)
 
 
 @metric("volumeRatio")
 def _volume_ratio(value, **_):
-    label = "Volume on the day"
-    what = "How much trading happened today compared with a normal day over the past month."
+    label = tr("Volume on the day", "Volume hari ini")
+    what = tr("How much trading happened today compared with a normal day over the past month.",
+              "Seberapa banyak perdagangan hari ini dibandingkan hari normal selama "
+              "sebulan terakhir.")
     if not _known(value):
-        return unavailable(label, what, "needs a month of volume history")
+        return unavailable(label, what, tr("needs a month of volume history",
+                                           "perlu riwayat volume sebulan"))
     if value >= 2.0:
-        band, verdict = "context", (f"{_num(value, 1)}x a normal day — a lot of people traded "
-                                    f"this. Heavy volume behind a move means more participants "
-                                    f"agreed with it.")
+        band, verdict = "context", (tr(f"{_num(value, 1)}x a normal day — a lot of people traded "
+                                       f"this. Heavy volume behind a move means more participants "
+                                       f"agreed with it.",
+                                       f"{_num(value, 1)}x hari normal — banyak orang memperdagangkan saham ini. "
+                                       "Volume besar di balik pergerakan berarti lebih banyak pelaku pasar yang "
+                                       "sepakat dengannya."))
     elif value >= 1.5:
-        band, verdict = "context", (f"{_num(value, 1)}x a normal day — heavier than usual, which "
-                                    f"is the confirmation a breakout rule normally asks for.")
+        band, verdict = "context", (tr(f"{_num(value, 1)}x a normal day — heavier than usual, which "
+                                       f"is the confirmation a breakout rule normally asks for.",
+                                       f"{_num(value, 1)}x hari normal — lebih ramai dari biasanya, konfirmasi "
+                                       "yang biasanya diminta aturan tembusan."))
     elif value <= 0.6:
-        band, verdict = "caution", (f"{_num(value, 1)}x a normal day — thin. A move on volume "
-                                    f"this light involved few participants and is easier to "
-                                    f"reverse.")
+        band, verdict = "caution", (tr(f"{_num(value, 1)}x a normal day — thin. A move on volume "
+                                       f"this light involved few participants and is easier to "
+                                       f"reverse.",
+                                       f"{_num(value, 1)}x hari normal — tipis. Pergerakan dengan volume "
+                                       "seringan ini melibatkan sedikit pelaku pasar dan lebih mudah berbalik."))
     else:
-        band, verdict = "context", f"{_num(value, 1)}x a normal day — ordinary participation."
+        band, verdict = "context", tr(f"{_num(value, 1)}x a normal day — ordinary participation.",
+                                      f"{_num(value, 1)}x hari normal — partisipasi biasa.")
     return make(label, what, verdict,
-                "Volume confirms a move, it does not cause one. Heavy volume on its own, with "
-                "no move to confirm, means nothing.",
+                tr("Volume confirms a move, it does not cause one. Heavy volume on its own, with "
+                   "no move to confirm, means nothing.",
+                   "Volume mengonfirmasi pergerakan, bukan menyebabkannya. Volume besar "
+                   "dengan sendirinya, tanpa pergerakan yang dikonfirmasi, tidak berarti "
+                   "apa-apa."),
                 band, "none", evidence="moderate", value_text=f"{_num(value, 1)}x")
 
 
 @metric("divergenceState")
 def _divergence(value, kind=None, **_):
-    label = "Price versus momentum"
-    what = ("Whether the price is making new highs (or lows) that the momentum reading is not "
-            "matching. When the two disagree, the move is said to be losing steam.")
+    label = tr("Price versus momentum", "Harga dibandingkan momentum")
+    what = (tr("Whether the price is making new highs (or lows) that the momentum reading is not "
+               "matching. When the two disagree, the move is said to be losing steam.",
+               "Apakah harga mencetak puncak (atau dasar) baru yang tidak diimbangi "
+               "pembacaan momentum. Ketika keduanya berselisih, pergerakannya disebut "
+               "mulai kehabisan tenaga."))
     if not kind:
         return make(label, what,
-                    "Price and momentum are moving together — no disagreement between them at "
-                    "the last two turning points.",
-                    CONTEXT_NOT_TRIGGER, "context", "none", evidence="weak",
-                    value_text="In step")
+                    tr("Price and momentum are moving together — no disagreement between them at "
+                       "the last two turning points.",
+                       "Harga dan momentum bergerak bersama — tidak ada perselisihan di antara "
+                       "keduanya pada dua titik balik terakhir."),
+                    _not_trigger(), "context", "none", evidence="weak",
+                    value_text=tr("In step", "Seirama"))
     if kind == "bearish":
         band = "caution"
-        reading = ("The price made a HIGHER high than last time, but momentum made a lower one. "
-                   "The advance is being driven by less force than before.")
+        reading = (tr("The price made a HIGHER high than last time, but momentum made a lower one. "
+                      "The advance is being driven by less force than before.",
+                      "Harga mencetak puncak yang LEBIH TINGGI daripada sebelumnya, tetapi "
+                      "momentum mencetak puncak yang lebih rendah. Kenaikannya didorong tenaga "
+                      "yang lebih kecil daripada sebelumnya."))
     else:
         band = "caution"
-        reading = ("The price made a LOWER low than last time, but momentum made a higher one. "
-                   "The decline is being driven by less force than before.")
-    reading += (" Treat it lightly: divergence depends heavily on how a turning point is "
-                "defined, and it can persist for months without resolving.")
+        reading = (tr("The price made a LOWER low than last time, but momentum made a higher one. "
+                      "The decline is being driven by less force than before.",
+                      "Harga mencetak dasar yang LEBIH RENDAH daripada sebelumnya, tetapi "
+                      "momentum mencetak dasar yang lebih tinggi. Penurunannya didorong tenaga "
+                      "yang lebih kecil daripada sebelumnya."))
+    reading += (tr(" Treat it lightly: divergence depends heavily on how a turning point is "
+                   "defined, and it can persist for months without resolving.",
+                   " Anggap enteng saja: divergensi sangat bergantung pada cara titik balik "
+                   "didefinisikan, dan bisa bertahan berbulan-bulan tanpa terselesaikan."))
     return make(label, what, reading,
-                "Not a trigger. At most a reason to want more confirmation before acting on "
-                "the move it is arguing with.",
+                tr("Not a trigger. At most a reason to want more confirmation before acting on "
+                   "the move it is arguing with.",
+                   "Bukan pemicu. Paling jauh menjadi alasan untuk menginginkan konfirmasi "
+                   "lebih sebelum bertindak atas pergerakan yang sedang dibantahnya."),
                 band, "none", evidence="weak",
-                value_text="Losing steam" if kind == "bearish" else "Selling drying up")
+                value_text=tr("Losing steam", "Kehabisan tenaga") if kind == "bearish" else tr("Selling drying up",
+                                                                       "Tekanan jual mengering"))
 
 
 @metric("gapState")
 def _gap(value, direction=None, size_atr=None, **_):
-    label = "Unfilled gap"
-    what = ("A price band the stock jumped straight over between one day's close and the next "
-            "day's open. Almost nobody traded inside it, so there is no established support or "
-            "resistance in there.")
+    label = tr("Unfilled gap", "Celah yang belum tertutup")
+    what = (tr("A price band the stock jumped straight over between one day's close and the next "
+               "day's open. Almost nobody traded inside it, so there is no established support or "
+               "resistance in there.",
+               "Pita harga yang dilompati langsung oleh saham antara penutupan suatu "
+               "hari dan pembukaan hari berikutnya. Hampir tak ada yang bertransaksi di "
+               "dalamnya, jadi tidak ada support atau resistance yang mapan di sana."))
     if not _known(value):
         return make(label, what,
-                    "No unfilled gap of any size in the recent history — the price has traded "
-                    "through every level on its way here.",
-                    CONTEXT_NOT_TRIGGER, "context", "none", evidence="weak", value_text="None")
-    reading = (f"An unfilled gap {_pct(abs(value))} "
-               + ("below" if value < 0 else "above") + " today's price"
-               + (f", about {_num(size_atr, 1)} average daily ranges wide" if _known(size_atr)
-                  else "") + f", left by a jump {direction or ''}. ")
-    reading += ("Because there is no trading history inside it, price often moves through that "
-                "band quickly in either direction. The common claim that gaps always get filled "
-                "is not supported — many never do.")
+                    tr("No unfilled gap of any size in the recent history — the price has traded "
+                       "through every level on its way here.",
+                       "Tidak ada celah yang belum tertutup sebesar apa pun dalam riwayat "
+                       "terbaru — harga sudah melewati setiap level dalam perjalanannya ke sini."),
+                    _not_trigger(), "context", "none", evidence="weak", value_text=tr("None",
+                                                                                           "Tidak ada"))
+    reading = (tr(f"An unfilled gap {_pct(abs(value))} ",
+                  f"Celah yang belum tertutup {_pct(abs(value))} ")
+               + (tr("below", "di bawah") if value < 0 else tr("above", "di atas"))
+               + tr(" today's price", " harga hari ini")
+               + (tr(f", about {_num(size_atr, 1)} average daily ranges wide",
+                     f", lebarnya sekitar {_num(size_atr, 1)} kali rentang harian rata-rata") if _known(size_atr)
+                  else "")
+               + tr(f", left by a jump {direction or ''}. ",
+                    ", akibat lonjakan "
+                    f"{'naik' if direction == 'up' else 'turun' if direction == 'down' else ''}. "))
+    reading += (tr("Because there is no trading history inside it, price often moves through that "
+                   "band quickly in either direction. The common claim that gaps always get filled "
+                   "is not supported — many never do.",
+                   "Karena tidak ada riwayat perdagangan di dalamnya, harga sering melewati "
+                   "pita itu dengan cepat ke arah mana pun. Klaim umum bahwa celah selalu "
+                   "tertutup tidak didukung bukti — banyak yang tidak pernah tertutup."))
     return make(label, what, reading,
-                "Useful for knowing where price may move fast, which affects where a stop is "
-                "safe. Not a directional signal.",
+                tr("Useful for knowing where price may move fast, which affects where a stop is "
+                   "safe. Not a directional signal.",
+                   "Berguna untuk mengetahui di mana harga bisa bergerak cepat, yang "
+                   "memengaruhi di mana stop aman ditempatkan. Bukan sinyal arah."),
                 "caution", "none", evidence="weak", value_text=_signed_pct(value))
 
 
@@ -2240,10 +3287,10 @@ def _years_of(observations: Optional[int]) -> Optional[float]:
 
 def _describe_span(years: Optional[float]) -> str:
     if years is None:
-        return "Over the loaded history"
+        return tr("Over the loaded history", "Selama riwayat yang dimuat")
     if years < 1.5:
-        return "Over the past year or so"
-    return f"Over the past {years:.0f} years"
+        return tr("Over the past year or so", "Selama sekitar setahun terakhir")
+    return tr(f"Over the past {years:.0f} years", f"Selama {years:.0f} tahun terakhir")
 
 
 def long_horizon_story(ticker: str, block: dict) -> dict:
@@ -2267,7 +3314,7 @@ def long_horizon_story(ticker: str, block: dict) -> dict:
     rolling = block.get("rollingReturns") or []
     relative = block.get("relativeStrength") or {}
     position = block.get("position") or {}
-    name = ticker.upper() if ticker else "This stock"
+    name = ticker.upper() if ticker else tr("This stock", "Saham ini")
 
     paragraphs: list[str] = []
 
@@ -2277,40 +3324,56 @@ def long_horizon_story(ticker: str, block: dict) -> dict:
     cagr_value = risk.get("cagr")
     if _known(cagr_value):
         if cagr_value >= 0:
-            first = (f"{span}, {name} returned about {_pct(cagr_value, 0)} a year. "
-                     f"Money left in it would have grown at roughly that pace, on average.")
+            first = (tr(f"{span}, {name} returned about {_pct(cagr_value, 0)} a year. "
+                        f"Money left in it would have grown at roughly that pace, on average.",
+                        f"{span}, {name} menghasilkan sekitar {_pct(cagr_value, 0)} per tahun. "
+                        "Uang yang ditanam di dalamnya akan tumbuh kira-kira secepat itu, secara "
+                        "rata-rata."))
         else:
-            first = (f"{span}, {name} LOST about {_pct(abs(cagr_value), 0)} a year. "
-                     f"A holder over that whole window is behind.")
+            first = (tr(f"{span}, {name} LOST about {_pct(abs(cagr_value), 0)} a year. "
+                        f"A holder over that whole window is behind.",
+                        f"{span}, {name} MERUGI sekitar {_pct(abs(cagr_value), 0)} per tahun. "
+                        "Pemegang saham selama seluruh periode itu tertinggal."))
         excess = ((relative.get("periods") or {}).get("36m") or {}).get("excess")
         benchmark = relative.get("benchmark")
         if _known(excess) and benchmark:
             index = index_name(benchmark)
-            first += (f" Over the last three years it beat {index} by "
-                      f"{_pct(excess, 0)}." if excess > 0 else
-                      f" Over the last three years it trailed {index} by "
-                      f"{_pct(abs(excess), 0)} — an index fund would have done better.")
+            first += (tr(f" Over the last three years it beat {index} by "
+                         f"{_pct(excess, 0)}.",
+                         f" Dalam tiga tahun terakhir ia mengungguli {index} sebesar "
+                         f"{_pct(excess, 0)}.") if excess > 0 else
+                      tr(f" Over the last three years it trailed {index} by "
+                         f"{_pct(abs(excess), 0)} — an index fund would have done better.",
+                         f" Dalam tiga tahun terakhir ia tertinggal dari {index} sebesar "
+                         f"{_pct(abs(excess), 0)} — reksa dana indeks akan memberi hasil lebih "
+                         "baik."))
         paragraphs.append(first)
 
     # ---- 2. What holding it cost ---------------------------------------
     depth = drawdown.get("maxDrawdown")
     if _known(depth):
-        pain = f"The worst stretch was a {_pct(abs(depth), 0)} fall"
+        pain = tr(f"The worst stretch was a {_pct(abs(depth), 0)} fall",
+                  f"Rentang terburuknya adalah penurunan {_pct(abs(depth), 0)}")
         recovery_days = drawdown.get("maxDrawdownRecoveryDays")
         if _known(recovery_days):
-            pain += f" that took {int(recovery_days)} days to climb back from"
+            pain += tr(f" that took {int(recovery_days)} days to climb back from",
+                       f" yang butuh {int(recovery_days)} hari untuk pulih")
         elif drawdown.get("maxDrawdownRecovered") is None:
-            pain += " that it has still not climbed back from"
+            pain += tr(" that it has still not climbed back from", " yang sampai kini belum pulih")
         under_water = drawdown.get("timeUnderWaterDays")
         if _known(under_water) and under_water > 20:
-            pain += (f", and there was a {int(under_water)}-day stretch where you would have "
-                     f"been sitting on a loss with nothing to show for it")
+            pain += (tr(f", and there was a {int(under_water)}-day stretch where you would have "
+                        f"been sitting on a loss with nothing to show for it",
+                        f", dan ada rentang {int(under_water)} hari ketika Anda akan memegang "
+                        "kerugian tanpa hasil apa pun"))
         pain += "."
         current = drawdown.get("currentDrawdown")
         if _known(current):
-            pain += (" Right now it is at or near its high."
+            pain += (tr(" Right now it is at or near its high.",
+                        " Saat ini ia berada di puncaknya atau dekat puncaknya.")
                      if abs(current) < 0.02 else
-                     f" Right now it sits {_pct(abs(current), 0)} below its best price.")
+                     tr(f" Right now it sits {_pct(abs(current), 0)} below its best price.",
+                        f" Saat ini ia berada {_pct(abs(current), 0)} di bawah harga terbaiknya."))
         paragraphs.append(pain)
 
     # ---- 3. The random-entry test --------------------------------------
@@ -2330,23 +3393,32 @@ def long_horizon_story(ticker: str, block: dict) -> dict:
         worst = chosen.get("worst")
         share = chosen.get("positiveShare")
         windows = chosen.get("windows")
-        line = (f"If you had bought at any random point in this history and held for "
-                f"{horizon} years, ")
+        line = (tr(f"If you had bought at any random point in this history and held for "
+                   f"{horizon} years, ",
+                   "Jika Anda membeli di titik acak mana pun dalam riwayat ini dan "
+                   f"memegangnya selama {horizon} tahun, "))
         if _known(share) and share >= 0.999:
-            line += "you would have made money every single time"
+            line += tr("you would have made money every single time",
+                       "Anda akan selalu untung, setiap kalinya")
         elif _known(share):
-            line += f"you would have made money {_pct(share, 0)} of the time"
+            line += tr(f"you would have made money {_pct(share, 0)} of the time",
+                       f"Anda akan untung {_pct(share, 0)} dari seluruh kesempatan")
         else:
-            line += "the outcomes were mixed"
+            line += tr("the outcomes were mixed", "hasilnya bercampur")
         if _known(worst):
             if worst >= 0.02:
-                line += f", with even the worst entry returning {_pct(worst, 0)} a year"
+                line += tr(f", with even the worst entry returning {_pct(worst, 0)} a year",
+                           f", bahkan titik masuk terburuk pun menghasilkan {_pct(worst, 0)} per "
+                           "tahun")
             elif worst >= -0.02:
-                line += ", with the worst case being roughly break-even"
+                line += tr(", with the worst case being roughly break-even",
+                           ", dengan kasus terburuk kira-kira impas")
             else:
-                line += f", with the worst entry losing {_pct(abs(worst), 0)} a year"
+                line += tr(f", with the worst entry losing {_pct(abs(worst), 0)} a year",
+                           f", dengan titik masuk terburuk merugi {_pct(abs(worst), 0)} per tahun")
         if _known(windows):
-            line += f" (across {int(windows)} overlapping windows)"
+            line += tr(f" (across {int(windows)} overlapping windows)",
+                       f" (dari {int(windows)} periode yang saling tumpang tindih)")
         line += "."
         paragraphs.append(line)
 
@@ -2356,15 +3428,22 @@ def long_horizon_story(ticker: str, block: dict) -> dict:
     if _known(from_high):
         stance = ""
         if faber.get("usable"):
-            stance = (" A simple long-term trend rule that follows the ten-month average "
-                      "currently says stay invested."
+            stance = (tr(" A simple long-term trend rule that follows the ten-month average "
+                         "currently says stay invested.",
+                         " Aturan tren jangka panjang sederhana yang mengikuti rata-rata sepuluh "
+                         "bulan saat ini berkata tetap berinvestasi.")
                       if faber.get("signal") == "invested" else
-                      " A simple long-term trend rule that follows the ten-month average "
-                      "currently says stand aside.")
+                      tr(" A simple long-term trend rule that follows the ten-month average "
+                         "currently says stand aside.",
+                         " Aturan tren jangka panjang sederhana yang mengikuti rata-rata sepuluh "
+                         "bulan saat ini berkata menepi."))
         near = abs(from_high) < 0.05
         paragraphs.append(
-            (f"Today it trades {'right at' if near else _pct(abs(from_high), 0) + ' below'} "
-             f"its 52-week high.") + stance)
+            (tr(f"Today it trades {'right at' if near else _pct(abs(from_high), 0) + ' below'} "
+                f"its 52-week high.",
+                "Hari ini ia diperdagangkan "
+                f"{'tepat di' if near else _pct(abs(from_high), 0) + ' di bawah'} puncak "
+                "52 minggunya.")) + stance)
 
     # ---- 5. The honesty paragraph --------------------------------------
     # Always present. If the series is indistinguishable from a random walk, the
@@ -2374,22 +3453,31 @@ def long_horizon_story(ticker: str, block: dict) -> dict:
     caveats = []
     if hurst_verdict == "indistinguishable":
         caveats.append(
-            "a statistical test cannot tell this price history apart from a random walk, so "
-            "the trend readings below are probably describing noise")
+            tr("a statistical test cannot tell this price history apart from a random walk, so "
+               "the trend readings below are probably describing noise",
+               "uji statistik tidak bisa membedakan riwayat harga ini dari jalan acak, "
+               "jadi pembacaan tren di bawah kemungkinan besar menggambarkan derau"))
     elif hurst_verdict == "meanReverting":
         caveats.append(
-            "this series has historically tended to reverse rather than continue, so discount "
-            "the trend readings below")
+            tr("this series has historically tended to reverse rather than continue, so discount "
+               "the trend readings below",
+               "deret ini secara historis cenderung berbalik alih-alih berlanjut, jadi "
+               "kurangi bobot pembacaan tren di bawah"))
     if years is not None and years < 3:
         caveats.append(
-            f"only about {years:.0f} years of history is loaded, which is thin for any "
-            f"multi-year statement — try 10y or max")
+            tr(f"only about {years:.0f} years of history is loaded, which is thin for any "
+               f"multi-year statement — try 10y or max",
+               f"riwayat yang dimuat hanya sekitar {years:.0f} tahun, terlalu tipis "
+               "untuk pernyataan multitahun apa pun — coba 10y atau max"))
     caveats.append(
-        "none of this knows anything about the business — it would read the same on a company "
-        "about to be delisted")
-    lead = "Worth remembering: " if len(caveats) == 1 else "Two things to remember: "
+        tr("none of this knows anything about the business — it would read the same on a company "
+           "about to be delisted",
+           "semua ini tidak tahu apa-apa tentang bisnisnya — hasilnya akan sama "
+           "pada perusahaan yang sebentar lagi dihapus dari bursa"))
+    lead = tr("Worth remembering: ", "Patut diingat: ") if len(caveats) == 1 else tr("Two things to remember: ",
+                                                              "Dua hal yang patut diingat: ")
     if len(caveats) > 2:
-        lead = "A few things to remember: "
+        lead = tr("A few things to remember: ", "Beberapa hal yang patut diingat: ")
     paragraphs.append(lead + "; ".join(caveats) + ".")
 
     return {
@@ -2666,7 +3754,7 @@ def horizon_story(ticker: str, block: dict, currency_format=None) -> dict:
     paragraphs of context is how a tool teaches people to always find a trade.
     """
     money = currency_format or (lambda v: f"{v:,.2f}")
-    name = (ticker or "This stock").upper()
+    name = (ticker or tr("This stock", "Saham ini")).upper()
     setup = block.get("setup") or {}
     plan = block.get("plan") or {}
     levels = block.get("levels") or {}
@@ -2674,30 +3762,45 @@ def horizon_story(ticker: str, block: dict, currency_format=None) -> dict:
 
     # ---- 1. what the setup is ------------------------------------------
     if setup.get("name"):
-        paragraphs.append(f"{name} is in a {setup['name'].lower()}. {setup['reason']}")
+        paragraphs.append(tr(f"{name} is in a {setup['name'].lower()}. {setup['reason']}",
+                             f"{name} sedang dalam pola {setup['name'].lower()}. {setup['reason']}"))
     else:
-        paragraphs.append(setup.get("reason") or "No recognised setup is present.")
+        paragraphs.append(setup.get("reason") or tr("No recognised setup is present.",
+                                                    "Tidak ada pola yang dikenali."))
 
     # ---- 2. the levels, if there are any -------------------------------
     if plan.get("usable"):
         target = (plan.get("targets") or [{}])[0]
-        line = (f"If you were taking it: entry around {money(plan['entry'])}, stop at "
-                f"{money(plan['stop'])} — that is {_pct(plan['stopDistancePct'])} below, "
-                f"placed just under "
-                + ("a level the price has previously turned at"
+        line = (tr(f"If you were taking it: entry around {money(plan['entry'])}, stop at "
+                   f"{money(plan['stop'])} — that is {_pct(plan['stopDistancePct'])} below, "
+                   f"placed just under ",
+                   f"Jika Anda mengambilnya: masuk di sekitar {money(plan['entry'])}, stop "
+                   f"di {money(plan['stop'])} — yaitu {_pct(plan['stopDistancePct'])} di "
+                   "bawahnya, ditempatkan tepat di bawah ")
+                + (tr("a level the price has previously turned at",
+                      "level tempat harga pernah berbalik")
                    if plan.get("stopBasis") == "structure"
-                   else f"{_num(plan['stopDistanceAtr'], 1)} average daily ranges")
+                   else tr(f"{_num(plan['stopDistanceAtr'], 1)} average daily ranges",
+                           f"{_num(plan['stopDistanceAtr'], 1)} kali rentang harian rata-rata"))
                 + ". ")
         if target.get("price") is not None:
-            line += (f"First target {money(target['price'])} "
-                     f"({_signed_pct(target.get('distancePct'))}), which is "
-                     f"{_num(plan['riskReward'], 1)} times what you are risking.")
+            line += (tr(f"First target {money(target['price'])} "
+                        f"({_signed_pct(target.get('distancePct'))}), which is "
+                        f"{_num(plan['riskReward'], 1)} times what you are risking.",
+                        f"Target pertama {money(target['price'])} ("
+                        f"{_signed_pct(target.get('distancePct'))}), yaitu "
+                        f"{_num(plan['riskReward'], 1)} kali yang Anda pertaruhkan."))
         paragraphs.append(line)
 
         paragraphs.append(
-            f"Sized so that being stopped out costs {_pct(plan['riskBudget'], 0)} of your "
-            f"account, the position would be {_pct(plan['positionShare'], 0)} of it."
-            + (" The arithmetic wanted more than the whole account, so that figure is a cap."
+            tr(f"Sized so that being stopped out costs {_pct(plan['riskBudget'], 0)} of your "
+               f"account, the position would be {_pct(plan['positionShare'], 0)} of it.",
+               "Dengan ukuran yang membuat terkena stop merugikan "
+               f"{_pct(plan['riskBudget'], 0)} dari akun Anda, posisinya akan menjadi "
+               f"{_pct(plan['positionShare'], 0)} dari akun itu.")
+            + (tr(" The arithmetic wanted more than the whole account, so that figure is a cap.",
+                  " Hitungannya menginginkan lebih dari seluruh akun, jadi angka itu "
+                  "adalah batas atas.")
                if plan.get("positionUncapped", 0) > 1.0 else ""))
     else:
         supports = levels.get("supports") or []
@@ -2705,29 +3808,43 @@ def horizon_story(ticker: str, block: dict, currency_format=None) -> dict:
         if supports or resistances:
             parts = []
             if resistances:
-                parts.append(f"the nearest ceiling is {money(resistances[0]['price'])} "
-                             f"({_signed_pct(resistances[0]['distancePct'])} away)")
+                parts.append(tr(f"the nearest ceiling is {money(resistances[0]['price'])} "
+                                f"({_signed_pct(resistances[0]['distancePct'])} away)",
+                                f"langit-langit terdekat ada di {money(resistances[0]['price'])} ("
+                                f"{_signed_pct(resistances[0]['distancePct'])} jauhnya)"))
             if supports:
-                parts.append(f"the nearest floor is {money(supports[0]['price'])} "
-                             f"({_signed_pct(supports[0]['distancePct'])} away)")
-            paragraphs.append("There is no trade to plan, but the structure is worth knowing: "
-                              + " and ".join(parts) + ".")
+                parts.append(tr(f"the nearest floor is {money(supports[0]['price'])} "
+                                f"({_signed_pct(supports[0]['distancePct'])} away)",
+                                f"lantai terdekat ada di {money(supports[0]['price'])} ("
+                                f"{_signed_pct(supports[0]['distancePct'])} jauhnya)"))
+            paragraphs.append(tr("There is no trade to plan, but the structure is worth knowing: ",
+                                 "Tidak ada transaksi untuk direncanakan, tetapi strukturnya layak "
+                                 "diketahui: ")
+                              + tr(" and ", " dan ").join(parts) + ".")
 
     # ---- 3. what would change the picture -------------------------------
     squeeze = block.get("squeeze") or {}
     volume = block.get("volume") or {}
     watch: list[str] = []
     if squeeze.get("inSqueeze"):
-        watch.append("price movement has contracted to the quietest in about a year, so a "
-                     "larger move is more likely than usual — in an unknown direction")
+        watch.append(tr("price movement has contracted to the quietest in about a year, so a "
+                        "larger move is more likely than usual — in an unknown direction",
+                        "pergerakan harga menyempit ke titik paling tenang dalam sekitar "
+                        "setahun, jadi pergerakan yang lebih besar lebih mungkin terjadi "
+                        "daripada biasanya — ke arah yang tidak diketahui"))
     if volume.get("anaemic"):
-        watch.append("trading volume is unusually thin, which makes every reading here noisier")
+        watch.append(tr("trading volume is unusually thin, which makes every reading here noisier",
+                        "volume perdagangan luar biasa tipis, yang membuat setiap pembacaan di "
+                        "sini lebih berderau"))
     if (block.get("gaps") or {}).get("unfilled"):
         gap = block["gaps"]["unfilled"][-1]
-        watch.append(f"there is an unfilled gap around {money(gap['from'])} that the price "
-                     f"jumped straight over, so it may move quickly through that band")
+        watch.append(tr(f"there is an unfilled gap around {money(gap['from'])} that the price "
+                        f"jumped straight over, so it may move quickly through that band",
+                        f"ada celah yang belum tertutup di sekitar {money(gap['from'])} yang "
+                        "dilompati langsung oleh harga, jadi harga mungkin bergerak cepat "
+                        "melewati pita itu"))
     if watch:
-        paragraphs.append("Worth watching: " + "; ".join(watch) + ".")
+        paragraphs.append(tr("Worth watching: ", "Layak diamati: ") + "; ".join(watch) + ".")
 
     # ---- 4. the honesty paragraph, always present -----------------------
     paragraphs.append(_horizon_caveat(block))
@@ -2745,23 +3862,40 @@ def _horizon_caveat(block: dict) -> str:
     """
     setup = block.get("setup") or {}
     evidence = setup.get("evidence")
-    lead = "Be careful how much weight you put on this. "
+    lead = tr("Be careful how much weight you put on this. ",
+              "Berhati-hatilah dengan seberapa besar bobot yang Anda berikan pada ini. ")
     if evidence == "moderate":
-        return (lead + "Breakout rules of this kind sit on the strongest evidence anything in "
-                "this section has — trends in price do persist over months, across many markets "
-                "and decades of data. That is a statement about averages over thousands of "
-                "trades, not a forecast for this one, and the edge is thin enough that trading "
-                "costs matter.")
+        return (lead + tr("Breakout rules of this kind sit on the strongest evidence anything in "
+                   "this section has — trends in price do persist over months, across many markets "
+                   "and decades of data. That is a statement about averages over thousands of "
+                   "trades, not a forecast for this one, and the edge is thin enough that trading "
+                   "costs matter.",
+                          "Aturan tembusan semacam ini berpijak pada bukti terkuat yang dimiliki "
+                          "apa pun di bagian ini — tren harga memang bertahan selama "
+                          "berbulan-bulan, di banyak pasar dan puluhan tahun data. Itu pernyataan "
+                          "tentang rata-rata ribuan transaksi, bukan ramalan untuk yang satu ini, "
+                          "dan keunggulannya cukup tipis sehingga biaya transaksi berpengaruh."))
     if evidence == "weak":
-        return (lead + "This setup is widely taught and thinly evidenced. The mechanism is "
-                "plausible and the published out-of-sample support is close to absent once "
-                "trading costs are counted. The levels below are useful for deciding how much "
-                "to risk; they are not a reason to take the trade.")
-    return (lead + "Everything in this section describes the last few weeks of price movement. "
-            "Short-horizon technical signals have far weaker published support than the "
-            "long-horizon ones, and over one to four weeks prices have historically shown mild "
-            "REVERSAL rather than continuation — the opposite of the twelve-month effect. "
-            "Nothing here knows anything about the business.")
+        return (lead + tr("This setup is widely taught and thinly evidenced. The mechanism is "
+                   "plausible and the published out-of-sample support is close to absent once "
+                   "trading costs are counted. The levels below are useful for deciding how much "
+                   "to risk; they are not a reason to take the trade.",
+                          "Pola ini banyak diajarkan tetapi buktinya tipis. Mekanismenya masuk "
+                          "akal, tetapi dukungan bukti di luar sampel yang diterbitkan nyaris "
+                          "tidak ada setelah biaya transaksi diperhitungkan. Level-level di bawah "
+                          "berguna untuk memutuskan berapa banyak yang dipertaruhkan; level itu "
+                          "bukan alasan untuk mengambil transaksinya."))
+    return (lead + tr("Everything in this section describes the last few weeks of price movement. "
+               "Short-horizon technical signals have far weaker published support than the "
+               "long-horizon ones, and over one to four weeks prices have historically shown mild "
+               "REVERSAL rather than continuation — the opposite of the twelve-month effect. "
+               "Nothing here knows anything about the business.",
+                      "Semua yang ada di bagian ini menggambarkan pergerakan harga beberapa "
+                      "minggu terakhir. Sinyal teknikal jangka pendek punya dukungan bukti "
+                      "terbitan yang jauh lebih lemah daripada sinyal jangka panjang, dan "
+                      "dalam satu hingga empat minggu harga secara historis menunjukkan "
+                      "PEMBALIKAN ringan alih-alih kelanjutan — kebalikan dari efek dua belas "
+                      "bulan. Tidak ada di sini yang tahu apa pun tentang bisnisnya."))
 
 
 def for_horizon(block: dict, currency_format=None) -> dict:
@@ -2826,89 +3960,121 @@ def for_horizon(block: dict, currency_format=None) -> dict:
 # ============================================================================ #
 def _percentile_words(value: float) -> str:
     if value >= 90:
-        return "in the top tenth of this scan"
+        return tr("in the top tenth of this scan", "di sepersepuluh teratas pemindaian ini")
     if value >= 75:
-        return "in the top quarter of this scan"
+        return tr("in the top quarter of this scan", "di seperempat teratas pemindaian ini")
     if value >= 60:
-        return "in the better half of this scan"
+        return tr("in the better half of this scan",
+                  "di separuh yang lebih baik dari pemindaian ini")
     if value >= 40:
-        return "around the middle of this scan"
+        return tr("around the middle of this scan", "di sekitar tengah pemindaian ini")
     if value >= 25:
-        return "in the weaker half of this scan"
+        return tr("in the weaker half of this scan",
+                  "di separuh yang lebih lemah dari pemindaian ini")
     if value >= 10:
-        return "in the bottom quarter of this scan"
-    return "in the bottom tenth of this scan"
+        return tr("in the bottom quarter of this scan", "di seperempat terbawah pemindaian ini")
+    return tr("in the bottom tenth of this scan", "di sepersepuluh terbawah pemindaian ini")
 
 
 @metric("compositeRank")
 def _composite(value, coverage=None, available=None, total=None, **_):
-    label = "Overall rank"
-    what = ("The weighted average of where this name sits on every signal, compared with the "
-            "others in the same scan. 100 would be best on everything.")
+    label = tr("Overall rank", "Peringkat keseluruhan")
+    what = (tr("The weighted average of where this name sits on every signal, compared with the "
+               "others in the same scan. 100 would be best on everything.",
+               "Rata-rata tertimbang posisi saham ini pada setiap sinyal, dibandingkan "
+               "saham lain dalam pemindaian yang sama. 100 berarti terbaik di semua "
+               "sinyal."))
     if not _known(value):
-        return unavailable(label, what, "no signal could be computed for this name")
+        return unavailable(label, what, tr("no signal could be computed for this name",
+                                           "tidak ada sinyal yang bisa dihitung untuk saham ini"))
     band = _ladder(value, ((25, "poor"), (45, "fair"), (70, "good"), (None, "excellent")))
-    reading = (f"{value:.0f} out of 100, {_percentile_words(value)}. This is a position "
-               f"WITHIN this universe on this date, not a score on an absolute scale — if the "
-               f"whole list is falling, the top of it is still falling.")
+    reading = (tr(f"{value:.0f} out of 100, {_percentile_words(value)}. This is a position "
+                  f"WITHIN this universe on this date, not a score on an absolute scale — if the "
+                  f"whole list is falling, the top of it is still falling.",
+                  f"{value:.0f} dari 100, {_percentile_words(value)}. Ini posisi DI DALAM "
+                  "kumpulan saham ini pada tanggal ini, bukan skor pada skala mutlak — "
+                  "jika seluruh daftar sedang turun, puncaknya pun masih turun."))
     if _known(available) and _known(total) and available < total:
-        reading += (f" Built from {int(available)} of {int(total)} signals; the rest had too "
-                    f"little history and were left out rather than filled in with a guess.")
+        reading += (tr(f" Built from {int(available)} of {int(total)} signals; the rest had too "
+                       f"little history and were left out rather than filled in with a guess.",
+                       f" Dibangun dari {int(available)} dari {int(total)} sinyal; sisanya "
+                       "terlalu sedikit riwayatnya dan dikeluarkan alih-alih diisi dengan "
+                       "tebakan."))
     return make(label, what, reading,
-                "A ranking is a shortlist, not a verdict. Its job is to decide which few names "
-                "are worth opening the four lenses on.",
+                tr("A ranking is a shortlist, not a verdict. Its job is to decide which few names "
+                   "are worth opening the four lenses on.",
+                   "Peringkat adalah daftar pendek, bukan vonis. Tugasnya memutuskan "
+                   "beberapa saham mana yang layak dibuka dengan keempat lensa."),
                 band, "high", evidence="moderate", value_text=f"{value:.0f}")
 
 
 @metric("signalRank")
 def _signal_rank(value, signal=None, raw=None, raw_text=None, **_):
     from . import ranking
-    definition = ranking.SIGNAL_BY_KEY.get(signal or "", {})
+    definition = ranking.signal_text(signal or "")
     label = definition.get("label", "Signal")
     what = f"{definition.get('question', '')} {definition.get('detail', '')}".strip()
     if not _known(value):
-        return unavailable(label, what or "One ranking signal.",
-                           "not enough history for this name")
+        return unavailable(label, what or tr("One ranking signal.", "Satu sinyal peringkat."),
+                           tr("not enough history for this name", "riwayat saham ini tidak cukup"))
     band = _ladder(value, ((25, "poor"), (45, "fair"), (70, "good"), (None, "excellent")))
-    reading = f"{value:.0f} out of 100 — {_percentile_words(value)}"
+    reading = tr(f"{value:.0f} out of 100 — {_percentile_words(value)}",
+                 f"{value:.0f} dari 100 — {_percentile_words(value)}")
     if raw_text:
-        reading += f", on a reading of {raw_text}"
+        reading += tr(f", on a reading of {raw_text}", f", dengan pembacaan {raw_text}")
     reading += ". "
     if definition.get("direction") == -1:
-        reading += ("Note the direction: a LOWER raw number ranks better here, and the "
-                    "percentile already accounts for that.")
-    return make(label, what or "One ranking signal.", reading,
-                "One input among several. The composite beside it is what orders the table, "
-                "and the overlap between signals is measured below it.",
+        reading += (tr("Note the direction: a LOWER raw number ranks better here, and the "
+                       "percentile already accounts for that.",
+                       "Perhatikan arahnya: angka mentah yang LEBIH RENDAH justru peringkatnya "
+                       "lebih baik di sini, dan persentilnya sudah memperhitungkan itu."))
+    return make(label, what or tr("One ranking signal.", "Satu sinyal peringkat."), reading,
+                tr("One input among several. The composite beside it is what orders the table, "
+                   "and the overlap between signals is measured below it.",
+                   "Satu masukan di antara beberapa. Skor gabungan di sebelahnya yang "
+                   "mengurutkan tabel, dan tumpang tindih antarsinyal diukur di bawahnya."),
                 band, "high", evidence=definition.get("evidence"),
                 value_text=f"{value:.0f}")
 
 
 @metric("signalOverlap")
 def _signal_overlap(value, a=None, b=None, **_):
-    label = "Signal overlap"
-    what = ("How much two of the ranking signals are measuring the same thing. 1.0 would mean "
-            "they are interchangeable.")
+    label = tr("Signal overlap", "Tumpang tindih sinyal")
+    what = (tr("How much two of the ranking signals are measuring the same thing. 1.0 would mean "
+               "they are interchangeable.",
+               "Seberapa besar dua sinyal peringkat mengukur hal yang sama. 1.0 berarti "
+               "keduanya bisa saling menggantikan."))
     if not _known(value):
-        return unavailable(label, what, "too few complete rows to measure it")
+        return unavailable(label, what, tr("too few complete rows to measure it",
+                                           "terlalu sedikit baris lengkap untuk mengukurnya"))
     magnitude = abs(value)
     if magnitude > 0.7:
         band = "caution"
-        verdict = (f"{_num(value)} — these two are close to the same measurement. The composite "
-                   f"is counting that one fact more than once, which makes it look like a "
-                   f"consensus of independent tests when it is not.")
+        verdict = (tr(f"{_num(value)} — these two are close to the same measurement. The composite "
+                      f"is counting that one fact more than once, which makes it look like a "
+                      f"consensus of independent tests when it is not.",
+                      f"{_num(value)} — keduanya nyaris pengukuran yang sama. Skor gabungan "
+                      "menghitung satu fakta itu lebih dari sekali, yang membuatnya tampak "
+                      "seperti konsensus dari uji-uji independen padahal bukan."))
     elif magnitude > 0.4:
         band = "context"
-        verdict = f"{_num(value)} — related, as you would expect, but not duplicates."
+        verdict = tr(f"{_num(value)} — related, as you would expect, but not duplicates.",
+                     f"{_num(value)} — saling berkaitan, seperti yang bisa diduga, tetapi "
+                     "bukan duplikat.")
     else:
         band = "good"
-        verdict = f"{_num(value)} — largely independent of each other."
+        verdict = tr(f"{_num(value)} — largely independent of each other.",
+                     f"{_num(value)} — sebagian besar saling independen.")
     if a and b:
-        verdict = f"{a} and {b}: " + verdict
+        verdict = tr(f"{a} and {b}: ", f"{a} dan {b}: ") + verdict
     return make(label, what, verdict,
-                "Where two signals overlap heavily, treat their agreement as one opinion rather "
-                "than two. This is the same caveat the four-lens view carries, measured instead "
-                "of asserted.",
+                tr("Where two signals overlap heavily, treat their agreement as one opinion rather "
+                   "than two. This is the same caveat the four-lens view carries, measured instead "
+                   "of asserted.",
+                   "Ketika dua sinyal sangat tumpang tindih, perlakukan kesepakatan "
+                   "keduanya sebagai satu pendapat, bukan dua. Ini peringatan yang sama "
+                   "dengan yang dibawa tampilan empat lensa, diukur alih-alih sekadar "
+                   "dinyatakan."),
                 band, "low", evidence="strong", value_text=_num(value))
 
 
@@ -2917,7 +4083,7 @@ def for_ranking(result: dict) -> dict:
     from . import ranking
 
     out: dict = {}
-    for signal in result.get("signals") or ranking.SIGNALS:
+    for signal in result.get("signals") or ranking.signals():
         key = signal["key"]
         # A definition-level explanation for the column header, independent of
         # any one row: the table needs to explain its columns before a reader
@@ -2925,13 +4091,20 @@ def for_ranking(result: dict) -> dict:
         out[f"signalDefinition.{key}"] = make(
             label=signal["label"],
             what=f"{signal['question']} {signal['detail']}",
-            reading=("Ranked across every name in this scan"
-                     + (", with a LOWER raw reading ranking better."
-                        if signal["direction"] == -1 else ", highest first.")
-                     + f" Weighted {signal['weight']:.1f} in the composite, because the "
-                       f"published evidence for it is {signal['evidence']}."),
-            action=("One column among several. Sort by it to see the ranking that signal alone "
-                    "would produce."),
+            reading=(tr("Ranked across every name in this scan",
+                        "Diperingkatkan di antara semua saham dalam pemindaian ini")
+                     + (tr(", with a LOWER raw reading ranking better.",
+                           ", dengan pembacaan mentah yang LEBIH RENDAH berperingkat lebih baik.")
+                        if signal["direction"] == -1 else tr(", highest first.",
+                                                             ", yang tertinggi lebih dulu."))
+                     + tr(f" Weighted {signal['weight']:.1f} in the composite, because the "
+                          f"published evidence for it is {signal['evidence']}.",
+                          f" Berbobot {signal['weight']:.1f} dalam skor gabungan, karena bukti "
+                          f"terbitan untuknya {_EVIDENCE_ID.get(signal['evidence'], signal['evidence'])}.")),
+            action=(tr("One column among several. Sort by it to see the ranking that signal alone "
+                       "would produce.",
+                       "Satu kolom di antara beberapa. Urutkan menurut kolom ini untuk melihat "
+                       "peringkat yang akan dihasilkan sinyal itu sendirian.")),
             band="context", good_direction="none", evidence=signal["evidence"],
         )
 
@@ -2944,8 +4117,8 @@ def for_ranking(result: dict) -> dict:
     for pair in (correlation.get("pairs") or []):
         explanation = explain(
             "signalOverlap", pair["correlation"],
-            a=ranking.SIGNAL_BY_KEY.get(pair["a"], {}).get("label", pair["a"]),
-            b=ranking.SIGNAL_BY_KEY.get(pair["b"], {}).get("label", pair["b"]))
+            a=ranking.signal_text(pair["a"]).get("label", pair["a"]),
+            b=ranking.signal_text(pair["b"]).get("label", pair["b"]))
         if explanation:
             out[f"signalOverlap.{pair['a']}.{pair['b']}"] = explanation
 
@@ -3026,7 +4199,8 @@ SYNTHESIS_FAMILY = {"flow": "price", "trend": "price",
 # habits are accounted for. `lensagreement` holds that measurement and
 # `_warrant` below is where it either earns this app's central claim or takes it
 # away. See §15 of RESEARCH_ROADMAP.md.
-FAMILY_LABEL = {"price": "price and volume", "filings": "the filings"}
+FAMILY_LABEL = Bilingual({"price": ("price and volume", "harga dan volume"),
+                          "filings": ("the filings", "laporan keuangan")})
 
 # Verbatim from the app's own framing. A DCF whose terminal value is more than
 # this share of the answer is mostly a statement about the perpetuity.
@@ -3070,26 +4244,36 @@ def _read_flow(data: dict) -> Optional[dict]:
     episode = ((data.get("accumulation") or {}).get("current")) or None
     tail = ""
     if isinstance(episode, dict) and episode.get("direction"):
-        tail = (f" A sustained {str(episode['direction']).lower()} regime is running "
-                f"underneath the day-to-day noise, which is the pattern a patient "
-                f"buyer leaves and a single-day detector cannot see.")
+        tail = (tr(f" A sustained {str(episode['direction']).lower()} regime is running "
+                   f"underneath the day-to-day noise, which is the pattern a patient "
+                   f"buyer leaves and a single-day detector cannot see.",
+                   f" Rezim {str(episode['direction']).lower()} yang berkelanjutan sedang "
+                   "berjalan di balik derau harian, pola yang ditinggalkan pembeli yang "
+                   "sabar dan tidak bisa dilihat detektor harian."))
 
     if not recent:
         total = stats.get("anomalyCount")
-        extra = f" ({total} unusual days across the whole window.)" if total else ""
+        extra = tr(f" ({total} unusual days across the whole window.)",
+                   f" ({total} hari tidak biasa di sepanjang periode.)") if total else ""
         return _reading(
-            "Flow", "flow", "Quiet",
-            f"Nothing unusual has traded in the last {days} days.{extra}{tail}",
+            tr("Flow", "Arus"), "flow", tr("Quiet", "Tenang"),
+            tr(f"Nothing unusual has traded in the last {days} days.{extra}{tail}",
+               f"Tidak ada yang tidak biasa diperdagangkan dalam {days} hari terakhir."
+               f"{extra}{tail}"),
             "neutral", 0)
 
     plural = "" if recent == 1 else "s"
     vote = 1 if bias == "accumulation" else -1 if bias == "distribution" else 0
-    word = {"accumulation": "buying", "distribution": "selling"}.get(bias, "mixed")
+    word = {"accumulation": tr("buying", "membeli"),
+            "distribution": tr("selling", "menjual")}.get(bias, tr("mixed", "bercampur"))
     return _reading(
-        "Flow", "flow", word.capitalize(),
-        f"{recent} unusual day{plural} in the last {days}, leaning {word}. "
-        f"Unusual means statistically unlike this stock's other days — it does not "
-        f"mean an institution was behind it.{tail}",
+        tr("Flow", "Arus"), "flow", word.capitalize(),
+        tr(f"{recent} unusual day{plural} in the last {days}, leaning {word}. "
+           f"Unusual means statistically unlike this stock's other days — it does not "
+           f"mean an institution was behind it.{tail}",
+           f"{recent} hari tidak biasa dalam {days} hari terakhir, arahnya {word}. "
+           "Tidak biasa berarti secara statistik tidak mirip hari-hari lain saham "
+           f"ini — bukan berarti ada institusi di baliknya.{tail}"),
         "good" if vote > 0 else "bad" if vote < 0 else "neutral", vote)
 
 
@@ -3102,9 +4286,14 @@ def _read_trend(data: dict) -> Optional[dict]:
     if data.get("hasLongTerm") and view.get("verdict"):
         tone = {"bull": "good", "bear": "bad"}.get(view.get("tone"), "neutral")
         passed, scored = view.get("passed"), view.get("scored")
-        count = f" ({passed} of {scored} checks point that way.)" if scored else ""
+        count = tr(f" ({passed} of {scored} checks point that way.)",
+                   f" ({passed} dari {scored} pemeriksaan mengarah ke sana.)") if scored else ""
         return _reading(
-            "Trend", "trend", str(view["verdict"]).capitalize(),
+            tr("Trend", "Tren"), "trend",
+            {"CONSTRUCTIVE": tr("Constructive", "Konstruktif"), "WEAK": tr("Weak", "Lemah"),
+             "MIXED": tr("Mixed", "Bercampur"),
+             "NO READING": tr("No reading", "Tidak ada pembacaan")}.get(
+                 str(view["verdict"]), str(view["verdict"]).capitalize()),
             f"{_plain(view.get('headline'))}{count}",
             tone, 1 if tone == "good" else -1 if tone == "bad" else 0)
 
@@ -3113,13 +4302,14 @@ def _read_trend(data: dict) -> Optional[dict]:
         return None
     tone = {"bull": "good", "bear": "bad"}.get(summary.get("trend_tone"), "neutral")
     return _reading(
-        "Trend", "trend", str(summary["trend"]).capitalize(),
+        tr("Trend", "Tren"), "trend", str(summary["trend"]).capitalize(),
         _plain(summary.get("headline")).split(". ")[0] + ".",
         tone, 1 if tone == "good" else -1 if tone == "bad" else 0)
 
 
-ENGINE_WORDS = {"DCF": "cash-flow model", "DDM": "dividend model",
-                "RI": "book-value model"}
+ENGINE_WORDS = Bilingual({"DCF": ("cash-flow model", "model arus kas"),
+                          "DDM": ("dividend model", "model dividen"),
+                          "RI": ("book-value model", "model nilai buku")})
 
 
 def _read_value(data: dict) -> Optional[dict]:
@@ -3139,10 +4329,12 @@ def _read_value(data: dict) -> Optional[dict]:
     fair, spot = monte.get("p50"), data.get("price")
     if _known(fair) and _known(spot) and fair:
         gap = (spot - fair) / fair
-        side = "below" if gap <= 0 else "above"
-        where = f", putting the market price {_pct(abs(gap), 0)} {side} that"
+        side = tr("below", "di bawah") if gap <= 0 else tr("above", "di atas")
+        where = tr(f", putting the market price {_pct(abs(gap), 0)} {side} that",
+                   f", sehingga harga pasar {_pct(abs(gap), 0)} {side}nya")
     prob = monte.get("probUndervalued")
-    runs = (f" {_pct(prob, 0)} of the simulated runs came out cheap."
+    runs = (tr(f" {_pct(prob, 0)} of the simulated runs came out cheap.",
+               f" {_pct(prob, 0)} dari simulasi menghasilkan murah.")
             if _known(prob) else "")
 
     vote = 1 if verdict == "UNDERVALUED" else -1 if verdict == "OVERVALUED" else 0
@@ -3150,38 +4342,50 @@ def _read_value(data: dict) -> Optional[dict]:
     # "overvalued". Rendered large beside a price, that word is read as a
     # forecast of a fall, which is the one thing a discounted cash flow cannot
     # be. Mirrors `verdictLabel` in lib/utils.ts.
-    label = {"UNDERVALUED": "Below model range",
-             "OVERVALUED": "Above model range",
-             "FAIRLY VALUED": "Within model range"}.get(verdict, str(verdict).capitalize())
+    label = {"UNDERVALUED": tr("Below model range", "Di bawah rentang model"),
+             "OVERVALUED": tr("Above model range", "Di atas rentang model"),
+             "FAIRLY VALUED": tr("Within model range", "Di dalam rentang model")}.get(verdict, str(verdict).capitalize())
     return _reading(
-        "Value", "value", label,
-        f"The {engine} puts fair value near {monte['p50Label']}{where}.{runs}",
+        tr("Value", "Nilai"), "value", label,
+        tr(f"The {engine} puts fair value near {monte['p50Label']}{where}.{runs}",
+           f"Menurut {engine}, nilai wajarnya sekitar {monte['p50Label']}{where}."
+           f"{runs}"),
         "good" if vote > 0 else "bad" if vote < 0 else "neutral", vote)
 
 
 def _read_quality(data: dict) -> Optional[dict]:
     if not data.get("applicable"):
         return _reading(
-            "Quality", "quality", "Not applicable",
-            "Piotroski, Altman and Beneish were all built on non-financial firms and "
-            "none of them transfers to a bank or insurer, so no score is reported here. "
-            "That is a refusal, not a gap in the data.",
+            tr("Quality", "Kualitas"), "quality", tr("Not applicable", "Tidak berlaku"),
+            tr("Piotroski, Altman and Beneish were all built on non-financial firms and "
+               "none of them transfers to a bank or insurer, so no score is reported here. "
+               "That is a refusal, not a gap in the data.",
+               "Piotroski, Altman, dan Beneish semuanya dibangun di atas perusahaan "
+               "nonkeuangan dan tidak ada yang berlaku untuk bank atau asuransi, jadi "
+               "tidak ada skor yang dilaporkan di sini. Itu penolakan, bukan celah data."),
             "none", 0)
 
     parts = []
     piotroski = data.get("piotroski") or {}
     if piotroski.get("score") is not None:
-        parts.append(f"{piotroski['score']} of {piotroski.get('maxScore', 9)} "
-                     f"health checks passed")
-    words = {"safe": "the balance sheet is clear of the distress zone",
-             "grey": "the balance sheet sits in the grey zone",
-             "distress": "the balance sheet is inside the distress zone"}
+        parts.append(tr(f"{piotroski['score']} of {piotroski.get('maxScore', 9)} "
+                        f"health checks passed",
+                        f"{piotroski['score']} dari {piotroski.get('maxScore', 9)} pemeriksaan "
+                        "kesehatan lolos"))
+    words = {"safe": tr("the balance sheet is clear of the distress zone",
+                        "neracanya berada di luar zona tertekan"),
+             "grey": tr("the balance sheet sits in the grey zone",
+                        "neracanya berada di zona abu-abu"),
+             "distress": tr("the balance sheet is inside the distress zone",
+                            "neracanya berada di dalam zona tertekan")}
     band = (data.get("altman") or {}).get("band")
     if band in words:
         parts.append(words[band])
-    flags = {"clean": "no sign of massaged earnings",
-             "borderline": "accruals close to the manipulation threshold",
-             "flagged": "the accrual pattern is flagged for a closer look"}
+    flags = {"clean": tr("no sign of massaged earnings", "tidak ada tanda laba yang dipoles"),
+             "borderline": tr("accruals close to the manipulation threshold",
+                              "akrual mendekati ambang manipulasi"),
+             "flagged": tr("the accrual pattern is flagged for a closer look",
+                           "pola akrualnya ditandai untuk diperiksa lebih dekat")}
     beneish = (data.get("beneish") or {}).get("band")
     if beneish in flags:
         parts.append(flags[beneish])
@@ -3191,7 +4395,9 @@ def _read_quality(data: dict) -> Optional[dict]:
     verdict = data.get("verdict") or "NEUTRAL"
     tone = {"SOUND": "good", "CONCERNS": "bad"}.get(verdict, "neutral")
     return _reading(
-        "Quality", "quality", verdict.capitalize(),
+        tr("Quality", "Kualitas"), "quality",
+        {"SOUND": tr("Sound", "Sehat"), "CONCERNS": tr("Concerns", "Ada kekhawatiran"),
+         "NEUTRAL": tr("Neutral", "Netral")}.get(verdict, verdict.capitalize()),
         (", ".join(parts) + ".").capitalize(),
         tone, 1 if tone == "good" else -1 if tone == "bad" else 0)
 
@@ -3233,27 +4439,43 @@ def _warrant(measured: Optional[dict]) -> str:
         # Never measured, or measured on too few names. Back to the stated
         # assumption, said as an assumption — which is what the confluence rail
         # has always admitted in smaller type.
-        return ("because the price record and the filings read different data — though "
-                "how far their verdicts actually overlap is a stated assumption here "
-                "rather than something this app has measured")
+        return (tr("because the price record and the filings read different data — though "
+                   "how far their verdicts actually overlap is a stated assumption here "
+                   "rather than something this app has measured",
+                   "karena catatan harga dan laporan keuangan membaca data yang berbeda — "
+                   "meski seberapa jauh vonis keduanya benar-benar tumpang tindih adalah "
+                   "asumsi yang dinyatakan di sini, bukan sesuatu yang sudah diukur "
+                   "aplikasi ini"))
 
     families = measured["families"]
     kappa, n = families["kappa"], families["n"]
-    where = f"across {n} names in {measured['scope']}"
+    where = tr(f"across {n} names in {measured['scope']}",
+               f"di {n} saham dalam {names(measured['scope'])}")
 
     if not families.get("excludesZero"):
-        return (f"and that is measured rather than assumed: {where}, the two reach the "
-                f"same verdict no more often than their own separate habits already "
-                f"put them there (κ = {kappa:+.2f}), so agreement between them really "
-                f"is two facts and not one counted twice")
+        return (tr(f"and that is measured rather than assumed: {where}, the two reach the "
+                   f"same verdict no more often than their own separate habits already "
+                   f"put them there (κ = {kappa:+.2f}), so agreement between them really "
+                   f"is two facts and not one counted twice",
+                   f"dan itu diukur, bukan diasumsikan: {where}, keduanya mencapai vonis "
+                   "yang sama tidak lebih sering daripada kebiasaan masing-masing (κ = "
+                   f"{kappa:+.2f}), jadi kesepakatan di antara keduanya benar-benar dua "
+                   "fakta, bukan satu yang dihitung dua kali"))
     if kappa > 0:
-        return (f"with one measured qualification: {where}, the two agree rather more "
-                f"often than chance alone would produce (κ = {kappa:+.2f}), so the "
-                f"second reading is partly predictable from the first and this is "
-                f"worth less than two independent readings")
-    return (f"with one measured oddity: {where}, the two agree LESS often than chance "
-            f"alone would produce (κ = {kappa:+.2f}), which is a finding in its own "
-            f"right rather than reassurance about either of them")
+        return (tr(f"with one measured qualification: {where}, the two agree rather more "
+                   f"often than chance alone would produce (κ = {kappa:+.2f}), so the "
+                   f"second reading is partly predictable from the first and this is "
+                   f"worth less than two independent readings",
+                   f"dengan satu catatan yang terukur: {where}, keduanya sepakat sedikit "
+                   f"lebih sering daripada yang dihasilkan kebetulan saja (κ = {kappa:+.2f}"
+                   "), jadi pembacaan kedua sebagian bisa ditebak dari yang pertama dan ini "
+                   "bernilai kurang dari dua pembacaan independen"))
+    return (tr(f"with one measured oddity: {where}, the two agree LESS often than chance "
+               f"alone would produce (κ = {kappa:+.2f}), which is a finding in its own "
+               f"right rather than reassurance about either of them",
+               f"dengan satu keanehan yang terukur: {where}, keduanya LEBIH JARANG "
+               f"sepakat daripada yang dihasilkan kebetulan saja (κ = {kappa:+.2f}), "
+               "yang merupakan temuan tersendiri, bukan penenang tentang salah satunya"))
 
 
 def _agreement(readings: Sequence[dict], families: dict,
@@ -3261,40 +4483,54 @@ def _agreement(readings: Sequence[dict], families: dict,
     """The cross-check sentence — the one claim this whole app is built on."""
     reading_count = len([r for r in readings if r["tone"] != "none"])
     if not families:
-        return {"text": "No lens returned a usable reading, so there is nothing to "
-                        "cross-check.", "tone": "none",
+        return {"text": tr("No lens returned a usable reading, so there is nothing to "
+                           "cross-check.",
+                           "Tidak ada lensa yang memberi pembacaan yang bisa dipakai, jadi tidak "
+                           "ada yang bisa diperiksa silang."), "tone": "none",
                 "independentSources": 0, "lensesReading": reading_count}
 
     if len(families) == 1:
         only = next(iter(families))
         return {"text": (
-            f"Only {FAMILY_LABEL[only]} could be read here, so there is no cross-check. "
-            f"Everything below rests on one body of data, which is exactly the situation "
-            f"this app exists to avoid."),
+            tr(f"Only {FAMILY_LABEL[only]} could be read here, so there is no cross-check. "
+               f"Everything below rests on one body of data, which is exactly the situation "
+               f"this app exists to avoid.",
+               f"Hanya {FAMILY_LABEL[only]} yang bisa dibaca di sini, jadi tidak ada "
+               "pemeriksaan silang. Semua di bawah bertumpu pada satu kumpulan data, "
+               "situasi yang justru ingin dihindari aplikasi ini.")),
             "tone": "warn", "independentSources": 1, "lensesReading": reading_count}
 
     price, filings = families["price"]["vote"], families["filings"]["vote"]
     base = {"independentSources": len(families), "lensesReading": reading_count}
 
     if price and price == filings:
-        direction = "the same constructive direction" if price > 0 else "the same negative direction"
+        direction = tr("the same constructive direction", "arah konstruktif yang sama") if price > 0 else tr("the same negative direction",
+                                                                           "arah negatif yang sama")
         return {**base, "tone": "good" if price > 0 else "bad", "text": (
-            f"Both bodies of data point in {direction}. That is the strongest thing this "
-            f"app can say, {_warrant(measured)}.")}
+            tr(f"Both bodies of data point in {direction}. That is the strongest thing this "
+               f"app can say, {_warrant(measured)}.",
+               f"Kedua kumpulan data menunjuk ke {direction}. Itulah hal terkuat yang "
+               f"bisa dikatakan aplikasi ini, {_warrant(measured)}."))}
 
     if price and filings and price != filings:
-        up = "price and volume" if price > 0 else "the filings"
-        down = "the filings" if price > 0 else "price and volume"
+        up = tr("price and volume", "harga dan volume") if price > 0 else tr("the filings", "laporan keuangan")
+        down = tr("the filings", "laporan keuangan") if price > 0 else tr("price and volume", "harga dan volume")
         return {**base, "tone": "warn", "text": (
-            f"They disagree: {up} read constructively while {down} do not. The "
-            f"disagreement is the finding, and this page cannot settle which side is "
-            f"right.")}
+            tr(f"They disagree: {up} read constructively while {down} do not. The "
+               f"disagreement is the finding, and this page cannot settle which side is "
+               f"right.",
+               f"Keduanya berselisih: {up} terbaca konstruktif sementara {down} tidak. "
+               "Perselisihan itulah temuannya, dan halaman ini tidak bisa memutuskan "
+               "sisi mana yang benar."))}
 
-    active = "price and volume" if price else "the filings"
-    quiet = "the filings" if price else "price and volume"
+    active = tr("price and volume", "harga dan volume") if price else tr("the filings", "laporan keuangan")
+    quiet = tr("the filings", "laporan keuangan") if price else tr("price and volume", "harga dan volume")
     return {**base, "tone": "neutral", "text": (
-        f"Only {active} has a directional view; {quiet} come out neutral. A single "
-        f"leaning reading is a weaker claim than agreement between two.")}
+        tr(f"Only {active} has a directional view; {quiet} come out neutral. A single "
+           f"leaning reading is a weaker claim than agreement between two.",
+           f"Hanya {active} yang punya pandangan berarah; {quiet} hasilnya netral. "
+           "Satu pembacaan yang condong adalah klaim yang lebih lemah daripada "
+           "kesepakatan dua pembacaan."))}
 
 
 def _tensions(readings: dict, payload: dict, families: dict) -> list[dict]:
@@ -3304,41 +4540,70 @@ def _tensions(readings: dict, payload: dict, families: dict) -> list[dict]:
     trend, flow = readings.get("trend"), readings.get("flow")
 
     if value and quality and value["vote"] > 0 and quality["vote"] < 0:
-        out.append({"title": "Cheap, with the accounts flagged", "text": (
-            "The valuation says the price is below what the cash flows support, and the "
-            "accounting screens raise a flag on the same filings. This is the shape of a "
-            "value trap: cheap because it deserves to be. Resolve the accounting question "
-            "before trusting the valuation, because both are computed from the same "
-            "statements and only one of them assumes they are honest.")})
+        out.append({"title": tr("Cheap, with the accounts flagged",
+                                "Murah, dengan laporan keuangan yang ditandai"), "text": (
+            tr("The valuation says the price is below what the cash flows support, and the "
+               "accounting screens raise a flag on the same filings. This is the shape of a "
+               "value trap: cheap because it deserves to be. Resolve the accounting question "
+               "before trusting the valuation, because both are computed from the same "
+               "statements and only one of them assumes they are honest.",
+               "Valuasi berkata harganya di bawah yang didukung arus kas, dan penyaring "
+               "akuntansi menandai laporan keuangan yang sama. Inilah bentuk jebakan "
+               "nilai: murah karena memang pantas murah. Selesaikan pertanyaan "
+               "akuntansinya sebelum mempercayai valuasinya, karena keduanya dihitung "
+               "dari laporan yang sama dan hanya salah satunya yang mengasumsikan "
+               "laporan itu jujur."))})
 
     if value and trend and value["vote"] < 0 and trend["vote"] > 0:
-        out.append({"title": "Rising past what the business supports", "text": (
-            "The price trend is constructive and the model says the price has run beyond "
-            "what the cash flows justify. Both can be true, and both can persist for "
-            "years — momentum and valuation operate on completely different clocks. "
-            "Nothing here tells you which one turns first.")})
+        out.append({"title": tr("Rising past what the business supports",
+                                "Naik melampaui yang didukung bisnisnya"), "text": (
+            tr("The price trend is constructive and the model says the price has run beyond "
+               "what the cash flows justify. Both can be true, and both can persist for "
+               "years — momentum and valuation operate on completely different clocks. "
+               "Nothing here tells you which one turns first.",
+               "Tren harganya konstruktif dan model berkata harga sudah berlari "
+               "melampaui yang dibenarkan arus kas. Keduanya bisa benar, dan keduanya "
+               "bisa bertahan bertahun-tahun — momentum dan valuasi berjalan dengan jam "
+               "yang sama sekali berbeda. Tidak ada di sini yang memberi tahu mana yang "
+               "berbalik lebih dulu."))})
 
     if value and quality and value["vote"] < 0 and quality["vote"] > 0:
-        out.append({"title": "A sound business at a demanding price", "text": (
-            "Quality is good and the valuation says expensive. That is a different "
-            "problem from a weak business — the risk is the price paid, not the company. "
-            "The growth assumption is the lever worth testing here.")})
+        out.append({"title": tr("A sound business at a demanding price",
+                                "Bisnis yang sehat dengan harga yang menuntut"), "text": (
+            tr("Quality is good and the valuation says expensive. That is a different "
+               "problem from a weak business — the risk is the price paid, not the company. "
+               "The growth assumption is the lever worth testing here.",
+               "Kualitasnya bagus dan valuasinya berkata mahal. Itu masalah yang "
+               "berbeda dari bisnis yang lemah — risikonya ada pada harga yang dibayar, "
+               "bukan perusahaannya. Asumsi pertumbuhan adalah tuas yang layak diuji di "
+               "sini."))})
 
     for family, info in families.items():
         if info.get("split"):
-            out.append({"title": f"Split within {FAMILY_LABEL[family]}", "text": (
-                f"{' and '.join(info['members'])} read the same data and point opposite "
-                f"ways. That is not two independent opinions cancelling out — it is one "
-                f"dataset supporting two readings, which usually means the signal is weak "
-                f"rather than balanced.")})
+            out.append({"title": tr(f"Split within {FAMILY_LABEL[family]}",
+                                    f"Terbelah di dalam {FAMILY_LABEL[family]}"), "text": (
+                tr(f"{' and '.join(info['members'])} read the same data and point opposite "
+                   f"ways. That is not two independent opinions cancelling out — it is one "
+                   f"dataset supporting two readings, which usually means the signal is weak "
+                   f"rather than balanced.",
+                   f"{' dan '.join(info['members'])} membaca data yang sama dan menunjuk ke "
+                   "arah berlawanan. Itu bukan dua pendapat independen yang saling "
+                   "meniadakan — itu satu kumpulan data yang mendukung dua pembacaan, yang "
+                   "biasanya berarti sinyalnya lemah, bukan seimbang."))})
 
     if flow and trend and flow["vote"] and not trend["vote"]:
-        out.append({"title": "Flow moved before the trend did", "text": (
-            "Unusual trading has shown up while the price trend itself is unresolved. "
-            "This is the case the Flow lens exists for, and also the case where it is "
-            "most often wrong — index rebalances, expiries and earnings all leave the "
-            "same footprint. The event study on the Flow tab is how you check whether "
-            "these flags have ever predicted anything on this ticker.")})
+        out.append({"title": tr("Flow moved before the trend did", "Arus bergerak sebelum trennya"), "text": (
+            tr("Unusual trading has shown up while the price trend itself is unresolved. "
+               "This is the case the Flow lens exists for, and also the case where it is "
+               "most often wrong — index rebalances, expiries and earnings all leave the "
+               "same footprint. The event study on the Flow tab is how you check whether "
+               "these flags have ever predicted anything on this ticker.",
+               "Perdagangan yang tidak biasa muncul sementara tren harganya sendiri "
+               "belum jelas. Inilah kasus yang menjadi alasan lensa Arus ada, dan juga "
+               "kasus ketika ia paling sering keliru — penyeimbangan ulang indeks, "
+               "jatuh tempo, dan laporan laba semuanya meninggalkan jejak yang sama. "
+               "Studi peristiwa di tab Arus adalah cara memeriksa apakah tanda-tanda "
+               "ini pernah memprediksi apa pun pada ticker ini."))})
 
     return out
 
@@ -3356,49 +4621,72 @@ def _blind_spots(payload: dict, readings: dict) -> list[dict]:
     if technical:
         hurst = ((technical.get("longTerm") or {}).get("hurstReading")) or {}
         if hurst.get("verdict") == "indistinguishable":
-            out.append({"title": "The trend tools may be describing noise", "text": (
-                "This price history cannot be told apart from a random walk, so discount "
-                "every price-based reading here. The filings lenses are unaffected.")})
+            out.append({"title": tr("The trend tools may be describing noise",
+                                    "Alat tren mungkin sedang menggambarkan derau"), "text": (
+                tr("This price history cannot be told apart from a random walk, so discount "
+                   "every price-based reading here. The filings lenses are unaffected.",
+                   "Riwayat harga ini tidak bisa dibedakan dari jalan acak, jadi kurangi "
+                   "bobot setiap pembacaan berbasis harga di sini. Lensa laporan keuangan "
+                   "tidak terpengaruh."))})
         if not technical.get("hasLongTerm"):
-            out.append({"title": "No long-horizon reading", "text": (
-                "Not enough history for the multi-year section — the part with the "
-                "strongest evidence. Set the range to 5y or more.")})
+            out.append({"title": tr("No long-horizon reading", "Tidak ada pembacaan jangka panjang"), "text": (
+                tr("Not enough history for the multi-year section — the part with the "
+                   "strongest evidence. Set the range to 5y or more.",
+                   "Riwayatnya tidak cukup untuk bagian multitahun — bagian dengan bukti "
+                   "terkuat. Atur rentangnya ke 5y atau lebih."))})
 
     valuation = _leg(payload, "valuation")
     if valuation:
         share = (valuation.get("baseCase") or {}).get("terminalShare")
         if _known(share) and share >= TERMINAL_SHARE_WARN:
-            out.append({"title": "Most of the valuation is a perpetuity guess", "text": (
-                f"{_pct(share, 0)} of the fair value comes from the terminal assumption — "
-                f"what the business is worth forever after year five — rather than from "
-                f"the forecast years. The valuation is mostly a statement about that one "
-                f"input, and it is editable on the Value tab.")})
+            out.append({"title": tr("Most of the valuation is a perpetuity guess",
+                                    "Sebagian besar valuasi adalah tebakan perpetuitas"), "text": (
+                tr(f"{_pct(share, 0)} of the fair value comes from the terminal assumption — "
+                   f"what the business is worth forever after year five — rather than from "
+                   f"the forecast years. The valuation is mostly a statement about that one "
+                   f"input, and it is editable on the Value tab.",
+                   f"{_pct(share, 0)} dari nilai wajar berasal dari asumsi terminal — nilai "
+                   "bisnis selamanya setelah tahun kelima — bukan dari tahun-tahun ramalan. "
+                   "Valuasinya sebagian besar adalah pernyataan tentang satu masukan itu, "
+                   "dan masukan itu bisa diubah di tab Nilai."))})
 
     anomaly = _leg(payload, "anomaly")
     if anomaly:
         liquidity = anomaly.get("liquidity") or {}
         if liquidity.get("spreadResolved") is False:
-            out.append({"title": "Trading cost is a ceiling, not a measurement", "text": (
-                "The bid-ask spread on this name sits below what daily bars can resolve, "
-                "so the panel reports an upper bound instead of a figure. Quoting the "
-                "estimator's own noise as a cost would overstate what this stock actually "
-                "charges to trade.")})
+            out.append({"title": tr("Trading cost is a ceiling, not a measurement",
+                                    "Biaya transaksi adalah batas atas, bukan hasil pengukuran"), "text": (
+                tr("The bid-ask spread on this name sits below what daily bars can resolve, "
+                   "so the panel reports an upper bound instead of a figure. Quoting the "
+                   "estimator's own noise as a cost would overstate what this stock actually "
+                   "charges to trade.",
+                   "Spread harga beli-jual saham ini berada di bawah yang bisa ditangkap "
+                   "batang harian, jadi panel melaporkan batas atas alih-alih angka. "
+                   "Mengutip derau penaksirnya sendiri sebagai biaya akan melebih-lebihkan "
+                   "ongkos transaksi saham ini yang sebenarnya."))})
 
-    for name, label in (("anomaly", "Flow"), ("technical", "Trend"),
-                        ("valuation", "Value"), ("quality", "Quality")):
+    for name, label in (("anomaly", tr("Flow", "Arus")), ("technical", tr("Trend", "Tren")),
+                        ("valuation", tr("Value", "Nilai")), ("quality", tr("Quality", "Kualitas"))):
         leg = (payload or {}).get(name)
         if isinstance(leg, dict) and not leg.get("ok"):
             detail = leg.get("error")
             if isinstance(detail, dict):
-                detail = detail.get("message") or "the engine could not run"
-            out.append({"title": f"{label} did not run", "text": (
-                f"{str(detail)[:220]} Everything below is missing that lens, so the "
-                f"cross-check is weaker than it looks.")})
+                detail = detail.get("message") or tr("the engine could not run",
+                                                     "mesinnya tidak bisa berjalan")
+            out.append({"title": tr(f"{label} did not run", f"{label} tidak berjalan"), "text": (
+                tr(f"{_clip(detail)} Everything below is missing that lens, so the "
+                   f"cross-check is weaker than it looks.",
+                   f"{_clip(detail)} Semua di bawah kehilangan lensa itu, jadi pemeriksaan "
+                   "silangnya lebih lemah daripada kelihatannya."))})
 
     if readings.get("quality") and readings["quality"]["tone"] == "none":
-        out.append({"title": "No accounting screen for this company", "text": (
-            "The three quality models do not apply to banks and insurers, so half of the "
-            "filings-side evidence is unavailable here and the valuation carries it alone.")})
+        out.append({"title": tr("No accounting screen for this company",
+                                "Tidak ada penyaring akuntansi untuk perusahaan ini"), "text": (
+            tr("The three quality models do not apply to banks and insurers, so half of the "
+               "filings-side evidence is unavailable here and the valuation carries it alone.",
+               "Ketiga model kualitas tidak berlaku untuk bank dan asuransi, jadi "
+               "separuh bukti dari sisi laporan keuangan tidak tersedia di sini dan "
+               "valuasi menanggungnya sendirian."))})
 
     return out
 
@@ -3413,30 +4701,44 @@ def _next_checks(payload: dict, readings: dict) -> list[str]:
     if valuation:
         share = (valuation.get("baseCase") or {}).get("terminalShare")
         if _known(share) and share >= TERMINAL_SHARE_WARN:
-            out.append("On the Value tab, move terminal growth by half a point and watch "
-                       "the fair value move further than the gap you are looking at. If it "
-                       "does, the gap is an artefact of that assumption.")
+            out.append(tr("On the Value tab, move terminal growth by half a point and watch "
+                          "the fair value move further than the gap you are looking at. If it "
+                          "does, the gap is an artefact of that assumption.",
+                          "Di tab Nilai, geser pertumbuhan terminal setengah poin dan lihat nilai "
+                          "wajarnya bergeser lebih jauh daripada selisih yang sedang Anda lihat. "
+                          "Jika iya, selisih itu hanyalah produk sampingan asumsi tersebut."))
         else:
-            out.append("On the Value tab, change the growth assumption to whatever you "
-                       "actually believe. The default is a default, not a forecast.")
+            out.append(tr("On the Value tab, change the growth assumption to whatever you "
+                          "actually believe. The default is a default, not a forecast.",
+                          "Di tab Nilai, ubah asumsi pertumbuhan ke angka yang benar-benar Anda "
+                          "yakini. Nilai bawaan hanyalah bawaan, bukan ramalan."))
 
     if quality and quality.get("applicable") and \
             (quality.get("beneish") or {}).get("band") == "flagged":
-        out.append("Read the cash-flow statement against the income statement. A Beneish "
-                   "flag means the profit and the cash have diverged, and it is a screen "
-                   "rather than a finding — most flags are false alarms.")
+        out.append(tr("Read the cash-flow statement against the income statement. A Beneish "
+                      "flag means the profit and the cash have diverged, and it is a screen "
+                      "rather than a finding — most flags are false alarms.",
+                      "Baca laporan arus kas berdampingan dengan laporan laba rugi. Tanda "
+                      "Beneish berarti laba dan kasnya sudah berpisah jalan, dan ia penyaring, "
+                      "bukan temuan — sebagian besar tanda adalah alarm palsu."))
 
     if technical:
         drawdown = ((technical.get("longTerm") or {}).get("drawdown")) or {}
         worst = drawdown.get("maxDrawdown")
         if _known(worst):
-            out.append(f"Size any position so that a repeat of the {_pct(abs(worst), 0)} "
-                       f"fall in this history would not force you out. That is the single "
-                       f"decision the drawdown number exists for.")
+            out.append(tr(f"Size any position so that a repeat of the {_pct(abs(worst), 0)} "
+                          f"fall in this history would not force you out. That is the single "
+                          f"decision the drawdown number exists for.",
+                          "Tentukan ukuran posisi apa pun sehingga terulangnya penurunan "
+                          f"{_pct(abs(worst), 0)} dalam riwayat ini tidak akan memaksa Anda keluar. "
+                          "Untuk satu keputusan itulah angka penurunan dari puncak ada."))
 
-    out.append("Run the event study on the Flow tab. It measures whether this ticker's "
-               "anomaly flags have predicted anything at all, and a null result there is "
-               "the most useful thing it can return.")
+    out.append(tr("Run the event study on the Flow tab. It measures whether this ticker's "
+                  "anomaly flags have predicted anything at all, and a null result there is "
+                  "the most useful thing it can return.",
+                  "Jalankan studi peristiwa di tab Arus. Ia mengukur apakah tanda anomali "
+                  "ticker ini pernah memprediksi sesuatu, dan hasil nihil di sana adalah "
+                  "hal paling berguna yang bisa diberikannya."))
     return out
 
 
@@ -3501,12 +4803,15 @@ def for_synthesis(payload: dict, market: Optional[str] = None,
     lenses = agreement["lensesReading"]
     sources = agreement["independentSources"]
     if not lenses:
-        headline = "No lens returned a usable reading for this ticker."
+        headline = tr("No lens returned a usable reading for this ticker.",
+                      "Tidak ada lensa yang memberi pembacaan yang bisa dipakai untuk ticker "
+                      "ini.")
     else:
         plural = "" if lenses == 1 else "es"
-        headline = (f"{lenses} lens{plural} reporting, resting on "
-                    f"{sources} independent "
-                    f"{'source' if sources == 1 else 'sources'} of data.")
+        headline = (tr(f"{lenses} lens{plural} reporting, resting on "
+                       f"{sources} independent "
+                       f"{'source' if sources == 1 else 'sources'} of data.",
+                       f"{lenses} lensa melapor, bertumpu pada {sources} sumber data independen."))
 
     return {
         "headline": headline,
@@ -3517,10 +4822,15 @@ def for_synthesis(payload: dict, market: Optional[str] = None,
         "blindSpots": _blind_spots(payload, readings),
         "nextChecks": _next_checks(payload, readings),
         "caveat": (
-            "This is a description of what the four lenses reported, not a recommendation. "
-            "Every sentence restates a number computed elsewhere on this page — nothing "
-            "here is a forecast, and no combination of these readings is a reason to buy "
-            "or sell on its own."),
+            tr("This is a description of what the four lenses reported, not a recommendation. "
+               "Every sentence restates a number computed elsewhere on this page — nothing "
+               "here is a forecast, and no combination of these readings is a reason to buy "
+               "or sell on its own.",
+               "Ini gambaran tentang apa yang dilaporkan keempat lensa, bukan "
+               "rekomendasi. Setiap kalimat mengulang angka yang dihitung di tempat "
+               "lain di halaman ini — tidak ada yang merupakan ramalan, dan tidak ada "
+               "kombinasi pembacaan ini yang dengan sendirinya menjadi alasan untuk "
+               "membeli atau menjual.")),
     }
 
 
@@ -3555,15 +4865,22 @@ def for_synthesis(payload: dict, market: Optional[str] = None,
 # rather than a score. `{pct}` is the direction-adjusted percentile, so a high
 # number is always the favourable end — including for the two signals where a
 # LOW raw value is the good one, which is exactly the confusion this avoids.
-PEER_PHRASING: dict[str, str] = {
-    "momentum": "Has risen more than {pct} of {group} over the past year.",
-    "trend": "Its long-run average is rising faster than {pct} of {group}.",
-    "nearHigh": "Sitting closer to its 52-week high than {pct} of {group}.",
-    "lowVolatility": "Calmer day to day than {pct} of {group}.",
-    "shallowDrawdown": "Its worst fall was milder than {pct} of {group}.",
-    "relativeStrength": "Beat the index by more than {pct} of {group}.",
-    "flow": "Recent days closed stronger on volume than {pct} of {group}.",
-}
+PEER_PHRASING = Bilingual({
+    "momentum": ("Has risen more than {pct} of {group} over the past year.",
+                 "Naik lebih tinggi daripada {pct} dari {group} selama setahun terakhir."),
+    "trend": ("Its long-run average is rising faster than {pct} of {group}.",
+              "Rata-rata jangka panjangnya naik lebih cepat daripada {pct} dari {group}."),
+    "nearHigh": ("Sitting closer to its 52-week high than {pct} of {group}.",
+                 "Lebih dekat ke puncak 52 minggunya daripada {pct} dari {group}."),
+    "lowVolatility": ("Calmer day to day than {pct} of {group}.",
+                      "Lebih tenang dari hari ke hari daripada {pct} dari {group}."),
+    "shallowDrawdown": ("Its worst fall was milder than {pct} of {group}.",
+                        "Penurunan terburuknya lebih ringan daripada {pct} dari {group}."),
+    "relativeStrength": ("Beat the index by more than {pct} of {group}.",
+                         "Mengungguli indeks lebih jauh daripada {pct} dari {group}."),
+    "flow": ("Recent days closed stronger on volume than {pct} of {group}.",
+             "Hari-hari terakhir ditutup lebih kuat dengan dukungan volume daripada {pct} dari {group}."),
+})
 
 # Where a percentile stops being unremarkable. Deliberately wide: the middle of a
 # distribution is the most common place to be and colouring it would invent a
@@ -3594,8 +4911,8 @@ def for_peers(row: dict, universe: dict, signals: Sequence[dict],
     # "72% of Nasdaq-100" reads like a typo; "of the Nasdaq-100" reads like
     # English. Guarded so a name that already carries an article is left alone.
     name = universe.get("name")
-    group = "its peers" if not name else (
-        name if name.lower().startswith("the ") else f"the {name}")
+    group = tr("its peers", "kelompok sejenisnya") if not name else (
+        name if name.lower().startswith("the ") else tr(f"the {name}", f"{name}"))
     scanned = universe.get("scanned")
     breakdown = row.get("signals") or {}
 
@@ -3607,15 +4924,19 @@ def for_peers(row: dict, universe: dict, signals: Sequence[dict],
         if not _known(percentile):
             readings.append({
                 "key": key, "label": signal["label"], "percentile": None,
-                "sentence": (f"Not enough history to place {row.get('ticker', 'this name')} "
-                             f"against {group} on this measure."),
+                "sentence": (tr(f"Not enough history to place {row.get('ticker', 'this name')} "
+                                f"against {group} on this measure.",
+                                "Riwayatnya tidak cukup untuk menempatkan "
+                                f"{row.get('ticker', 'saham ini')} terhadap {group} pada ukuran ini.")),
                 "tone": "none", "band": "unavailable", "evidence": signal["evidence"],
                 "rawText": None,
             })
             continue
 
         band = _peer_band(float(percentile), signal["evidence"])
-        template = PEER_PHRASING.get(key, "Ranks above {pct} of {group} on this measure.")
+        template = PEER_PHRASING.get(key, tr("Ranks above {pct} of {group} on this measure.",
+                                             "Berperingkat di atas {pct} dari {group} pada "
+                                             "ukuran ini."))
         raw = entry.get("raw")
         raw_text = None
         if _known(raw):
@@ -3637,29 +4958,42 @@ def for_peers(row: dict, universe: dict, signals: Sequence[dict],
     composite = row.get("composite")
     rank, of = row.get("rank"), scanned
     if _known(composite) and rank and of:
-        headline = (f"Against {group}, {row.get('ticker', 'this name')} places "
-                    f"{rank} of {of} on the seven price signals combined.")
+        headline = (tr(f"Against {group}, {row.get('ticker', 'this name')} places "
+                       f"{rank} of {of} on the seven price signals combined.",
+                       f"Dibandingkan {group}, {row.get('ticker', 'saham ini')} berada di urutan "
+                       f"{rank} dari {of} pada gabungan tujuh sinyal harga."))
     else:
-        headline = f"Placed against {group}, on price and volume alone."
+        headline = tr(f"Placed against {group}, on price and volume alone.",
+                      f"Ditempatkan terhadap {group}, berdasarkan harga dan volume saja.")
 
     effective = (correlation or {}).get("effectiveSignals")
     overlap = None
     if _known(effective):
-        overlap = (f"Those seven columns carry about {_num(effective, 1)} signals' worth of "
-                   f"independent information — several of them are different ways of saying "
-                   f"\"it went up\", so treat the combined placing as weaker than seven "
-                   f"separate tests.")
+        overlap = (tr(f"Those seven columns carry about {_num(effective, 1)} signals' worth of "
+                      f"independent information — several of them are different ways of saying "
+                      f"\"it went up\", so treat the combined placing as weaker than seven "
+                      f"separate tests.",
+                      "Ketujuh kolom itu membawa informasi independen senilai sekitar "
+                      f"{_num(effective, 1)} sinyal — beberapa di antaranya hanyalah cara "
+                      "berbeda untuk berkata \"harganya naik\", jadi anggap penempatan "
+                      "gabungannya lebih lemah daripada tujuh uji yang terpisah."))
 
     return {
         "headline": headline,
         "readings": readings,
         "overlap": overlap,
         "caveat": (
-            f"Every line here is a position within {group} on this date, not a score and not "
-            f"a verdict. Change the peer group and the same company moves. These seven "
-            f"measures are computed from price and volume alone and know nothing about the "
-            f"business — the Value and Quality lenses have no peer comparison here, because "
-            f"the filings behind them cannot be fetched in batch."
+            tr(f"Every line here is a position within {group} on this date, not a score and not "
+               f"a verdict. Change the peer group and the same company moves. These seven "
+               f"measures are computed from price and volume alone and know nothing about the "
+               f"business — the Value and Quality lenses have no peer comparison here, because "
+               f"the filings behind them cannot be fetched in batch.",
+               f"Setiap baris di sini adalah posisi di dalam {group} pada tanggal ini, "
+               "bukan skor dan bukan vonis. Ganti kelompok sejenisnya dan perusahaan "
+               "yang sama akan bergeser. Ketujuh ukuran ini dihitung dari harga dan "
+               "volume saja dan tidak tahu apa pun tentang bisnisnya — lensa Nilai dan "
+               "Kualitas tidak punya perbandingan sejenis di sini, karena laporan "
+               "keuangan di baliknya tidak bisa diambil secara massal.")
         ),
     }
 
@@ -3686,33 +5020,50 @@ def for_peers(row: dict, universe: dict, signals: Sequence[dict],
 # ============================================================================ #
 @metric("checkFiringRate")
 def _check_firing_rate(value, check_label=None, universe_label=None, **_):
-    label = "How often this condition fires"
-    what = ("The share of a large, published universe of companies on which this same "
-            "condition is true. It is measured offline across four index membership "
-            "lists and stamped with the date, not estimated.")
+    label = tr("How often this condition fires", "Seberapa sering kondisi ini muncul")
+    what = (tr("The share of a large, published universe of companies on which this same "
+               "condition is true. It is measured offline across four index membership "
+               "lists and stamped with the date, not estimated.",
+               "Porsi dari kumpulan besar perusahaan yang terpublikasi tempat kondisi "
+               "yang sama ini berlaku. Ia diukur secara terpisah di empat daftar "
+               "anggota indeks dan dicap dengan tanggalnya, bukan diperkirakan."))
     if not _known(value):
-        return unavailable(label, what, "this condition has never been calibrated")
-    where = universe_label or "the calibration universe"
+        return unavailable(label, what, tr("this condition has never been calibrated",
+                                           "kondisi ini belum pernah dikalibrasi"))
+    where = universe_label or tr("the calibration universe", "semesta kalibrasi")
     band = _ladder(value, ((0.05, "context"), (0.15, "context"),
                            (0.33, "context"), (None, "context")))
     if value <= 0.05:
-        detail = ("Uncommon enough that its presence here says something specific about "
-                  "this company.")
+        detail = (tr("Uncommon enough that its presence here says something specific about "
+                     "this company.",
+                     "Cukup jarang sehingga kehadirannya di sini mengatakan sesuatu yang "
+                     "spesifik tentang perusahaan ini."))
     elif value <= 0.15:
-        detail = ("Not rare, but far from typical. Worth reading as a fact about this "
-                  "company rather than about the market.")
+        detail = (tr("Not rare, but far from typical. Worth reading as a fact about this "
+                     "company rather than about the market.",
+                     "Tidak langka, tetapi jauh dari lazim. Layak dibaca sebagai fakta "
+                     "tentang perusahaan ini, bukan tentang pasar."))
     elif value <= 0.33:
-        detail = ("Common enough that it is partly a description of listed equities in "
-                  "general. Weigh it as one input, not as an alarm.")
+        detail = (tr("Common enough that it is partly a description of listed equities in "
+                     "general. Weigh it as one input, not as an alarm.",
+                     "Cukup umum sehingga sebagian merupakan gambaran saham tercatat secara "
+                     "umum. Timbang sebagai satu masukan, bukan sebagai alarm."))
     else:
-        detail = ("So common that it is a base condition of this market rather than a "
-                  "finding about this company, and the panel presents it as one.")
+        detail = (tr("So common that it is a base condition of this market rather than a "
+                     "finding about this company, and the panel presents it as one.",
+                     "Begitu umum sehingga ini kondisi dasar pasar ini, bukan temuan tentang "
+                     "perusahaan ini, dan panel menyajikannya demikian."))
     return make(
         label=label, what=what,
-        reading=f"{_pct(value, 0)} of {where}. {detail}",
-        action=("Compare it against the other conditions on the panel before weighting "
-                "any of them. A rare condition and a common one presented in identical "
-                "type is the mistake this number exists to prevent."),
+        reading=tr(f"{_pct(value, 0)} of {where}. {detail}",
+                   f"{_pct(value, 0)} dari {where}. {detail}"),
+        action=(tr("Compare it against the other conditions on the panel before weighting "
+                   "any of them. A rare condition and a common one presented in identical "
+                   "type is the mistake this number exists to prevent.",
+                   "Bandingkan dengan kondisi lain di panel sebelum memberi bobot pada "
+                   "salah satunya. Kondisi yang langka dan kondisi yang umum yang disajikan "
+                   "dengan huruf yang sama persis adalah kekeliruan yang ingin dicegah "
+                   "angka ini.")),
         band=band, good_direction="none", evidence="strong",
         value_text=_pct(value, 0),
     )
@@ -3736,53 +5087,82 @@ def _check_firing_rate(value, check_label=None, universe_label=None, **_):
 # ============================================================================ #
 @metric("holdingCorrelation")
 def _holding_correlation(value, ticker=None, overlap=None, **_):
-    label = f"Correlation with {ticker}" if ticker else "Correlation with a holding"
-    what = ("How closely these two have moved together day to day over the past year. "
-            "1.0 would be lockstep, 0 would be unrelated, and negative would mean one "
-            "tends to rise when the other falls.")
+    label = tr(f"Correlation with {ticker}", f"Korelasi dengan {ticker}") if ticker else tr("Correlation with a holding",
+                                                           "Korelasi dengan sebuah kepemilikan")
+    what = (tr("How closely these two have moved together day to day over the past year. "
+               "1.0 would be lockstep, 0 would be unrelated, and negative would mean one "
+               "tends to rise when the other falls.",
+               "Seberapa dekat keduanya bergerak bersama dari hari ke hari selama "
+               "setahun terakhir. 1.0 berarti seirama, 0 berarti tidak berhubungan, dan "
+               "negatif berarti yang satu cenderung naik ketika yang lain turun."))
     if not _known(value):
-        return unavailable(label, what, "too few overlapping trading days")
+        return unavailable(label, what, tr("too few overlapping trading days",
+                                           "terlalu sedikit hari perdagangan yang beririsan"))
     band = _ladder(value, ((0.3, "good"), (0.6, "fair"), (0.8, "caution"), (None, "poor")))
-    reading = f"{_num(value)} over the past year. "
+    reading = tr(f"{_num(value)} over the past year. ", f"{_num(value)} selama setahun terakhir. ")
     reading += {
-        "good": "These have largely gone their own ways, so owning both is closer to two "
-                "positions than one.",
-        "fair": "They move together more often than not. Some of what looks like two "
-                "positions is one.",
-        "caution": "They move together most of the time. Owning both is closer to holding "
-                   "a double position in one of them than to being diversified.",
-        "poor": "These are effectively the same position with two ticker symbols on it. "
-                "Whatever reason you have for owning one applies to the other, and so "
-                "does whatever goes wrong.",
+        "good": tr("These have largely gone their own ways, so owning both is closer to two "
+                   "positions than one.",
+                   "Keduanya sebagian besar berjalan sendiri-sendiri, jadi memiliki "
+                   "keduanya lebih mirip dua posisi daripada satu."),
+        "fair": tr("They move together more often than not. Some of what looks like two "
+                   "positions is one.",
+                   "Keduanya lebih sering bergerak bersama. Sebagian dari yang tampak "
+                   "seperti dua posisi sebenarnya satu."),
+        "caution": tr("They move together most of the time. Owning both is closer to holding "
+                      "a double position in one of them than to being diversified.",
+                      "Keduanya hampir selalu bergerak bersama. Memiliki keduanya lebih mirip "
+                      "memegang posisi ganda pada salah satunya daripada terdiversifikasi."),
+        "poor": tr("These are effectively the same position with two ticker symbols on it. "
+                   "Whatever reason you have for owning one applies to the other, and so "
+                   "does whatever goes wrong.",
+                   "Keduanya praktis posisi yang sama dengan dua kode saham. Apa pun alasan "
+                   "Anda memiliki yang satu berlaku pula untuk yang lain, begitu pula apa "
+                   "pun yang bisa salah."),
     }[band]
     if _known(overlap):
-        reading += f" Measured across {int(overlap)} shared trading days."
+        reading += tr(f" Measured across {int(overlap)} shared trading days.",
+                      f" Diukur dari {int(overlap)} hari perdagangan bersama.")
     return make(label, what, reading,
-                "If you would not double the position you already hold, think about "
-                "whether adding this one amounts to the same thing.",
+                tr("If you would not double the position you already hold, think about "
+                   "whether adding this one amounts to the same thing.",
+                   "Jika Anda tidak akan menggandakan posisi yang sudah Anda pegang, "
+                   "pikirkan apakah menambahkan yang ini sama saja dengan itu."),
                 band, "low", evidence="moderate", value_text=_num(value))
 
 
 @metric("effectiveHoldings")
 def _effective_holdings(value, names=None, before=None, gain=None, **_):
-    label = "Independent positions"
-    what = ("How many genuinely separate bets a set of holdings amounts to. Nine names "
-            "that all rise and fall together are closer to one position than to nine, and "
-            "this counts them the way their price history says they behave rather than "
-            "the way the account statement lists them.")
+    label = tr("Independent positions", "Posisi independen")
+    what = (tr("How many genuinely separate bets a set of holdings amounts to. Nine names "
+               "that all rise and fall together are closer to one position than to nine, and "
+               "this counts them the way their price history says they behave rather than "
+               "the way the account statement lists them.",
+               "Berapa banyak taruhan yang benar-benar terpisah dari sekumpulan "
+               "kepemilikan. Sembilan saham yang naik dan turun bersama lebih mirip "
+               "satu posisi daripada sembilan, dan angka ini menghitungnya menurut "
+               "perilaku riwayat harganya, bukan menurut daftar di laporan rekening."))
     if not _known(value):
-        return unavailable(label, what, "needs at least two holdings with shared history")
-    reading = f"About {_num(value, 1)} independent bets"
+        return unavailable(label, what, tr("needs at least two holdings with shared history",
+                                           "perlu setidaknya dua kepemilikan dengan riwayat bersama"))
+    reading = tr(f"About {_num(value, 1)} independent bets",
+                 f"Sekitar {_num(value, 1)} taruhan independen")
     if _known(names):
-        reading += f" across {int(names)} holdings"
+        reading += tr(f" across {int(names)} holdings", f" dari {int(names)} kepemilikan")
         crowding = value / names if names else None
         if crowding is not None:
-            reading += (". Close to one bet per position, so these are genuinely different "
-                        "things." if crowding >= 0.7 else
-                        ". Rather fewer than the position count, so some of these are "
-                        "the same bet twice." if crowding >= 0.4 else
-                        ". Far fewer than the position count — most of this book is one "
-                        "bet held several times over.")
+            reading += (tr(". Close to one bet per position, so these are genuinely different "
+                           "things.",
+                           ". Hampir satu taruhan per posisi, jadi semuanya benar-benar hal yang "
+                           "berbeda.") if crowding >= 0.7 else
+                        tr(". Rather fewer than the position count, so some of these are "
+                           "the same bet twice.",
+                           ". Agak lebih sedikit daripada jumlah posisi, jadi sebagian di antaranya "
+                           "adalah taruhan yang sama dua kali.") if crowding >= 0.4 else
+                        tr(". Far fewer than the position count — most of this book is one "
+                           "bet held several times over.",
+                           ". Jauh lebih sedikit daripada jumlah posisi — sebagian besar portofolio "
+                           "ini adalah satu taruhan yang dipegang berkali-kali."))
     else:
         reading += "."
     # THE SCALE IS ANCHORED ON WHAT AN UNCORRELATED ADDITION WOULD GIVE, which
@@ -3794,36 +5174,56 @@ def _effective_holdings(value, names=None, before=None, gain=None, **_):
     band = "context"
     if _known(gain):
         if gain >= 0.5:
-            reading += (f" Adding the candidate takes it from {_num(before, 1)} to "
-                        f"{_num(value, 1)} — most of a whole extra bet, so it brings "
-                        f"something the book did not have.")
+            reading += (tr(f" Adding the candidate takes it from {_num(before, 1)} to "
+                           f"{_num(value, 1)} — most of a whole extra bet, so it brings "
+                           f"something the book did not have.",
+                           f" Menambahkan kandidat membawanya dari {_num(before, 1)} ke "
+                           f"{_num(value, 1)} — hampir satu taruhan tambahan penuh, jadi ia membawa "
+                           "sesuatu yang belum dimiliki portofolio."))
         elif gain >= 0.15:
-            reading += (f" Adding the candidate moves it from {_num(before, 1)} to "
-                        f"{_num(value, 1)}: some new ground, but well short of the whole "
-                        f"extra bet an unrelated name would add.")
+            reading += (tr(f" Adding the candidate moves it from {_num(before, 1)} to "
+                           f"{_num(value, 1)}: some new ground, but well short of the whole "
+                           f"extra bet an unrelated name would add.",
+                           f" Menambahkan kandidat menggesernya dari {_num(before, 1)} ke "
+                           f"{_num(value, 1)}: ada wilayah baru, tetapi jauh dari satu taruhan "
+                           "tambahan penuh yang akan ditambahkan saham yang tidak berhubungan."))
         else:
             band = "caution"
-            reading += (f" Adding the candidate moves it from {_num(before, 1)} to "
-                        f"{_num(value, 1)} — one more name, and next to no more "
-                        f"independence, where an unrelated one would add a full bet. That "
-                        f"is the shape of buying the fourth copy of a bet you already hold.")
+            reading += (tr(f" Adding the candidate moves it from {_num(before, 1)} to "
+                           f"{_num(value, 1)} — one more name, and next to no more "
+                           f"independence, where an unrelated one would add a full bet. That "
+                           f"is the shape of buying the fourth copy of a bet you already hold.",
+                           f" Menambahkan kandidat menggesernya dari {_num(before, 1)} ke "
+                           f"{_num(value, 1)} — satu saham lagi, dan nyaris tanpa tambahan "
+                           "independensi, padahal saham yang tidak berhubungan akan menambah satu "
+                           "taruhan penuh. Itulah bentuk membeli salinan keempat dari taruhan yang "
+                           "sudah Anda pegang."))
     return make(label, what, reading,
-                "Compare it with the number of positions. Where the two diverge, the "
-                "account statement is flattering how diversified this is.",
+                tr("Compare it with the number of positions. Where the two diverge, the "
+                   "account statement is flattering how diversified this is.",
+                   "Bandingkan dengan jumlah posisi. Ketika keduanya berbeda jauh, laporan "
+                   "rekening menyanjung seberapa terdiversifikasinya portofolio ini."),
                 band, "high", evidence="moderate", value_text=_num(value, 1))
 
 
 @metric("riskShare")
 def _risk_share(value, ticker=None, weight=None, **_):
-    label = f"{ticker}'s share of risk" if ticker else "Share of portfolio risk"
-    what = ("How much of the portfolio's total price swing this one position accounts for. "
-            "Compare it with how much of the money is in it: a position holding a tenth of "
-            "the money and a quarter of the risk is the portfolio wearing a smaller name.")
+    label = tr(f"{ticker}'s share of risk", f"Porsi risiko {ticker}") if ticker else tr("Share of portfolio risk",
+                                                          "Porsi risiko portofolio")
+    what = (tr("How much of the portfolio's total price swing this one position accounts for. "
+               "Compare it with how much of the money is in it: a position holding a tenth of "
+               "the money and a quarter of the risk is the portfolio wearing a smaller name.",
+               "Seberapa besar gejolak harga total portofolio yang berasal dari satu "
+               "posisi ini. Bandingkan dengan seberapa besar uang yang ada di dalamnya: "
+               "posisi yang memegang sepersepuluh uang dan seperempat risiko berarti "
+               "portofolio sedang mengenakan nama yang lebih kecil."))
     if not _known(value):
-        return unavailable(label, what, "the risk decomposition could not be computed")
+        return unavailable(label, what, tr("the risk decomposition could not be computed",
+                                           "dekomposisi risikonya tidak bisa dihitung"))
     if not _known(weight):
-        return make(label, what, f"{_pct(value, 0)} of the portfolio's movement.",
-                    CONTEXT_NOT_TRIGGER, "context", "none", evidence="moderate",
+        return make(label, what, tr(f"{_pct(value, 0)} of the portfolio's movement.",
+                                    f"{_pct(value, 0)} dari pergerakan portofolio."),
+                    _not_trigger(), "context", "none", evidence="moderate",
                     value_text=_pct(value, 0))
     # A NEGATIVE CONTRIBUTION IS A REAL AND DIFFERENT THING, not a small one.
     # Marginal risk contribution goes below zero when a position moves against
@@ -3835,27 +5235,45 @@ def _risk_share(value, ticker=None, weight=None, **_):
     # against a real book with a defensive name in it.
     if value < 0:
         return make(label, what,
-                    f"This position REDUCES the portfolio's movement rather than adding to "
-                    f"it, offsetting about {_pct(abs(value), 0)} of what the others "
-                    f"contribute, from {_pct(weight, 0)} of the money. It has been moving "
-                    f"against the rest of the book — which is what diversification looks "
-                    f"like when it is actually working.",
-                    "Nothing to fix. Worth knowing before trimming it: a position that "
-                    "offsets the others costs more to remove than its size suggests.",
+                    tr(f"This position REDUCES the portfolio's movement rather than adding to "
+                       f"it, offsetting about {_pct(abs(value), 0)} of what the others "
+                       f"contribute, from {_pct(weight, 0)} of the money. It has been moving "
+                       f"against the rest of the book — which is what diversification looks "
+                       f"like when it is actually working.",
+                       "Posisi ini MENGURANGI pergerakan portofolio alih-alih menambahnya, "
+                       f"mengimbangi sekitar {_pct(abs(value), 0)} dari kontribusi posisi lain, "
+                       f"dengan {_pct(weight, 0)} dari uangnya. Ia bergerak berlawanan dengan "
+                       "sisa portofolio — seperti itulah diversifikasi yang benar-benar bekerja."),
+                    tr("Nothing to fix. Worth knowing before trimming it: a position that "
+                       "offsets the others costs more to remove than its size suggests.",
+                       "Tidak ada yang perlu diperbaiki. Patut diketahui sebelum memangkasnya: "
+                       "posisi yang mengimbangi posisi lain lebih mahal dihilangkan daripada "
+                       "yang ditunjukkan ukurannya."),
                     "context", "none", evidence="moderate", value_text=_pct(value, 0))
 
     excess = value - weight
     band = _ladder(excess, ((0.05, "context"), (0.10, "caution"), (None, "poor")))
-    reading = (f"{_pct(value, 0)} of the portfolio's movement, from {_pct(weight, 0)} of "
-               f"its money. ")
-    reading += ("Risk and money are broadly in line here." if band == "context" else
-                "It carries noticeably more of the risk than of the money — usually "
-                "because it swings harder than the rest, or moves with them." if band == "caution"
-                else "It dominates the portfolio's risk out of all proportion to its size. "
-                     "A bad stretch for this one name is a bad stretch for the whole book.")
+    reading = (tr(f"{_pct(value, 0)} of the portfolio's movement, from {_pct(weight, 0)} of "
+                  f"its money. ",
+                  f"{_pct(value, 0)} dari pergerakan portofolio, dengan {_pct(weight, 0)} "
+                  "dari uangnya. "))
+    reading += (tr("Risk and money are broadly in line here.",
+                   "Risiko dan uangnya secara umum sejalan di sini.") if band == "context" else
+                tr("It carries noticeably more of the risk than of the money — usually "
+                   "because it swings harder than the rest, or moves with them.",
+                   "Ia membawa porsi risiko yang terasa lebih besar daripada porsi uangnya "
+                   "— biasanya karena ia berayun lebih keras daripada yang lain, atau "
+                   "bergerak bersama mereka.") if band == "caution"
+                else tr("It dominates the portfolio's risk out of all proportion to its size. "
+                        "A bad stretch for this one name is a bad stretch for the whole book.",
+                        "Ia mendominasi risiko portofolio jauh melampaui ukurannya. Masa buruk "
+                        "bagi satu saham ini adalah masa buruk bagi seluruh portofolio."))
     return make(label, what, reading,
-                "Where risk share runs far above money share, the position is bigger than "
-                "it looks. That is a reason to check the size, not a reason to sell.",
+                tr("Where risk share runs far above money share, the position is bigger than "
+                   "it looks. That is a reason to check the size, not a reason to sell.",
+                   "Ketika porsi risiko jauh di atas porsi uang, posisinya lebih besar "
+                   "daripada kelihatannya. Itu alasan untuk memeriksa ukurannya, bukan "
+                   "alasan untuk menjual."),
                 band, "low", evidence="moderate", value_text=_pct(value, 0))
 
 
@@ -3875,17 +5293,22 @@ def _risk_share(value, ticker=None, weight=None, **_):
 # ============================================================================ #
 @metric("sharedDirection")
 def _shared_direction(value, market_share=None, weeks=None, holdings=None, **_):
-    label = "Shared direction"
-    what = ("How much of these holdings' week-to-week movement is one common thing "
-            "rather than each name going its own way, and how much of that common "
-            "thing is simply the local market.")
+    label = tr("Shared direction", "Arah bersama")
+    what = (tr("How much of these holdings' week-to-week movement is one common thing "
+               "rather than each name going its own way, and how much of that common "
+               "thing is simply the local market.",
+               "Seberapa besar pergerakan mingguan kepemilikan ini merupakan satu hal "
+               "yang sama, bukan masing-masing berjalan sendiri, dan seberapa besar hal "
+               "yang sama itu sekadar pasar lokal."))
     if not _known(value):
         return unavailable(label, what,
-                           "needs at least three holdings with a shared history")
+                           tr("needs at least three holdings with a shared history",
+                              "perlu setidaknya tiga kepemilikan dengan riwayat bersama"))
 
-    reading = f"{_pct(value, 0)} of the joint movement is one shared direction"
+    reading = tr(f"{_pct(value, 0)} of the joint movement is one shared direction",
+                 f"{_pct(value, 0)} dari pergerakan gabungannya adalah satu arah bersama")
     if _known(holdings):
-        reading += f" across {int(holdings)} holdings"
+        reading += tr(f" across {int(holdings)} holdings", f" dari {int(holdings)} kepemilikan")
     reading += "."
 
     # THE MARKET SHARE IS THE PART THAT CHANGES WHAT A READER DOES. A book whose
@@ -3894,18 +5317,25 @@ def _shared_direction(value, market_share=None, weeks=None, holdings=None, **_):
     # driving it, and that something is what the next figure tries to name.
     if _known(market_share):
         if market_share >= 0.50:
-            reading += (f" Most of it — {_pct(market_share, 0)} — is the market itself, "
-                        f"which is what a spread-out book looks like.")
+            reading += (tr(f" Most of it — {_pct(market_share, 0)} — is the market itself, "
+                           f"which is what a spread-out book looks like.",
+                           f" Sebagian besarnya — {_pct(market_share, 0)} — adalah pasar itu "
+                           "sendiri, seperti itulah rupa portofolio yang menyebar."))
         elif market_share >= 0.20:
-            reading += (f" About {_pct(market_share, 0)} of it is the market; the rest is "
-                        f"something these names share and the index does not.")
+            reading += (tr(f" About {_pct(market_share, 0)} of it is the market; the rest is "
+                           f"something these names share and the index does not.",
+                           f" Sekitar {_pct(market_share, 0)} darinya adalah pasar; sisanya sesuatu "
+                           "yang dimiliki bersama saham-saham ini dan tidak dimiliki indeks."))
         else:
-            reading += (f" Only {_pct(market_share, 0)} of it is the market, so almost all "
-                        f"of what moves these together is specific to them rather than "
-                        f"to where they are listed.")
+            reading += (tr(f" Only {_pct(market_share, 0)} of it is the market, so almost all "
+                           f"of what moves these together is specific to them rather than "
+                           f"to where they are listed.",
+                           f" Hanya {_pct(market_share, 0)} darinya adalah pasar, jadi hampir semua "
+                           "yang menggerakkan saham-saham ini bersama adalah hal khusus milik "
+                           "mereka, bukan soal di mana mereka tercatat."))
     return make(
         label=label, what=what, reading=reading,
-        action=CONTEXT_NOT_TRIGGER,
+        action=_not_trigger(),
         band="context", good_direction="none", evidence="moderate",
         value_text=_pct(value, 0),
     )
@@ -3914,16 +5344,20 @@ def _shared_direction(value, market_share=None, weeks=None, holdings=None, **_):
 @metric("sharedDriver")
 def _shared_driver(value, matches=None, tested=None, ambiguous=False,
                    name_at=None, **_):
-    label = "What they have in common"
-    what = ("Whether the movement these holdings share, once the local market is taken "
-            "out, tracks anything that can be named. Tested against gold, energy, copper "
-            "and the dollar.")
+    label = tr("What they have in common", "Kesamaan di antara mereka")
+    what = (tr("Whether the movement these holdings share, once the local market is taken "
+               "out, tracks anything that can be named. Tested against gold, energy, copper "
+               "and the dollar.",
+               "Apakah pergerakan bersama kepemilikan ini, setelah pasar lokal "
+               "dikeluarkan, mengikuti sesuatu yang bisa dinamai. Diuji terhadap emas, "
+               "energi, tembaga, dan dolar."))
     rows = list(matches or [])
     checked = [t for t in (tested or []) if t.get("available")]
 
     if not checked:
         return unavailable(label, what,
-                           "none of the reference series had enough overlapping history")
+                           tr("none of the reference series had enough overlapping history",
+                              "tidak ada deret acuan yang punya riwayat beririsan cukup panjang"))
 
     if ambiguous:
         # A TIE IS A REFUSAL. Two references this close are not distinguishable
@@ -3931,11 +5365,15 @@ def _shared_driver(value, matches=None, tested=None, ambiguous=False,
         # precision the data does not have.
         return make(
             label=label, what=what,
-            reading=("Two of the tested series track this book's shared movement about "
-                     "equally well, which is not enough to tell them apart. Nothing is "
-                     "named rather than picking the larger by a margin this sample "
-                     "cannot resolve."),
-            action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+            reading=(tr("Two of the tested series track this book's shared movement about "
+                        "equally well, which is not enough to tell them apart. Nothing is "
+                        "named rather than picking the larger by a margin this sample "
+                        "cannot resolve.",
+                        "Dua deret yang diuji mengikuti pergerakan bersama portofolio ini "
+                        "kira-kira sama baiknya, yang tidak cukup untuk membedakan keduanya. "
+                        "Tidak ada yang dinamai, alih-alih memilih yang lebih besar dengan "
+                        "selisih yang tidak bisa dipastikan sampel ini.")),
+            action=_not_trigger(), band="context", good_direction="none",
             evidence="weak", value_text=None,
         )
 
@@ -3948,13 +5386,17 @@ def _shared_driver(value, matches=None, tested=None, ambiguous=False,
         # that would have caught those were measured and did not work.
         labels = [t["label"] for t in checked]
         names = (labels[0] if len(labels) == 1
-                 else " and ".join([", ".join(labels[:-1]), labels[-1]]))
+                 else tr(" and ", " dan ").join([", ".join(labels[:-1]), labels[-1]]))
         return make(
             label=label, what=what,
-            reading=(f"Nothing tested explained what these holdings share. That is not "
-                     f"evidence they are diversified — only that {names} did not account "
-                     f"for it, and whatever does may simply not be on that list."),
-            action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+            reading=(tr(f"Nothing tested explained what these holdings share. That is not "
+                        f"evidence they are diversified — only that {names} did not account "
+                        f"for it, and whatever does may simply not be on that list.",
+                        "Tidak ada yang diuji yang menjelaskan kesamaan kepemilikan ini. Itu "
+                        f"bukan bukti bahwa portofolionya terdiversifikasi — hanya bahwa {names} "
+                        "tidak menjelaskannya, dan apa pun yang menjelaskannya mungkin memang "
+                        "tidak ada di daftar itu.")),
+            action=_not_trigger(), band="context", good_direction="none",
             evidence="weak", value_text=None,
         )
 
@@ -3963,20 +5405,28 @@ def _shared_driver(value, matches=None, tested=None, ambiguous=False,
     # complex at 0.54", which reads as a stutter and cost the reader the number.
     if len(rows) == 1:
         row = rows[0]
-        body = (f"tracks {row['label']}, at {_num(row['correlation'], 2)} on weekly "
-                f"moves with the local market already taken out")
+        body = (tr(f"tracks {row['label']}, at {_num(row['correlation'], 2)} on weekly "
+                   f"moves with the local market already taken out",
+                   f"mengikuti {row['label']}, pada {_num(row['correlation'], 2)} untuk "
+                   "pergerakan mingguan setelah pengaruh pasar lokal dikeluarkan"))
     else:
-        body = ("tracks "
-                + ", ".join(f"{r['label']} at {_num(r['correlation'], 2)}" for r in rows)
-                + ", on weekly moves with the local market already taken out")
-    reading = (f"What these holdings share {body}. A position in this book is partly a "
-               f"position on that.")
+        body = (tr("tracks ", "mengikuti ")
+                + ", ".join(tr(f"{r['label']} at {_num(r['correlation'], 2)}",
+                               f"{r['label']} pada {_num(r['correlation'], 2)}") for r in rows)
+                + tr(", on weekly moves with the local market already taken out",
+                     ", untuk pergerakan mingguan setelah pengaruh pasar lokal dikeluarkan"))
+    reading = (tr(f"What these holdings share {body}. A position in this book is partly a "
+                  f"position on that.",
+                  f"Kesamaan kepemilikan ini {body}. Posisi dalam portofolio ini sebagian "
+                  "adalah posisi pada hal itu."))
     if _known(name_at):
-        reading += (f" Reported because it passed {_num(name_at, 2)}, a reading "
-                    f"threshold rather than a published one.")
+        reading += (tr(f" Reported because it passed {_num(name_at, 2)}, a reading "
+                       f"threshold rather than a published one.",
+                       f" Dilaporkan karena melewati {_num(name_at, 2)}, ambang pembacaan, bukan "
+                       "ambang yang diterbitkan."))
     return make(
         label=label, what=what, reading=reading,
-        action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+        action=_not_trigger(), band="context", good_direction="none",
         evidence="moderate",
         value_text=_num(max(abs(row["correlation"]) for row in rows), 2),
     )
@@ -4002,33 +5452,48 @@ def _shared_driver(value, matches=None, tested=None, ambiguous=False,
 @metric("factorBreadth")
 def _factor_breadth(value, label=None, loaded=None, scanned=None,
                     rank_correlation=None, **_):
-    name = label or "this factor"
-    heading = f"How many move with {name}"
-    what = (f"The share of the names scanned whose weekly moves {name} accounts for "
-            f"enough of to be worth reporting, once the local market is out of both. "
-            f"It calibrates a single reading: one stock loading on {name} means "
-            f"something different in an index where three do than in one where thirty "
-            f"do.")
+    name = label or tr("this factor", "faktor ini")
+    heading = tr(f"How many move with {name}", f"Berapa banyak yang bergerak bersama {name}")
+    what = (tr(f"The share of the names scanned whose weekly moves {name} accounts for "
+               f"enough of to be worth reporting, once the local market is out of both. "
+               f"It calibrates a single reading: one stock loading on {name} means "
+               f"something different in an index where three do than in one where thirty "
+               f"do.",
+               "Porsi saham yang dipindai yang pergerakan mingguannya cukup dijelaskan "
+               f"oleh {name} sehingga layak dilaporkan, setelah pasar lokal dikeluarkan "
+               "dari keduanya. Angka ini mengkalibrasi satu pembacaan: satu saham yang "
+               f"terpengaruh {name} berarti lain di indeks yang tiga sahamnya begitu "
+               "dibandingkan di indeks yang tiga puluh sahamnya begitu."))
     if not _known(value):
-        return unavailable(heading, what, "nothing in this list could be measured")
+        return unavailable(heading, what, tr("nothing in this list could be measured",
+                                             "tidak ada di daftar ini yang bisa diukur"))
     reading = f"{_pct(value, 0)}"
     if _known(loaded) and _known(scanned):
-        reading += f" — {int(loaded)} of {int(scanned)} names"
-    reading += f" carry a material loading on {name}."
+        reading += tr(f" — {int(loaded)} of {int(scanned)} names",
+                      f" — {int(loaded)} dari {int(scanned)} saham")
+    reading += tr(f" carry a material loading on {name}.",
+                  f" memiliki keterkaitan material dengan {name}.")
     # WITHOUT THIS THE BREADTH READS AS A CONCLUSION. A factor that half an index
     # loads on may be describing the market rather than a driver, and the reader
     # has no way to tell that from the count alone.
     if value >= 0.5:
-        reading += (" More than half the list, so this is closer to a description of "
-                    "the whole market here than of any one name in it.")
+        reading += (tr(" More than half the list, so this is closer to a description of "
+                       "the whole market here than of any one name in it.",
+                       " Lebih dari separuh daftar, jadi ini lebih mirip gambaran seluruh pasar "
+                       "di sini daripada satu saham di dalamnya."))
     elif value <= 0.1:
-        reading += (" A small minority, so a name that does load on it is unusual "
-                    "within this list rather than typical of it.")
-    reading += (" Measured over five years with the local market removed from both "
-                "sides, so it describes what these did rather than what they will do.")
+        reading += (tr(" A small minority, so a name that does load on it is unusual "
+                       "within this list rather than typical of it.",
+                       " Minoritas kecil, jadi saham yang terkait dengannya tidak biasa di "
+                       "dalam daftar ini, bukan hal yang lazim."))
+    reading += (tr(" Measured over five years with the local market removed from both "
+                   "sides, so it describes what these did rather than what they will do.",
+                   " Diukur selama lima tahun dengan pasar lokal dikeluarkan dari kedua "
+                   "sisi, jadi ini menggambarkan apa yang terjadi, bukan apa yang akan "
+                   "terjadi."))
     return make(
         label=heading, what=what, reading=reading,
-        action=CONTEXT_NOT_TRIGGER, band="context", good_direction="none",
+        action=_not_trigger(), band="context", good_direction="none",
         evidence="moderate", value_text=_pct(value, 0),
     )
 
@@ -4036,21 +5501,29 @@ def _factor_breadth(value, label=None, loaded=None, scanned=None,
 @metric("factorExposure")
 def _factor_exposure(value, label=None, r_squared=None, weeks=None,
                      rank_correlation=None, **_):
-    name = label or "this factor"
-    heading = f"Moves with {name}"
-    what = (f"How hard this stock's weekly moves track {name} once the local market "
-            f"is taken out of both, and how much of the rest that accounts for. "
-            f"Removing the market first is what separates a real exposure from a "
-            f"stock and a commodity both drifting with the same index.")
+    name = label or tr("this factor", "faktor ini")
+    heading = tr(f"Moves with {name}", f"Bergerak bersama {name}")
+    what = (tr(f"How hard this stock's weekly moves track {name} once the local market "
+               f"is taken out of both, and how much of the rest that accounts for. "
+               f"Removing the market first is what separates a real exposure from a "
+               f"stock and a commodity both drifting with the same index.",
+               f"Seberapa kuat pergerakan mingguan saham ini mengikuti {name} setelah "
+               "pasar lokal dikeluarkan dari keduanya, dan seberapa besar sisa "
+               "pergerakannya yang dijelaskan olehnya. Mengeluarkan pasar lebih dulu "
+               "itulah yang memisahkan eksposur nyata dari saham dan komoditas yang "
+               "sama-sama hanyut bersama indeks yang sama."))
     if not _known(value):
-        return unavailable(heading, what, "no material loading on this name")
+        return unavailable(heading, what, tr("no material loading on this name",
+                                             "tidak ada keterkaitan material pada saham ini"))
 
-    reading = f"{_num(value, 2)}x — a 1% move in {name} has gone with "
-    reading += f"{_num(abs(value), 2)}% here"
-    reading += ", in the opposite direction." if value < 0 else "."
+    reading = tr(f"{_num(value, 2)}x — a 1% move in {name} has gone with ",
+                 f"{_num(value, 2)}x — pergerakan 1% pada {name} disertai ")
+    reading += tr(f"{_num(abs(value), 2)}% here", f"{_num(abs(value), 2)}% di sini")
+    reading += tr(", in the opposite direction.", ", ke arah berlawanan.") if value < 0 else "."
     if _known(r_squared):
-        reading += f" That accounts for {_pct(r_squared, 0)} of its week-to-week movement"
-        reading += f" over {int(weeks)} weeks." if _known(weeks) else "."
+        reading += tr(f" That accounts for {_pct(r_squared, 0)} of its week-to-week movement",
+                      f" Itu menjelaskan {_pct(r_squared, 0)} dari pergerakan mingguannya")
+        reading += tr(f" over {int(weeks)} weeks.", f" selama {int(weeks)} minggu.") if _known(weeks) else "."
     # THE HONEST QUALIFIER, and it is the point of shipping this at all. A beta
     # printed without it invites being read as next year's number.
     # IT IS HISTORY, AND THE SENTENCE HAS TO SAY SO. This figure carried a
@@ -4059,12 +5532,14 @@ def _factor_exposure(value, label=None, r_squared=None, weeks=None,
     # is actually shown could not be measured at this data depth — nine years
     # holds fewer than two non-overlapping five-year blocks — so no forward
     # claim is made and the absence is stated rather than left to be assumed.
-    reading += (" This is what happened over five years, not a forecast: whether a "
-                "loading like this one persists could not be measured from the "
-                "history available.")
+    reading += (tr(" This is what happened over five years, not a forecast: whether a "
+                   "loading like this one persists could not be measured from the "
+                   "history available.",
+                   " Ini yang terjadi selama lima tahun, bukan ramalan: apakah keterkaitan "
+                   "seperti ini bertahan tidak bisa diukur dari riwayat yang tersedia."))
     return make(
         label=heading, what=what, reading=reading,
-        action=CONTEXT_NOT_TRIGGER,
+        action=_not_trigger(),
         band="context", good_direction="none", evidence="moderate",
         value_text=f"{_num(value, 2)}x",
     )
@@ -4175,33 +5650,58 @@ def for_portfolio(result: dict) -> dict:
 @metric("manipulationPosterior")
 def _manipulation_posterior(value, flagged=None, prior_text=None, robust=None,
                             partial=False, **_):
-    label = "What the flag is worth"
-    what = ("How likely it is that a company this screen flags really has manipulated its "
-            "earnings. It combines how often the screen catches a manipulator, how often "
-            "it cries wolf, and how rare manipulation is to begin with — the third being "
-            "the input that decides the answer and the one nobody can measure exactly.")
+    label = tr("What the flag is worth", "Seberapa berharga tanda itu")
+    what = (tr("How likely it is that a company this screen flags really has manipulated its "
+               "earnings. It combines how often the screen catches a manipulator, how often "
+               "it cries wolf, and how rare manipulation is to begin with — the third being "
+               "the input that decides the answer and the one nobody can measure exactly.",
+               "Seberapa besar kemungkinan perusahaan yang ditandai penyaring ini "
+               "benar-benar memanipulasi labanya. Ia menggabungkan seberapa sering "
+               "penyaring menangkap manipulator, seberapa sering ia memberi alarm "
+               "palsu, dan seberapa langka manipulasi sejak awal — yang ketiga adalah "
+               "masukan yang menentukan jawabannya dan yang tidak bisa diukur siapa pun "
+               "dengan tepat."))
     if not _known(value):
         return unavailable(label, what,
-                           "no M-Score was computed, so there is nothing to condition on")
+                           tr("no M-Score was computed, so there is nothing to condition on",
+                              "tidak ada M-Score yang dihitung, jadi tidak ada yang bisa dijadikan "
+                              "syarat"))
 
-    base = f" Starting from {prior_text} before the test." if prior_text else ""
-    tail = (" Built from fewer than the eight indices the published error rates were "
-            "measured on, so read it as indicative." if partial else "")
+    base = tr(f" Starting from {prior_text} before the test.",
+              f" Bermula dari {prior_text} sebelum pengujian.") if prior_text else ""
+    tail = (tr(" Built from fewer than the eight indices the published error rates were "
+               "measured on, so read it as indicative.",
+               " Dibangun dari kurang dari delapan indeks yang menjadi dasar pengukuran "
+               "tingkat galat terbitan, jadi bacalah sebagai petunjuk.") if partial else "")
     if flagged:
-        reading = (f"About {_pct(value, 0)} likely to be a real manipulator — so roughly "
-                   f"{_pct(1 - value, 0)} of flags like this one are false alarms.{base}"
-                   f"{tail}")
-        action = ("Treat a flag as a reading assignment, not a finding: go to the cash-flow "
-                  "statement and the income statement and see whether profit and cash have "
-                  "diverged. If you would not do that work, the flag should not change what "
-                  "you do.")
+        reading = (tr(f"About {_pct(value, 0)} likely to be a real manipulator — so roughly "
+                      f"{_pct(1 - value, 0)} of flags like this one are false alarms.{base}"
+                      f"{tail}",
+                      f"Sekitar {_pct(value, 0)} kemungkinan benar-benar manipulator — jadi "
+                      f"kira-kira {_pct(1 - value, 0)} dari tanda seperti ini adalah alarm "
+                      f"palsu.{base}{tail}"))
+        action = (tr("Treat a flag as a reading assignment, not a finding: go to the cash-flow "
+                     "statement and the income statement and see whether profit and cash have "
+                     "diverged. If you would not do that work, the flag should not change what "
+                     "you do.",
+                     "Perlakukan tanda sebagai tugas membaca, bukan temuan: buka laporan arus "
+                     "kas dan laporan laba rugi lalu lihat apakah laba dan kasnya sudah "
+                     "berpisah jalan. Jika Anda tidak akan melakukan pekerjaan itu, tanda ini "
+                     "seharusnya tidak mengubah apa yang Anda lakukan."))
     else:
-        reading = (f"No flag, which leaves about {_pct(value, 2)} — down from {prior_text} "
-                   f"before the test.{tail} The screen moved a number that was already small, "
-                   f"and it tests one specific accrual pattern rather than honesty.")
-        action = ("Nothing. A clean M-Score is the absence of one signature, not a clean "
-                  "bill of health — a business can be a poor holding for reasons this "
-                  "screen has no view on at all.")
+        reading = (tr(f"No flag, which leaves about {_pct(value, 2)} — down from {prior_text} "
+                      f"before the test.{tail} The screen moved a number that was already small, "
+                      f"and it tests one specific accrual pattern rather than honesty.",
+                      f"Tidak ditandai, yang menyisakan sekitar {_pct(value, 2)} — turun dari "
+                      f"{prior_text} sebelum pengujian.{tail} Penyaring ini menggeser angka "
+                      "yang memang sudah kecil, dan ia menguji satu pola akrual tertentu, "
+                      "bukan kejujuran."))
+        action = (tr("Nothing. A clean M-Score is the absence of one signature, not a clean "
+                     "bill of health — a business can be a poor holding for reasons this "
+                     "screen has no view on at all.",
+                     "Tidak ada. M-Score yang bersih adalah ketiadaan satu jejak, bukan surat "
+                     "keterangan sehat — sebuah bisnis bisa menjadi kepemilikan yang buruk "
+                     "karena alasan yang sama sekali di luar jangkauan penyaring ini."))
     # The robust range is a sentence about what a FLAG is worth. Appended to a
     # clean reading it is a non-sequitur — it answers a question the company in
     # front of the reader did not raise. The panel still prints it in its own
@@ -4233,41 +5733,59 @@ def _manipulation_posterior(value, flagged=None, prior_text=None, robust=None,
 # ============================================================================ #
 @metric("validationDomain")
 def _validation_domain(value, name=None, sample=None, this_use=None, note=None, **_):
-    label = name or "Validation domain"
-    what = ("Which companies, in which market and in which years, the published study "
-            "behind this score was actually fitted on. A model used outside that sample "
-            "is not thereby wrong — it is being asked a question nobody has checked it "
-            "against.")
+    label = name or tr("Validation domain", "Domain validasi")
+    what = (tr("Which companies, in which market and in which years, the published study "
+               "behind this score was actually fitted on. A model used outside that sample "
+               "is not thereby wrong — it is being asked a question nobody has checked it "
+               "against.",
+               "Perusahaan mana, di pasar mana, dan pada tahun-tahun mana studi "
+               "terbitan di balik skor ini benar-benar dicocokkan. Model yang dipakai "
+               "di luar sampel itu tidak otomatis salah — ia sedang ditanya pertanyaan "
+               "yang belum pernah diperiksa siapa pun."))
     if not _known(value):
         # No verdict at all is a gap, and gaps take the one band that is never a
         # colour anywhere in this app.
-        return unavailable(label, what, "this dimension was not evaluated")
+        return unavailable(label, what, tr("this dimension was not evaluated",
+                                           "dimensi ini tidak dievaluasi"))
     verdict = str(value).lower() if isinstance(value, str) else ""
     if verdict not in (INSIDE_WORD, OUTSIDE_WORD, UNKNOWN_WORD):
         # The glossary probes every interpreter with numbers. This one takes a
         # verdict string, so the numeric probe falls through to the definition
         # rather than to None — which would fail the manual's build.
         return make(label, what,
-                    "This line reports whether one aspect of this company matches the "
-                    "study's sample: the years, the market, the kind of business, or the "
-                    "size of firm the effect was found in.",
-                    "Read it as provenance. It tells you how far the number has been "
-                    "carried from where it was tested, not whether the number is right.",
+                    tr("This line reports whether one aspect of this company matches the "
+                       "study's sample: the years, the market, the kind of business, or the "
+                       "size of firm the effect was found in.",
+                       "Baris ini melaporkan apakah satu aspek perusahaan ini cocok dengan "
+                       "sampel studinya: tahun, pasar, jenis bisnis, atau ukuran perusahaan "
+                       "tempat efek itu ditemukan."),
+                    tr("Read it as provenance. It tells you how far the number has been "
+                       "carried from where it was tested, not whether the number is right.",
+                       "Bacalah sebagai asal-usul. Ia memberi tahu seberapa jauh angkanya "
+                       "dibawa dari tempat ia diuji, bukan apakah angkanya benar."),
                     "context", "none", evidence="strong")
 
-    where = f"Study sample: {sample}. This company: {this_use}. " if sample and this_use else ""
+    where = tr(f"Study sample: {sample}. This company: {this_use}. ",
+               f"Sampel studi: {sample}. Perusahaan ini: {this_use}. ") if sample and this_use else ""
     heading = {
-        INSIDE_WORD: "Inside the study's sample on this axis. ",
-        OUTSIDE_WORD: "Outside the study's sample on this axis. ",
-        UNKNOWN_WORD: "Cannot be placed against the study's sample on this axis. ",
+        INSIDE_WORD: tr("Inside the study's sample on this axis. ",
+                        "Di dalam sampel studi pada sumbu ini. "),
+        OUTSIDE_WORD: tr("Outside the study's sample on this axis. ",
+                         "Di luar sampel studi pada sumbu ini. "),
+        UNKNOWN_WORD: tr("Cannot be placed against the study's sample on this axis. ",
+                         "Tidak bisa ditempatkan terhadap sampel studi pada sumbu ini. "),
     }[verdict]
     return make(
         label=label, what=what, reading=heading + where + (note or ""),
-        action=("Nothing to act on. This is where the number came from, not a judgement "
-                "about the number — and matching the sample would not make the score "
-                "reliable here any more than missing it makes it wrong."),
+        action=(tr("Nothing to act on. This is where the number came from, not a judgement "
+                   "about the number — and matching the sample would not make the score "
+                   "reliable here any more than missing it makes it wrong.",
+                   "Tidak ada yang perlu ditindaklanjuti. Inilah asal angkanya, bukan "
+                   "penilaian atas angkanya — dan cocok dengan sampel tidak membuat skornya "
+                   "lebih andal di sini, sama seperti tidak cocok tidak membuatnya salah.")),
         band="context", good_direction="none", evidence="strong",
-        value_text=verdict,
+        value_text={INSIDE_WORD: tr("inside", "di dalam"), OUTSIDE_WORD: tr("outside", "di luar"),
+                    UNKNOWN_WORD: tr("unknown", "tidak diketahui")}[verdict],
     )
 
 
@@ -4309,19 +5827,29 @@ def for_pretrade(flags: Sequence[dict], base_conditions: Sequence[dict],
     # whether it applies, and the framing has to keep that distinction.
     if flags:
         framing = (
-            "Each condition below is true of this company right now. Beside each one is how "
-            "often it is true across a published universe — a common condition describes "
-            "the market, not this company."
+            tr("Each condition below is true of this company right now. Beside each one is how "
+               "often it is true across a published universe — a common condition describes "
+               "the market, not this company.",
+               "Setiap kondisi di bawah berlaku untuk perusahaan ini saat ini. Di "
+               "sebelah masing-masing ada seberapa sering kondisi itu berlaku di "
+               "kumpulan perusahaan yang terpublikasi — kondisi yang umum menggambarkan "
+               "pasar, bukan perusahaan ini.")
         )
     elif base_conditions:
         framing = (
-            "Nothing unusual fired. The conditions below are true here and true of most of "
-            "this market, so they describe the market rather than this company."
+            tr("Nothing unusual fired. The conditions below are true here and true of most of "
+               "this market, so they describe the market rather than this company.",
+               "Tidak ada yang tidak biasa yang muncul. Kondisi di bawah berlaku di "
+               "sini dan berlaku untuk sebagian besar pasar ini, jadi kondisi itu "
+               "menggambarkan pasar, bukan perusahaan ini.")
         )
     else:
         framing = (
-            "None of the conditions this app can test is true of this company right now. "
-            "That is a narrower statement than it looks."
+            tr("None of the conditions this app can test is true of this company right now. "
+               "That is a narrower statement than it looks.",
+               "Tidak ada kondisi yang bisa diuji aplikasi ini yang berlaku untuk "
+               "perusahaan ini saat ini. Itu pernyataan yang lebih sempit daripada "
+               "kelihatannya.")
         )
 
     # KEYED, NOT A LIST. The panel needs to place each note under the section it
@@ -4331,19 +5859,28 @@ def for_pretrade(flags: Sequence[dict], base_conditions: Sequence[dict],
     notes = {}
     if base_conditions:
         notes["base"] = (
-            "True here, and true of more than "
-            f"{int((calibration or {}).get('baseRateMax', 0.33) * 100)}% of the universe. "
-            "Real, but not a finding about this company."
+            tr("True here, and true of more than "
+               f"{int((calibration or {}).get('baseRateMax', 0.33) * 100)}% of the universe. "
+               "Real, but not a finding about this company.",
+               "Berlaku di sini, dan berlaku untuk lebih dari "
+               f"{int((calibration or {}).get('baseRateMax', 0.33) * 100)}% dari "
+               "kumpulan perusahaan. Nyata, tetapi bukan temuan tentang perusahaan ini.")
         )
     if not_checked:
         notes["notChecked"] = (
-            "Never tested — a refused lens, a missing filing, an estimate the data cannot "
-            "resolve. Not tested is not clear."
+            tr("Never tested — a refused lens, a missing filing, an estimate the data cannot "
+               "resolve. Not tested is not clear.",
+               "Tidak pernah diuji — lensa yang menolak, laporan keuangan yang hilang, "
+               "perkiraan yang tidak bisa dipastikan datanya. Tidak diuji bukan berarti "
+               "bersih.")
         )
     if uncalibrated:
         notes["uncalibrated"] = (
-            "Testable, but nobody has measured how often they fire. A flag without a base "
-            "rate is not readable, so it is withheld."
+            tr("Testable, but nobody has measured how often they fire. A flag without a base "
+               "rate is not readable, so it is withheld.",
+               "Bisa diuji, tetapi belum ada yang mengukur seberapa sering kondisinya "
+               "muncul. Tanda tanpa tingkat dasar tidak bisa dibaca, jadi tanda itu "
+               "ditahan.")
         )
 
     # The stamp deliberately does NOT name a universe. Each line carries the
@@ -4353,18 +5890,26 @@ def for_pretrade(flags: Sequence[dict], base_conditions: Sequence[dict],
     # above it on every second ticker.
     stamp = None
     if calibration and calibration.get("measuredOn"):
-        stamp = (f"Rates measured {calibration['measuredOn']}, each against the universe "
-                 f"named beside it.")
+        stamp = (tr(f"Rates measured {calibration['measuredOn']}, each against the universe "
+                    f"named beside it.",
+                    f"Tingkat diukur pada {calibration['measuredOn']}, masing-masing terhadap "
+                    "kumpulan perusahaan yang disebut di sebelahnya."))
 
     return {
-        "headline": "What would give a careful buyer pause",
+        "headline": tr("What would give a careful buyer pause",
+                       "Yang akan membuat pembeli yang cermat berpikir dua kali"),
         "framing": framing,
         "notes": notes,
         "measuredOn": stamp,
         "caveat": (
-            ABSENCE_IS_NOT_EVIDENCE
-            + (NOTHING_UNTESTED_CLAUSE if not_checked else "")
-            + " None of this is a recommendation."
+            tr(ABSENCE_IS_NOT_EVIDENCE,
+               "Panel yang kosong bukan surat keterangan sehat — hanya berarti tidak ada "
+               "kondisi yang bisa diuji aplikasi ini yang muncul.")
+            + (tr(NOTHING_UNTESTED_CLAUSE,
+                  " Apa pun yang tercantum sebagai tidak diperiksa sama sekali belum pernah "
+                  "dievaluasi.") if not_checked else "")
+            + tr(" None of this is a recommendation.",
+                 " Tidak satu pun dari ini adalah rekomendasi.")
         ),
     }
 
@@ -4383,85 +5928,132 @@ def _id_market(market) -> bool:
 
 @metric("yearsProfitable")
 def _years_profitable(value, years=None, profitable=None, market=None, **_):
-    label = "Years profitable"
-    what = ("The share of the years in the filings in which the company made a net profit. "
-            "The data source keeps four or five years, which does not span a business cycle.")
+    label = tr("Years profitable", "Tahun-tahun untung")
+    what = (tr("The share of the years in the filings in which the company made a net profit. "
+               "The data source keeps four or five years, which does not span a business cycle.",
+               "Porsi tahun dalam laporan keuangan ketika perusahaan membukukan laba "
+               "bersih. Sumber datanya menyimpan empat atau lima tahun, yang tidak "
+               "mencakup satu siklus bisnis."))
     if not _known(value):
-        return unavailable(label, what, "fewer than three years of income statement came back")
+        return unavailable(label, what, tr("fewer than three years of income statement came back",
+                                           "laporan laba rugi yang kembali kurang dari tiga tahun"))
     band = _ladder(value, ((0.5, "poor"), (0.999, "fair"), (None, "good")))
-    count = (f"{profitable} of {years} years" if _known(profitable) and _known(years)
-             else f"{_pct(value, 0)} of the years covered")
-    reading = f"Profitable in {count}. "
+    count = (tr(f"{profitable} of {years} years", f"{profitable} dari {years} tahun") if _known(profitable) and _known(years)
+             else tr(f"{_pct(value, 0)} of the years covered",
+                     f"{_pct(value, 0)} dari tahun yang tercakup"))
+    reading = tr(f"Profitable in {count}. ", f"Untung pada {count}. ")
     if _id_market(market):
-        reading += ("Two thirds of Indonesian listings are profitable in every year their "
-                    "filings cover, so a full record is common here rather than a distinction.")
+        reading += (tr("Two thirds of Indonesian listings are profitable in every year their "
+                       "filings cover, so a full record is common here rather than a distinction.",
+                       "Dua pertiga saham BEI untung setiap tahun yang dicakup laporan "
+                       "keuangannya, jadi catatan yang penuh adalah hal yang umum di sini, "
+                       "bukan keistimewaan."))
     else:
-        reading += ("No base rate has been measured for this market, so how ordinary that is "
-                    "here is not established.")
+        reading += (tr("No base rate has been measured for this market, so how ordinary that is "
+                       "here is not established.",
+                       "Belum ada tingkat dasar yang diukur untuk pasar ini, jadi seberapa "
+                       "lazim hal itu di sini belum dipastikan."))
     return make(label, what, reading,
-                "Read it with the window: four profitable years inside one good cycle say less "
-                "than the count suggests. Whether the profit arrived as cash is the next line.",
+                tr("Read it with the window: four profitable years inside one good cycle say less "
+                   "than the count suggests. Whether the profit arrived as cash is the next line.",
+                   "Bacalah bersama periodenya: empat tahun untung di dalam satu siklus "
+                   "yang bagus berkata lebih sedikit daripada yang disiratkan hitungannya. "
+                   "Apakah labanya datang sebagai kas ada di baris berikutnya."),
                 band, "high", evidence="moderate", value_text=count)
 
 
 @metric("revenueCagr")
 def _revenue_cagr(value, years=None, market=None, **_):
-    label = "Revenue growth"
-    what = ("How fast sales compounded each year, from the oldest year in the filings to the "
-            "newest. Two endpoints, so one unusual year at either end moves it a lot.")
+    label = tr("Revenue growth", "Pertumbuhan pendapatan")
+    what = (tr("How fast sales compounded each year, from the oldest year in the filings to the "
+               "newest. Two endpoints, so one unusual year at either end moves it a lot.",
+               "Seberapa cepat penjualan bertumbuh majemuk setiap tahun, dari tahun "
+               "tertua dalam laporan keuangan ke yang terbaru. Hanya dua titik ujung, "
+               "jadi satu tahun yang tidak biasa di salah satu ujung sangat "
+               "menggesernya."))
     if not _known(value):
-        return unavailable(label, what, "revenue was missing or not positive at one end")
-    span = f" over {int(years) - 1} years" if _known(years) and years > 1 else ""
-    reading = f"{_pct(value, 1)} a year{span}. "
+        return unavailable(label, what, tr("revenue was missing or not positive at one end",
+                                           "pendapatannya hilang atau tidak positif di salah satu ujung"))
+    span = tr(f" over {int(years) - 1} years", f" selama {int(years) - 1} tahun") if _known(years) and years > 1 else ""
+    reading = tr(f"{_pct(value, 1)} a year{span}. ", f"{_pct(value, 1)} per tahun{span}. ")
     if _id_market(market):
-        reading += ("The median Indonesian listing grew about 5% a year over the same kind of "
-                    "window, and the top quarter about 15% or more.")
+        reading += (tr("The median Indonesian listing grew about 5% a year over the same kind of "
+                       "window, and the top quarter about 15% or more.",
+                       "Median saham BEI tumbuh sekitar 5% per tahun dalam periode sejenis, dan "
+                       "seperempat teratas sekitar 15% atau lebih."))
     else:
-        reading += "No market median has been measured for this listing's market."
+        reading += tr("No market median has been measured for this listing's market.",
+                      "Belum ada median pasar yang diukur untuk pasar tempat saham ini "
+                      "tercatat.")
     return make(label, what, reading,
-                "Growth is a description of the past, not a forecast. Compare it with the growth "
-                "the share price requires on the Value tab.",
+                tr("Growth is a description of the past, not a forecast. Compare it with the growth "
+                   "the share price requires on the Value tab.",
+                   "Pertumbuhan adalah gambaran masa lalu, bukan ramalan. Bandingkan dengan "
+                   "pertumbuhan yang dibutuhkan harga saham di tab Nilai."),
                 "context", "high", evidence="moderate", value_text=_pct(value, 1))
 
 
 @metric("netDebtToEbitda")
 def _net_debt_to_ebitda(value, market=None, **_):
-    label = "Borrowings against earnings"
-    what = ("Net debt — borrowings minus cash — divided by a year's operating earnings before "
-            "depreciation. Roughly, how many years of earnings the debt represents.")
+    label = tr("Borrowings against earnings", "Pinjaman dibandingkan laba")
+    what = (tr("Net debt — borrowings minus cash — divided by a year's operating earnings before "
+               "depreciation. Roughly, how many years of earnings the debt represents.",
+               "Utang bersih — pinjaman dikurangi kas — dibagi laba operasional setahun "
+               "sebelum depresiasi. Kira-kira, berapa tahun laba yang diwakili utangnya."))
     if not _known(value):
         return unavailable(label, what,
-                           "it carries net cash, has no positive earnings to measure against, "
-                           "or the balance sheet did not arrive")
-    reading = f"{_num(value, 1)} times a year's earnings. "
+                           tr("it carries net cash, has no positive earnings to measure against, "
+                              "or the balance sheet did not arrive",
+                              "ia memiliki kas bersih, tidak punya laba positif sebagai pembanding, "
+                              "atau neracanya tidak tersedia"))
+    reading = tr(f"{_num(value, 1)} times a year's earnings. ",
+                 f"{_num(value, 1)} kali laba setahun. ")
     if _id_market(market):
-        reading += ("The median for Indonesian listings that borrow at all is 3.0, so this is "
-                    f"{'above' if value > 3.0 else 'at or below'} the typical borrower here — a "
-                    "comparison, not a verdict.")
+        reading += (tr("The median for Indonesian listings that borrow at all is 3.0, so this is "
+                       f"{'above' if value > 3.0 else 'at or below'} the typical borrower here — a "
+                       "comparison, not a verdict.",
+                       "Median saham BEI yang berutang adalah 3.0, jadi ini "
+                       f"{'di atas' if value > 3.0 else 'setara atau di bawah'} peminjam pada "
+                       "umumnya di sini — sebuah perbandingan, bukan vonis."))
     else:
-        reading += "No median has been measured for this market, so it is reported bare."
+        reading += tr("No median has been measured for this market, so it is reported bare.",
+                      "Belum ada median yang diukur untuk pasar ini, jadi angkanya dilaporkan "
+                      "apa adanya.")
     return make(label, what, reading,
-                "No line is drawn here on purpose: the textbook 3x is the middle of the "
-                "Indonesian distribution. What the debt pays for decides whether it matters.",
+                tr("No line is drawn here on purpose: the textbook 3x is the middle of the "
+                   "Indonesian distribution. What the debt pays for decides whether it matters.",
+                   "Sengaja tidak ada garis batas di sini: 3x versi buku teks adalah titik "
+                   "tengah distribusi saham BEI. Untuk apa utang itu dipakai yang "
+                   "menentukan apakah ia penting."),
                 "context", "low", evidence="moderate", value_text=f"{_num(value, 1)}x")
 
 
 @metric("freeCashFlowYears")
 def _free_cash_flow_years(value, positive=None, of=None, **_):
-    label = "Years of positive free cash flow"
-    what = ("The share of years in which operating cash flow exceeded spending on assets. A "
-            "company building something will fall short for a while, which is not a flaw.")
+    label = tr("Years of positive free cash flow", "Tahun-tahun arus kas bebas positif")
+    what = (tr("The share of years in which operating cash flow exceeded spending on assets. A "
+               "company building something will fall short for a while, which is not a flaw.",
+               "Porsi tahun ketika arus kas operasional melebihi belanja aset. "
+               "Perusahaan yang sedang membangun sesuatu akan kekurangan untuk "
+               "sementara, dan itu bukan cacat."))
     if not _known(value):
         return unavailable(label, what,
-                           "no free-cash-flow line came back, or the company is a lender, "
-                           "for whom capital spending describes nothing")
-    count = (f"{positive} of {of} years" if _known(positive) and _known(of)
-             else f"{_pct(value, 0)} of years")
-    reading = f"Free cash flow was positive in {count}. "
-    reading += ("Mostly negative is what a build-out looks like, and whether that is good depends "
-                "on what the spending bought." if value < 0.5 else
-                "The spending on assets mostly stayed inside what the business generated.")
-    return make(label, what, reading, CONTEXT_NOT_TRIGGER,
+                           tr("no free-cash-flow line came back, or the company is a lender, "
+                              "for whom capital spending describes nothing",
+                              "tidak ada baris arus kas bebas yang kembali, atau perusahaannya pemberi "
+                              "pinjaman, yang belanja modalnya tidak menggambarkan apa pun"))
+    count = (tr(f"{positive} of {of} years", f"{positive} dari {of} tahun") if _known(positive) and _known(of)
+             else tr(f"{_pct(value, 0)} of years", f"{_pct(value, 0)} dari tahun-tahunnya"))
+    reading = tr(f"Free cash flow was positive in {count}. ",
+                 f"Arus kas bebas positif pada {count}. ")
+    reading += (tr("Mostly negative is what a build-out looks like, and whether that is good depends "
+                   "on what the spending bought.",
+                   "Sebagian besar negatif adalah rupa sebuah pembangunan, dan apakah itu "
+                   "baik bergantung pada apa yang dibeli dari belanja itu.") if value < 0.5 else
+                tr("The spending on assets mostly stayed inside what the business generated.",
+                   "Belanja asetnya sebagian besar tetap di dalam kemampuan yang dihasilkan "
+                   "bisnisnya."))
+    return make(label, what, reading, _not_trigger(),
                 "context", "high", evidence="moderate", value_text=count)
 
 
@@ -4496,18 +6088,25 @@ def for_company(record: dict, market: str) -> dict:
 # ============================================================================ #
 @metric("dailyMove")
 def _daily_move(value, **_):
-    label = "How unusual a day's move was"
-    what = ("Where the latest session's move sits among the same instrument's daily moves "
-            "over the past year, by size alone: 97 means it was larger than 97% of them. A "
-            "rise and a fall of the same size read the same, and neither is good or bad on "
-            "its own. Each instrument is compared only with itself, on its own trading days.")
+    label = tr("How unusual a day's move was", "Seberapa tidak biasa pergerakan sehari")
+    what = (tr("Where the latest session's move sits among the same instrument's daily moves "
+               "over the past year, by size alone: 97 means it was larger than 97% of them. A "
+               "rise and a fall of the same size read the same, and neither is good or bad on "
+               "its own. Each instrument is compared only with itself, on its own trading days.",
+               "Di mana pergerakan sesi terakhir berada di antara pergerakan harian "
+               "instrumen yang sama selama setahun terakhir, menurut besarnya saja: 97 "
+               "berarti lebih besar daripada 97% di antaranya. Kenaikan dan penurunan "
+               "yang sama besarnya terbaca sama, dan tidak ada yang baik atau buruk "
+               "dengan sendirinya. Setiap instrumen hanya dibandingkan dengan dirinya "
+               "sendiri, pada hari perdagangannya sendiri."))
     if not _known(value):
-        return unavailable(label, what, "fewer than 120 sessions of history in the past year")
+        return unavailable(label, what, tr("fewer than 120 sessions of history in the past year",
+                                           "riwayatnya kurang dari 120 sesi dalam setahun terakhir"))
     reading = _size_phrase(value).capitalize()
-    reading += (", which is unusual for it." if value >= 95 else
-                ", an ordinary size for it." if value < 80 else ".")
-    return make(label, what, reading, CONTEXT_NOT_TRIGGER, "context", "none",
-                value_text=f"{_num(value, 0)}th percentile")
+    reading += (tr(", which is unusual for it.", ", yang tidak biasa baginya.") if value >= 95 else
+                tr(", an ordinary size for it.", ", besaran yang biasa baginya.") if value < 80 else ".")
+    return make(label, what, reading, _not_trigger(), "context", "none",
+                value_text=tr(f"{_num(value, 0)}th percentile", f"persentil ke-{_num(value, 0)}"))
 
 
 def _size_phrase(percentile: float) -> str:
@@ -4517,62 +6116,95 @@ def _size_phrase(percentile: float) -> str:
     misprint, so a small move is described from the other end.
     """
     if percentile >= 50:
-        return f"larger than {percentile:.0f}% of its daily moves in the past year"
+        return tr(f"larger than {percentile:.0f}% of its daily moves in the past year",
+                  f"lebih besar daripada {percentile:.0f}% pergerakan hariannya dalam "
+                  "setahun terakhir")
     if 100 - percentile >= 99.5:
-        return "smaller than almost all of its daily moves in the past year"
-    return f"smaller than {100 - percentile:.0f}% of its daily moves in the past year"
+        return tr("smaller than almost all of its daily moves in the past year",
+                  "lebih kecil daripada hampir semua pergerakan hariannya dalam setahun "
+                  "terakhir")
+    return tr(f"smaller than {100 - percentile:.0f}% of its daily moves in the past year",
+              f"lebih kecil daripada {100 - percentile:.0f}% pergerakan hariannya dalam "
+              "setahun terakhir")
 
 
 @metric("eventDayMove")
 def _event_day_move(value, events=None, p=None, **_):
-    label = "How past event days compare"
-    what = ("On the days a given event happened — an FOMC decision, a CPI release — how often "
-            "an instrument moved more than on its median day. On any day, half do, and how far "
-            "from one half a share must be before it means anything depends on how many event "
-            "days there were.")
+    label = tr("How past event days compare", "Perbandingan hari-hari peristiwa sebelumnya")
+    what = (tr("On the days a given event happened — an FOMC decision, a CPI release — how often "
+               "an instrument moved more than on its median day. On any day, half do, and how far "
+               "from one half a share must be before it means anything depends on how many event "
+               "days there were.",
+               "Pada hari-hari ketika sebuah peristiwa terjadi — keputusan FOMC, rilis "
+               "CPI — seberapa sering sebuah instrumen bergerak lebih besar daripada "
+               "hari mediannya. Pada hari mana pun, separuhnya begitu, dan seberapa "
+               "jauh porsinya harus dari separuh sebelum berarti apa-apa bergantung "
+               "pada berapa banyak hari peristiwanya."))
     if not _known(value):
-        return unavailable(label, what, "too few of these events in the history held")
-    count = f" of {int(events)} event days" if _known(events) else ""
-    reading = f"Moved more than on its median day on {_pct(value, 0)}{count}; on any day, half do."
+        return unavailable(label, what, tr("too few of these events in the history held",
+                                           "terlalu sedikit peristiwa ini dalam riwayat yang tersedia"))
+    count = tr(f" of {int(events)} event days", f" dari {int(events)} hari peristiwa") if _known(events) else ""
+    reading = tr(f"Moved more than on its median day on {_pct(value, 0)}{count}; on any day, half do.",
+                 f"Bergerak lebih besar daripada hari mediannya pada {_pct(value, 0)}"
+                 f"{count}; pada hari mana pun, separuhnya begitu.")
     # Worded by the binomial test the history line uses, never by how far the
     # share sits from one half: 15 of 22 is 68%, and still within chance.
     if _known(p):
-        reading += (" A gap this size is within what chance produces." if p > 0.05 else
-                    " A gap this size is more than chance alone usually produces.")
-    return make(label, what, reading, CONTEXT_NOT_TRIGGER, "context", "none",
+        reading += (tr(" A gap this size is within what chance produces.",
+                       " Selisih sebesar ini masih dalam jangkauan kebetulan.") if p > 0.05 else
+                    tr(" A gap this size is more than chance alone usually produces.",
+                       " Selisih sebesar ini lebih besar daripada yang biasanya dihasilkan "
+                       "kebetulan saja."))
+    return make(label, what, reading, _not_trigger(), "context", "none",
                 value_text=_pct(value, 0))
 
 
 # The event and the instrument as a sentence says them.
-_EVENT_DAYS = {"fomc": "FOMC decision days", "cpi": "CPI release days",
-               "jobs": "jobs-report days", "bi-rate": "Bank Indonesia decision days"}
-_HISTORY_NAMES = {"sp500": "the S&P 500", "t10y": "the 10-year yield",
-                  "dollar": "the dollar index", "jkse": "IHSG", "usdidr": "the rupiah"}
+_EVENT_DAYS = Bilingual({"fomc": ("FOMC decision days", "hari keputusan FOMC"),
+                         "cpi": ("CPI release days", "hari rilis CPI"),
+                         "jobs": ("jobs-report days", "hari laporan ketenagakerjaan"),
+                         "bi-rate": ("Bank Indonesia decision days",
+                                     "hari keputusan Bank Indonesia")})
+_HISTORY_NAMES = Bilingual({"sp500": ("the S&P 500", "S&P 500"),
+                            "t10y": ("the 10-year yield", "imbal hasil obligasi 10 tahun"),
+                            "dollar": ("the dollar index", "indeks dolar"),
+                            "jkse": ("IHSG", "IHSG"), "usdidr": ("the rupiah", "rupiah")})
 
 
 def _size_text(value: float, change: str) -> str:
     if change == "bp":
         return f"{value:,.1f} bp"
     if change == "points":
-        return f"{value:,.2f} points"
+        return tr(f"{value:,.2f} points", f"{value:,.2f} poin")
     return f"{value * 100:,.2f}%"
 
 
 def history_reading(kind: str, row: dict) -> str:
     """One past-occurrence line, worded as history and never as a forecast."""
     if not row.get("available"):
-        return row.get("reason") or "No history to compare."
-    name = _HISTORY_NAMES.get(row["key"], row.get("name", "it"))
-    days = _EVENT_DAYS.get(kind, "event days")
-    text = (f"On {row['above']} of the last {row['events']} {days}, {name} moved more than on "
-            f"its median day; on any day, half do.")
+        return row.get("reason") or tr("No history to compare.",
+                                       "Tidak ada riwayat untuk dibandingkan.")
+    name = _HISTORY_NAMES.get(row["key"], row.get("name", tr("it", "instrumen ini")))
+    days = _EVENT_DAYS.get(kind, tr("event days", "hari peristiwa"))
+    text = (tr(f"On {row['above']} of the last {row['events']} {days}, {name} moved more than on "
+               f"its median day; on any day, half do.",
+               f"Pada {row['above']} dari {row['events']} {days} terakhir, {name} "
+               "bergerak lebih besar daripada hari mediannya; pada hari mana pun, "
+               "separuhnya begitu."))
     if row["p"] > 0.05:
-        text += " A gap this size is within what chance produces over that many days."
+        text += tr(" A gap this size is within what chance produces over that many days.",
+                   " Selisih sebesar ini masih dalam jangkauan kebetulan untuk hari "
+                   "sebanyak itu.")
     else:
         # A gap, not "more often": the test is two-sided, and the count already says which way.
-        text += f" A gap this size is more than chance alone usually produces over {row['events']} days."
-    text += (f" Its median move on those days was {_size_text(row['eventMedian'], row['change'])}, "
-             f"against {_size_text(row['allMedian'], row['change'])} on all days.")
+        text += tr(f" A gap this size is more than chance alone usually produces over {row['events']} days.",
+                   " Selisih sebesar ini lebih besar daripada yang biasanya dihasilkan "
+                   f"kebetulan saja dalam {row['events']} hari.")
+    text += (tr(f" Its median move on those days was {_size_text(row['eventMedian'], row['change'])}, "
+                f"against {_size_text(row['allMedian'], row['change'])} on all days.",
+                " Pergerakan median pada hari-hari itu "
+                f"{_size_text(row['eventMedian'], row['change'])}, dibandingkan "
+                f"{_size_text(row['allMedian'], row['change'])} pada semua hari."))
     return text
 
 
@@ -4582,8 +6214,8 @@ def _board_date(iso: Optional[str], with_year: bool = False) -> str:
     except ValueError:
         day = None
     if day is None:
-        return "an unknown date"
-    text = f"{day.day} {day.strftime('%b')}"
+        return tr("an unknown date", "tanggal yang tidak diketahui")
+    text = f"{day.day} {month_abbr(day.month)}"
     return f"{text} {day.year}" if with_year else text
 
 
@@ -4596,7 +6228,7 @@ def board_move_text(row: dict) -> str:
     if row.get("change") == "bp":
         return f"{sign}{abs(move):,.0f} bp"
     if row.get("change") == "points":
-        return f"{sign}{abs(move):,.2f} points"
+        return tr(f"{sign}{abs(move):,.2f} points", f"{sign}{abs(move):,.2f} poin")
     # Two decimals, because a currency or a broad index often moves a few
     # hundredths of a percent, and "-0.0%" says nothing.
     return f"{sign}{abs(move) * 100:,.2f}%"
@@ -4604,26 +6236,33 @@ def board_move_text(row: dict) -> str:
 
 def _board_reading(row: dict) -> str:
     if not row.get("available"):
-        return row.get("reason") or "No recent price."
-    verb = {"up": "Rose", "down": "Fell"}.get(row.get("direction"), "Was unchanged")
+        return row.get("reason") or tr("No recent price.", "Tidak ada harga terbaru.")
+    verb = {"up": tr("Rose", "Naik"), "down": tr("Fell", "Turun")}.get(row.get("direction"), "Was unchanged")
     session = _board_date(row.get("asOf"))
     if verb == "Was unchanged":
-        return f"Was unchanged in the session of {session}."
-    text = f"{verb} {board_move_text(row).lstrip('+-')} in the session of {session}"
+        return tr(f"Was unchanged in the session of {session}.",
+                  f"Tidak berubah pada sesi {session}.")
+    text = tr(f"{verb} {board_move_text(row).lstrip('+-')} in the session of {session}",
+              f"{verb} {board_move_text(row).lstrip('+-')} pada sesi {session}")
     percentile = row.get("percentile")
     if not _known(percentile):
-        return (f"{text}. Too little history in the past year to say whether that is "
-                f"unusual for it.")
+        return (tr(f"{text}. Too little history in the past year to say whether that is "
+                   f"unusual for it.",
+                   f"{text}. Riwayat dalam setahun terakhir terlalu sedikit untuk menilai "
+                   "apakah itu tidak biasa baginya."))
     text += f", {_size_phrase(percentile)}"
     if row.get("unusual"):
-        word = "rise" if row.get("direction") == "up" else "fall"
+        word = tr("rise", "kenaikan") if row.get("direction") == "up" else tr("fall", "penurunan")
         since = row.get("largestSince")
         if since:
-            return f"{text} — its largest {word} since {_board_date(since, with_year=True)}."
+            return tr(f"{text} — its largest {word} since {_board_date(since, with_year=True)}.",
+                      f"{text} — {word} terbesarnya sejak {_board_date(since, with_year=True)}.")
         if row.get("largestInHistory"):
-            return (f"{text} — its largest {word} in the history fetched, since "
-                    f"{_board_date(row.get('historyFrom'), with_year=True)}.")
-        return f"{text}, which is unusual for it."
+            return (tr(f"{text} — its largest {word} in the history fetched, since "
+                       f"{_board_date(row.get('historyFrom'), with_year=True)}.",
+                       f"{text} — {word} terbesarnya dalam riwayat yang diambil, sejak "
+                       f"{_board_date(row.get('historyFrom'), with_year=True)}."))
+        return tr(f"{text}, which is unusual for it.", f"{text}, yang tidak biasa baginya.")
     return f"{text}."
 
 
@@ -4637,28 +6276,41 @@ def _board_summary(rows: list[dict], code: str, unusual: list[str],
             part = f"{row['name']} {board_move_text(row)}"
             since = row.get("largestSince")
             if since:
-                word = "rise" if row.get("direction") == "up" else "fall"
-                part += f" (its largest {word} since {_board_date(since, with_year=True)})"
+                word = (tr("rise", "kenaikan") if row.get("direction") == "up"
+                        else tr("fall", "penurunan"))
+                part += tr(f" (its largest {word} since {_board_date(since, with_year=True)})",
+                           f" ({word} terbesarnya sejak {_board_date(since, with_year=True)})")
             parts.append(part)
-        text = ("Unusual for the instrument that made it: " + "; ".join(parts) + ". Each is "
-                "measured against its own past year, not against the others.")
+        text = (tr("Unusual for the instrument that made it: ",
+                   "Tidak biasa bagi instrumen yang mencatatnya: ") + "; ".join(parts) + tr(". Each is "
+                   "measured against its own past year, not against the others.",
+                                                                                    ". Masing-masing diukur terhadap setahun terakhirnya sendiri, bukan "
+                                                                                    "terhadap yang lain."))
     else:
-        text = ("Nothing here moved more than it ordinarily does: every latest move was "
-                "smaller than 95% of that instrument's own days in the past year.")
+        text = (tr("Nothing here moved more than it ordinarily does: every latest move was "
+                   "smaller than 95% of that instrument's own days in the past year.",
+                   "Tidak ada di sini yang bergerak lebih besar daripada biasanya: setiap "
+                   "pergerakan terakhir lebih kecil daripada 95% hari-hari instrumen itu "
+                   "sendiri dalam setahun terakhir."))
     if unavailable_keys:
         names = [by_key[key]["name"] for key in unavailable_keys]
         count = len(names)
-        text += (f" {', '.join(names)} had no recent price and "
-                 f"{'is' if count == 1 else 'are'} left blank.")
+        text += (tr(f" {', '.join(names)} had no recent price and "
+                    f"{'is' if count == 1 else 'are'} left blank.",
+                    f" {', '.join(names)} tidak punya harga terbaru dan dibiarkan kosong."))
     return text
 
 
 def _board_base_rate(rate: Optional[dict]) -> Optional[str]:
     if not rate:
         return None
-    return (f"For scale: on {_pct(rate['share'], 0)} of the past year's weekdays, at least "
-            f"one of these {rate['instruments']} instruments moved this much. A move this "
-            f"size somewhere on the board is common; one in a particular instrument is not.")
+    return (tr(f"For scale: on {_pct(rate['share'], 0)} of the past year's weekdays, at least "
+               f"one of these {rate['instruments']} instruments moved this much. A move this "
+               f"size somewhere on the board is common; one in a particular instrument is not.",
+               f"Sebagai skala: pada {_pct(rate['share'], 0)} hari kerja dalam setahun "
+               f"terakhir, setidaknya satu dari {rate['instruments']} instrumen ini "
+               "bergerak sebesar ini. Pergerakan sebesar ini di suatu tempat di papan "
+               "itu umum; di satu instrumen tertentu, tidak."))
 
 
 def for_market_board(board: dict) -> dict:

@@ -3,10 +3,12 @@
 import { track } from "@vercel/analytics";
 import { useCallback, useEffect, useRef } from "react";
 import { createTtlCache } from "./cache";
+import { requestLang, useLang } from "./i18n";
 import { readSession, useSessionState, writeSession } from "./session";
 import type { RunTuning } from "./url";
 import type {
-  AnomalyResponse, CompanyResponse, ConfluenceResponse, DeepenResponse, Engine, EngineFailure,
+  AnomalyResponse, Capabilities, CompanyResponse, ConfluenceResponse, DeepenResponse, Engine,
+  EngineFailure,
   ExposureScanResponse,
   Leg, ManualInputs, EventStudyResponse, Market, MarketBoard, MarketCalendar, MarketHeadlines,
   NewsResponse, QualityResponse, WatchlistEarnings,
@@ -56,17 +58,30 @@ async function unwrap<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/**
+ * THE READING LANGUAGE RIDES ON EVERY REQUEST, and only when it is not English.
+ * The server writes its own prose in it (api/_lib/lang.py); leaving it off for
+ * English keeps every English URL — and so every edge-cache entry — exactly as
+ * it was. It is a language, never a fact about what the reader looked at, so
+ * the board and the calendar still name nothing.
+ */
+function withLang<P extends Record<string, unknown>>(params: P): P {
+  const lang = requestLang();
+  return lang === "en" ? params : { ...params, lang };
+}
+
 async function get<T>(
   path: string,
   params: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<T> {
-  return unwrap<T>(await fetch(`${path}?${queryString(params as never)}`, { signal }));
+  return unwrap<T>(await fetch(`${path}?${queryString(withLang(params) as never)}`, { signal }));
 }
 
 /**
  * POST, for the routes whose input is personal, and the reason is the INPUT
- * rather than the size. There are two: holdings (/api/portfolio) and a reader's
+ * rather than the size. There are three: the watchlist's report dates
+ * (/api/markets/earnings, below), holdings (/api/portfolio) and a reader's
  * own list to rank (/api/rank/list).
  *
  * Every other request here asks about a company, and a company name in a URL is
@@ -85,7 +100,8 @@ async function post<T>(
   body: unknown,
   signal?: AbortSignal,
 ): Promise<T> {
-  return unwrap<T>(await fetch(path, {
+  const lang = requestLang();
+  return unwrap<T>(await fetch(lang === "en" ? path : `${path}?lang=${lang}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -138,7 +154,19 @@ const IDLE = { status: "idle" } as const;
  * same key, and written back under the key it was STARTED with, so a late
  * answer can never land under another company's header.
  */
-function useRequest<P, T>(key: string, fetcher: (params: P, signal: AbortSignal) => Promise<T>) {
+/** Where a request's answer is kept: per subject, and per language it was written in. */
+function requestKey(name: string): string {
+  const lang = requestLang();
+  return lang === "en" ? name : `${name}@${lang}`;
+}
+
+function useRequest<P, T>(name: string, fetcher: (params: P, signal: AbortSignal) => Promise<T>) {
+  // Per language as well as per subject: an answer is written in one language,
+  // and switching must not leave the other one on screen as if it were current.
+  // Subscribed so a switch re-renders and re-keys; the key itself follows the
+  // language requests ask for, which is settled before the first fetch.
+  useLang();
+  const key = requestKey(name);
   const [state] = useSessionState<Engine<T>>(key, IDLE);
   const fetchRef = useRef(fetcher);
   fetchRef.current = fetcher;
@@ -237,7 +265,9 @@ const ALL_LENSES: Lens[] = ["anomaly", "technical", "valuation", "quality", "new
 const confluenceCache = createTtlCache<ConfluenceResponse>({ ttlMs: 300_000, max: 8 });
 
 export function confluenceKey(o: RunOptions): string {
-  return queryString(confluenceParams({ ...o, ticker: o.ticker.trim().toUpperCase() }));
+  // The language is part of the read: the same company in Indonesian is a
+  // different payload, so it is a different entry and a different run.
+  return queryString(withLang(confluenceParams({ ...o, ticker: o.ticker.trim().toUpperCase() })));
 }
 
 /** One company's full read, through the shared cache. Used by the compare view. */
@@ -492,7 +522,7 @@ export function useUniverses() {
   const { state, run } = useRequest("universes",
     (_: void, signal: AbortSignal) => get<UniversesResponse>("/api/rank/universes", {}, signal));
   useEffect(() => {
-    const current = readSession<Engine<UniversesResponse>>("universes");
+    const current = readSession<Engine<UniversesResponse>>(requestKey("universes"));
     if (!current || current.status === "idle" || current.status === "error") run(undefined);
   }, [run]);
   return { state, load: () => run(undefined) };
@@ -602,18 +632,39 @@ export function usePeers(symbol: string) {
  * `available: false` wherever no scan has been run — a fresh checkout, or the
  * deployed app, where `reports/` does not exist.
  */
-export function useScan(market: Market) {
+export function useScan(market: Market, enabled = true) {
   const key = `scan:${market}`;
   const { state, run } = useRequest(key,
     (m: Market, signal: AbortSignal) => get<ScanResponse>("/api/scan/latest", { market: m }, signal));
   // Loaded on mount and whenever the market changes, because it costs one read
   // of a local file and the alternative is a button nobody presses — which is
-  // how the scan results went unseen for a week.
+  // how the scan results went unseen for a week. Not at all where the private
+  // tier is off: there is nothing to read, and no panel to read it into.
   useEffect(() => {
-    const current = readSession<Engine<ScanResponse>>(key);
+    if (!enabled) return;
+    const current = readSession<Engine<ScanResponse>>(requestKey(key));
     if (!current || current.status === "idle") run(market);
-  }, [key, market, run]);
+  }, [key, market, run, enabled]);
   return { state, reload: () => run(market) };
+}
+
+/**
+ * What this deployment serves, asked once per tab like the universe list.
+ *
+ * `privateTier` reads FALSE until the server says true, so a public deployment
+ * never flashes a Score tab it would only refuse; where the owner runs the app
+ * the tab appears a moment after the page. The server decides the flag with the
+ * same function that guards `/api/verdict` and `/api/scan/latest`, so the page
+ * cannot offer what the routes refuse.
+ */
+export function useCapabilities(): { privateTier: boolean } {
+  const { state, run } = useRequest("capabilities",
+    (_: void, signal: AbortSignal) => get<Capabilities>("/api/capabilities", {}, signal));
+  useEffect(() => {
+    const current = readSession<Engine<Capabilities>>(requestKey("capabilities"));
+    if (!current || current.status === "idle" || current.status === "error") run(undefined);
+  }, [run]);
+  return { privateTier: state.status === "ready" && state.data.privateTier === true };
 }
 
 /**

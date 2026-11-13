@@ -3,6 +3,7 @@
 import { ChevronRight, Download } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /**
  * Labelled controls for the engine assumption panels.
@@ -187,10 +188,11 @@ export function ApplyButton({
   disabled?: boolean;
   children?: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <Button variant="secondary" size="sm" onClick={onClick} disabled={busy || disabled}
             aria-busy={busy || undefined}>
-      {busy ? "Running…" : children}
+      {busy ? t("Running…") : children}
     </Button>
   );
 }

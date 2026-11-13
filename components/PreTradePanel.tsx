@@ -6,6 +6,7 @@ import type { PreTrade, PreTradeCheck } from "@/lib/types";
 import { ExplanationBody, TONE_HEX, TONE_TEXT, useDetail } from "@/components/ui/explain";
 import { cn } from "@/lib/utils";
 import { palette } from "@/lib/palette";
+import { useT } from "@/lib/i18n";
 
 /**
  * What would give a careful buyer pause.
@@ -58,18 +59,20 @@ const PRETRADE = palette.pretrade;
  * backwards.
  */
 function Rate({ check }: { check: PreTradeCheck }) {
+  const t = useT();
   return (
     <span
       className="num shrink-0 rounded-full border border-rule bg-sunken px-2.5 py-1
                  text-micro font-medium text-ash"
       title={check.rateSentence}
     >
-      fires on {check.firingRateText}
+      {t("fires on {firingRateText}", { firingRateText: check.firingRateText })}
     </span>
   );
 }
 
 function Check({ check }: { check: PreTradeCheck }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const base = check.classification === "base";
   // Colour comes from `explain.tone` and nothing else — the same rule as every
@@ -90,15 +93,15 @@ function Check({ check }: { check: PreTradeCheck }) {
             type="button"
             aria-expanded={open}
             aria-label={open
-              ? `Hide the detail behind ${check.explain.label}`
-              : `Why ${check.explain.label} matters`}
+              ? t("Hide the detail behind {label}", { label: check.explain.label })
+              : t("Why {label} matters", { label: check.explain.label })}
             onClick={() => setOpen((v) => !v)}
             className="inline-flex h-6 items-center gap-1 rounded border border-rule px-2
                        text-micro font-medium text-ash transition-colors
                        hover:border-tech/50 hover:bg-tech/10 hover:text-tech
                        focus:outline-none focus-visible:ring-2 focus-visible:ring-tech"
           >
-            {open ? "Less" : "Why"}
+            {open ? t("Less") : t("Why")}
           </button>
         </span>
       </div>
@@ -110,7 +113,7 @@ function Check({ check }: { check: PreTradeCheck }) {
 
       <p className="prose-col mt-2 text-meta leading-relaxed text-faint">
         {check.rateSentence}{" "}
-        <span className="text-ash">Look at: {check.where}.</span>
+        <span className="text-ash">{t("Look at: {where}.", { where: check.where })}</span>
       </p>
 
       {open && (
@@ -213,6 +216,7 @@ const NotCheckedRow = ({ label, reason }: { label: string; reason: string }) => 
 );
 
 export function PreTradePanel({ data }: { data: PreTrade }) {
+  const t = useT();
   const guided = useDetail() === "simple";
   const { flags, baseConditions, notChecked, uncalibrated } = data;
 
@@ -232,15 +236,15 @@ export function PreTradePanel({ data }: { data: PreTrade }) {
       </div>
 
       {flags.length > 0 && (
-        <Group icon={AlertTriangle} title="Conditions that fired" tone="warn">
+        <Group icon={AlertTriangle} title={t("Conditions that fired")} tone="warn">
           <ul>{flags.map((c) => <Check key={c.id} check={c} />)}</ul>
         </Group>
       )}
 
       {baseConditions.length > 0 && (
-        <Group icon={Layers} title="True here, and ordinary for this market"
+        <Group icon={Layers} title={t("True here, and ordinary for this market")}
                note={data.notes.base} weight="quiet" collapsible
-               summary="true of this company, and of most of its market">
+               summary={t("true of this company, and of most of its market")}>
           <ul>{baseConditions.map((c) => <Check key={c.id} check={c} />)}</ul>
         </Group>
       )}
@@ -249,9 +253,9 @@ export function PreTradePanel({ data }: { data: PreTrade }) {
           impossible to miss. In Guided it is open, because a beginner is exactly
           who would otherwise read silence as a pass. */}
       {notChecked.length > 0 && (
-        <Group icon={CircleSlash} title="Not checked" note={data.notes.notChecked}
+        <Group icon={CircleSlash} title={t("Not checked")} note={data.notes.notChecked}
                weight="quiet" collapsible
-               summary="never tested — which is not the same as clear">
+               summary={t("never tested — which is not the same as clear")}>
           <ul className="px-5 pb-2">
             {(guided ? notChecked : notChecked.slice(0, 3)).map((entry) => (
               <NotCheckedRow key={entry.id} label={entry.label} reason={entry.reason} />
@@ -265,7 +269,7 @@ export function PreTradePanel({ data }: { data: PreTrade }) {
                                   focus-visible:ring-tech">
                 <ChevronRight aria-hidden
                               className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
-                The rest
+                {t("The rest")}
               </summary>
               <ul className="mt-1 pl-6">
                 {notChecked.slice(3).map((entry) => (
@@ -278,9 +282,9 @@ export function PreTradePanel({ data }: { data: PreTrade }) {
       )}
 
       {uncalibrated.length > 0 && (
-        <Group icon={HelpCircle} title="Withheld for want of a base rate"
+        <Group icon={HelpCircle} title={t("Withheld for want of a base rate")}
                note={data.notes.uncalibrated} weight="quiet" collapsible
-               summary="no measured firing rate, so not shown as a flag">
+               summary={t("no measured firing rate, so not shown as a flag")}>
           <p className="prose-col px-5 pb-3 text-meta leading-relaxed text-ash">
             {uncalibrated.map((u) => u.label).join(". ")}.
           </p>

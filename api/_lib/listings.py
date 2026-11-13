@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import Optional
 
 from . import market_data
+from .lang import tr
 
 # One file per market, beside the stamped measurement artifacts. Named by market
 # code rather than by provider so swapping the source later does not orphan the
@@ -111,24 +112,30 @@ def staleness(payload: Optional[dict]) -> dict:
     """How old this universe is, in the terms the report prints it in."""
     if not payload or not payload.get("asOf"):
         return {"known": False, "days": None, "stale": None,
-                "text": "No universe file — the scanned population is unknown."}
+                "text": tr("No universe file — the scanned population is unknown.",
+                           "Tidak ada berkas semesta — populasi yang dipindai tidak diketahui.")}
     try:
         taken = dt.date.fromisoformat(payload["asOf"])
     except ValueError:
         return {"known": False, "days": None, "stale": None,
-                "text": f"Universe date {payload['asOf']!r} is unreadable."}
+                "text": tr(f"Universe date {payload['asOf']!r} is unreadable.",
+                           f"Tanggal semesta {payload['asOf']!r} tidak bisa dibaca.")}
 
     days = (dt.date.today() - taken).days
     stale = days > STALE_AFTER_DAYS
     if days <= 0:
-        text = "Universe list taken today."
+        text = tr("Universe list taken today.", "Daftar semesta diambil hari ini.")
     else:
-        text = (f"Universe list taken {days} day{'' if days == 1 else 's'} ago "
-                f"({payload['asOf']}).")
+        text = (tr(f"Universe list taken {days} day{'' if days == 1 else 's'} ago "
+                   f"({payload['asOf']}).",
+                   f"Daftar semesta diambil {days} hari lalu ({payload['asOf']})."))
     if stale:
-        text += (f" That is past {STALE_AFTER_DAYS} days: names delisted since then are "
-                 f"still being scanned, and names listed since then are missing entirely. "
-                 f"Re-run scripts/refresh_listings.py.")
+        text += (tr(f" That is past {STALE_AFTER_DAYS} days: names delisted since then are "
+                    f"still being scanned, and names listed since then are missing entirely. "
+                    f"Re-run scripts/refresh_listings.py.",
+                    f" Itu sudah lewat {STALE_AFTER_DAYS} hari: saham yang dihapus dari bursa "
+                    "sejak itu masih dipindai, dan saham yang tercatat sejak itu sama sekali "
+                    "tidak ada. Jalankan ulang scripts/refresh_listings.py."))
     return {"known": True, "days": days, "stale": stale, "asOf": payload["asOf"],
             "text": text}
 
@@ -262,24 +269,36 @@ def as_universe(market_code: str = "ID", limit: int = 250) -> Optional[dict]:
     truncated = total > len(tickers)
     return {
         "id": f"{market.lower()}market",
-        "name": (f"{market} market — {len(tickers)} largest"
-                 if truncated else f"{market} market — all {total}"),
+        "name": (tr(f"{market} market — {len(tickers)} largest",
+                    f"Pasar {market} — {len(tickers)} terbesar")
+                 if truncated else tr(f"{market} market — all {total}",
+                                      f"Pasar {market} — semua {total}")),
         "market": market,
         "asOf": payload["asOf"],
         "count": len(tickers),
         "listed": total,
         "truncated": truncated,
         "note": (
-            f"Every {market} equity the provider listed on {payload['asOf']}, by market "
-            f"capitalisation. "
-            + (f"TRUNCATED: {len(tickers)} of {total}, because the ranking tier scans "
-               f"at most that many per request. The smallest {total - len(tickers)} "
-               f"listings are absent — most of them would not clear a turnover floor "
-               f"anyway, but their absence here is a limit of this route, not a "
-               f"judgement. `scripts/scan_market.py` sweeps all {total}."
+            tr(f"Every {market} equity the provider listed on {payload['asOf']}, by market "
+               f"capitalisation. ",
+               f"Setiap saham {market} yang tercantum pada penyedia data per "
+               f"{payload['asOf']}, menurut kapitalisasi pasar. ")
+            + (tr(f"TRUNCATED: {len(tickers)} of {total}, because the ranking tier scans "
+                  f"at most that many per request. The smallest {total - len(tickers)} "
+                  f"listings are absent — most of them would not clear a turnover floor "
+                  f"anyway, but their absence here is a limit of this route, not a "
+                  f"judgement. `scripts/scan_market.py` sweeps all {total}.",
+                  f"TERPOTONG: {len(tickers)} dari {total}, karena tingkat peringkat "
+                  "memindai paling banyak sejumlah itu per permintaan. "
+                  f"{total - len(tickers)} saham terkecil tidak ada — sebagian besar tidak "
+                  "akan lolos batas nilai transaksi, tetapi ketiadaannya di sini adalah "
+                  "batasan rute ini, bukan penilaian. `scripts/scan_market.py` menyapu "
+                  f"seluruh {total}.")
                if truncated else
-               "Not an index and not the exchange's register: delisted names linger "
-               "and new ones arrive late.")),
+               tr("Not an index and not the exchange's register: delisted names linger "
+                  "and new ones arrive late.",
+                  "Bukan indeks dan bukan daftar resmi bursa: saham yang dihapus masih "
+                  "tertinggal dan saham baru datang terlambat."))),
         "tickers": tickers,
     }
 

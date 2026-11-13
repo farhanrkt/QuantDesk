@@ -1,3 +1,4 @@
+import { dayLong as weekdayLong, dayShort as weekdayShort, monthLong, monthShort, msg, t } from "./i18n";
 import type { CalendarEvent, Market } from "./types";
 
 /**
@@ -12,11 +13,6 @@ import type { CalendarEvent, Market } from "./types";
  * only order a calendar has.
  */
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August",
-  "September", "October", "November", "December"];
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 /** The reader's date now, YYYY-MM-DD. */
 export function todayIn(now: Date, timeZone?: string): string {
@@ -47,13 +43,13 @@ export function shiftMonth(month: string, n: number): string {
 /** "November 2026". */
 export function monthHeading(month: string): string {
   const [y, m] = month.split("-").map(Number);
-  return `${MONTH_NAMES[m - 1]} ${y}`;
+  return `${monthLong(m)} ${y}`;
 }
 
 /** "Tuesday 10 November 2026", for a screen reader or a tooltip. */
 export function dayLong(day: string): string {
   const date = utcOf(day);
-  return `${DAY_NAMES[date.getUTCDay()]} ${date.getUTCDate()} ${MONTH_NAMES[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+  return `${weekdayLong(date.getUTCDay())} ${date.getUTCDate()} ${monthLong(date.getUTCMonth() + 1)} ${date.getUTCFullYear()}`;
 }
 
 /**
@@ -88,24 +84,26 @@ export function byDay(events: CalendarEvent[], timeZone?: string): Map<string, C
   return days;
 }
 
+// Acronyms read the same in both languages; the words go through `t()`.
 const CELL_LABELS: Partial<Record<CalendarEvent["kind"], string>> = {
-  fomc: "FOMC", cpi: "CPI", jobs: "Jobs", pce: "PCE", gdp: "GDP", "bi-rate": "BI",
-  holiday: "Closed", "early-close": "Early",
+  fomc: "FOMC", cpi: "CPI", jobs: msg("Jobs"), pce: "PCE", gdp: msg("GDP"), "bi-rate": "BI",
+  holiday: msg("Closed"), "early-close": msg("Early"),
 };
 
 /** What a calendar cell has room to say: the kind's short name, or the ticker that reports. */
 export function cellLabel(event: CalendarEvent): string {
   if (event.kind === "earnings" && event.ticker) return event.ticker.replace(/\.JK$/, "");
-  return CELL_LABELS[event.kind] ?? event.label;
+  const label = CELL_LABELS[event.kind];
+  return label ? t(label) : event.label;
 }
 
 /** "today", "tomorrow", "in 5 days", "yesterday", "5 days ago". */
 export function relativeDay(day: string, today: string): string {
   const diff = Math.round((utcOf(day).getTime() - utcOf(today).getTime()) / 86_400_000);
-  if (diff === 0) return "today";
-  if (diff === 1) return "tomorrow";
-  if (diff === -1) return "yesterday";
-  return diff > 0 ? `in ${diff} days` : `${-diff} days ago`;
+  if (diff === 0) return t("today");
+  if (diff === 1) return t("tomorrow");
+  if (diff === -1) return t("yesterday");
+  return diff > 0 ? t("in {n} days", { n: diff }) : t("{n} days ago", { n: -diff });
 }
 
 /** The reader's date for an event, YYYY-MM-DD. */
@@ -141,12 +139,12 @@ export function groupByDay(events: CalendarEvent[], timeZone?: string): { day: s
 /** "Tue 10 Nov", from YYYY-MM-DD, without the reader's zone moving the day. */
 export function dayHeading(day: string): string {
   const [y, m, d] = day.split("-").map(Number);
-  return `${DAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${MONTHS[m - 1]}`;
+  return `${weekdayShort(new Date(Date.UTC(y, m - 1, d)).getUTCDay())} ${d} ${monthShort(m)}`;
 }
 
 /** The event's time on the reader's clock, or "All day". */
 export function timeText(event: CalendarEvent, timeZone?: string): string {
-  if (!event.utc) return "All day";
+  if (!event.utc) return t("All day");
   return new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit" })
     .format(new Date(event.utc));
 }

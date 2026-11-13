@@ -10,11 +10,12 @@ import { ApplyButton, Field, PercentField } from "@/components/ui/controls";
 import { HorizonPicker } from "@/components/ui/horizon";
 import { useToast } from "@/components/ui/toaster";
 import {
-  JOURNAL_KEY, appendEntry, contradictions, drift, newId, readJournal,
-  type ThesisEntry, type ThesisSnapshot,
+  JOURNAL_KEY, appendEntry, applyChange, contradictions, drift, newId, readJournal, removeEntry,
+  type JournalChange, type ThesisEntry, type ThesisSnapshot,
 } from "@/lib/journal";
 import { palette } from "@/lib/palette";
 import { Textarea } from "@/components/ui/input";
+import { useT } from "@/lib/i18n";
 
 /**
  * What you believed, written down before you acted, and never edited after.
@@ -50,6 +51,7 @@ export function ThesisPanel({
   /** What the app is showing right now, frozen into an entry when one is saved. */
   snapshot: ThesisSnapshot;
 }) {
+  const t = useT();
   const { horizon, setHorizon } = usePreferences();
   const toast = useToast();
   const [entries, setEntries] = useState<ThesisEntry[]>([]);
@@ -67,13 +69,28 @@ export function ThesisPanel({
     try {
       setEntries(readJournal(window.localStorage.getItem(JOURNAL_KEY)));
     } catch { /* private mode — an empty journal is the right default */ }
+    // Another tab wrote: show what is stored now rather than a stale copy.
+    const sync = (e: StorageEvent) => {
+      if (e.key === JOURNAL_KEY || e.key === null) setEntries(readJournal(e.newValue));
+    };
+    window.addEventListener("storage", sync);
+    return () => window.removeEventListener("storage", sync);
   }, []);
 
-  const persist = (next: ThesisEntry[]) => {
+  const persist = (change: JournalChange) => {
+    let stored: string | null = null;
+    let readable = true;
+    try { stored = window.localStorage.getItem(JOURNAL_KEY); } catch { readable = false; }
+    const next = readable ? applyChange(stored, change) : change(entries);
     setEntries(next);
     try {
       window.localStorage.setItem(JOURNAL_KEY, JSON.stringify(next));
-    } catch { /* storage full or disabled; the entry stays on screen this session */ }
+    } catch {
+      // Storage full or disabled. The entry stays on screen for this session,
+      // and the reader is told so, rather than finding it gone next time.
+      toast({ message: t("Not saved — this browser would not store it. Export the journal to keep it."),
+              tone: "error" });
+    }
   };
 
   const draft = useMemo(() => ({
@@ -89,7 +106,7 @@ export function ThesisPanel({
 
   const save = () => {
     const now = new Date();
-    persist(appendEntry(entries, {
+    const entry: ThesisEntry = {
       id: newId(now, ticker),
       ticker: ticker.toUpperCase(),
       written: now.toISOString(),
@@ -99,7 +116,8 @@ export function ThesisPanel({
       horizonYears: horizon,
       positionShare: size ?? null,
       snapshot,
-    }));
+    };
+    persist((current) => appendEntry(current, entry));
     setThesis("");
     setFalsifier("");
   };
@@ -110,54 +128,49 @@ export function ThesisPanel({
     <div className="space-y-4 animate-rise">
       <Card accent={THESIS}>
         <CardHeader>
-          <CardTitle>Write it down before you act</CardTitle>
+          <CardTitle>{t("Write it down before you act")}</CardTitle>
           <span className="font-mono text-micro text-ash">
-            {entries.length} entr{entries.length === 1 ? "y" : "ies"}, in this browser only
+            {t("{length} entr{value}, in this browser only", { length: entries.length, value: entries.length === 1 ? "y" : "ies" })}
           </span>
         </CardHeader>
         <CardBody className="space-y-4">
-          <Explainer summary="Saved entries cannot be edited, and nothing here is ever scored"
+          <Explainer summary={t("Saved entries cannot be edited, and nothing here is ever scored")}
                      defaultOpen>
-            The point of writing it down is that the version you wrote <em>before</em> you knew
-            the outcome is still there afterwards, in the words you actually used. So each entry
-            is timestamped, saved alongside what the app was showing at the time, and locked.
-            {" "}There is no verdict, no profit and loss, and no marking of your own homework.
+            {t("The point of writing it down is that the version you wrote")}{" "}<em>{t("before")}</em>{" "}{t("you knew the outcome is still there afterwards, in the words you actually used. So each entry is timestamped, saved alongside what the app was showing at the time, and locked. There is no verdict, no profit and loss, and no marking of your own homework.")}
           </Explainer>
 
           <div className="space-y-1.5">
-            <span className="eyebrow">What has to be true for this to work?</span>
+            <span className="eyebrow">{t("What has to be true for this to work?")}</span>
             <Textarea
               value={thesis}
               onChange={(e) => setThesis(e.target.value)}
               rows={3}
-              aria-label="What has to be true"
-              placeholder="The specific thing you are betting on."
+              aria-label={t("What has to be true")}
+              placeholder={t("The specific thing you are betting on.")}
             />
           </div>
 
           <div className="space-y-1.5">
-            <span className="eyebrow">What would tell you it is wrong?</span>
+            <span className="eyebrow">{t("What would tell you it is wrong?")}</span>
             <Textarea
               value={falsifier}
               onChange={(e) => setFalsifier(e.target.value)}
               rows={2}
-              aria-label="What would falsify this"
-              placeholder="Something observable, that you would actually notice."
+              aria-label={t("What would falsify this")}
+              placeholder={t("Something observable, that you would actually notice.")}
             />
             <Note>
-              A thesis with nothing that could disprove it is a hope. If no observation would
-              change your mind, this will still save — but you will read it back one day and
-              know.
+              {t("A thesis with nothing that could disprove it is a hope. If no observation would change your mind, this will still save — but you will read it back one day and know.")}
             </Note>
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Growth you expect"
-                   hint="A year, for five years. Compared with what the price requires.">
+            <Field label={t("Growth you expect")}
+                   hint={t("A year, for five years. Compared with what the price requires.")}>
               <PercentField value={growth ?? undefined} onChange={setGrowth} />
             </Field>
-            <Field label="Position size"
-                   hint="Share of the account. Checked against this stock's own worst fall.">
+            <Field label={t("Position size")}
+                   hint={t("Share of the account. Checked against this stock's own worst fall.")}>
               <PercentField value={size ?? undefined} onChange={setSize} />
             </Field>
             {/* THE SAME CONTROL AS THE BAR ABOVE THE TABS. This was a number
@@ -165,15 +178,14 @@ export function ThesisPanel({
                 keystroke and silently kept the old value. Now it is the shared
                 horizon, so changing it here changes it everywhere. */}
             <div className="flex flex-col gap-1">
-              <span className="eyebrow">Horizon</span>
+              <span className="eyebrow">{t("Horizon")}</span>
               <HorizonPicker value={horizon} onChange={setHorizon} />
             </div>
-            <ApplyButton onClick={save} disabled={!ready}>Lock this entry</ApplyButton>
+            <ApplyButton onClick={save} disabled={!ready}>{t("Lock this entry")}</ApplyButton>
           </div>
           {!ready && (
             <Note>
-              Both halves are needed. Half a thesis reads back later as agreement with whatever
-              happened to occur.
+              {t("Both halves are needed. Half a thesis reads back later as agreement with whatever happened to occur.")}
             </Note>
           )}
         </CardBody>
@@ -182,8 +194,8 @@ export function ThesisPanel({
       {live.length > 0 && (
         <Card tone="warn">
           <CardHeader>
-            <CardTitle>Where this disagrees with the page</CardTitle>
-            <span className="font-mono text-micro text-ash">before you save</span>
+            <CardTitle>{t("Where this disagrees with the page")}</CardTitle>
+            <span className="font-mono text-micro text-ash">{t("before you save")}</span>
           </CardHeader>
           <CardBody className="space-y-2.5">
             {live.map((c) => (
@@ -193,9 +205,7 @@ export function ThesisPanel({
               </div>
             ))}
             <Note>
-              Disagreeing with the model is a perfectly respectable thing to do — the
-              price-implied growth figure exists to be argued with. Disagreeing without
-              noticing is not, and that is all this names.
+              {t("Disagreeing with the model is a perfectly respectable thing to do — the price-implied growth figure exists to be argued with. Disagreeing without noticing is not, and that is all this names.")}
             </Note>
           </CardBody>
         </Card>
@@ -204,8 +214,8 @@ export function ThesisPanel({
       {forTicker.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>What you wrote about {ticker.toUpperCase()}</CardTitle>
-            <span className="font-mono text-micro text-ash">as written, unedited</span>
+            <CardTitle>{t("What you wrote about {ticker}", { ticker: ticker.toUpperCase() })}</CardTitle>
+            <span className="font-mono text-micro text-ash">{t("as written, unedited")}</span>
           </CardHeader>
           <CardBody className="space-y-4 px-0">
             {forTicker.map((entry) => (
@@ -214,9 +224,12 @@ export function ThesisPanel({
                        // ONE CLICK, AND UNDOABLE. Delete used to be immediate and
                        // final; the journal's whole value is that entries are
                        // kept, so the removal is offered back for a few seconds.
-                       const before = entries;
-                       persist(entries.filter((e) => e.id !== entry.id));
-                       toast({ message: "Entry deleted", action: { label: "Undo", onClick: () => persist(before) } });
+                       // Undo puts THIS entry back — it used to restore the whole
+                       // list as it was, undoing anything another tab wrote since.
+                       persist((current) => removeEntry(current, entry.id));
+                       toast({ message: t("Entry deleted"),
+                               action: { label: t("Undo"),
+                                         onClick: () => persist((current) => appendEntry(current, entry)) } });
                      }} />
             ))}
           </CardBody>
@@ -224,24 +237,22 @@ export function ThesisPanel({
       )}
 
       <Card>
-        <CardHeader><CardTitle>Where this is kept</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{t("Where this is kept")}</CardTitle></CardHeader>
         <CardBody className="space-y-3">
           <p className="prose-col text-meta leading-relaxed text-ash">
-            In this browser and nowhere else. It is never sent anywhere — not even to draw the
-            checks above, which run here on your own machine.
+            {t("In this browser and nowhere else. It is never sent anywhere — not even to draw the checks above, which run here on your own machine.")}
           </p>
           <Note tone="warn">
-            Which also means it is one cleared cache, one private window or one new machine
-            away from gone. Export it.
+            {t("Which also means it is one cleared cache, one private window or one new machine away from gone. Export it.")}
           </Note>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="quiet" size="sm" onClick={exportAll} disabled={entries.length === 0}>
               <Download aria-hidden className="h-3.5 w-3.5" />
-              Export as JSON
+              {t("Export as JSON")}
             </Button>
             {entries.length > forTicker.length && (
               <Link href="/journal" className="inline-flex items-center gap-1.5 text-meta text-tech hover:underline">
-                All {entries.length} entries, every company
+                {t("All {length} entries, every company", { length: entries.length })}
                 <ArrowRight aria-hidden className="h-3.5 w-3.5" />
               </Link>
             )}
@@ -255,6 +266,7 @@ export function ThesisPanel({
 export function Entry({
   entry, current, onDelete,
 }: { entry: ThesisEntry; current: ThesisSnapshot | null; onDelete: () => void }) {
+  const t = useT();
   // No current snapshot (the journal page, which loads no company): nothing to
   // measure movement against, so none is claimed.
   const moved = current ? drift(entry, current) : [];
@@ -268,12 +280,10 @@ export function Entry({
           {new Date(entry.written).toLocaleString()}
         </span>
         <span className="text-micro text-ash">
-          {entry.horizonYears}-year horizon
-          {entry.growthBelief != null && `, expecting ${(entry.growthBelief * 100).toFixed(0)}% a year`}
-          {entry.positionShare != null && `, ${(entry.positionShare * 100).toFixed(0)}% of the account`}
+          {t("{horizonYears}-year horizon{value}{value2}", { horizonYears: entry.horizonYears, value: entry.growthBelief != null && t(", expecting {growth}% a year", { growth: (entry.growthBelief * 100).toFixed(0) }), value2: entry.positionShare != null && t(", {share}% of the account", { share: (entry.positionShare * 100).toFixed(0) }) })}
         </span>
         <button type="button" onClick={onDelete}
-                aria-label="Delete this entry"
+                aria-label={t("Delete this entry")}
                 className="-mr-1 ml-auto inline-flex h-6 w-6 shrink-0 items-center
                            justify-center rounded text-ash transition-colors hover:bg-dist/10
                            hover:text-dist
@@ -284,7 +294,7 @@ export function Entry({
 
       <p className="text-base leading-relaxed text-body">{entry.thesis}</p>
       <p className="mt-1.5 text-meta leading-relaxed text-ash">
-        <span className="eyebrow mr-1.5">Wrong if</span>{entry.falsifier}
+        <span className="eyebrow mr-1.5">{t("Wrong if")}</span>{entry.falsifier}
       </p>
 
       {written.length > 0 && (
@@ -292,7 +302,7 @@ export function Entry({
           {written.map((c) => (
             <li key={c.key} className="flex gap-2 text-meta leading-relaxed text-ash">
               <AlertTriangle aria-hidden className="mt-0.5 h-3 w-3 shrink-0 text-warn" />
-              <span>{c.title}, at the time of writing.</span>
+              <span>{t("{title}, at the time of writing.", { title: c.title })}</span>
             </li>
           ))}
         </ul>
@@ -300,20 +310,20 @@ export function Entry({
 
       {moved.length > 0 && (
         <div className="mt-3 rounded border border-rule bg-raised/60 px-3 py-2">
-          <div className="eyebrow mb-1.5">What has moved since</div>
+          <div className="eyebrow mb-1.5">{t("What has moved since")}</div>
           <ul className="space-y-1">
             {moved.map((d) => (
               <li key={d.key} className="flex items-baseline gap-2 text-micro">
                 <span className="text-ash">{d.label}</span>
                 <span className="num ml-auto text-ash">{d.then}</span>
                 <ArrowRight aria-hidden className="h-3.5 w-3.5 shrink-0 self-center text-ash" />
-                <span className="sr-only">to</span>
+                <span className="sr-only">{t("to")}</span>
                 <span className="num text-body">{d.now}</span>
               </li>
             ))}
           </ul>
           <p className="mt-1.5 text-meta leading-relaxed text-ash">
-            Movement, not a verdict. Nothing here says whether the thesis was right.
+            {t("Movement, not a verdict. Nothing here says whether the thesis was right.")}
           </p>
         </div>
       )}

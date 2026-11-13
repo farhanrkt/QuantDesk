@@ -459,3 +459,60 @@ def test_the_bridge_names_the_cash_it_added(monkeypatch):
     bridge = {row["component"]: row["amount"] for row in V.analyze("PLNT")["bridge"]}
     assert "+ Cash & short-term investments" in bridge
     assert "+ Cash & equivalents" not in bridge
+
+
+# --------------------------------------------------------------------------- #
+# The DDM's dividend bases read complete calendar years only
+# --------------------------------------------------------------------------- #
+def _bank_paying(history: dict, ttm: float = 1.2):
+    """A regional bank with the given calendar-year dividend record, newest first."""
+    record = _company(sector="Financial Services", industry="Banks - Regional",
+                      ttm_dividend=ttm,
+                      dividend_history=pd.DataFrame({"Year": list(history),
+                                                     "Dividend / Share": list(history.values())}))
+    return record
+
+
+def _base_dps(result) -> float:
+    """The base dividend, read back from year one of the schedule."""
+    return result["schedule"][0]["streamRaw"] / (1 + result["assumptions"]["growth"])
+
+
+def test_last_full_year_is_last_calendar_year_before_this_year_has_paid(monkeypatch):
+    """An annual payer with nothing paid yet this year: the first row IS the
+    last full year, and the basis used to skip it for the year before."""
+    import datetime as dt
+    this = dt.date.today().year
+    _offline(monkeypatch, _bank_paying({str(this - 1): 1.2, str(this - 2): 1.1,
+                                        str(this - 3): 1.0}))
+    result = V.analyze("BANK", dps_basis="Last full year")
+    assert _base_dps(result) == pytest.approx(1.2)
+    source = next(d["value"] for d in result["diagnostics"] if d["metric"] == "Base DPS source")
+    assert source == f"FY{this - 1} declared"
+
+
+def test_a_three_year_average_leaves_out_the_year_to_date(monkeypatch):
+    import datetime as dt
+    this = dt.date.today().year
+    _offline(monkeypatch, _bank_paying({str(this): 0.6, str(this - 1): 1.1,
+                                        str(this - 2): 1.0, str(this - 3): 0.9}))
+    result = V.analyze("BANK", dps_basis="3-year average")
+    assert _base_dps(result) == pytest.approx(1.0), "the partial year was averaged in"
+    assert "3-year average" in result["assumptions"]["basisOptions"]
+
+
+def test_a_basis_needing_more_complete_years_than_exist_is_not_offered(monkeypatch):
+    import datetime as dt
+    this = dt.date.today().year
+    _offline(monkeypatch, _bank_paying({str(this): 0.6, str(this - 1): 1.1, str(this - 2): 1.0}))
+    options = V.analyze("BANK")["assumptions"]["basisOptions"]
+    assert "Last full year" in options
+    assert "3-year average" not in options, "two complete years cannot make a three-year average"
+
+
+def test_complete_years_never_include_the_current_one():
+    import datetime as dt
+    this = dt.date.today().year
+    history = pd.DataFrame({"Year": [str(this), str(this - 1)], "Dividend / Share": [0.3, 1.0]})
+    assert list(V.complete_years(history)["Year"]) == [str(this - 1)]
+    assert V.complete_years(pd.DataFrame()).empty

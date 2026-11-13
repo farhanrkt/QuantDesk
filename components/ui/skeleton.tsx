@@ -1,3 +1,4 @@
+import { useT } from "@/lib/i18n";
 /**
  * Placeholders shaped like what they stand in for.
  *
@@ -62,9 +63,10 @@ export function Skeleton({ shape = "chart" }: { shape?: SkeletonShape }) {
 
 /** Placeholder shown while an engine is still running. */
 export function PanelSkeleton({ shape = "chart" }: { shape?: SkeletonShape }) {
+  const t = useT();
   return (
     <div aria-busy="true">
-      <span className="sr-only">Running the engine…</span>
+      <span className="sr-only">{t("Running the engine…")}</span>
       <Skeleton shape={shape} />
     </div>
   );

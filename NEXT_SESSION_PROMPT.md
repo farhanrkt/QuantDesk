@@ -11,15 +11,16 @@ CODEBASE_REVIEW.md is older and partly superseded.
 
 STATE
 =====
-Branch: claude/codebase-app-overhaul-e51579 — feature/personal-verdict-scanner
-plus main's IC-bar commit and the fix-ci advisory commit (merged, not
-cherry-picked), plus the October 2026 overhaul. It is open for review as PR
-farhanrkt/QuantDesk#5. The market board (November 2026) is on
-claude/markets-today, stacked on that branch so #5 stays reviewable: merge #5
-first. Each commit states what it changed and why.
+main has the October 2026 overhaul, the private market scanner and the market
+board, which reached it through farhanrkt/QuantDesk#5. The November 2026 work
+(the analysis fixes, Bahasa Indonesia across the app, the Indonesian field
+manual) is on claude/gallant-davinci-l5qtd5 and reaches main through its own
+pull request: start from main once that has merged, and from that branch
+before. Each commit states what it changed and why. CLAUDE.md, which Claude
+Code loads into every session, carries the checks and the standing rules.
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
-single Vercel Python function on the back. ~1,740 offline pytest tests, 78
-frontend assertions, 19 enforced design rules plus structural checks. US and
+single Vercel Python function on the back. ~1,920 offline pytest tests, 85
+frontend assertions, 20 enforced design rules plus structural checks. US and
 Indonesian (IDX) listings. lxml is now a runtime dependency (see below).
 
 The full battery, all green as of the last commit:
@@ -67,6 +68,39 @@ lib/palette.ts is the only place a colour is written; lib/session.ts keeps
 results per symbol for the tab; lib/cache.ts shares confluence payloads across
 views for five minutes. Read lib/url.ts before touching routing, and
 lib/compare.ts before touching Compare.
+
+BAHASA INDONESIA (November 2026). EN | ID in the top bar switches the whole
+published app. Two halves, read DESIGN.md "Language" before touching either:
+- SERVER: every sentence the API writes is `tr(english, indonesian)` from
+  api/_lib/lang.py, answered per request from `?lang=id` (a contextvar set by
+  the outermost middleware in api/index.py). Work handed to a thread pool must
+  go through `lang.carry`, or it answers in English. Prose built at import time
+  cannot call tr() — use lang.Bilingual, a function, or an _ID side table. The
+  English was proved byte-identical module by module when the pairs went in.
+  Identifiers (bands, tones, verdict codes, signal types, lens keys) are NOT
+  translated: components, caches and tests branch on them. tests/test_language.py
+  runs every interpreter in Indonesian and fails on an English answer.
+- INTERFACE: every drawn string is `t("English")` (or `msg()` in a table), its
+  Indonesian keyed by that English in lib/i18n-id.ts. Rule 20 in
+  check_frontend fails a missing, unused or duplicate entry. A component reads
+  `const t = useT()` so it re-renders on a switch; a memo over translated rows
+  takes `t` as a dependency (see lib/compare.ts). Session keys carry the
+  language (`requestKey` in lib/api.ts) so an English result is never shown to
+  an Indonesian reader.
+- ADDING A STRING: wrap it, add its entry, run `npm run check:frontend`. Adding
+  server prose: write `tr("...", "...")`, never a bare English literal.
+- THE FIELD MANUAL IS BUILT IN INDONESIAN, NOT WRITTEN TWICE.
+  scripts/build_glossary.py writes docs/field-manual.id.html from the English
+  page plus docs/field-manual.id.json (Indonesian per block, keyed by the
+  block's English) and explain.py's Indonesian glossary. Edit the English, run
+  the script, and it fails until the changed block has its Indonesian:
+  `--missing` lists them. Never edit field-manual.id.html by hand.
+- NOT TRANSLATED: page metadata and the private scanner tier. Numbers keep
+  English separators in both languages on purpose. The first paint is English
+  until the browser's stored choice is read; a cookie would fix that.
+- NOBODY FLUENT HAS READ IT. The Indonesian was written here, consistently
+  (the glossary heads lib/i18n-id.ts), but not reviewed by a native-speaking
+  investor. That is the most useful next step for it.
 
 FIVE SILENT BUGS THE OVERHAUL FOUND, FOUR OF THEM LONG-STANDING
 ----------------------------------------------------------------
@@ -193,6 +227,33 @@ So: the battery does not cover the page. Open it. The browser pane works.
 
 WHAT THE LAST SESSIONS DID
 ==========================
+THE NOVEMBER 2026 ANALYSIS (8 November, RESEARCH_ROADMAP §24), on
+claude/gallant-davinci-l5qtd5. An outside read of the whole app, run with the
+data provider blocked — which is what a Yahoo throttle looks like here. Fixed,
+each with tests that plant the failure:
+  - The PRIVATE TIER was public: /api/verdict served a score, an action and a
+    position size on every deployment and the stock page drew the Score tab.
+    `private_tier_enabled` now refuses both private routes on any Vercel
+    deployment; the page asks /api/capabilities. Local runs need no setting
+    (QUANTDESK_PRIVATE_TIER overrides). .vercelignore excludes reports/.
+  - PIOTROSKI banded the raw count, so 3 of 3 checks read "weak —
+    deteriorating" and voted bearish. Bands now read the share, unknown below
+    six computable checks. RE-RUN calibrate_checks.py AND
+    measure_lens_agreement.py when the network allows — both stamps predate it.
+  - PROVIDER OUTAGES told readers their ticker was wrong, inside a 200 the edge
+    kept for six minutes. Now named via the market's own index, held 15s.
+  - The JOURNAL lost entries across tabs (reproduced in a browser). Writes now
+    apply to what is stored at that moment, and other tabs' writes sync in.
+  - Rate limiter: forwarded address trusted only on Vercel, unrouted paths
+    share one bucket, stale buckets evicted instead of clearing the table.
+  - Dividends: a lapsed dividend no longer counts as trailing; 350-day window;
+    the DDM's bases read complete years. Throttled register and earnings
+    lookups are kept for minutes and never on disk. Weekend-trading series are
+    annualised over their own year. The news panel can now say a feed failed.
+NOT DONE, deliberately: the Beneish `(x or 0)` NaN case and the `ebit` alias
+that can substring-match EBITDA (both move a calibrated screen; measure first);
+technical.py's 252-bar indicator windows for crypto; the global yf.download lock.
+
 THE NOVEMBER 2026 AUDIT (RESEARCH_ROADMAP §23), on branch claude/full-audit,
 which merges every finished branch (the market board and calendar widgets,
 §18.9's summary revenue, §21's forward log, §22's per-holding sessions). Every
@@ -346,7 +407,9 @@ WHERE TO BE CAREFUL
   do not delete the check.
 
 - build_glossary.py --check fails CI if a metric is added without regenerating
-  docs/field-manual.html. New metric groups also need a filter chip in the HTML.
+  docs/field-manual.html, or if the English manual has a block with no
+  Indonesian. New metric groups also need a filter chip in the HTML (and that
+  chip's Indonesian).
 
 - npm run build clobbers .next under a running dev server; clear .next and
   restart the preview if the page starts 500ing with __webpack_modules__.

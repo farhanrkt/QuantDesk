@@ -5,6 +5,7 @@ import {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from "react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /**
  * Short confirmations of something the reader just did — "link copied",
@@ -47,7 +48,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const seq = useRef(0);
 
   const dismiss = useCallback((id: number) => {
-    setToasts((all) => all.filter((t) => t.id !== id));
+    setToasts((all) => all.filter((item) => item.id !== id));
   }, []);
 
   const push = useCallback((input: ToastInput) => {
@@ -58,8 +59,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((all) => [...all.slice(-2), toast]);
   }, []);
 
-  const polite = toasts.filter((t) => t.tone !== "error").at(-1)?.message ?? "";
-  const assertive = toasts.filter((t) => t.tone === "error").at(-1)?.message ?? "";
+  const polite = toasts.filter((item) => item.tone !== "error").at(-1)?.message ?? "";
+  const assertive = toasts.filter((item) => item.tone === "error").at(-1)?.message ?? "";
 
   return (
     <ToastContext.Provider value={push}>
@@ -69,13 +70,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       <div aria-hidden={toasts.length === 0}
            className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center
                       gap-2 px-4 print:hidden">
-        {toasts.map((t) => <ToastView key={t.id} toast={t} onDismiss={dismiss} />)}
+        {toasts.map((item) => <ToastView key={item.id} toast={item} onDismiss={dismiss} />)}
       </div>
     </ToastContext.Provider>
   );
 }
 
 function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number) => void }) {
+  const t = useT();
   const [paused, setPaused] = useState(false);
   useEffect(() => {
     if (paused) return;
@@ -102,11 +104,11 @@ function ToastView({ toast, onDismiss }: { toast: Toast; onDismiss: (id: number)
           {toast.action.label}
         </button>
       )}
-      <button type="button" aria-label="Dismiss" onClick={() => onDismiss(toast.id)}
+      <button type="button" aria-label={t("Dismiss")} onClick={() => onDismiss(toast.id)}
               className="flex h-6 w-6 items-center justify-center rounded text-ash hover:text-chalk
                          focus:outline-none focus-visible:ring-2 focus-visible:ring-tech">
         <X aria-hidden className="h-3.5 w-3.5" />
       </button>
     </div>
-  ), [toast, onDismiss]);
+  ), [toast, onDismiss, t]);
 }

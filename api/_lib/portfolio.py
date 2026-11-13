@@ -116,6 +116,7 @@ import numpy as np
 import pandas as pd
 
 from . import exposure, market_data, riskmodel
+from .lang import tr
 
 # One year of daily returns. Not a free choice: it is the window whose
 # persistence was measured, so it is the only one whose stability this app can
@@ -241,13 +242,15 @@ def risk_contributions(matrix: pd.DataFrame, volatility: pd.Series,
     w = weights.reindex(names).fillna(0.0).to_numpy(dtype="float64")
     total = w.sum()
     if total <= 0 or not np.all(np.isfinite(sigma)):
-        return {"usable": False, "reason": "No usable weights or volatilities."}
+        return {"usable": False, "reason": tr("No usable weights or volatilities.",
+                                              "Tidak ada bobot atau volatilitas yang bisa dipakai.")}
 
     w = w / total
     covariance = matrix.to_numpy(dtype="float64") * np.outer(sigma, sigma)
     variance = float(w @ covariance @ w)
     if not np.isfinite(variance) or variance <= 0:
-        return {"usable": False, "reason": "Portfolio variance could not be computed."}
+        return {"usable": False, "reason": tr("Portfolio variance could not be computed.",
+                                              "Varians portofolio tidak bisa dihitung.")}
 
     marginal = covariance @ w
     shares = (w * marginal) / variance
@@ -303,9 +306,12 @@ def analyse(candidate: str, holdings: Sequence[str],
     if candidate not in usable:
         return {
             "usable": False,
-            "reason": (f"{candidate} has fewer than {MIN_OVERLAP} trading days in common "
-                       f"with the last {window} sessions, so no correlation against it "
-                       f"means anything."),
+            "reason": (tr(f"{candidate} has fewer than {MIN_OVERLAP} trading days in common "
+                          f"with the last {window} sessions, so no correlation against it "
+                          f"means anything.",
+                          f"{candidate} punya kurang dari {MIN_OVERLAP} hari perdagangan yang sama "
+                          f"dengan {window} sesi terakhir, jadi korelasi apa pun terhadapnya tidak "
+                          "berarti.")),
             "missing": missing,
         }
 
@@ -313,8 +319,10 @@ def analyse(candidate: str, holdings: Sequence[str],
     if not held:
         return {
             "usable": False,
-            "reason": ("None of the holdings had enough overlapping history to correlate "
-                       "against. Check the symbols, including their exchange suffixes."),
+            "reason": (tr("None of the holdings had enough overlapping history to correlate "
+                          "against. Check the symbols, including their exchange suffixes.",
+                          "Tidak satu pun kepemilikan punya riwayat beririsan yang cukup untuk "
+                          "dikorelasikan. Periksa simbolnya, termasuk akhiran bursanya.")),
             "missing": missing,
         }
 

@@ -21,6 +21,7 @@ import { isTicker, marketOf, resolveSymbol } from "@/lib/symbols";
 import type { ConfluenceResponse, Engine, Market } from "@/lib/types";
 import { MAX_COMPARE, PRESETS, RUN_DEFAULTS, compareHref, parseSymbolList, stockHref } from "@/lib/url";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /**
  * Two to four companies, each read through the same lenses, side by side.
@@ -85,6 +86,7 @@ function useColumns(symbols: string[]) {
 }
 
 export function CompareView() {
+  const t = useT();
   const router = useRouter();
   const search = useSearchParams();
   const { horizon } = usePreferences();
@@ -92,7 +94,7 @@ export function CompareView() {
   const guided = useDetail() === "simple";
   const symbols = useMemo(() => parseSymbolList(search?.get("symbols")), [search]);
   const { states, retry } = useColumns(symbols);
-  const model: CompareModel = useMemo(() => buildCompare(states, horizon), [states, horizon]);
+  const model: CompareModel = useMemo(() => buildCompare(states, horizon, t), [states, horizon, t]);
 
   // Remembered so "Compare" on a stock page adds to the set being built here.
   useEffect(() => { writeSession("compare:last", symbols); }, [symbols]);
@@ -117,7 +119,7 @@ export function CompareView() {
   };
 
   useRegisterCommands("compare", symbols.map((s) => ({
-    id: `compare:open:${s}`, group: "Go to" as const, label: `Open ${s} in all lenses`,
+    id: `compare:open:${s}`, group: "Go to" as const, label: t("Open {symbol} in all lenses", { symbol: s }),
     run: () => router.push(stockHref(s)),
   })));
 
@@ -128,33 +130,31 @@ export function CompareView() {
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1>Compare</h1>
+        <h1>{t("Compare")}</h1>
         <p className="prose-col text-ash">
-          Up to four companies, each read through the same lenses. Nothing is summed, scored or
-          ranked — the columns stay in the order you put them, and what to make of the
-          differences is yours.
+          {t("Up to four companies, each read through the same lenses. Nothing is summed, scored or ranked — the columns stay in the order you put them, and what to make of the differences is yours.")}
         </p>
       </header>
 
       {n < MAX_COMPARE && (
         <form className="flex flex-col gap-2 sm:flex-row sm:items-center"
               onSubmit={(e) => { e.preventDefault(); add(draft); }}>
-          <Input value={draft} onChange={(e) => setDraft(e.target.value)} aria-label="Add a ticker"
-                 placeholder={n ? "Add another ticker" : "First ticker — AAPL, BBCA.JK"}
+          <Input value={draft} onChange={(e) => setDraft(e.target.value)} aria-label={t("Add a ticker")}
+                 placeholder={n ? t("Add another ticker") : t("First ticker — AAPL, BBCA.JK")}
                  className="sm:max-w-xs" autoComplete="off" spellCheck={false} />
-          <Select value={market} onChange={(e) => setMarket(e.target.value as Market)} aria-label="Market">
-            <option value="US">US market</option>
-            <option value="ID">IDX (.JK)</option>
+          <Select value={market} onChange={(e) => setMarket(e.target.value as Market)} aria-label={t("Market")}>
+            <option value="US">{t("US market")}</option>
+            <option value="ID">{t("IDX (.JK)")}</option>
           </Select>
           <Button type="submit" variant="secondary" disabled={!draft.trim()}>
-            <Plus aria-hidden className="h-4 w-4" /> Add
+            <Plus aria-hidden className="h-4 w-4" />{" "}{t("Add")}
           </Button>
-          <span className="text-meta text-faint sm:ml-2">{n} of {MAX_COMPARE}</span>
+          <span className="text-meta text-faint sm:ml-2">{t("{n} of {MAX_COMPARE}", { n, MAX_COMPARE })}</span>
         </form>
       )}
       {suggestions.length > 0 && n < MAX_COMPARE && (
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-meta text-faint">Add:</span>
+          <span className="text-meta text-faint">{t("Add:")}</span>
           {suggestions.map((s) => (
             <Button key={s} variant="chip" size="xs" onClick={() => add(s, marketOf(s))}>{s}</Button>
           ))}
@@ -162,21 +162,20 @@ export function CompareView() {
       )}
 
       {n === 0 ? (
-        <StateCard kind="empty" level={2} title="Nothing to compare yet">
-          Add two to four tickers. Each column runs all four lenses on that company — the same
-          read its own page gives — and the rows line up so the same question sits side by side.
+        <StateCard kind="empty" level={2} title={t("Nothing to compare yet")}>
+          {t("Add two to four tickers. Each column runs all four lenses on that company — the same read its own page gives — and the rows line up so the same question sits side by side.")}
         </StateCard>
       ) : (
         <>
           {model.currencyNote && <Note tone="warn">{model.currencyNote}</Note>}
-          {n === 1 && <Note>Add at least one more company to read them side by side.</Note>}
+          {n === 1 && <Note>{t("Add at least one more company to read them side by side.")}</Note>}
 
           {/* ------------------------------------------- column headers */}
           <div className="sticky top-14 z-20 -mx-4 border-b border-rule bg-ink/95 px-4 py-3 backdrop-blur
                           supports-[backdrop-filter]:bg-ink/80 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
             <div className="grid gap-3 max-lg:!grid-cols-2" style={gridStyle}>
               <div className="hidden items-end text-meta text-faint lg:flex">
-                <Columns3 aria-hidden className="mr-2 h-4 w-4" /> In your order
+                <Columns3 aria-hidden className="mr-2 h-4 w-4" />{" "}{t("In your order")}
               </div>
               {model.columns.map((col, i) => (
                 <div key={col.symbol} className="min-w-0 rounded-lg border border-rule bg-panel px-3 py-2">
@@ -186,23 +185,23 @@ export function CompareView() {
                       {col.symbol}
                     </Link>
                     <span className="ml-auto flex shrink-0 items-center">
-                      <IconButton label={`Move ${col.symbol} left`} disabled={i === 0}
+                      <IconButton label={t("Move {symbol} left", { symbol: col.symbol })} disabled={i === 0}
                                   onClick={() => move(i, -1)}><ArrowLeft className="h-3.5 w-3.5" /></IconButton>
-                      <IconButton label={`Move ${col.symbol} right`} disabled={i === n - 1}
+                      <IconButton label={t("Move {symbol} right", { symbol: col.symbol })} disabled={i === n - 1}
                                   onClick={() => move(i, 1)}><ArrowRight className="h-3.5 w-3.5" /></IconButton>
-                      <IconButton label={`Remove ${col.symbol}`}
+                      <IconButton label={t("Remove {symbol}", { symbol: col.symbol })}
                                   onClick={() => go(symbols.filter((s) => s !== col.symbol))}><X className="h-3.5 w-3.5" /></IconButton>
                     </span>
                   </div>
                   <p className="truncate text-micro text-ash">
                     {col.status === "ready" ? (col.name ?? "—")
-                      : col.status === "error" ? "did not load" : "reading four lenses…"}
+                      : col.status === "error" ? t("did not load") : t("reading four lenses…")}
                     {col.currency && col.status === "ready" ? ` · ${col.currency}` : ""}
                   </p>
                   {col.status === "error" && (
                     <button type="button" onClick={retry}
                             className="mt-1 inline-flex min-h-[24px] items-center gap-1 text-micro text-tech hover:underline">
-                      <RotateCw aria-hidden className="h-3 w-3" /> Try again
+                      <RotateCw aria-hidden className="h-3 w-3" />{" "}{t("Try again")}
                     </button>
                   )}
                 </div>
@@ -236,8 +235,7 @@ export function CompareView() {
           ))}
 
           <p className="prose-col text-meta leading-relaxed text-faint">
-            Each column is the same read its own page gives, at the default settings. Open a
-            column&apos;s page for every chart, control and caveat behind these lines.
+            {t("Each column is the same read its own page gives, at the default settings. Open a column's page for every chart, control and caveat behind these lines.")}
           </p>
         </>
       )}

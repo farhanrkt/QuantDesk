@@ -3,6 +3,7 @@
 import { AlertTriangle, CircleSlash, Inbox } from "lucide-react";
 import { Skeleton, type SkeletonShape } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /**
  * Every "there is nothing to show here yet / any more / at all" in the app.
@@ -55,6 +56,7 @@ export function StateCard({
   bare?: boolean;
   className?: string;
 }) {
+  const t = useT();
   const surface = bare ? "" : cn(
     "rounded-lg border",
     kind === "error" ? "border-dist/40 bg-dist/5"
@@ -67,7 +69,7 @@ export function StateCard({
       <div className={cn(surface, className)} role="status" aria-live="polite">
         {title && <p className="px-5 pt-4 text-meta text-ash">{title}</p>}
         <Skeleton shape={shape} />
-        {!title && <span className="sr-only">Loading…</span>}
+        {!title && <span className="sr-only">{t("Loading…")}</span>}
       </div>
     );
   }

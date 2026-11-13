@@ -121,6 +121,7 @@ import numpy as np
 import pandas as pd
 
 from . import market_data
+from .lang import tr
 
 # Below this many holdings there is no "shared direction" worth extracting: the
 # first component of two names is their average wearing a longer name.
@@ -237,6 +238,26 @@ REFERENCES: tuple[Reference, ...] = (
               "The ICE dollar index. Not USDIDR: a rupiah cross mostly measures "
               "the dollar, and the sign says so."),
 )
+
+# Each reference's name and note in Bahasa Indonesia, keyed like REFERENCES.
+# Beside the table rather than in it: a Reference is built once, at import, in
+# no request's language.
+_REFERENCE_ID: dict[str, tuple[str, str]] = {
+    "gold": ("emas", "Kontrak berjangka emas."),
+    "oil": ("kompleks energi",
+            "Kontrak berjangka minyak WTI, mewakili harga energi secara umum."),
+    "copper": ("tembaga", "Kontrak berjangka tembaga."),
+    "dollar": ("dolar", "Indeks dolar ICE. Bukan USDIDR: pasangan rupiah sebagian besar "
+                        "mengukur dolar, dan tandanya menunjukkan hal itu."),
+}
+
+
+def _label(reference: Reference) -> str:
+    return tr(reference.label, _REFERENCE_ID[reference.key][0])
+
+
+def _note(reference: Reference) -> str:
+    return tr(reference.note, _REFERENCE_ID[reference.key][1])
 
 LOCAL_INDEX = {"US": "^GSPC", "ID": "^JKSE"}
 
@@ -421,9 +442,11 @@ def analyse(holding_returns: pd.DataFrame, reference_returns: pd.DataFrame,
     direction = shared_direction(weekly_holdings)
     if direction is None:
         return {"usable": False,
-                "reason": (f"Needs at least {MIN_HOLDINGS} holdings sharing "
-                           f"{MIN_WEEKS} weeks of history before there is a common "
-                           f"direction to name.")}
+                "reason": (tr(f"Needs at least {MIN_HOLDINGS} holdings sharing "
+                              f"{MIN_WEEKS} weeks of history before there is a common "
+                              f"direction to name.",
+                              f"Butuh setidaknya {MIN_HOLDINGS} kepemilikan dengan riwayat {MIN_WEEKS} "
+                              "minggu yang sama sebelum ada arah bersama untuk dinamai."))}
 
     index_symbol = LOCAL_INDEX.get(market, LOCAL_INDEX["US"])
     index_returns = (weekly_references[index_symbol]
@@ -447,22 +470,22 @@ def analyse(holding_returns: pd.DataFrame, reference_returns: pd.DataFrame,
         if market not in reference.markets:
             continue
         if reference.symbol not in weekly_references.columns:
-            tested.append({"key": reference.key, "label": reference.label,
+            tested.append({"key": reference.key, "label": _label(reference),
                            "symbol": reference.symbol, "available": False})
             continue
         scored = _correlate(residual, weekly_references[reference.symbol])
         if scored is None:
-            tested.append({"key": reference.key, "label": reference.label,
+            tested.append({"key": reference.key, "label": _label(reference),
                            "symbol": reference.symbol, "available": False})
             continue
         value, overlap = scored
-        tested.append({"key": reference.key, "label": reference.label,
+        tested.append({"key": reference.key, "label": _label(reference),
                        "symbol": reference.symbol, "available": True,
                        "correlation": value, "overlapWeeks": overlap})
         if abs(value) >= NAME_AT:
-            matches.append({"key": reference.key, "label": reference.label,
+            matches.append({"key": reference.key, "label": _label(reference),
                             "symbol": reference.symbol, "correlation": value,
-                            "overlapWeeks": overlap, "note": reference.note})
+                            "overlapWeeks": overlap, "note": _note(reference)})
 
     # AMBIGUITY IS A REFUSAL, NOT A TIE-BREAK. Comparing magnitudes here is not
     # the same as showing a ranking: nothing ordered by strength ever reaches the
@@ -649,29 +672,34 @@ def for_symbol(symbol: str, market_code: str = "US",
     own = _weekly_returns(symbol, weeks)
     if own is None or len(own) < MIN_WEEKS:
         return {"usable": False,
-                "reason": (f"Needs {MIN_WEEKS} weeks of price history before a factor "
-                           f"beta means anything; this listing has "
-                           f"{0 if own is None else len(own)}."),
+                "reason": (tr(f"Needs {MIN_WEEKS} weeks of price history before a factor "
+                              f"beta means anything; this listing has "
+                              f"{0 if own is None else len(own)}.",
+                              f"Butuh riwayat harga {MIN_WEEKS} minggu sebelum beta faktor berarti apa "
+                              f"pun; saham ini punya {0 if own is None else len(own)}.")),
                 "refused": [], "measuredOn": (stability or {}).get("measuredOn")}
 
     rows, refused = [], []
     for reference in considered:
         series = _weekly_returns(reference.symbol, weeks)
         if series is None:
-            refused.append({"key": reference.key, "label": reference.label,
-                            "reason": "no data for the factor series"})
+            refused.append({"key": reference.key, "label": _label(reference),
+                            "reason": tr("no data for the factor series",
+                                         "tidak ada data untuk deret faktornya")})
             continue
         fitted = _fit(own, series, index_returns)
         if fitted is None:
-            refused.append({"key": reference.key, "label": reference.label,
-                            "reason": "too few overlapping weeks"})
+            refused.append({"key": reference.key, "label": _label(reference),
+                            "reason": tr("too few overlapping weeks",
+                                         "terlalu sedikit minggu yang beririsan")})
             continue
         if abs(fitted["tStat"]) < MATERIAL_T:
-            refused.append({"key": reference.key, "label": reference.label,
-                            "reason": "no material loading on this name"})
+            refused.append({"key": reference.key, "label": _label(reference),
+                            "reason": tr("no material loading on this name",
+                                         "tidak ada keterkaitan material pada saham ini")})
             continue
-        rows.append({"key": reference.key, "label": reference.label,
-                     "symbol": reference.symbol, "note": reference.note, **fitted})
+        rows.append({"key": reference.key, "label": _label(reference),
+                     "symbol": reference.symbol, "note": _note(reference), **fitted})
 
     return {
         "usable": True,
@@ -732,7 +760,8 @@ def scan(symbols: Sequence[str], market_code: str = "US",
     frames = market_data.ohlcv_batch(
         wanted, end - dt.timedelta(days=int(weeks * 9)), end, own_sessions=True)
     if not frames:
-        return {"usable": False, "reason": "No price history came back for this list.",
+        return {"usable": False, "reason": tr("No price history came back for this list.",
+                                              "Tidak ada riwayat harga yang kembali untuk daftar ini."),
                 "factors": [], "refused": refused, "rows": [],
                 "measuredOn": (stability or {}).get("measuredOn")}
 
@@ -769,7 +798,8 @@ def scan(symbols: Sequence[str], market_code: str = "US",
 
     return {
         "usable": bool(rows),
-        "reason": None if rows else "Nothing in this list had enough weekly history.",
+        "reason": None if rows else tr("Nothing in this list had enough weekly history.",
+                                       "Tidak ada di daftar ini yang punya riwayat mingguan cukup."),
         # Declaration order, never strength order — see the module docstring.
         "factors": [{"key": r.key, "label": r.label, "symbol": r.symbol,
                      "note": r.note} for r in factors],

@@ -10,12 +10,13 @@ import { TickerBar } from "@/components/TickerBar";
 import { useWorkspace } from "@/components/shell/workspace";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Kbd } from "@/components/ui/kbd";
-import { useScan, type RunOptions } from "@/lib/api";
+import { useCapabilities, useScan, type RunOptions } from "@/lib/api";
 import { palette } from "@/lib/palette";
 import { marketOf, resolveSymbol } from "@/lib/symbols";
-import { RUN_DEFAULTS, compareHref, marketsHref, stockHref } from "@/lib/url";
+import { MANUAL_HREF, RUN_DEFAULTS, compareHref, marketsHref, stockHref } from "@/lib/url";
 import { MarketsToday } from "@/components/landing/MarketsToday";
 import { WatchlistRank } from "@/components/landing/WatchlistRank";
+import { msg, useLang, useT } from "@/lib/i18n";
 
 /**
  * The first screen, before a ticker.
@@ -40,44 +41,41 @@ import { WatchlistRank } from "@/components/landing/WatchlistRank";
  */
 const STEPS = [
   {
-    title: "Four models, two kinds of data",
-    body: "Order flow and price trend read the trading record; intrinsic value and accounting "
-      + "quality read the filings. Agreement between those two families is worth more than "
-      + "four lenses saying the same thing twice.",
+    title: msg("Four models, two kinds of data"),
+    body: msg("Order flow and price trend read the trading record; intrinsic value and accounting quality read the filings. Agreement between those two families is worth more than four lenses saying the same thing twice."),
   },
   {
-    title: "Where they disagree is the finding",
-    body: "Nothing here adds the four up. The summary names what they agree on, where they "
-      + "pull against each other, and what none of them can see about this company.",
+    title: msg("Where they disagree is the finding"),
+    body: msg("Nothing here adds the four up. The summary names what they agree on, where they pull against each other, and what none of them can see about this company."),
   },
   {
-    title: "Then what would stop a careful buyer",
-    body: "Conditions that argue against acting, each beside how often it fires across a real "
-      + "market — so a warning true of a third of all companies reads as the base rate it is.",
+    title: msg("Then what would stop a careful buyer"),
+    body: msg("Conditions that argue against acting, each beside how often it fires across a real market — so a warning true of a third of all companies reads as the base rate it is."),
   },
 ];
 
 const TOOLS = [
-  { href: marketsHref("rank"), icon: Layers, hue: palette.trend, title: "Rank a universe",
-    body: "Seven price signals across the Dow, Nasdaq-100, IDX30 or LQ45 — a shortlist, with the "
-      + "published finding that the order predicts nothing." },
-  { href: marketsHref("screener"), icon: Radar, hue: palette.flow, title: "Scan for unusual activity",
-    body: "Up to twenty names, each against its own history, with the number of hits you would "
-      + "expect from noise." },
-  { href: marketsHref("exposure"), icon: Compass, hue: palette.drivers, title: "What a market moves with",
-    body: "Every name in a list against the factors whose betas were measured to persist." },
-  { href: compareHref([]), icon: Columns3, hue: palette.thesis, title: "Compare companies",
-    body: "Two to four names read lens by lens in parallel columns. Nothing is summed." },
+  { href: marketsHref("rank"), icon: Layers, hue: palette.trend, title: msg("Rank a universe"),
+    body: msg("Seven price signals across the Dow, Nasdaq-100, IDX30 or LQ45 — a shortlist, with the published finding that the order predicts nothing.")},
+  { href: marketsHref("screener"), icon: Radar, hue: palette.flow, title: msg("Scan for unusual activity"),
+    body: msg("Up to twenty names, each against its own history, with the number of hits you would expect from noise.")},
+  { href: marketsHref("exposure"), icon: Compass, hue: palette.drivers, title: msg("What a market moves with"),
+    body: msg("Every name in a list against the factors whose betas were measured to persist.")},
+  { href: compareHref([]), icon: Columns3, hue: palette.thesis, title: msg("Compare companies"),
+    body: msg("Two to four names read lens by lens in parallel columns. Nothing is summed.")},
 ];
 
 export function Landing() {
+  const t = useT();
+  const lang = useLang();
   const router = useRouter();
   const { watchlist, recent, toggleWatch, clearRecent } = useWorkspace();
   const [opts, setOpts] = useState<RunOptions>({ ticker: "", market: "US", ...RUN_DEFAULTS });
-  // The local scan report, if this machine has one. On the deployed app the
-  // route answers `available: false` and the card simply does not appear.
-  const { state: scan } = useScan("ID");
-  const scanAvailable = scan.status === "ready" && scan.data.available;
+  // The local scan report, if this machine has one. On a deployment the private
+  // tier is off, nothing is asked for, and the card simply does not appear.
+  const { privateTier } = useCapabilities();
+  const { state: scan } = useScan("ID", privateTier);
+  const scanAvailable = privateTier && scan.status === "ready" && scan.data.available;
 
   const open = (next: RunOptions) => {
     const symbol = resolveSymbol(next.ticker, next.market);
@@ -88,19 +86,19 @@ export function Landing() {
     <div className="space-y-12">
       {/* --------------------------------------------------------------- hero */}
       <section className="mx-auto max-w-3xl pt-4 text-center sm:pt-10">
-        <p className="eyebrow mb-4">US and Indonesian listings · research, not advice</p>
+        <p className="eyebrow mb-4">{t("US and Indonesian listings · research, not advice")}</p>
         <h1 className="text-balance sm:text-display">
-          Read one company through four models that share no data.
+          {t("Read one company through four models that share no data.")}
         </h1>
         <p className="mx-auto mt-4 max-w-measure text-lead text-body">
-          See where they agree, where they disagree, and what none of them can tell you.
+          {t("See where they agree, where they disagree, and what none of them can tell you.")}
         </p>
         <div className="mx-auto mt-8 max-w-2xl text-left">
           <TickerBar opts={opts} onChange={setOpts} onRun={open} busy={false} autoFocus />
         </div>
         <p className="mt-4 text-meta text-ash">
-          Know the company but not the ticker? Press <Kbd keys={["mod", "K"]} className="mx-1 align-middle" />
-          and type its name.
+          {t("Know the company but not the ticker? Press")}{" "}<Kbd keys={["mod", "K"]} className="mx-1 align-middle" />
+          {t("and type its name.")}
         </p>
       </section>
 
@@ -110,19 +108,18 @@ export function Landing() {
       {/* ---------------------------------------------------------- your desk */}
       {(watchlist.length > 0 || recent.length > 0) && (
         <section aria-labelledby="desk-title" className="space-y-3">
-          <h2 id="desk-title">Your desk</h2>
+          <h2 id="desk-title">{t("Your desk")}</h2>
           <p className="max-w-measure text-meta text-ash">
-            Kept in this browser only. Nothing here is sent anywhere unless you press a button
-            that says so.
+            {t("Kept in this browser only. Nothing here is sent anywhere unless you press a button that says so.")}
           </p>
           <div className="grid gap-4 lg:grid-cols-2">
             {watchlist.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Star aria-hidden className="h-4 w-4 text-ash" /> Watchlist
+                    <Star aria-hidden className="h-4 w-4 text-ash" />{" "}{t("Watchlist")}
                   </CardTitle>
-                  <span className="font-mono text-micro text-ash">{watchlist.length} of 50</span>
+                  <span className="font-mono text-micro text-ash">{t("{length} of 50", { length: watchlist.length })}</span>
                 </CardHeader>
                 <CardBody className="space-y-4">
                   <SymbolList symbols={watchlist}
@@ -135,12 +132,12 @@ export function Landing() {
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Clock aria-hidden className="h-4 w-4 text-ash" /> Recently opened
+                    <Clock aria-hidden className="h-4 w-4 text-ash" />{" "}{t("Recently opened")}
                   </CardTitle>
                   <button type="button" onClick={clearRecent}
                           className="inline-flex min-h-[24px] items-center rounded px-1.5 text-micro text-ash
                                      hover:text-chalk focus:outline-none focus-visible:ring-2 focus-visible:ring-tech">
-                    Clear
+                    {t("Clear")}
                   </button>
                 </CardHeader>
                 <CardBody>
@@ -148,7 +145,7 @@ export function Landing() {
                   {recent.length >= 2 && (
                     <Link href={compareHref(recent.slice(0, 4))}
                           className="mt-4 inline-flex items-center gap-1.5 text-meta text-tech hover:underline">
-                      Compare the last {Math.min(4, recent.length)} side by side
+                      {t("Compare the last {Math} side by side", { Math: Math.min(4, recent.length) })}
                       <ArrowRight aria-hidden className="h-3.5 w-3.5" />
                     </Link>
                   )}
@@ -162,19 +159,19 @@ export function Landing() {
       {/* ------------------------------------------------------- how to read */}
       <section aria-labelledby="how-title" className="space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="how-title">How to read it</h2>
-          <a href="/docs/field-manual.html"
+          <h2 id="how-title">{t("How to read it")}</h2>
+          <a href={MANUAL_HREF[lang]}
              className="inline-flex items-center gap-1.5 text-meta text-tech hover:underline">
             <BookOpen aria-hidden className="h-4 w-4" />
-            The field manual assumes no finance at all
+            {t("The field manual assumes no finance at all")}
           </a>
         </div>
         <ol className="grid gap-4 md:grid-cols-3">
           {STEPS.map((step, i) => (
             <li key={step.title} className="rounded-lg border border-rule bg-panel p-5">
               <span className="num text-meta text-faint">0{i + 1}</span>
-              <h3 className="mt-2">{step.title}</h3>
-              <p className="mt-2 text-meta leading-relaxed text-body">{step.body}</p>
+              <h3 className="mt-2">{t(step.title)}</h3>
+              <p className="mt-2 text-meta leading-relaxed text-body">{t(step.body)}</p>
             </li>
           ))}
         </ol>
@@ -182,11 +179,11 @@ export function Landing() {
 
       {/* --------------------------------------------------------- the tools */}
       <section aria-labelledby="tools-title" className="space-y-4">
-        <h2 id="tools-title">Across a whole market</h2>
+        <h2 id="tools-title">{t("Across a whole market")}</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {scanAvailable && (
             <ToolCard href={marketsHref("scan")} icon={ScanSearch} hue={palette.private}
-                      title="Latest local scan"
+                      title={t("Latest local scan")}
                       body="The private whole-market sweep run on this machine. Every score ships with the null result above it." />
           )}
           {TOOLS.map((tool) => <ToolCard key={tool.title} {...tool} />)}
@@ -199,16 +196,17 @@ export function Landing() {
 function ToolCard({
   href, icon: Icon, hue, title, body,
 }: { href: string; icon: typeof Layers; hue: string; title: string; body: string }) {
+  const t = useT();
   return (
     <Link href={href}
           className="group flex flex-col rounded-lg border border-rule bg-panel p-5 transition-colors
                      hover:border-ruleStrong hover:bg-raised focus:outline-none focus-visible:ring-2
                      focus-visible:ring-tech">
       <Icon aria-hidden className="h-5 w-5" style={{ color: hue }} />
-      <span className="mt-3 text-h3 font-semibold text-chalk">{title}</span>
-      <span className="mt-1.5 flex-1 text-meta leading-relaxed text-ash">{body}</span>
+      <span className="mt-3 text-h3 font-semibold text-chalk">{t(title)}</span>
+      <span className="mt-1.5 flex-1 text-meta leading-relaxed text-ash">{t(body)}</span>
       <span className="mt-4 inline-flex items-center gap-1 text-meta text-tech">
-        Open <ArrowRight aria-hidden className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+        {t("Open")}{" "}<ArrowRight aria-hidden className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
       </span>
     </Link>
   );
@@ -217,6 +215,7 @@ function ToolCard({
 function SymbolList({
   symbols, onRemove, removeLabel,
 }: { symbols: string[]; onRemove?: (s: string) => void; removeLabel?: string }) {
+  const t = useT();
   return (
     <ul className="flex flex-wrap gap-2">
       {symbols.map((s) => (
@@ -226,7 +225,7 @@ function SymbolList({
                            text-body hover:text-chalk focus:outline-none focus-visible:ring-2
                            focus-visible:ring-tech">
             {s}
-            <span className="text-micro text-faint">{marketOf(s) === "ID" ? "IDX" : "US"}</span>
+            <span className="text-micro text-faint">{marketOf(s) === "ID" ? t("IDX") : t("US")}</span>
           </Link>
           {onRemove && (
             <button type="button" onClick={() => onRemove(s)} aria-label={`${removeLabel} ${s}`}

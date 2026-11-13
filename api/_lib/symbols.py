@@ -21,6 +21,7 @@ harmless.
 """
 
 from __future__ import annotations
+from .lang import tr
 
 MARKET_SUFFIX = {
     "US": "",
@@ -46,7 +47,8 @@ def resolve(ticker: str, market_code: str = DEFAULT_MARKET) -> str:
     """
     raw = (ticker or "").strip().upper()
     if not raw:
-        raise SymbolError("Ticker symbol must be a non-empty string.")
+        raise SymbolError(tr("Ticker symbol must be a non-empty string.",
+                             "Simbol ticker harus berupa teks yang tidak kosong."))
 
     suffix = MARKET_SUFFIX.get((market_code or DEFAULT_MARKET).strip().upper(), "")
     if suffix and not raw.endswith(suffix):
@@ -89,19 +91,24 @@ def hint(symbol: str) -> str:
     """
     raw = (symbol or "").strip().upper()
     if not raw:
-        return "Enter a ticker symbol."
+        return tr("Enter a ticker symbol.", "Masukkan simbol ticker.")
 
     base, _, suffix = raw.rpartition(".")
     # A single trailing letter after a dot is a share class, not an exchange.
     # Real exchange suffixes are two or more letters (.JK, .L, .TO — .L being the
     # exception, which is why the class-share test also requires a short base).
     if base and len(suffix) == 1 and suffix.isalpha():
-        return (f"US class shares use a hyphen on this data source: try "
-                f"{base}-{suffix} rather than {raw}.")
+        return (tr(f"US class shares use a hyphen on this data source: try "
+                   f"{base}-{suffix} rather than {raw}.",
+                   f"Saham kelas di AS memakai tanda hubung pada sumber data ini: coba {base}"
+                   f"-{suffix}, bukan {raw}."))
     if "." not in raw and "-" not in raw:
-        return ("Non-US listings need their exchange suffix — Indonesian tickers "
-                "end in .JK. Crypto takes a pair, such as BTC-USD.")
-    return "Check the symbol, or try a wider date range."
+        return (tr("Non-US listings need their exchange suffix — Indonesian tickers "
+                   "end in .JK. Crypto takes a pair, such as BTC-USD.",
+                   "Saham di luar AS perlu akhiran bursanya — ticker Indonesia berakhiran "
+                   ".JK. Kripto memakai pasangan, misalnya BTC-USD."))
+    return tr("Check the symbol, or try a wider date range.",
+              "Periksa simbolnya, atau coba rentang tanggal yang lebih lebar.")
 
 
 def market_for(ticker: str, market_code: str = DEFAULT_MARKET) -> str:
