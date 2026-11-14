@@ -1150,6 +1150,16 @@ the flow bias — and reassembling that chain outside the payload builders would
 have measured a lookalike of the app. Nothing batches, the run is about a
 quarter of an hour, and that is the correct trade.
 
+**Three of the 168 no longer trade.** The index lists are transcribed by hand,
+and on the November run Ansys had no prices at all while Electronic Arts and
+Warner Bros. Discovery had histories ending on 4 August and 5 October 2026.
+The stamp of 14 November names Ansys under `namesNoLongerListed` and files the
+other two under `namesStillThrottled`. That second label is wrong: their
+company profiles arrived, and it was the Flow lens that found no usable rows.
+The script now calls a price lens that cannot read, while the provider answers
+for the market's own index, what it is. The votes were unaffected, so the
+figures stand; the label is corrected the next time the stamp is taken.
+
 **A lens that could not read does not vote.** `None`, never 0. A bank's refused
 accounting screens recorded as a neutral vote would manufacture agreement with
 every other lens that happened to be quiet, which is the "absence is not

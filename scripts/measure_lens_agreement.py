@@ -125,24 +125,28 @@ def _gap(legs: dict, market: str) -> str | None:
     """What kind of provider gap these legs carry: "throttled", "unlisted" or None.
 
     `api._throttled` is the test `/api/confluence` itself uses to shorten its
-    cache life: a filings lens that answered `unknown-sector`. A failed price
-    leg is the other shape — on an index constituent with years of history
-    there is no company-side reason for a chart to be missing.
+    cache life: a filings lens that answered `unknown-sector`. That is the
+    throttle signature, and it is asked for again for up to three rounds.
 
-    WHEN THE PROVIDER ANSWERS FOR THE MARKET'S INDEX AND BOTH PRICE LEGS STILL
-    FAIL, THE NAME IS GONE, NOT THROTTLED. The constituent lists are transcribed
-    by hand and go stale: Ansys left the Nasdaq-100 when it was acquired and
-    still sits in the list. Such a name gets one more try, in case it was a
-    blip, and is not asked for again — three rounds of waiting on a delisted
-    ticker is six minutes spent confirming a fact about the list.
+    A PRICE LENS THAT CANNOT READ WHILE THE PROVIDER ANSWERS FOR THE MARKET'S
+    OWN INDEX IS A NAME THAT STOPPED TRADING, NOT A THROTTLE. The constituent
+    lists are transcribed by hand and go stale. On the run of 14 November 2026
+    three Nasdaq-100 names were gone: Ansys has no prices at all, and
+    Electronic Arts and Warner Bros. Discovery have a history that ends on
+    4 August and 5 October, so the Flow lens finds no usable rows while the
+    chart still returns its last bar. The first version of this test called a
+    single failed price leg "throttled" and waited three rounds on the last
+    two; the stamp of that run files them under `namesStillThrottled`, which is
+    wrong, and their company profiles had arrived the whole time.
+
+    Such a name gets one more try, in case it was a blip, and is not asked for
+    again. Only when the index does not answer either is a missing price a
+    throttle.
     """
-    no_prices = not legs["anomaly"]["ok"] and not legs["technical"]["ok"]
-    if no_prices and market_data.provider_answering(market):
-        return "unlisted"
     if any(api._throttled(legs[name]) for name in ("valuation", "quality")):
         return "throttled"
     if any(not legs[name]["ok"] for name in ("anomaly", "technical")):
-        return "throttled"
+        return "unlisted" if market_data.provider_answering(market) else "throttled"
     return None
 
 
@@ -353,8 +357,9 @@ def main() -> int:
         # Names that still carried a provider gap after every retry: a lens that
         # "could not read" them may only have been refused the data that day.
         "namesStillThrottled": sorted(pending),
-        # Names the provider has no prices for while it answers for the market's
-        # own index: left the exchange, or renamed, since the list was written.
+        # Names a price lens could not read while the provider answered for the
+        # market's own index: left the exchange, or renamed, since the list was
+        # written.
         "namesNoLongerListed": sorted(unlisted),
         "anomalyPeriod": ANOMALY_PERIOD,
         "chartRange": CHART_RANGE,
@@ -395,7 +400,7 @@ def main() -> int:
         print(f"\n{len(failed)} symbols produced nothing: {', '.join(failed[:12])}"
               + (" ..." if len(failed) > 12 else ""))
     if unlisted:
-        print(f"\n{len(unlisted)} symbols have no prices at the provider and look "
+        print(f"\n{len(unlisted)} symbols have no usable prices at the provider and look "
               f"delisted or renamed: {', '.join(sorted(unlisted))}")
     if pending:
         print(f"\n{len(pending)} symbols still looked throttled after "
