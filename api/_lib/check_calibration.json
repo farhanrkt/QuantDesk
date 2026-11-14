@@ -1,5 +1,5 @@
 {
-  "measuredOn": "2026-08-28",
+  "measuredOn": "2026-11-14",
   "years": 5,
   "universeIds": [
     "dow30",
@@ -30,20 +30,23 @@
   },
   "baseRateMax": 0.33,
   "minSampleSize": 30,
+  "profileNotReturned": [
+    "ANSS"
+  ],
   "checks": {
     "altmanDistress": {
       "fired": 18,
-      "sampleSize": 151,
-      "couldNotRun": 17,
-      "firingRate": 0.11920529801324503,
+      "sampleSize": 149,
+      "couldNotRun": 19,
+      "firingRate": 0.12080536912751678,
       "namesMeasured": 168,
       "classification": "flag",
       "markets": {
         "US": {
           "fired": 12,
-          "sampleSize": 112,
-          "couldNotRun": 10,
-          "firingRate": 0.10714285714285714,
+          "sampleSize": 110,
+          "couldNotRun": 12,
+          "firingRate": 0.10909090909090909,
           "classification": "flag"
         },
         "ID": {
@@ -57,15 +60,15 @@
       "universes": {
         "dow30": {
           "fired": 1,
-          "sampleSize": 24,
-          "couldNotRun": 6,
-          "firingRate": 0.041666666666666664
+          "sampleSize": 23,
+          "couldNotRun": 7,
+          "firingRate": 0.043478260869565216
         },
         "nasdaq100": {
           "fired": 12,
-          "sampleSize": 95,
-          "couldNotRun": 4,
-          "firingRate": 0.12631578947368421
+          "sampleSize": 93,
+          "couldNotRun": 6,
+          "firingRate": 0.12903225806451613
         },
         "idx30": {
           "fired": 3,
@@ -82,18 +85,18 @@
       }
     },
     "beneishFlagged": {
-      "fired": 6,
-      "sampleSize": 154,
-      "couldNotRun": 14,
-      "firingRate": 0.03896103896103896,
+      "fired": 7,
+      "sampleSize": 153,
+      "couldNotRun": 15,
+      "firingRate": 0.0457516339869281,
       "namesMeasured": 168,
       "classification": "flag",
       "markets": {
         "US": {
-          "fired": 3,
-          "sampleSize": 115,
-          "couldNotRun": 7,
-          "firingRate": 0.02608695652173913,
+          "fired": 4,
+          "sampleSize": 114,
+          "couldNotRun": 8,
+          "firingRate": 0.03508771929824561,
           "classification": "flag"
         },
         "ID": {
@@ -112,10 +115,10 @@
           "firingRate": 0.04
         },
         "nasdaq100": {
-          "fired": 3,
-          "sampleSize": 97,
-          "couldNotRun": 2,
-          "firingRate": 0.030927835051546393
+          "fired": 4,
+          "sampleSize": 96,
+          "couldNotRun": 3,
+          "firingRate": 0.041666666666666664
         },
         "idx30": {
           "fired": 2,
@@ -132,18 +135,18 @@
       }
     },
     "piotroskiWeak": {
-      "fired": 2,
-      "sampleSize": 154,
-      "couldNotRun": 14,
-      "firingRate": 0.012987012987012988,
+      "fired": 3,
+      "sampleSize": 153,
+      "couldNotRun": 15,
+      "firingRate": 0.0196078431372549,
       "namesMeasured": 168,
       "classification": "flag",
       "markets": {
         "US": {
-          "fired": 1,
-          "sampleSize": 115,
-          "couldNotRun": 7,
-          "firingRate": 0.008695652173913044,
+          "fired": 2,
+          "sampleSize": 114,
+          "couldNotRun": 8,
+          "firingRate": 0.017543859649122806,
           "classification": "flag"
         },
         "ID": {
@@ -162,10 +165,10 @@
           "firingRate": 0.0
         },
         "nasdaq100": {
-          "fired": 1,
-          "sampleSize": 97,
-          "couldNotRun": 2,
-          "firingRate": 0.010309278350515464
+          "fired": 2,
+          "sampleSize": 96,
+          "couldNotRun": 3,
+          "firingRate": 0.020833333333333332
         },
         "idx30": {
           "fired": 1,
@@ -182,25 +185,25 @@
       }
     },
     "terminalDominant": {
-      "fired": 138,
+      "fired": 135,
       "sampleSize": 152,
       "couldNotRun": 16,
-      "firingRate": 0.9078947368421053,
+      "firingRate": 0.8881578947368421,
       "namesMeasured": 168,
       "classification": "base",
       "markets": {
         "US": {
-          "fired": 103,
+          "fired": 101,
           "sampleSize": 115,
           "couldNotRun": 7,
-          "firingRate": 0.8956521739130435,
+          "firingRate": 0.8782608695652174,
           "classification": "base"
         },
         "ID": {
-          "fired": 35,
+          "fired": 34,
           "sampleSize": 37,
           "couldNotRun": 9,
-          "firingRate": 0.9459459459459459,
+          "firingRate": 0.918918918918919,
           "classification": "base"
         }
       },
@@ -212,10 +215,10 @@
           "firingRate": 0.9655172413793104
         },
         "nasdaq100": {
-          "fired": 81,
+          "fired": 79,
           "sampleSize": 93,
           "couldNotRun": 6,
-          "firingRate": 0.8709677419354839
+          "firingRate": 0.8494623655913979
         },
         "idx30": {
           "fired": 23,
@@ -224,76 +227,76 @@
           "firingRate": 0.92
         },
         "lq45": {
-          "fired": 35,
+          "fired": 34,
           "sampleSize": 36,
           "couldNotRun": 9,
-          "firingRate": 0.9722222222222222
+          "firingRate": 0.9444444444444444
         }
       }
     },
     "impliedGrowthDemanding": {
-      "fired": 55,
-      "sampleSize": 128,
-      "couldNotRun": 40,
-      "firingRate": 0.4296875,
+      "fired": 60,
+      "sampleSize": 132,
+      "couldNotRun": 36,
+      "firingRate": 0.45454545454545453,
       "namesMeasured": 168,
       "classification": "base",
       "markets": {
         "US": {
-          "fired": 50,
-          "sampleSize": 95,
-          "couldNotRun": 27,
-          "firingRate": 0.5263157894736842,
+          "fired": 56,
+          "sampleSize": 99,
+          "couldNotRun": 23,
+          "firingRate": 0.5656565656565656,
           "classification": "base"
         },
         "ID": {
-          "fired": 5,
+          "fired": 4,
           "sampleSize": 33,
           "couldNotRun": 13,
-          "firingRate": 0.15151515151515152,
+          "firingRate": 0.12121212121212122,
           "classification": "flag"
         }
       },
       "universes": {
         "dow30": {
           "fired": 14,
-          "sampleSize": 27,
-          "couldNotRun": 3,
-          "firingRate": 0.5185185185185185
+          "sampleSize": 26,
+          "couldNotRun": 4,
+          "firingRate": 0.5384615384615384
         },
         "nasdaq100": {
-          "fired": 39,
-          "sampleSize": 73,
-          "couldNotRun": 26,
-          "firingRate": 0.5342465753424658
+          "fired": 46,
+          "sampleSize": 79,
+          "couldNotRun": 20,
+          "firingRate": 0.5822784810126582
         },
         "idx30": {
-          "fired": 4,
+          "fired": 3,
           "sampleSize": 22,
           "couldNotRun": 8,
-          "firingRate": 0.18181818181818182
+          "firingRate": 0.13636363636363635
         },
         "lq45": {
-          "fired": 5,
-          "sampleSize": 32,
-          "couldNotRun": 13,
-          "firingRate": 0.15625
+          "fired": 4,
+          "sampleSize": 33,
+          "couldNotRun": 12,
+          "firingRate": 0.12121212121212122
         }
       }
     },
     "thinFilings": {
-      "fired": 58,
+      "fired": 59,
       "sampleSize": 167,
       "couldNotRun": 1,
-      "firingRate": 0.3473053892215569,
+      "firingRate": 0.3532934131736527,
       "namesMeasured": 168,
       "classification": "base",
       "markets": {
         "US": {
-          "fired": 19,
+          "fired": 20,
           "sampleSize": 121,
           "couldNotRun": 1,
-          "firingRate": 0.15702479338842976,
+          "firingRate": 0.1652892561983471,
           "classification": "flag"
         },
         "ID": {
@@ -312,10 +315,10 @@
           "firingRate": 0.1
         },
         "nasdaq100": {
-          "fired": 16,
+          "fired": 17,
           "sampleSize": 98,
           "couldNotRun": 1,
-          "firingRate": 0.16326530612244897
+          "firingRate": 0.17346938775510204
         },
         "idx30": {
           "fired": 24,
@@ -332,25 +335,25 @@
       }
     },
     "hurstRandomWalk": {
-      "fired": 137,
-      "sampleSize": 166,
+      "fired": 134,
+      "sampleSize": 165,
       "couldNotRun": 0,
-      "firingRate": 0.8253012048192772,
-      "namesMeasured": 166,
+      "firingRate": 0.8121212121212121,
+      "namesMeasured": 165,
       "classification": "base",
       "markets": {
         "US": {
-          "fired": 94,
-          "sampleSize": 120,
+          "fired": 93,
+          "sampleSize": 119,
           "couldNotRun": 0,
-          "firingRate": 0.7833333333333333,
+          "firingRate": 0.7815126050420168,
           "classification": "base"
         },
         "ID": {
-          "fired": 43,
+          "fired": 41,
           "sampleSize": 46,
           "couldNotRun": 0,
-          "firingRate": 0.9347826086956522,
+          "firingRate": 0.8913043478260869,
           "classification": "base"
         }
       },
@@ -362,37 +365,37 @@
           "firingRate": 0.8666666666666667
         },
         "nasdaq100": {
-          "fired": 74,
-          "sampleSize": 97,
+          "fired": 73,
+          "sampleSize": 96,
           "couldNotRun": 0,
-          "firingRate": 0.7628865979381443
+          "firingRate": 0.7604166666666666
         },
         "idx30": {
-          "fired": 28,
+          "fired": 27,
           "sampleSize": 30,
           "couldNotRun": 0,
-          "firingRate": 0.9333333333333333
+          "firingRate": 0.9
         },
         "lq45": {
-          "fired": 42,
+          "fired": 40,
           "sampleSize": 45,
           "couldNotRun": 0,
-          "firingRate": 0.9333333333333333
+          "firingRate": 0.8888888888888888
         }
       }
     },
     "moveInsideCost": {
       "fired": 0,
       "sampleSize": 0,
-      "couldNotRun": 166,
+      "couldNotRun": 165,
       "firingRate": null,
-      "namesMeasured": 166,
+      "namesMeasured": 165,
       "classification": "uncalibrated",
       "markets": {
         "US": {
           "fired": 0,
           "sampleSize": 0,
-          "couldNotRun": 120,
+          "couldNotRun": 119,
           "firingRate": null,
           "classification": "uncalibrated"
         },
@@ -414,7 +417,7 @@
         "nasdaq100": {
           "fired": 0,
           "sampleSize": 0,
-          "couldNotRun": 97,
+          "couldNotRun": 96,
           "firingRate": null
         },
         "idx30": {
@@ -433,51 +436,51 @@
     },
     "deepDrawdownHistory": {
       "fired": 86,
-      "sampleSize": 166,
+      "sampleSize": 165,
       "couldNotRun": 0,
-      "firingRate": 0.5180722891566265,
-      "namesMeasured": 166,
+      "firingRate": 0.5212121212121212,
+      "namesMeasured": 165,
       "classification": "base",
       "markets": {
         "US": {
-          "fired": 55,
-          "sampleSize": 120,
+          "fired": 53,
+          "sampleSize": 119,
           "couldNotRun": 0,
-          "firingRate": 0.4583333333333333,
+          "firingRate": 0.44537815126050423,
           "classification": "base"
         },
         "ID": {
-          "fired": 31,
+          "fired": 33,
           "sampleSize": 46,
           "couldNotRun": 0,
-          "firingRate": 0.6739130434782609,
+          "firingRate": 0.717391304347826,
           "classification": "base"
         }
       },
       "universes": {
         "dow30": {
-          "fired": 8,
+          "fired": 7,
           "sampleSize": 30,
           "couldNotRun": 0,
-          "firingRate": 0.26666666666666666
+          "firingRate": 0.23333333333333334
         },
         "nasdaq100": {
-          "fired": 49,
-          "sampleSize": 97,
+          "fired": 48,
+          "sampleSize": 96,
           "couldNotRun": 0,
-          "firingRate": 0.5051546391752577
+          "firingRate": 0.5
         },
         "idx30": {
-          "fired": 18,
+          "fired": 20,
           "sampleSize": 30,
           "couldNotRun": 0,
-          "firingRate": 0.6
+          "firingRate": 0.6666666666666666
         },
         "lq45": {
-          "fired": 30,
+          "fired": 32,
           "sampleSize": 45,
           "couldNotRun": 0,
-          "firingRate": 0.6666666666666666
+          "firingRate": 0.7111111111111111
         }
       }
     }

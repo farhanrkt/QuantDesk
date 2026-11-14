@@ -53,10 +53,11 @@ app collapses them into one vote rather than counting four.
 
 **And that caveat is now measured, not asserted.** Across 168 names in four index universes,
 the price record and the filings reach the same verdict about as often as chance puts them
-there — **κ = +0.03, on an interval that straddles zero** — so agreement between them really
-is two facts rather than one counted twice. The surprise was the other half: Flow and Trend,
-the pair grouped together *because* they read the same series, agree at κ = +0.03 too, and
-the four lenses together carry **3.7 lenses' worth of independent information** rather than
+there — **κ = −0.02, on an interval that straddles zero** (re-measured 14 November 2026;
++0.03 in August) — so agreement between them really is two facts rather than one counted
+twice. The surprise was the other half: Flow and Trend, the pair grouped together *because*
+they read the same series, do not agree either (κ = +0.03 in August, −0.13 in November), and
+the four lenses together carry **3.6 lenses' worth of independent information** rather than
 the two the count collapses them to. The grouping was left alone anyway, and the panel says
 why: a vote that correlates with nothing is what an independent reading and an uninformative
 one both look like, and the Flow lens's own event study already returns nulls.
@@ -536,18 +537,21 @@ every run, and until now nothing had checked it.
 The check is Cohen's κ between the two families' actual verdicts across 168 names in four index
 universes, because raw agreement is uninterpretable: a lens calling 70% of companies cheap and
 one calling 70% sound land on the same label **58% of the time while sharing nothing at all**.
-Chance-corrected, price and filings come out at **κ = +0.03 (US +0.05, IDX +0.09)**, on
-intervals that straddle zero in all three. **The claim survives** — measured now, not asserted,
-and the sentence on the panel is written from whichever way the number came out.
+Chance-corrected, price and filings come out at **κ = −0.02 (US +0.04, IDX −0.01)**, on
+intervals that straddle zero in all three. **The claim survives** — measured in August 2026 at
++0.03 and again on 14 November, not asserted, and the sentence on the panel is written from
+whichever way the number came out.
 
 The unexpected half: **Flow and Trend, the pair the app collapses into one vote precisely
-because they read the same price series, agree at κ = +0.03 as well.** The four together carry
-3.7 lenses' worth of independent information rather than the two they are counted as. The
-grouping was left alone regardless, and the panel says why — a vote uncorrelated with everything
-is what an independent reading and an uninformative one both look like, and the Flow lens's own
-event study returns nulls. Two pairs came out *negatively* correlated; one of those (a rising
-price making a DCF look expensive) explains itself, and the other is recorded without an
-explanation.
+because they read the same price series, do not agree: κ = +0.03 in August and −0.13 in
+November.** The four together carry 3.6 lenses' worth of independent information rather than the
+two they are counted as. The grouping was left alone regardless, and the panel says why — a vote
+uncorrelated with everything is what an independent reading and an uninformative one both look
+like, and the Flow lens's own event study returns nulls. Trend and Value are *negatively*
+correlated in both runs, which explains itself (a rising price makes a DCF look expensive).
+Every pair that includes Flow moved by more than its interval between the two runs, because
+Flow votes on the last ten sessions: a Flow pair that looks significant on one date is not a
+finding.
 
 Measured offline by `scripts/measure_lens_agreement.py`, which pushes every name through the
 same four production engines a real request uses. Re-run it after changing what any lens
@@ -567,8 +571,8 @@ condition**, and a condition that could not be tested lands under *not checked* 
 *clear*.
 
 **The rates are per market, and the run is what forced that.** "Scores built from incomplete
-data" fires on 16% of US large caps and 85% of Indonesian ones — which is Yahoo's coverage of
-smaller IDX filings, not a fact about the companies. A blended rate near 40% would be
+data" fires on 17% of US large caps and 85% of Indonesian ones — which is Yahoo's coverage of
+smaller IDX filings, not a fact about the companies. A blended rate near 35% would be
 simultaneously alarming for a US listing and reassuring for an IDX one, so each check carries
 a rate for each market and the panel uses the one the ticker actually belongs to.
 
@@ -1245,7 +1249,12 @@ scripts/
   scan_market.py      The private scanner: sweep a market, score every
                       tradeable name, write a report
   render_scan.py      That report as one self-contained HTML file
-tests/        1,894 offline tests (pytest), plus 85 frontend assertions
+  audit_repro.py      One offline reproduction per finding in docs/AUDIT.md:
+                      PRESENT while the defect is in the code, absent after
+  audit/              The audit's instruments, outside CI: a live sweep of
+                      198 companies, a provider that hangs, and the browser
+                      walk (screenshots, axe-core, layout shift, keyboard)
+tests/        1,920 offline tests (pytest), plus 85 frontend assertions
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -1544,8 +1553,11 @@ where you press the button.
   ```
 - **[RESEARCH_ROADMAP.md](RESEARCH_ROADMAP.md)** — every model, why that estimator, what it
   doesn't claim, with citations and validation results.
-- **[CODEBASE_REVIEW.md](CODEBASE_REVIEW.md)** — engineering review: security, architecture,
-  and what's still open.
+- **[docs/AUDIT.md](docs/AUDIT.md)** — the audit taken before launch, November 2026: what is
+  wrong ranked by impact, each with its evidence and a reproduction, what was checked and
+  found sound, what was not covered, and the decisions that are the owner's.
+- **[CODEBASE_REVIEW.md](CODEBASE_REVIEW.md)** — the first engineering review, August 2026.
+  Older and partly superseded by the audit above.
 
 ---
 
