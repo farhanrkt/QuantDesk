@@ -567,8 +567,8 @@ condition**, and a condition that could not be tested lands under *not checked* 
 *clear*.
 
 **The rates are per market, and the run is what forced that.** "Scores built from incomplete
-data" fires on 16% of US large caps and 85% of Indonesian ones — which is Yahoo's coverage of
-smaller IDX filings, not a fact about the companies. A blended rate near 40% would be
+data" fires on 17% of US large caps and 85% of Indonesian ones — which is Yahoo's coverage of
+smaller IDX filings, not a fact about the companies. A blended rate near 35% would be
 simultaneously alarming for a US listing and reassuring for an IDX one, so each check carries
 a rate for each market and the panel uses the one the ticker actually belongs to.
 

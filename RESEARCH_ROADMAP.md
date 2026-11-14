@@ -309,12 +309,12 @@ condition to flag by its own coverage gap.
 
 The first complete run reported one rate per check across all four universes, and one of the
 results made that indefensible. **"Scores built from incomplete data" fires on 10% of the Dow
-and 16% of the Nasdaq-100, and on 80% of IDX30 and 84% of LQ45.** That is not a fact about
+and 17% of the Nasdaq-100, and on 80% of IDX30 and 84% of LQ45.** That is not a fact about
 companies — it is Yahoo's fundamentals coverage for smaller Indonesian listings, which this
 README has always named as the project's single biggest fragility, showing up as a number for
 the first time.
 
-The blended rate lands near 40%. It is simultaneously alarming for a US large cap, where the
+The blended rate lands near 35%. It is simultaneously alarming for a US large cap, where the
 condition is genuinely unusual and worth a flag, and reassuring for an IDX one, where it is
 the norm and should be demoted. **Neither reading is true of the company in front of the
 reader**, which is the definition of the wrong number.
@@ -327,22 +327,44 @@ date, and the population has to be one the reader is actually in.
 
 ### What the measurement changed
 
-Measured 28 August 2026 over five years of daily data, US against the Dow and the Nasdaq-100,
-IDX against IDX30 and LQ45. The denominator is names where the check could be **evaluated**;
-where it could not — a refused lens, a missing statement — that is counted separately and
-never as a pass.
+First measured 28 August 2026 and **re-measured 14 November 2026**, over five years of daily
+data, US against the Dow and the Nasdaq-100, IDX against IDX30 and LQ45. The denominator is
+names where the check could be **evaluated**; where it could not — a refused lens, a missing
+statement — that is counted separately and never as a pass.
 
 | Condition | US | IDX | Reads as |
 |---|---|---|---|
-| Balance sheet inside the distress zone | 11% of 112 | 15% of 39 | flag |
-| Accrual pattern flags on the manipulation screen | 3% of 115 | 8% of 39 | flag |
-| Fundamental trend deteriorating | 1% of 115 | 3% of 39 | flag |
-| Most of the valuation is a perpetuity guess | 90% of 115 | 95% of 37 | base condition |
-| The price assumes more growth than the model does | 53% of 95 | 15% of 33 | **base in the US, flag on the IDX** |
-| Scores built from incomplete data | 16% of 121 | 85% of 46 | **flag in the US, base on the IDX** |
-| Price series indistinguishable from a random walk | 78% of 120 | 93% of 46 | base condition |
+| Balance sheet inside the distress zone | 11% of 110 | 15% of 39 | flag |
+| Accrual pattern flags on the manipulation screen | 4% of 114 | 8% of 39 | flag |
+| Fundamental trend deteriorating | 2% of 114 | 3% of 39 | flag |
+| Most of the valuation is a perpetuity guess | 88% of 115 | 92% of 37 | base condition |
+| The price assumes more growth than the model does | 57% of 99 | 12% of 33 | **base in the US, flag on the IDX** |
+| Scores built from incomplete data | 17% of 121 | 85% of 46 | **flag in the US, base on the IDX** |
+| Price series indistinguishable from a random walk | 78% of 119 | 89% of 46 | base condition |
 | The latest move is inside the cost of trading it | — | — | withheld, never evaluable |
-| Has already fallen more than half | 46% of 120 | 67% of 46 | base condition |
+| Has already fallen more than half | 45% of 119 | 72% of 46 | base condition |
+
+**What eleven weeks moved, and what they did not.** No check changed its classification in
+either market, so the panel draws exactly the flags and base conditions it drew before. The
+largest movement is five points (IDX names that have already halved, 67% to 72%); every flag
+moved by one name or none. The August figures were: 11% of 112 and 15% of 39; 3% of 115 and
+8% of 39; 1% of 115 and 3% of 39; 90% of 115 and 95% of 37; 53% of 95 and 15% of 33; 16% of
+121 and 85% of 46; 78% of 120 and 93% of 46; 46% of 120 and 67% of 46.
+
+**"Fundamental trend deteriorating" rose, where §24.1 said it could only fall.** That
+prediction was about the band change alone, on the same statements: reading the share of
+computable checks can only lift a band. It holds. What it could not cover is that the
+statements themselves moved: eleven weeks of annual reports arrived between the two runs, and
+the US count went from one name in 115 to two in 114. The rate is 2% and the check stays a
+flag.
+
+**One constituent is gone, and the stamp now says so.** Ansys was acquired and delisted, and
+still sits in the hand-transcribed Nasdaq-100 list. The script used to count such a name
+silently under "could not run". It now asks again for any name whose company profile did not
+arrive (a throttled provider returns statements with no sector), waits out the two minutes
+`market_data` keeps a gap, and writes the names that never came back into the stamp as
+`profileNotReturned`. A name with no price history either is recorded and not asked for
+again, because that is a fact about the list and not a throttle.
 
 Of the nine, three survive as flags in both markets, three are demoted in both, two split
 along the market line, and one turned out never to be evaluable at all. The demotions are the
@@ -358,10 +380,10 @@ alarm to the ordinary case.
 synthesis already warns at is cleared by nearly every name measured. Worth stating; not worth
 flagging.
 
-**The price implies more growth than the model assumes on half the US universe** — which is
+**The price implies more growth than the model assumes on more than half the US universe** — which is
 what happens when the model's growth input is a default and the default is not a forecast.
 This one was predictable in advance and was deliberately left to the data to decide, because a
-rule that only ever confirms a prior judgement is not being tested. On the IDX it fires on 15%
+rule that only ever confirms a prior judgement is not being tested. On the IDX it fires on 12%
 and stays a flag, which is the market split earning its keep on the first check that met it.
 
 **And one condition can never be evaluated at all.** "The latest move is inside the cost of
