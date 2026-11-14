@@ -1249,6 +1249,11 @@ scripts/
   scan_market.py      The private scanner: sweep a market, score every
                       tradeable name, write a report
   render_scan.py      That report as one self-contained HTML file
+  audit_repro.py      One offline reproduction per finding in docs/AUDIT.md:
+                      PRESENT while the defect is in the code, absent after
+  audit/              The audit's instruments, outside CI: a live sweep of
+                      198 companies, a provider that hangs, and the browser
+                      walk (screenshots, axe-core, layout shift, keyboard)
 tests/        1,920 offline tests (pytest), plus 85 frontend assertions
 ```
 
@@ -1548,8 +1553,11 @@ where you press the button.
   ```
 - **[RESEARCH_ROADMAP.md](RESEARCH_ROADMAP.md)** — every model, why that estimator, what it
   doesn't claim, with citations and validation results.
-- **[CODEBASE_REVIEW.md](CODEBASE_REVIEW.md)** — engineering review: security, architecture,
-  and what's still open.
+- **[docs/AUDIT.md](docs/AUDIT.md)** — the audit taken before launch, November 2026: what is
+  wrong ranked by impact, each with its evidence and a reproduction, what was checked and
+  found sound, what was not covered, and the decisions that are the owner's.
+- **[CODEBASE_REVIEW.md](CODEBASE_REVIEW.md)** — the first engineering review, August 2026.
+  Older and partly superseded by the audit above.
 
 ---
 
