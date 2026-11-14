@@ -257,9 +257,10 @@ agreeing.
 This now appears in the confluence rail itself rather than in a footnote.
 
 **Quantified in §15, and the answer was not the one the caveat predicted.** Across 168 names
-in four index universes, the two families' verdicts agree at κ = +0.03 — indistinguishable
-from chance, so the cross-check is sound. But Flow and Trend, the pair grouped together here
-*because* they read the same series, agree at κ = +0.03 as well: the redundancy this section
+in four index universes, the two families' verdicts agree at κ = −0.02 (re-measured
+14 November 2026; +0.03 in August) — indistinguishable from chance, so the cross-check is
+sound. But Flow and Trend, the pair grouped together here *because* they read the same series,
+do not agree either: κ = +0.03 in August and −0.13 in November. The redundancy this section
 asserts shows up in the code and not in the votes. The grouping was left alone anyway, because
 a vote that correlates with nothing is what an independent reading and an uninformative one
 both look like.
@@ -1146,8 +1147,8 @@ That fidelity is the whole point and it is why this could not reuse
 calls deep, so measuring it from a batch download costs nothing. A lens *vote* is
 the end of a chain — fetch, engineer features, fit an Isolation Forest, classify
 the flow bias — and reassembling that chain outside the payload builders would
-have measured a lookalike of the app. Nothing batches, the run is fourteen
-minutes, and that is the correct trade.
+have measured a lookalike of the app. Nothing batches, the run is about a
+quarter of an hour, and that is the correct trade.
 
 **A lens that could not read does not vote.** `None`, never 0. A bank's refused
 accounting screens recorded as a neutral vote would manufacture agreement with
@@ -1158,20 +1159,38 @@ place. A test asserts the two readings *differ*, so a later change that mapped
 
 ### The result: the claim survives
 
+Re-measured 14 November 2026, after §24.1 changed what two lenses conclude for
+some names:
+
 | Population | n | They agree | Chance agrees | κ | 95% interval |
 |---|---|---|---|---|---|
-| All four universes | 167 | 35.3% | 33.1% | **+0.03** | −0.07 to +0.14 |
-| US — Dow 30 + Nasdaq-100 | 121 | 36.4% | 32.8% | **+0.05** | −0.08 to +0.17 |
-| IDX — IDX30 + LQ45 | 46 | 32.6% | 25.6% | **+0.10** | −0.05 to +0.25 |
+| All four universes | 167 | 31.7% | 33.4% | **−0.02** | −0.13 to +0.08 |
+| US — Dow 30 + Nasdaq-100 | 121 | 36.4% | 33.4% | **+0.04** | −0.08 to +0.17 |
+| IDX — IDX30 + LQ45 | 46 | 19.6% | 20.2% | **−0.01** | −0.10 to +0.08 |
 
-**Not distinguishable from zero on any population.** The price record and the
-filings reach the same verdict about as often as two unrelated readings with
-those habits would, so agreement between them really is two facts rather than
-one counted twice. The rail's arithmetic is doing what it claims.
+**Not distinguishable from zero on any population, in either run.** The August
+figures were +0.03 (−0.07 to +0.14), +0.05 (−0.08 to +0.17) and +0.10 (−0.05
+to +0.25). The price record and the filings reach the same verdict about as
+often as two unrelated readings with those habits would, so agreement between
+them really is two facts rather than one counted twice. The rail's arithmetic
+is doing what it claims.
 
-Two independent runs on the same day returned those three headline figures
-**identical to three decimals** (+0.033, +0.053, +0.095), which is the
+In August, two independent runs on the same day returned the three headline
+figures **identical to three decimals** (+0.033, +0.053, +0.095), which is the
 reproducibility a stamped number needs before it is worth stamping.
+
+**In November a second run did not repeat to three decimals, and that is
+reported rather than rounded away.** Ninety minutes after the stamped run, with
+both markets closed for the weekend, the same script returned −0.054 against
+−0.025 for all names and +0.009 against +0.044 for the US; the Indonesian family
+figure was −0.008 both times. Coverage was identical and every engine is seeded,
+so what differed is what the provider returned for a handful of names. Both runs
+sit well inside the interval and neither changes the conclusion, but the third
+decimal of this stamp is the provider's, not the method's: read it as −0.02 to
+−0.05. One name (Cisco) came back throttled in the second run and was caught by
+the retry; a fetch that loses part of a company's statements while keeping its
+sector would not be, and that is the open question the audit that follows this
+change takes up.
 
 ### The finding nobody was looking for: the redundant pair is not redundant
 
@@ -1179,20 +1198,24 @@ The grouping collapses Flow and Trend into one price vote *because they read the
 same OHLCV series*. That is a fact about the code. Whether their **verdicts**
 behave that way is not, and it had never been checked:
 
-| Pair | κ (all) | κ (US) | κ (IDX) | τb (all) |
-|---|---|---|---|---|
-| **Flow · Trend** — declared redundant | **+0.03** | +0.07 | −0.02 | −0.02 |
-| Flow · Value | +0.00 | +0.00 | +0.02 | +0.07 |
-| Flow · Quality | **−0.10** | −0.10 | −0.05 | −0.24 |
-| Trend · Value | **−0.14** | −0.10 | +0.01 | −0.18 |
-| Trend · Quality | −0.05 | −0.10 | +0.05 | +0.00 |
-| Value · Quality | +0.01 | +0.01 | −0.14 | −0.03 |
+| Pair | κ (all) | κ (US) | κ (IDX) | τb (all) | κ (all), August |
+|---|---|---|---|---|---|
+| **Flow · Trend** — declared redundant | **−0.13** | −0.13 | +0.07 | −0.09 | +0.03 |
+| Flow · Value | **+0.11** | +0.12 | −0.01 | +0.26 | +0.00 |
+| Flow · Quality | +0.07 | +0.11 | +0.05 | +0.06 | **−0.10** |
+| Trend · Value | **−0.16** | −0.06 | +0.02 | −0.31 | **−0.14** |
+| Trend · Quality | −0.04 | −0.11 | +0.04 | −0.04 | −0.05 |
+| Value · Quality | +0.05 | +0.05 | −0.11 | +0.03 | +0.01 |
 
-Flow and Trend — the one pair the app treats as a single reading — agree at
-κ = +0.03. Their verdicts are all but unrelated. And the participation ratio
-says the same thing from the other end: across the 138 names where every lens
-read, the four carry **3.72 lenses' worth of independent information** (US 3.74,
-IDX 3.59) rather than the two the rail collapses them to.
+Bold marks an interval that excludes zero.
+
+Flow and Trend — the one pair the app treats as a single reading — do not
+behave as one. In August their verdicts were all but unrelated (κ = +0.03); in
+November they agree **less** often than chance (κ = −0.13, interval −0.22 to
+−0.04). And the participation ratio says the same thing from the other end:
+across the 137 names where every lens read, the four carry **3.63 lenses' worth
+of independent information** (US 3.80, IDX 3.70; 3.72 in August) rather than
+the two the rail collapses them to.
 
 **The grouping was not loosened, and the reason matters more than the number.**
 A kappa near zero is equally consistent with two readings carrying genuinely
@@ -1204,22 +1227,32 @@ its own, and this measurement cannot tell those two cases apart. So the
 conservative collapse stands, and the panel now says why it stands rather than
 implying the four were known to be two.
 
-### Two negative pairs, one of which explains itself
+### One pair that explains itself, and three that the second run took back
 
-Two intervals exclude zero, and both are **negative** — the lenses agree *less*
-than chance.
+In August two intervals excluded zero, both negative. In November three do,
+and only one of them is the same pair.
 
-**Trend · Value at −0.14** is mechanical rather than interesting. A stock that
-has trended up is by construction less likely to sit below a discounted cash
-flow's range: the same price is in the numerator of one lens's verdict and the
-denominator of the other's. It is the strongest signed relationship in the table
-and it is an artefact of what the two measure, not a fact about markets.
+**Trend · Value is negative in both runs** (−0.14, then −0.16) and is
+mechanical rather than interesting. A stock that has trended up is by
+construction less likely to sit below a discounted cash flow's range: the same
+price is in the numerator of one lens's verdict and the denominator of the
+other's. It is the strongest signed relationship in the table and it is an
+artefact of what the two measure, not a fact about markets.
 
-**Flow · Quality at −0.10, τb = −0.24** has no such explanation, and it is
-recorded here without one. Unusual buying pressure showing up slightly more
-often on companies whose accounting screens report concerns is either a real
-pattern, a selection effect in which names produce anomalies, or noise at the
-edge of what 153 names can resolve. Nothing here settles it.
+**Every pair with Flow in it moved by more than its own interval.** Flow ·
+Quality was −0.10 in August, recorded then "without an explanation", and is
++0.07 now. Flow · Value went from 0.00 to +0.11, and Flow · Trend from +0.03
+to −0.13. The explanation was never about companies. The Flow lens votes on
+the **last ten sessions**, so its vote for every name is redrawn each
+fortnight, while the other three lenses read years of prices or annual
+filings. The bootstrap resamples **names on one date**; it says nothing about
+how far a figure moves between dates, and for the Flow pairs that movement is
+the larger of the two.
+
+So a Flow pair whose interval excludes zero on one date is not a finding, and
+this section no longer treats one as such. What is stable across both runs is
+the claim the rail makes (the family κ is within 0.06 of zero each time), the
+Trend · Value artefact, and the effective lens count (3.72, then 3.63).
 
 ### The IDX coverage gap, again, in a new place
 
@@ -1302,6 +1335,11 @@ headline stances coincide across 168 large caps — not how correlated the
 underlying information is. Move a verdict band and this number moves, which is
 why the script has to be re-run whenever one does.
 
+**It is one date.** The intervals describe which names happened to be in the
+sample, not which fortnight the run fell in. Two runs eleven weeks apart moved
+the family κ by 0.06, inside its interval, and the Flow pairs by 0.10 to 0.17,
+outside theirs. A third run will move them again.
+
 **It never becomes a weight.** Nothing downstream reads the kappa except the
 sentence that reports it. A measured agreement scaling a verdict would be the
 composite score this app refuses to have, arrived at sideways through a
@@ -1310,8 +1348,9 @@ set is asserted for the same reason `test_pretrade.py` asserts on its own.
 
 > Cohen (1960), *Educational and Psychological Measurement* 20(1).
 > Kendall (1945), *Biometrika* 33(3). Efron & Tibshirani (1993), *An
-> Introduction to the Bootstrap*. Measured 29 August 2026 by
-> `scripts/measure_lens_agreement.py`; stamped in `api/_lib/lens_agreement.json`.
+> Introduction to the Bootstrap*. First measured 29 August 2026 and re-measured
+> 14 November 2026 by `scripts/measure_lens_agreement.py`; stamped in
+> `api/_lib/lens_agreement.json`.
 
 ---
 
@@ -1424,7 +1463,8 @@ AALI into the LQ45 would make that list say something false, undetectably from
 the output — the argument `universes.py` already makes for refusing to ship an
 S&P 500 list from memory. Keeping the index lists untouched also means all four
 stamped artifacts still describe the populations they were measured on, so none
-needed re-running and **κ cannot have moved off +0.03**.
+needed re-running for it and κ could not move on its account. (It stood at
++0.03 when this was written; §15 has the November 2026 re-measurement.)
 
 UNTR is deliberately absent, with a test pinning the absence. United Tractors
 files as Industrials, sells mining equipment, and reads R² 0.28 against the coal
@@ -2408,8 +2448,15 @@ can move, because a stamp that predates a change to what it measured is worse th
   move DDM fair values for the affected names, and so possibly the Value vote; the terminal
   share does not move, because it is invariant to the base.
 
-**Both need re-measuring**: `scripts/calibrate_checks.py` and
+**Both needed re-measuring**: `scripts/calibrate_checks.py` and
 `scripts/measure_lens_agreement.py`, on network access the analysis did not have.
+
+**Re-measured 14 November 2026**, on real data, and both stamps now postdate these changes.
+§7 has the firing rates: no check changed its classification in either market, and
+`piotroskiWeak` went from 1.3% to 2.0% because eleven weeks of new annual reports arrived,
+which the "can only fall" above was never a statement about. §15 has the agreement: the two
+families' κ is −0.02 against +0.03, inside its interval both times, and the pairs that include
+the Flow lens moved by more than their intervals because that lens votes on ten sessions.
 
 ### 24.2 Changes that move no stamp
 
@@ -2454,7 +2501,6 @@ stamps stand or fall exactly as §24 left them.
 
 | Item | Why it was not done now |
 |---|---|
-| Re-measure after §24.1 | The Piotroski band and the trailing dividend changed what two lenses conclude for some names. `calibrate_checks.py` and `measure_lens_agreement.py` need the network, which the November 2026 analysis did not have; until they are re-run the two stamps predate those changes |
 | Placing a company in a book-to-market quintile | §8 declines this rather than inventing a breakpoint. It needs a universe-wide scan of book values, and fundamentals do not batch |
 | Multi-factor cost of equity (Fama-French) | Factor returns are freely available for the US; constructing IDX factors is a project in itself |
 | Peer / sector relative multiples | Needs a peer-set source beyond yfinance. §18 supplies half of it — a field membership from the provider's industry label — but those labels are coarse ("Conglomerates" is not a field anyone competes in) and a quarter of the exchange cannot be placed at all, so they are not yet a base for a multiple |
