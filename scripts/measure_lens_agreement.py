@@ -94,6 +94,7 @@ import index as api  # noqa: E402  — the production payload builders, delibera
 
 from _lib import explain  # noqa: E402
 from _lib import lensagreement as agreement  # noqa: E402
+from _lib import market_data  # noqa: E402
 from _lib import universes  # noqa: E402
 
 OUTPUT = ROOT / "api" / "_lib" / "lens_agreement.json"
@@ -108,6 +109,41 @@ ANOMALY_PERIOD = "2y"
 CHART_RANGE = "5y"
 DETECTION_MODE = "threshold"
 SCORE_THRESHOLD = -0.10
+
+# A THROTTLED NAME IS ASKED AGAIN, NOT RECORDED. A company whose profile did not
+# arrive is declined by both filings lenses, and a price fetch the provider
+# refused leaves both price lenses with nothing — either way the name would
+# enter the measurement as "this lens could not read", which is a fact about the
+# provider's afternoon and not about the app's coverage. `market_data` keeps a
+# gap for two minutes before fetching afresh, so each round waits that long.
+# Whatever is still missing after three rounds is counted in the stamp.
+RETRY_ROUNDS = 3
+RETRY_WAIT_SECONDS = market_data.COMPANY_GAP_TTL_SECONDS + 5
+
+
+def _gap(legs: dict, market: str) -> str | None:
+    """What kind of provider gap these legs carry: "throttled", "unlisted" or None.
+
+    `api._throttled` is the test `/api/confluence` itself uses to shorten its
+    cache life: a filings lens that answered `unknown-sector`. A failed price
+    leg is the other shape — on an index constituent with years of history
+    there is no company-side reason for a chart to be missing.
+
+    WHEN THE PROVIDER ANSWERS FOR THE MARKET'S INDEX AND BOTH PRICE LEGS STILL
+    FAIL, THE NAME IS GONE, NOT THROTTLED. The constituent lists are transcribed
+    by hand and go stale: Ansys left the Nasdaq-100 when it was acquired and
+    still sits in the list. Such a name gets one more try, in case it was a
+    blip, and is not asked for again — three rounds of waiting on a delisted
+    ticker is six minutes spent confirming a fact about the list.
+    """
+    no_prices = not legs["anomaly"]["ok"] and not legs["technical"]["ok"]
+    if no_prices and market_data.provider_answering(market):
+        return "unlisted"
+    if any(api._throttled(legs[name]) for name in ("valuation", "quality")):
+        return "throttled"
+    if any(not legs[name]["ok"] for name in ("anomaly", "technical")):
+        return "throttled"
+    return None
 
 
 def _legs(symbol: str, market: str) -> dict:
@@ -242,26 +278,58 @@ def main() -> int:
     print(f"calls each, so expect about {len(symbols) * 4 // 60 + 1} minutes.\n")
 
     noise = io.StringIO()
-    rows: list[dict] = []
-    failed: list[str] = []
     started = time.monotonic()
 
-    for position, symbol in enumerate(symbols, start=1):
+    # Keyed by symbol so a retry REPLACES the first reading rather than adding a
+    # second row for the same company.
+    measured: dict[str, dict] = {}
+    errors: dict[str, str] = {}
+    pending: list[str] = []
+
+    unlisted: set[str] = set()
+
+    def measure(symbol: str) -> bool:
+        """Run one symbol; True when it should be asked for again."""
         market = plan[symbol]["market"]
         try:
             with contextlib.redirect_stdout(noise), contextlib.redirect_stderr(noise):
                 legs = _legs(symbol, market)
                 lens_votes, family_votes = _votes(legs)
+                gap = _gap(legs, market)
         except Exception as exc:            # a symbol must not sink the run
-            failed.append(f"{symbol}: {type(exc).__name__}")
-            continue
+            errors[symbol] = f"{symbol}: {type(exc).__name__}"
+            return True
+        errors.pop(symbol, None)
+        measured[symbol] = {"symbol": symbol, "market": market,
+                            "lenses": lens_votes, "families": family_votes}
+        if gap == "unlisted":
+            # Asked for twice and gone both times: a fact about the list.
+            again = symbol not in unlisted
+            unlisted.add(symbol)
+            return again
+        unlisted.discard(symbol)
+        return gap == "throttled"
 
-        rows.append({"symbol": symbol, "market": market,
-                     "lenses": lens_votes, "families": family_votes})
+    for position, symbol in enumerate(symbols, start=1):
+        if measure(symbol):
+            pending.append(symbol)
         if position % 10 == 0 or position == len(symbols):
             elapsed = time.monotonic() - started
             print(f"  {position:4d}/{len(symbols)}  {elapsed / position:.1f}s per name "
-                  f"({len(failed)} failed)")
+                  f"({len(errors)} failed, {len(pending)} to ask again)", flush=True)
+
+    for attempt in range(1, RETRY_ROUNDS + 1):
+        if not pending:
+            break
+        print(f"  {len(pending)} look throttled "
+              f"({', '.join(pending[:8])}{' ...' if len(pending) > 8 else ''}); "
+              f"asking again in {RETRY_WAIT_SECONDS}s (round {attempt} of {RETRY_ROUNDS})",
+              flush=True)
+        time.sleep(RETRY_WAIT_SECONDS)
+        pending = [symbol for symbol in pending if measure(symbol)]
+
+    rows = [measured[symbol] for symbol in symbols if symbol in measured]
+    failed = list(errors.values())
 
     if not rows:
         print("\nNo symbol produced a reading. Nothing written.")
@@ -282,6 +350,12 @@ def main() -> int:
         "universeLabel": _label(covered),
         "namesMeasured": len(rows),
         "namesFailed": len(failed),
+        # Names that still carried a provider gap after every retry: a lens that
+        # "could not read" them may only have been refused the data that day.
+        "namesStillThrottled": sorted(pending),
+        # Names the provider has no prices for while it answers for the market's
+        # own index: left the exchange, or renamed, since the list was written.
+        "namesNoLongerListed": sorted(unlisted),
         "anomalyPeriod": ANOMALY_PERIOD,
         "chartRange": CHART_RANGE,
         "minPairSample": agreement.MIN_PAIR_SAMPLE,
@@ -320,6 +394,13 @@ def main() -> int:
     if failed:
         print(f"\n{len(failed)} symbols produced nothing: {', '.join(failed[:12])}"
               + (" ..." if len(failed) > 12 else ""))
+    if unlisted:
+        print(f"\n{len(unlisted)} symbols have no prices at the provider and look "
+              f"delisted or renamed: {', '.join(sorted(unlisted))}")
+    if pending:
+        print(f"\n{len(pending)} symbols still looked throttled after "
+              f"{RETRY_ROUNDS} rounds: {', '.join(pending[:12])}"
+              + (" ..." if len(pending) > 12 else ""))
 
     if args.limit:
         print("\n--limit was set, so this is a smoke run. Not written.")

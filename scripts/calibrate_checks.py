@@ -72,6 +72,7 @@ import datetime as dt
 import io
 import json
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -96,6 +97,28 @@ OUTPUT = ROOT / "api" / "_lib" / "check_calibration.json"
 YEARS = 5
 
 DEFAULT_UNIVERSES = ("dow30", "nasdaq100", "idx30", "lq45")
+
+# A PROFILE THAT DID NOT ARRIVE IS ASKED FOR AGAIN, NOT COUNTED. When the
+# provider throttles, a company comes back with statements and no sector, and
+# both filings lenses then decline it — so the name lands in "could not run",
+# the sample shrinks, and nothing in the output says the gap was the provider's
+# rather than the company's. `market_data` keeps such a record for two minutes
+# and then fetches afresh, so each round waits that long and asks again. Three
+# rounds, because a throttle that outlasts six minutes is an outage, and the
+# names still missing are written into the stamp so a reader can see them.
+RETRY_ROUNDS = 3
+RETRY_WAIT_SECONDS = market_data.COMPANY_GAP_TTL_SECONDS + 5
+
+
+def _profile_missing(symbol: str) -> bool:
+    """Whether this symbol's company record is in hand without its sector.
+
+    The same test `market_data` uses to decide a record is a gap: no sector is
+    what an `.info` that never arrived looks like. A record that is not in hand
+    at all (the fetch raised) is missing too.
+    """
+    record = market_data.cached_company(symbol)
+    return record is None or not (record.get("sector") or "").strip()
 
 
 def _price_legs(frame) -> dict:
@@ -197,6 +220,11 @@ def main() -> int:
     # labelled with the group it is a percentage OF.
     markets_seen: dict = {}
     noise = io.StringIO()
+    # Names whose profile never arrived, after every retry. Written to the stamp.
+    profile_missing: set[str] = set()
+    # Names with neither a price frame nor a profile: left the exchange or were
+    # renamed since the list was written.
+    unlisted: set[str] = set()
 
     for universe_id in args.universes:
         entry = universes.get(universe_id)
@@ -223,14 +251,46 @@ def main() -> int:
         # --- filings half: one fetch per symbol, which is why this is a script
         print(f"  filings checks (one fetch per name, ~{len(symbols) * 3}s) ...",
               end="", flush=True)
-        for index, symbol in enumerate(symbols, start=1):
+        pending: list[str] = []
+
+        def measure_filings(symbol: str, states: dict = states) -> None:
             with contextlib.redirect_stdout(noise), contextlib.redirect_stderr(noise):
                 legs = _filings_legs(symbol)
             for check_id in filings_ids:
                 states[check_id][symbol] = predicates[check_id](legs)["state"]
+
+        # A NAME WITH NO PRICE FRAME EITHER IS GONE, NOT THROTTLED. The lists
+        # are transcribed by hand and go stale (Ansys left the Nasdaq-100 when
+        # it was acquired), and three rounds of waiting on a delisted ticker is
+        # six minutes spent confirming a fact about the list. It is recorded as
+        # missing and not asked for again.
+        for index, symbol in enumerate(symbols, start=1):
+            measure_filings(symbol)
+            if _profile_missing(symbol):
+                if symbol in frames:
+                    pending.append(symbol)
+                else:
+                    unlisted.add(symbol)
             if index % 10 == 0:
                 print(".", end="", flush=True)
         print(" done")
+
+        for attempt in range(1, RETRY_ROUNDS + 1):
+            if not pending:
+                break
+            print(f"  {len(pending)} came back without a company profile "
+                  f"({', '.join(pending[:8])}{' ...' if len(pending) > 8 else ''}); "
+                  f"asking again in {RETRY_WAIT_SECONDS}s (round {attempt} of {RETRY_ROUNDS})",
+                  flush=True)
+            time.sleep(RETRY_WAIT_SECONDS)
+            for symbol in pending:
+                measure_filings(symbol)
+            pending = [symbol for symbol in pending if _profile_missing(symbol)]
+        # A name reached through two lists (IDX30 sits inside LQ45) keeps its
+        # latest outcome, as its check states do.
+        profile_missing.difference_update(symbols)
+        profile_missing.update(pending)
+        profile_missing.update(symbol for symbol in symbols if symbol in unlisted)
 
         for check_id in sorted(states):
             summary = summarise(states[check_id])
@@ -262,7 +322,7 @@ def main() -> int:
     # data" came out at 10% of the Dow and 80% of IDX30: Yahoo's coverage of
     # smaller Indonesian filings is the app's biggest known fragility, and it is
     # a fact about the data source, not about any company. The blend lands near
-    # 40% — alarming for a US large cap where the condition is genuinely
+    # 35% — alarming for a US large cap where the condition is genuinely
     # unusual, reassuring for an IDX one where it is the norm.
     #
     # So each check carries a per-market rate as well as the combined one, and
@@ -301,6 +361,11 @@ def main() -> int:
         "markets": markets_seen,
         "baseRateMax": pretrade.BASE_RATE_MAX,
         "minSampleSize": pretrade.MIN_CALIBRATION_SAMPLE,
+        # Names the provider never returned a profile for: still missing after
+        # the retries above, or gone from the exchange since the list was
+        # written. They sit in each filings check's `couldNotRun`; this says
+        # which of those were the provider's gap rather than a refusal.
+        "profileNotReturned": sorted(profile_missing),
         "checks": checks,
     }
 
@@ -311,6 +376,9 @@ def main() -> int:
 
     OUTPUT.write_text(json.dumps(payload, indent=2) + "\n")
     print(f"\nWrote {OUTPUT.relative_to(ROOT)}")
+    if profile_missing:
+        print(f"  {len(profile_missing)} names never returned a company profile: "
+              f"{', '.join(sorted(profile_missing))}")
     for market in sorted(markets_seen):
         print(f"\n  {market} — {payload['marketLabels'][market]}")
         for label, name in (("base", "    ordinary for this market"),
