@@ -347,8 +347,9 @@ async def rate_limit(request: Request, call_next):
     #
     # `scope["path"]` is the value the router itself uses, so the bucket can
     # never disagree with the endpoint that actually executes. This holds
-    # regardless of the Starlette version (CVE fixed in 1.3.0; FastAPI 0.115
-    # pins <0.42, so the library fix is not available without a major bump).
+    # regardless of the Starlette version. The library fixed the flaw in 1.3.0
+    # and this app has run a fixed Starlette since November 2026; the read
+    # stays on the raw scope because it is the router's own value either way.
     path = request.scope.get("path") or request.url.path
     if request.method == "OPTIONS" or path in RATE_EXEMPT:
         return await call_next(request)
