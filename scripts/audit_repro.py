@@ -253,10 +253,12 @@ def the_api_sets_no_security_headers_of_its_own():
     missing = [h for h in ("x-content-type-options", "x-frame-options", "referrer-policy")
                if h not in headers]
     powered = "poweredByHeader: false" not in _source("next.config.mjs")
+    # Whether /api/docs is served on a deployment is the owner's Decision 7, so
+    # it is reported here and does not count toward the finding.
     docs_public = client.get("/api/docs", headers={"x-vercel-id": "sin1::planted"}).status_code == 200
-    return (bool(missing) or powered or docs_public,
-            f"API responses lack {missing}; Next still sends X-Powered-By: {powered}; "
-            f"/api/docs answers on a deployment: {docs_public}")
+    return (bool(missing) or powered,
+            f"API responses lack {missing or 'nothing'}; Next sends X-Powered-By: {powered}; "
+            f"/api/docs answers on a deployment (Decision 7): {docs_public}")
 
 
 # --------------------------------------------------------------------------- #

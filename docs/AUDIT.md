@@ -32,9 +32,12 @@ that measured them, all in `scripts/audit/`:
 The four browser scripts need Playwright, which is not a dependency of this
 project; each says how to run it in its first lines.
 
-**Status** is filled in as the work is done: *open*, *fixed* (with the commit),
-*decision* (the owner's to make, with a recommendation at the end of this file),
-or *deferred* (with the reason).
+**Status** is filled in as the work is done: *open*, *fixed*, *narrowed* (made
+smaller, with what remains stated), *decision* (the owner's to make, with a
+recommendation at the end of this file), *deferred* (with the reason), or the
+later phase that takes it: layout and phone findings go to Phase 4, where each
+change is checked against a before-and-after screenshot, and finding a company
+by name is the first feature of Phase 5.
 
 ## Summary
 
@@ -43,10 +46,10 @@ or *deferred* (with the reason).
 | REL-1 | High | A provider that hangs holds one company read for minutes; the platform kills it at 60 s | fixed |
 | REL-7 | High | The provider sometimes returns a statement with a row missing, and the app keeps it as fact for a day | narrowed |
 | COR-1 | High | A statement line is found by substring: six Indonesian banks chart the wrong line as operating income | fixed |
-| SEC-1 | High | Eighteen known advisories in the Python dependencies; CI audits npm only | open |
+| SEC-1 | High | Eighteen known advisories in the Python dependencies; CI audits npm only | fixed |
 | REL-4 | High | Ordinary browsing reaches the rate limit; limits are per address | fixed |
-| PERF-1 | High | The stock page jumps as results arrive (layout shift 0.62 on a phone) | open |
-| UX-1 | High | A company cannot be found by its everyday name, and "apple" opens a ticker called APPLE | open |
+| PERF-1 | High | The stock page jumps as results arrive (layout shift 0.62 on a phone) | Phase 4 |
+| UX-1 | High | A company cannot be found by its everyday name, and "apple" opens a ticker called APPLE | Phase 5 |
 | PERF-2 | Medium | One company read is 1.35 MB of JSON, 1.1 MB of it the chart series | narrowed |
 | REL-2 | Medium | During an outage the single-lens routes tell the reader their ticker is wrong | fixed |
 | REL-3 | Medium | One failed price request is final: no second attempt | fixed |
@@ -60,10 +63,10 @@ or *deferred* (with the reason).
 | SEC-5 | Medium | A failed lens returns the raw exception text to the reader | fixed |
 | PERF-3 | Medium | Nothing is code-split: every page ships every panel, and the Indonesian catalogue | narrowed |
 | PERF-4 | Medium | A public deployment imports the private scanner on every cold start | fixed |
-| UX-2 | Medium | The Flow tab scrolls sideways at 375 px | open |
-| UX-3 | Medium | The holding-period control offers 5 and 10 years the default load cannot answer | open |
-| UX-4 | Medium | On a phone the company's name is below the first screen | open |
-| UX-5 | Medium | Identifiers and provider text reach an Indonesian reader in English | open |
+| UX-2 | Medium | The Flow tab scrolls sideways at 375 px | Phase 4 |
+| UX-3 | Medium | The holding-period control offers 5 and 10 years the default load cannot answer | Phase 4 |
+| UX-4 | Medium | On a phone the company's name is below the first screen | Phase 4 |
+| UX-5 | Medium | Identifiers and provider text reach an Indonesian reader in English | Phase 4 |
 | COPY-1 | Medium | The Ulcer index explains itself with only its own number | fixed |
 | COPY-2 | Medium | The landing says the four models "share no data"; two of them share a series | fixed |
 | COPY-3 | Medium | "More growth than you assumed", said of a default the reader never set | fixed |
@@ -226,6 +229,11 @@ production npm tree is clean; nine advisories sit in development dependencies.
 
 **Fix.** Upgrade FastAPI and Starlette, lxml and certifi; run the suite; add
 `pip-audit` to the CI audit job.
+
+**Fixed.** FastAPI 0.115.6 to 0.162.7 (Starlette 1.10.0), lxml 6.1.3, certifi
+2026.10.23; the whole suite passes unchanged and `pip-audit` reports nothing.
+CI's audit job runs `pip-audit -r requirements.txt`, and
+`tests/test_dependencies.py` fails if that step is dropped or a pin slides back.
 
 ### REL-4. Ordinary browsing reaches the rate limit
 
