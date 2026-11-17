@@ -44,13 +44,13 @@ or *deferred* (with the reason).
 | REL-7 | High | The provider sometimes returns a statement with a row missing, and the app keeps it as fact for a day | narrowed |
 | COR-1 | High | A statement line is found by substring: six Indonesian banks chart the wrong line as operating income | fixed |
 | SEC-1 | High | Eighteen known advisories in the Python dependencies; CI audits npm only | open |
-| REL-4 | High | Ordinary browsing reaches the rate limit; limits are per address | open |
+| REL-4 | High | Ordinary browsing reaches the rate limit; limits are per address | fixed |
 | PERF-1 | High | The stock page jumps as results arrive (layout shift 0.62 on a phone) | open |
 | UX-1 | High | A company cannot be found by its everyday name, and "apple" opens a ticker called APPLE | open |
 | PERF-2 | Medium | One company read is 1.35 MB of JSON, 1.1 MB of it the chart series | open |
 | REL-2 | Medium | During an outage the single-lens routes tell the reader their ticker is wrong | fixed |
 | REL-3 | Medium | One failed price request is final: no second attempt | fixed |
-| REL-5 | Medium | The browser never gives up on a request, and cannot read a validation error | open |
+| REL-5 | Medium | The browser never gives up on a request, and cannot read a validation error | fixed |
 | COR-4 | Medium | Two lenses on one page use two risk-free rates (4.2% and the live 5.15%) | open |
 | COR-5 | Medium | A company that stopped trading is told to "widen the date range" | open |
 | COR-3 | Medium | Three names in the Nasdaq-100 list no longer trade | decision |
@@ -72,7 +72,7 @@ or *deferred* (with the reason).
 | SEC-7 | Low | The API sets no security headers of its own; `/api/docs` is public; `X-Powered-By` is sent | fixed, docs: decision 7 |
 | SEC-8 | Low | The content security policy allows inline scripts | deferred |
 | COR-2 | Low | The Beneish leverage index is silently neutral when a company has no long-term debt line | open |
-| REL-6 | Low | A news thumbnail that fails to load draws an empty box | open |
+| REL-6 | Low | A news thumbnail that fails to load draws an empty box | fixed |
 | COPY-5 | Low | The rate-limit message says "endpoint" | open |
 | DOC-1 | Low | Three statements in the README no longer match the app | open |
 
@@ -247,6 +247,13 @@ announced.
 lifetime so navigation does not refetch them; raise the limits on the three
 routes whose cost the edge already absorbs; retry once after `Retry-After`.
 
+**Fixed.** The board lives in the app shell, so moving between pages inside the
+app already reuses it; the limit was reached on full reloads. The three routes
+every page asks for now allow 60, 40 and 60 a minute, and the browser waits out
+a `Retry-After` of eight seconds or less once, in the background, before it
+shows a refusal. It never sends a POST twice. Pinned by the frontend assertions
+on `lib/failures.ts`.
+
 ### PERF-1. The stock page jumps as results arrive
 
 Measured by `scripts/audit/perf.mjs` on the production build with a
@@ -347,6 +354,12 @@ connection is shown as "TypeError: Failed to fetch". `audit_repro.py REL-5`.
 
 **Fix.** A deadline on every request, and worded, translated messages for the
 three cases.
+
+**Fixed.** `lib/failures.ts` reads every failed request into a sentence in the
+reader's language: a worded server answer passes through, a list of validation
+errors, a bare status, a dropped connection and a request past its 60-second
+deadline are each named. Seven frontend assertions, run by
+`npm run check:frontend`.
 
 ### COR-4. Two lenses on one page use two risk-free rates
 
@@ -587,6 +600,9 @@ of 39 Indonesian ones; none of the eleven changes band when it is computed.
 `components/ui/headlines.tsx:36` has no fallback. This sandbox blocks the two
 image hosts, so every thumbnail here is the failure state, and the success
 path could not be checked. `audit_repro.py REL-6`.
+
+**Fixed.** A thumbnail that fails to load is left out and its headline takes
+the width. Seen in the browser here, where every thumbnail fails.
 
 ### COPY-5. The rate-limit message says "endpoint"
 

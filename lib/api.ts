@@ -3,6 +3,7 @@
 import { track } from "@vercel/analytics";
 import { useCallback, useEffect, useRef } from "react";
 import { createTtlCache } from "./cache";
+import { REQUEST_DEADLINE_MS, failureFromError, failureFromResponse, retryAfterMs } from "./failures";
 import { requestLang, useLang } from "./i18n";
 import { readSession, useSessionState, writeSession } from "./session";
 import type { RunTuning } from "./url";
@@ -45,17 +46,69 @@ export function queryString(params: Record<string, string | number | boolean | n
  */
 async function unwrap<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    let failure: EngineFailure = { message: `Request failed (${res.status})` };
+    let detail: unknown = null;
     try {
-      const detail = (await res.json())?.detail;
-      if (typeof detail === "string") failure = { message: detail };
-      else if (detail && typeof detail === "object") failure = detail as EngineFailure;
+      detail = (await res.json())?.detail;
     } catch {
-      /* non-JSON error body — keep the status message */
+      /* non-JSON error body (the platform's own page) — the status decides */
     }
-    throw failure;
+    throw failureFromResponse(res.status, detail);
   }
   return res.json() as Promise<T>;
+}
+
+/**
+ * A signal that aborts when the caller's does or when the deadline passes,
+ * whichever comes first. The deadline aborts with a `TimeoutError`, which
+ * `isAbort` does not treat as a superseded request, so the reader is told the
+ * answer took too long instead of being shown a spinner forever.
+ */
+function withDeadline(signal?: AbortSignal): { signal: AbortSignal; done: () => void } {
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new DOMException("The request took too long.", "TimeoutError")),
+    REQUEST_DEADLINE_MS);
+  const follow = () => controller.abort(signal?.reason);
+  if (signal?.aborted) follow();
+  else signal?.addEventListener("abort", follow, { once: true });
+  return {
+    signal: controller.signal,
+    done: () => { clearTimeout(timer); signal?.removeEventListener("abort", follow); },
+  };
+}
+
+/** Resolves after `ms`, or rejects as soon as `signal` aborts. */
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(signal.reason); return; }
+    const timer = setTimeout(resolve, ms);
+    signal.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason); },
+                            { once: true });
+  });
+}
+
+/**
+ * One request with a deadline, asked once more after a short `Retry-After`.
+ *
+ * THE RATE LIMIT IS PER ADDRESS, and a mobile carrier puts many readers behind
+ * one. A 429 that names a wait of a few seconds is waited out once, in the
+ * background, before it is shown; a longer one is the reader's to wait, so it
+ * is shown (docs/AUDIT.md, REL-4). Only for reads: a POST carries a reader's
+ * holdings or watchlist, and is never sent twice on their behalf.
+ */
+async function request(url: string, init: RequestInit, retry: boolean): Promise<Response> {
+  const { signal, done } = withDeadline(init.signal ?? undefined);
+  try {
+    let res = await fetch(url, { ...init, signal });
+    const wait = retry && res.status === 429 ? retryAfterMs(res.headers.get("Retry-After")) : null;
+    if (wait !== null) {
+      await pause(wait, signal);
+      res = await fetch(url, { ...init, signal });
+    }
+    return res;
+  } finally {
+    done();
+  }
 }
 
 /**
@@ -75,7 +128,8 @@ async function get<T>(
   params: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<T> {
-  return unwrap<T>(await fetch(`${path}?${queryString(withLang(params) as never)}`, { signal }));
+  return unwrap<T>(await request(`${path}?${queryString(withLang(params) as never)}`,
+                                 { signal }, true));
 }
 
 /**
@@ -101,18 +155,15 @@ async function post<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const lang = requestLang();
-  return unwrap<T>(await fetch(lang === "en" ? path : `${path}?lang=${lang}`, {
+  return unwrap<T>(await request(lang === "en" ? path : `${path}?lang=${lang}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal,
-  }));
+  }, false));
 }
 
-const asFailure = (err: unknown): EngineFailure =>
-  err && typeof err === "object" && "message" in err
-    ? (err as EngineFailure)
-    : { message: String(err) };
+const asFailure = (err: unknown): EngineFailure => failureFromError(err);
 
 /** An aborted request was superseded on purpose; it is never an error to show. */
 const isAbort = (err: unknown) =>

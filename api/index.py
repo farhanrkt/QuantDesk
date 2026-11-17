@@ -274,11 +274,19 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # The board names nothing and is cached at the edge for five minutes, so
     # almost every poll is served without reaching this function. The cap is
     # for the ones that do: one batch download, then arithmetic.
-    "/api/markets/today": (30, 60),
+    #
+    # EVERY PAGE ASKS FOR THESE THREE, so their caps are set by reading, not by
+    # cost. At 30, 20 and 30 a minute, sixteen ordinary page loads from one
+    # address reached them in the November 2026 audit (docs/AUDIT.md, REL-4),
+    # and an address is not a reader: an Indonesian mobile carrier puts many
+    # readers behind one. What reaches the function is already bounded by the
+    # edge cache and by the process caches behind it, so doubling the caps
+    # costs little and the browser now also waits out a short Retry-After once.
+    "/api/markets/today": (60, 60),
     # Up to four feeds per call, each one bounded and timed out.
-    "/api/markets/headlines": (20, 60),
+    "/api/markets/headlines": (40, 60),
     # A committed file and some date arithmetic; the edge answers most of these.
-    "/api/markets/calendar": (30, 60),
+    "/api/markets/calendar": (60, 60),
     # One provider call per name and none of them batch, the shape of cost the
     # shortlist deepening has, so it takes a cap of the same order.
     "/api/markets/earnings": (3, 60),

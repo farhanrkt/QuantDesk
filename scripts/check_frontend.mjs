@@ -70,6 +70,9 @@ const SOURCES = [
   // The calendar's browser half: the reader's day, the exchange clock, the .ics.
   "lib/marketclock.ts",
   "lib/calendar.ts",
+  // What a reader is told when a request does not answer: the request layer
+  // itself is a client module, so the reading of a failure lives apart from it.
+  "lib/failures.ts",
 ];
 
 // Real packages the compiled output requires at load time.

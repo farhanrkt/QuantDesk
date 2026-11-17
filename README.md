@@ -1320,9 +1320,11 @@ dividend history still returns its other three panels.
 **Limits.** Per-IP rate limiting (40/min default; 3/min for the screener, the ranking scan
 and the verdict, which runs a universe scan *and* four lenses; 2/min for shortlist deepening,
 which is the one route that does *not* batch; 6/min for the event study; 120/min for the
-symbol finder, which reads two files already in memory and has to keep up with typing; 30/min
-for the market board, its calendar and 20/min for its headlines, most of which the edge
-cache answers; 3/min for the watchlist's report dates, one provider call per name). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
+symbol finder, which reads two files already in memory and has to keep up with typing; 60/min
+for the market board and its calendar and 40/min for its headlines, which every page asks for
+and the edge cache mostly answers; 3/min for the watchlist's report dates, one provider call per
+name). The browser waits out a `Retry-After` of eight seconds or less once, in the background,
+before it shows a refusal; it never sends a POST twice. The screener caps at 20 symbols, the ranking tier at 250, and deepening at
 8. These exist because each of those requests fans out to upstream calls — the caps are sized
 to what actually batches. The client is identified by the forwarded address only on Vercel,
 whose edge writes it; anywhere else by the connection, as uvicorn resolves it for the proxies it

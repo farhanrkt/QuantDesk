@@ -773,6 +773,50 @@ t("fired conditions are listed, never counted", () => {
   });
 }
 
+// ---- What a reader is told when a request does not answer (docs/AUDIT.md, REL-5) ----
+{
+  const F = require("./lib/failures.js");
+  const L = require("./lib/i18n.js");
+  t("a worded failure from the server is passed through as it came", () => {
+    assert.deepEqual(F.failureFromResponse(404, "No data found for 'X'."), { message: "No data found for 'X'." });
+    const manual = { message: "Needs a base.", manualRequired: true, engine: "DCF" };
+    assert.deepEqual(F.failureFromResponse(422, manual), manual);
+  });
+  t("a list of validation errors is a sentence, not a blank card", () => {
+    const out = F.failureFromResponse(422, [{ loc: ["query", "ticker"], msg: "x", input: "bad/one" }]);
+    assert.match(out.message, /could not be read/);
+    assert.ok(!out.message.includes("bad/one"), "the rejected input is never repeated");
+  });
+  t("a bare status is worded, and a gateway timeout says the provider may be slow", () => {
+    assert.match(F.failureFromResponse(504, null).message, /did not answer in time/);
+    assert.match(F.failureFromResponse(500, null).message, /status 500/);
+    assert.match(F.failureFromResponse(429, null).message, /Too many requests/);
+  });
+  t("no connection and no answer in time are named, not shown as a TypeError", () => {
+    assert.match(F.failureFromError(new TypeError("Failed to fetch")).message, /could not be reached/);
+    const late = new Error("x"); late.name = "TimeoutError";
+    assert.match(F.failureFromError(late).message, /took too long/);
+    assert.ok(!F.failureFromError(new TypeError("Failed to fetch")).message.includes("TypeError"));
+  });
+  t("every one of them reads in Indonesian when the reader chose it", () => {
+    L.setLang("id");
+    try {
+      assert.match(F.failureFromError(new TypeError("Failed to fetch")).message, /^Server QuantDesk/);
+      assert.match(F.failureFromResponse(422, []).message, /^Permintaan ini tidak bisa dibaca/);
+    } finally { L.setLang("en"); }
+  });
+  t("only a short Retry-After is waited out on the reader's behalf", () => {
+    assert.equal(F.retryAfterMs("3"), 3000);
+    assert.equal(F.retryAfterMs("0"), 0);
+    assert.equal(F.retryAfterMs("60"), null, "a minute is the reader's to wait, so it is shown");
+    assert.equal(F.retryAfterMs(null), null);
+    assert.equal(F.retryAfterMs("soon"), null);
+  });
+  t("the browser's deadline is past the server's own, inside nothing", () => {
+    assert.ok(F.REQUEST_DEADLINE_MS >= 55_000, "the server answers in words by 52 s; wait for it");
+  });
+}
+
 Promise.all(pending).then(() => {
   console.log(`  ${n} frontend assertions passed`);
 });

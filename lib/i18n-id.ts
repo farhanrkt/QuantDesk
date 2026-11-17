@@ -46,6 +46,15 @@ export const ID: Record<string, string> = {
   "Guided": "Terpandu",
   "Full": "Lengkap",
 
+  // ---- What a reader is told when a request does not answer (lib/failures.ts) ----
+  "Too many requests from this connection in the last minute. Wait a moment and try again.": "Terlalu banyak permintaan dari koneksi ini dalam semenit terakhir. Tunggu sebentar lalu coba lagi.",
+  "This request could not be read. Check the ticker: letters and digits, with an exchange suffix such as .JK where it has one.": "Permintaan ini tidak bisa dibaca. Periksa tickernya: huruf dan angka, dengan akhiran bursa seperti .JK bila ada.",
+  "The server did not answer in time. The data provider may be slow; trying again in a minute usually works.": "Server tidak menjawab tepat waktu. Penyedia data mungkin sedang lambat; mencoba lagi sebentar lagi biasanya berhasil.",
+  "The request failed (status {status}). Trying again usually works.": "Permintaan gagal (status {status}). Mencoba lagi biasanya berhasil.",
+  "This took too long and was stopped. The data provider may be slow; trying again in a minute usually works.": "Ini terlalu lama, jadi dihentikan. Penyedia data mungkin sedang lambat; mencoba lagi sebentar lagi biasanya berhasil.",
+  "QuantDesk's server could not be reached. Check the connection and try again.": "Server QuantDesk tidak bisa dihubungi. Periksa koneksi lalu coba lagi.",
+  "Something went wrong before an answer arrived. Trying again usually works.": "Ada yang salah sebelum jawaban tiba. Mencoba lagi biasanya berhasil.",
+
   // ---- Command palette --------------------------------------------------------
   "Open": "Buka",
   "Recent": "Terakhir dibuka",
