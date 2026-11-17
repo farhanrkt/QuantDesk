@@ -55,9 +55,9 @@ or *deferred* (with the reason).
 | COR-5 | Medium | A company that stopped trading is told to "widen the date range" | open |
 | COR-3 | Medium | Three names in the Nasdaq-100 list no longer trade | decision |
 | SEC-2 | Medium | The ticker pattern accepts `..` | fixed |
-| SEC-3 | Medium | Validation errors are English lists that echo their input without limit | open |
+| SEC-3 | Medium | Validation errors are English lists that echo their input without limit | fixed |
 | SEC-4 | Medium | Any website may call the API on a preview deployment | fixed |
-| SEC-5 | Medium | A failed lens returns the raw exception text to the reader | open |
+| SEC-5 | Medium | A failed lens returns the raw exception text to the reader | fixed |
 | PERF-3 | Medium | Nothing is code-split: every page ships every panel, and the Indonesian catalogue | open |
 | PERF-4 | Medium | A public deployment imports the private scanner on every cold start | open |
 | UX-2 | Medium | The Flow tab scrolls sideways at 375 px | open |
@@ -412,6 +412,12 @@ returned in a 50 KB error. `audit_repro.py SEC-3`.
 **Fix.** One handler that answers a validation failure with a short sentence
 in the reader's language and never the input; a length limit on list items.
 
+**Fixed.** `unreadable_request` in `api/index.py` answers every validation
+failure with one translated sentence naming the parameter, never its value;
+each symbol in a request body is limited to 40 characters; and the routes'
+own rejections show at most five symbols, each cut to 24 characters. A
+50,000-character symbol now gets a 177-byte answer. `tests/test_error_answers.py`.
+
 ### SEC-4. Any website may call the API on a preview deployment
 
 `_allowed_origins` (`api/index.py:92-106`) returns `*` unless `VERCEL_ENV` is
@@ -437,6 +443,10 @@ value the message carried. `audit_repro.py SEC-5`.
 
 **Fix.** A worded, translated sentence for the reader; the exception goes to
 the log (and to error reporting, Phase 6).
+
+**Fixed.** `lens_broke` logs the exception under the `quantdesk` logger and
+gives the reader a translated sentence with `cause: "internal"`, on the public
+route and the private one. `tests/test_error_answers.py`.
 
 ### PERF-3. Nothing is code-split
 

@@ -66,13 +66,15 @@ from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 
 import json
+import logging
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
-from typing import Optional
+from typing import Annotated, Optional
 
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -219,6 +221,13 @@ SERIES_CAP = 1500
 # leaves room.
 TICKER_PATTERN = r"^\^?[A-Za-z0-9]{1,10}(?:[.\-=][A-Za-z0-9]{1,6}){0,2}$"
 TICKER_RE = re.compile(TICKER_PATTERN)
+
+# One symbol inside a request body. Bounded on its own, because a list's length
+# says nothing about its items: a body of one 50,000-character "symbol" passed
+# every check that existed (docs/AUDIT.md, SEC-3). The pattern itself is
+# applied by each route, which names the offenders rather than failing the
+# whole list anonymously.
+Symbol = Annotated[str, Field(max_length=40)]
 
 
 # --------------------------------------------------------------------------- #
@@ -538,6 +547,35 @@ class RequestDeadline:
 app.add_middleware(RequestDeadline)
 
 
+@app.exception_handler(RequestValidationError)
+async def unreadable_request(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """A request that failed validation, answered in a sentence that names
+    WHICH input was wrong and never repeats what it held.
+
+    The framework's own answer is a list of objects, in English whatever the
+    reader asked for, each carrying the rejected input whole (docs/AUDIT.md,
+    SEC-3). The page could not read it either: `lib/api.ts` cast the list to a
+    failure with no message and drew a blank card. Parameter names are
+    identifiers and stay as they are in both languages.
+    """
+    names = []
+    for error in exc.errors():
+        loc = [part for part in error.get("loc", ()) if isinstance(part, str)
+               and part not in ("query", "body", "path")]
+        name = loc[-1] if loc else "request"
+        if name not in names:
+            names.append(name)
+    listed = ", ".join(f"`{name}`" for name in names[:4])
+    return JSONResponse(status_code=422, headers={"Cache-Control": "no-store"}, content={
+        "detail": tr(f"This request could not be read: {listed} is not in the form this app "
+                     "expects. A ticker is letters and digits, with an exchange suffix such as "
+                     ".JK where it has one.",
+                     f"Permintaan ini tidak bisa dibaca: {listed} tidak dalam bentuk yang "
+                     "diharapkan aplikasi ini. Ticker terdiri dari huruf dan angka, dengan "
+                     "akhiran bursa seperti .JK bila ada."),
+    })
+
+
 def ok(payload: dict, *, failed: bool = False) -> JSONResponse:
     # Cache at the edge: quotes move, but not within 60s, and every engine
     # re-runs a network fetch that we do not want to pay for on each keystroke.
@@ -566,6 +604,21 @@ def private_ok(payload: dict) -> JSONResponse:
                         headers={"Cache-Control": "no-store"})
 
 
+def shown(rejected: list[str]) -> str:
+    """Up to five rejected symbols, each cut to what a person could have typed.
+
+    The rejection messages used to join the offending input as it arrived, and
+    nothing bounded an item, so a 50,000-character "symbol" came back in a
+    50 KB error (docs/AUDIT.md, SEC-3). Naming what was wrong is useful; echoing
+    it whole is a reflection anyone can aim.
+    """
+    def cut(text: str) -> str:
+        text = "".join(ch if ch.isprintable() else "?" for ch in text)
+        return text if len(text) <= 24 else text[:23] + "…"
+    head = ", ".join(cut(t) for t in rejected[:5])
+    return head + ("..." if len(rejected) > 5 else "")
+
+
 def resolved(ticker: str, market: str) -> str:
     try:
         return symbols.resolve(ticker, market)
@@ -588,10 +641,8 @@ def parse_ticker_list(tickers: str, market: str) -> list[str]:
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}.",
-                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}."))
+            detail=tr(f"Not valid ticker symbols: {shown(bad)}.",
+                      f"Bukan simbol ticker yang valid: {shown(bad)}."))
     return list(dict.fromkeys(resolved(t, market) for t in raw))
 
 
@@ -830,10 +881,8 @@ def screener(
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}.",
-                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}."),
+            detail=tr(f"Not valid ticker symbols: {shown(bad)}.",
+                      f"Bukan simbol ticker yang valid: {shown(bad)}."),
         )
     universe = list(dict.fromkeys(resolved(t, market) for t in raw))
     if not universe:
@@ -1043,7 +1092,7 @@ class RankListRequest(BaseModel):
     The GET with `tickers=` stays, for curl and for anyone who prefers it; the
     UI no longer uses it for a reader's own list.
     """
-    tickers: list[str] = Field(..., min_length=1, max_length=RANK_MAX_UNIVERSE)
+    tickers: list[Symbol] = Field(..., min_length=1, max_length=RANK_MAX_UNIVERSE)
     market: str = Field("US", pattern="^(US|ID|us|id)$")
 
 
@@ -1204,7 +1253,7 @@ async def name_verdict(
         except HTTPException as exc:
             return name, {"ok": False, "error": exc.detail}
         except Exception as exc:
-            return name, {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            return name, {"ok": False, "error": lens_broke(name, exc)}
 
     # THE UNIVERSE SCAN RUNS BEFORE THE LENSES AND NOT BESIDE THEM. This was
     # written the other way first, on the obvious reasoning that the batched
@@ -1703,10 +1752,8 @@ def rank_deepen(
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}.",
-                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}."))
+            detail=tr(f"Not valid ticker symbols: {shown(bad)}.",
+                      f"Bukan simbol ticker yang valid: {shown(bad)}."))
     shortlist = list(dict.fromkeys(resolved(t, market) for t in raw))
     if not shortlist:
         raise HTTPException(status_code=400, detail=tr("Provide at least one ticker.",
@@ -1807,7 +1854,7 @@ class PortfolioRequest(BaseModel):
     fans out to a batch download.
     """
     candidate: str = Field(..., pattern=TICKER_PATTERN)
-    holdings: list[str] = Field(..., min_length=1, max_length=200)
+    holdings: list[Symbol] = Field(..., min_length=1, max_length=200)
     market: str = Field("US", pattern="^(US|ID|us|id)$")
     # Self-describing rather than positional. A parallel list aligned to
     # `holdings` would silently attach the wrong weight to the wrong name the
@@ -1824,8 +1871,9 @@ def _validated_weights(raw: dict) -> dict:
         symbol = str(ticker).strip().upper()
         if not TICKER_RE.match(symbol):
             raise HTTPException(status_code=400,
-                                detail=tr(f"Not a valid ticker symbol in weights: {symbol!r}.",
-                                          f"Bukan simbol ticker yang valid dalam bobot: {symbol!r}."))
+                                detail=tr(f"Not a valid ticker symbol in weights: {shown([symbol])}.",
+                                          f"Bukan simbol ticker yang valid dalam bobot: "
+                                          f"{shown([symbol])}."))
         try:
             weight = float(value)
         except (TypeError, ValueError) as exc:
@@ -1868,10 +1916,8 @@ def portfolio_context(body: PortfolioRequest):
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}.",
-                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}."))
+            detail=tr(f"Not valid ticker symbols: {shown(bad)}.",
+                      f"Bukan simbol ticker yang valid: {shown(bad)}."))
     if not raw:
         raise HTTPException(status_code=400, detail=tr("Provide at least one holding.",
                                                        "Masukkan setidaknya satu kepemilikan."))
@@ -2197,6 +2243,29 @@ def company_payload(symbol: str) -> dict:
     }
 
 
+LOG = logging.getLogger("quantdesk")
+
+
+def lens_broke(name: str, exc: BaseException) -> dict:
+    """What a reader sees when a lens raised something nobody planned for.
+
+    It used to be `f"{type(exc).__name__}: {exc}"`: a Python exception, in
+    English whatever the reader asked for, carrying whatever path or value the
+    message held (docs/AUDIT.md, SEC-5). The exception goes to the log, where
+    the person who can fix it reads it, and the reader gets a sentence.
+    """
+    LOG.error("lens %s failed", name, exc_info=exc)
+    return {
+        "message": tr("Something went wrong inside this lens, so it has no reading this time. "
+                      "The other lenses are unaffected; trying again usually works, and if it "
+                      "keeps happening it is a fault in the app, not in the company.",
+                      "Ada yang salah di dalam lensa ini, jadi kali ini tidak ada pembacaan. "
+                      "Lensa lain tidak terpengaruh; mencoba lagi biasanya berhasil, dan jika "
+                      "terus terjadi, itu kesalahan aplikasi, bukan perusahaannya."),
+        "cause": "internal",
+    }
+
+
 def answered_or_outage(symbol: str, build):
     """`build()`, unless its failure is really the provider's, and then say so.
 
@@ -2479,7 +2548,7 @@ class EarningsRequest(BaseModel):
     here and the browser logs by default, and the answer is `no-store`. See
     `RankListRequest`.
     """
-    tickers: list[str] = Field(..., min_length=1, max_length=EARNINGS_MAX)
+    tickers: list[Symbol] = Field(..., min_length=1, max_length=EARNINGS_MAX)
 
 
 @app.post("/api/markets/earnings")
@@ -2684,7 +2753,7 @@ async def confluence(
         except HTTPException as exc:
             return name, {"ok": False, "error": exc.detail}
         except Exception as exc:  # one leg must not be able to sink the others
-            return name, {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            return name, {"ok": False, "error": lens_broke(name, exc)}
 
     results = await asyncio.gather(
         leg("anomaly", lambda: whale_payload(
