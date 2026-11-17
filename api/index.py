@@ -200,11 +200,21 @@ SERIES_CAP = 1500
 # yfinance interpolates it into a URL PATH (.../v8/finance/chart/{ticker}), and
 # the CSV route interpolates it into a Content-Disposition HEADER.
 #
-# The character class is exactly what real symbols need and nothing more:
-#   A-Z 0-9  ordinary listings           .  exchange suffixes (BBCA.JK, BRK.B)
-#   -        crypto/FX pairs (BTC-USD)   ^  indices (^TNX)     =  FX (EURUSD=X)
-# No slashes, no dots-dot, no quotes, no control characters, no whitespace.
-TICKER_PATTERN = r"^[A-Za-z0-9.\-^=]{1,20}$"
+# A SHAPE, NOT A CHARACTER CLASS. A symbol is an optional `^` (an index,
+# ^TNX), a code of letters and digits, then at most two more parts, each joined
+# by one `.` (an exchange suffix, BBCA.JK, BRK.B), `-` (a pair, BTC-USD) or `=`
+# (FX and futures, EURUSD=X, GC=F). No slashes, no quotes, no control
+# characters, no whitespace.
+#
+# It used to be the character class `[A-Za-z0-9.\-^=]{1,20}`, whose comment
+# promised "no dots-dot" and whose class allowed them: `..`, `.`, `-` and `^`
+# alone all passed, and `GET /api/isolation-forest?ticker=..` sent the provider
+# a request for `/v8/finance/chart/..` (docs/AUDIT.md, SEC-2). The reach was
+# the provider's own host, so it was a gap in the fence rather than a breach.
+# Every one of the 10,888 symbols in the listing files, the index lists and the
+# market board matches the shape; the longest code is five characters, so ten
+# leaves room.
+TICKER_PATTERN = r"^\^?[A-Za-z0-9]{1,10}(?:[.\-=][A-Za-z0-9]{1,6}){0,2}$"
 TICKER_RE = re.compile(TICKER_PATTERN)
 
 

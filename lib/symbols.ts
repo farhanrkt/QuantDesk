@@ -18,8 +18,8 @@
  */
 import type { Market } from "./types";
 
-/** Same characters, same length, as `TICKER_PATTERN` in api/index.py. */
-export const TICKER_PATTERN = /^[A-Za-z0-9.\-^=]{1,20}$/;
+/** The same shape as `TICKER_PATTERN` in api/index.py, and check_frontend holds them equal. */
+export const TICKER_PATTERN = /^\^?[A-Za-z0-9]{1,10}(?:[.\-=][A-Za-z0-9]{1,6}){0,2}$/;
 
 /** Same map as `MARKET_SUFFIX` in api/_lib/symbols.py. */
 export const MARKET_SUFFIX: Record<Market, string> = { US: "", ID: ".JK" };

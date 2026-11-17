@@ -54,7 +54,7 @@ or *deferred* (with the reason).
 | COR-4 | Medium | Two lenses on one page use two risk-free rates (4.2% and the live 5.15%) | open |
 | COR-5 | Medium | A company that stopped trading is told to "widen the date range" | open |
 | COR-3 | Medium | Three names in the Nasdaq-100 list no longer trade | decision |
-| SEC-2 | Medium | The ticker pattern accepts `..` | open |
+| SEC-2 | Medium | The ticker pattern accepts `..` | fixed |
 | SEC-3 | Medium | Validation errors are English lists that echo their input without limit | open |
 | SEC-4 | Medium | Any website may call the API on a preview deployment | open |
 | SEC-5 | Medium | A failed lens returns the raw exception text to the reader | open |
@@ -393,6 +393,12 @@ finding, not a breach. `audit_repro.py SEC-2`.
 
 **Fix.** Require a letter, digit or `^` first and forbid two dots together, in
 the Python pattern and its mirror in `lib/symbols.ts`.
+
+**Fixed.** The pattern is now a shape: an optional `^`, a code of letters and
+digits, then at most two more parts each joined by one `.`, `-` or `=`. All
+10,888 symbols in the listing files, the index lists and the market board
+match it. Eleven new hostile cases in `tests/test_api.py` fail on the old
+pattern.
 
 ### SEC-3. Validation errors are English lists that echo their input
 

@@ -84,7 +84,8 @@ def offline_company(monkeypatch):
 # --------------------------------------------------------------------------- #
 # C4 — ticker validation
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("good", ["AAPL", "BBCA.JK", "BRK.B", "BTC-USD", "^TNX", "EURUSD=X"])
+@pytest.mark.parametrize("good", ["AAPL", "BBCA.JK", "BRK.B", "BTC-USD", "^TNX", "EURUSD=X",
+                                  "GC=F", "^JKSE", "DX-Y.NYB", "0700.HK"])
 def test_ticker_pattern_accepts_real_symbols(good):
     assert index.TICKER_RE.match(good), f"{good} is a real symbol and must be accepted"
 
@@ -98,6 +99,9 @@ def test_ticker_pattern_accepts_real_symbols(good):
     "<script>alert(1)</script>",
     "A" * 21,                   # over length
     "",
+    # The character class these replaced accepted every one of these, and
+    # `..` reached the provider as /v8/finance/chart/.. (docs/AUDIT.md, SEC-2).
+    "..", ".", "-", "^", "=", "....", "A..B", "AAPL.", ".JK", "^^GSPC", "BTC--USD",
 ])
 def test_ticker_pattern_rejects_hostile_input(bad):
     assert not index.TICKER_RE.match(bad)
