@@ -2,6 +2,7 @@
 
 import { ExternalLink } from "lucide-react";
 import Image from "next/image";
+import { useState } from "react";
 import { agoText } from "@/lib/marketboard";
 import type { NewsItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -23,17 +24,26 @@ import { cn } from "@/lib/utils";
 export function HeadlineList({
   items, now, compact,
 }: { items: NewsItem[]; now?: number; compact?: boolean }) {
+  // A THUMBNAIL THAT DID NOT LOAD IS LEFT OUT, NOT DRAWN AS AN EMPTY FRAME.
+  // The optimizer fetches from the news hosts on the server, and when that
+  // fails the browser drew an outlined empty box beside every headline
+  // (docs/AUDIT.md, REL-6). The headline is the content; the picture is not.
+  const [broken, setBroken] = useState<ReadonlySet<string>>(() => new Set());
+  const markBroken = (url: string) =>
+    setBroken((current) => (current.has(url) ? current : new Set(current).add(url)));
   return (
     <ul>
       {items.map((item, i) => {
         const ago = now ? agoText(item.published, now) : null;
+        const image = item.image && !broken.has(item.image.url) ? item.image : null;
         return (
           <li key={`${i}-${item.link}`}
               className={compact ? "flex gap-3 border-b border-ruleSoft py-2.5 last:border-0"
                                  : "flex gap-3 border-b border-ruleSoft px-5 py-2.5 last:border-0"}>
-            {item.image && (
-              <Image src={item.image.url} alt="" width={compact ? 72 : 112} height={compact ? 48 : 72}
+            {image && (
+              <Image src={image.url} alt="" width={compact ? 72 : 112} height={compact ? 48 : 72}
                      sizes={compact ? "72px" : "112px"}
+                     onError={() => markBroken(image.url)}
                      className={compact ? "h-12 w-[4.5rem] shrink-0 rounded object-cover"
                                         : "h-[4.5rem] w-28 shrink-0 rounded object-cover"} />
             )}
@@ -47,7 +57,7 @@ export function HeadlineList({
                    className={cn("group inline-flex min-h-[24px] basis-full items-baseline gap-1 py-0.5 text-meta",
                                  "leading-relaxed text-body hover:text-chalk",
                                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-tech",
-                                 !compact && !item.image && "sm:basis-auto")}>
+                                 !compact && !image && "sm:basis-auto")}>
                   {item.title}
                   <ExternalLink aria-hidden
                                 className="h-3 w-3 shrink-0 self-center text-ash opacity-0 transition-opacity group-hover:opacity-100" />
