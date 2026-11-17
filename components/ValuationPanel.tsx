@@ -173,7 +173,7 @@ export function ValuationPanel({
                   {t("a year, for five years")}
                 </div>
                 <div className="mt-2 border-t border-rule pt-2 text-micro text-ash">
-                  {t("you assumed")}{" "}
+                  {t("the model was run at")}{" "}
                   <span className="num text-body">{pct(data.baseCase.assumedGrowth)}</span>
                 </div>
               </div>

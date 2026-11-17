@@ -424,11 +424,12 @@ async def rate_limit(request: Request, call_next):
             retry_after = max(1, int(window - (now - hits[0])) + 1)
             return JSONResponse(
                 status_code=429,
-                content={"detail": tr(f"Rate limit reached for this endpoint "
-                                      f"({limit} requests per {window}s). "
-                                      f"Try again in {retry_after}s.",
-                                      f"Batas permintaan untuk endpoint ini tercapai ({limit} permintaan per "
-                                      f"{window} detik). Coba lagi dalam {retry_after} detik.")},
+                content={"detail": tr(f"Too many requests of this kind from this connection: "
+                                      f"the limit is {limit} in {window} seconds. Try again "
+                                      f"in {retry_after} seconds.",
+                                      f"Terlalu banyak permintaan jenis ini dari koneksi ini: "
+                                      f"batasnya {limit} dalam {window} detik. Coba lagi "
+                                      f"dalam {retry_after} detik.")},
                 headers={"Retry-After": str(retry_after),
                          "Cache-Control": "no-store"},
             )

@@ -1,6 +1,6 @@
 # QuantDesk
 
-**Four independent models read the same stock, side by side.**
+**Four models read the same stock, side by side, from two independent bodies of data.**
 
 Most research tools give you one opinion. QuantDesk gives you four — order flow, price
 trend, intrinsic value, and accounting quality — and shows you where they agree and where
@@ -193,8 +193,8 @@ Each runs a 5-year projection plus a terminal value, then a 10,000-draw Monte Ca
 simulation to produce a range rather than a single number.
 
 **Run it backwards.** The panel also solves the model in reverse: what growth rate would make
-today's price correct? On AAPL that came out at **37% a year for five years** against a 10%
-assumption — which is a claim about the world you can agree or disagree with, rather than a fair
+today's price correct? On AAPL on 14 November 2026 that came out at **32.5% a year for five
+years** against the model's default of 10% — which is a claim about the world you can agree or disagree with, rather than a fair
 value you have no basis to judge. It is stated as conditional on the other inputs, because it is:
 lower the discount rate and the implied growth falls with it. The panel says so, and a
 **sensitivity grid** shows it: the base-case value across growth ±6 points and the discount

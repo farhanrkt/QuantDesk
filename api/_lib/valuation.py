@@ -764,7 +764,11 @@ def sensitivity_grid(engine, base, growth, rate, terminal_growth, *, cash=0.0, d
         row_axis = {"name": "growth", "label": tr("Growth, years 1-5", "Pertumbuhan, tahun 1-5"), "values": rows,
                     "assumedIndex": row_at}
     cols, col_at = _axis(rate, rate_steps, SENS_RATE_BOUNDS)
-    rate_label = "WACC" if engine == "DCF" else tr("Cost of equity", "Biaya ekuitas")
+    # "Discount rate" on the grid, the words the rest of the page uses for it;
+    # it read "WACC" here alone (docs/AUDIT.md, COPY-3). `rateName` elsewhere is
+    # an identifier the controls key on and keeps its value.
+    rate_label = (tr("Discount rate", "Tingkat diskonto") if engine == "DCF"
+                  else tr("Cost of equity", "Biaya ekuitas"))
 
     g_grid, r_grid = np.meshgrid(np.array(rows), np.array(cols), indexing="ij")
     if engine == "RI":

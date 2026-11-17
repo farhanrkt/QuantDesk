@@ -213,14 +213,16 @@ def test_a_nonsense_price_is_refused(price):
 
 
 def test_the_reading_names_the_gap_against_the_assumption():
-    """The number on its own is context; against what you assumed it is a
-    decision. Both directions must be stated plainly."""
+    """The number on its own is context; against the growth the model was run
+    at it is a decision. Both directions must be stated plainly — and as the
+    model's figure, not the reader's: a newcomer assumed nothing, and the input
+    is a default until someone changes it (docs/AUDIT.md, COPY-3)."""
     from _lib import explain as E
 
     higher = E.explain("impliedGrowth", 0.18, assumedGrowth=0.10)
-    assert "MORE growth than you assumed" in higher["reading"]
+    assert "8.0% a year more growth than the model" in higher["reading"]
     lower = E.explain("impliedGrowth", 0.04, assumedGrowth=0.10)
-    assert "LESS growth than you assumed" in lower["reading"]
+    assert "6.0% a year less growth than the model" in lower["reading"]
     same = E.explain("impliedGrowth", 0.100, assumedGrowth=0.100)
     assert "the model and the market agree" in same["reading"]
 

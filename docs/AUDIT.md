@@ -64,17 +64,17 @@ or *deferred* (with the reason).
 | UX-3 | Medium | The holding-period control offers 5 and 10 years the default load cannot answer | open |
 | UX-4 | Medium | On a phone the company's name is below the first screen | open |
 | UX-5 | Medium | Identifiers and provider text reach an Indonesian reader in English | open |
-| COPY-1 | Medium | The Ulcer index explains itself with only its own number | open |
-| COPY-2 | Medium | The landing says the four models "share no data"; two of them share a series | open |
-| COPY-3 | Medium | "More growth than you assumed", said of a default the reader never set | open |
-| COPY-4 | Medium | A loss is worded as a gain ("still returned −16.4%", "you earned −0.49") | open |
+| COPY-1 | Medium | The Ulcer index explains itself with only its own number | fixed |
+| COPY-2 | Medium | The landing says the four models "share no data"; two of them share a series | fixed |
+| COPY-3 | Medium | "More growth than you assumed", said of a default the reader never set | fixed |
+| COPY-4 | Medium | A loss is worded as a gain ("still returned −16.4%", "you earned −0.49") | fixed |
 | SEC-6 | Low | The rate limiter counts per serverless instance | decision |
 | SEC-7 | Low | The API sets no security headers of its own; `/api/docs` is public; `X-Powered-By` is sent | fixed, docs: decision 7 |
 | SEC-8 | Low | The content security policy allows inline scripts | deferred |
 | COR-2 | Low | The Beneish leverage index is silently neutral when a company has no long-term debt line | fixed |
 | REL-6 | Low | A news thumbnail that fails to load draws an empty box | fixed |
-| COPY-5 | Low | The rate-limit message says "endpoint" | open |
-| DOC-1 | Low | Three statements in the README no longer match the app | open |
+| COPY-5 | Low | The rate-limit message says "endpoint" | fixed |
+| DOC-1 | Low | Three statements in the README no longer match the app | fixed, except CODEBASE_REVIEW.md (Phase 6) |
 
 ## What was done
 
@@ -649,6 +649,16 @@ the width. Seen in the browser here, where every thumbnail fails.
 
 `api/index.py:377`, in both languages.
 
+**Fixed, with COPY-1 to COPY-4.** The Ulcer index opens "11.7 — low: falls have
+been shallow, or brief, or both."; the landing says "four models and two
+independent kinds of evidence", and so do README and PRODUCT.md; the implied
+growth is compared with "the model", the grid says "Discount rate", and the
+valuation tile says "the model was run at"; a negative worst case reads "lost
+16.4% a year" and a negative Sortino "fell short of the risk-free rate"; the
+rate limit says "too many requests of this kind from this connection" and
+states its window. Both languages. `tests/test_copy.py`, ten tests that fail
+without the change.
+
 ### DOC-1. Three statements in the README no longer match the app
 
 - Line 195: "On AAPL that came out at **37% a year**"; the page shows 32.5%.
@@ -656,6 +666,10 @@ the width. Seen in the browser here, where every thumbnail fails.
 - Line 1332: "US uses a 4.2% risk-free rate" (COR-4).
 - `CODEBASE_REVIEW.md` is dated 20 August and describes a codebase a fifth of
   this size; NEXT_SESSION_PROMPT already calls it "partly superseded".
+
+**Fixed**, except `CODEBASE_REVIEW.md`, which Phase 6 handles with the rest of
+what is dead: the AAPL example now carries its date and today's 32.5%, and the
+risk-free sentence was corrected with COR-4.
 
 ## Checked and found sound
 
