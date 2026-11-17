@@ -83,3 +83,32 @@ def test_a_lens_that_breaks_says_so_in_words_and_logs_the_cause(client, monkeypa
     assert error["message"].startswith("Ada yang salah di dalam lensa ini")
     assert any("secret_path" in str(record.exc_info) for record in caplog.records), \
         "the cause belongs in the log, where someone can fix it"
+
+
+# --------------------------------------------------------------------------- #
+# The API's own headers (docs/AUDIT.md, SEC-7)
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize("path, params", [
+    ("/api/health", {}),
+    ("/api/confluence", {"ticker": "bad/one"}),      # the validation answer
+    ("/api/nope", {}),                               # an unrouted path
+])
+def test_every_api_answer_carries_its_own_headers(client, path, params):
+    headers = client.get(path, params=params).headers
+    for name, value in index.API_HEADERS.items():
+        assert headers.get(name) == value, f"{path}: {name}"
+
+
+def test_a_rate_limit_refusal_carries_them_too(client, monkeypatch):
+    monkeypatch.setitem(index.RATE_LIMITS, "/api/health", (1, 60))
+    monkeypatch.setattr(index, "RATE_EXEMPT", set())
+    client.get("/api/health")
+    refused = client.get("/api/health")
+    assert refused.status_code == 429
+    assert refused.headers.get("X-Content-Type-Options") == "nosniff"
+
+
+def test_the_web_layer_does_not_announce_its_framework():
+    from pathlib import Path
+    config = (Path(index.__file__).resolve().parents[1] / "next.config.mjs").read_text()
+    assert "poweredByHeader: false" in config

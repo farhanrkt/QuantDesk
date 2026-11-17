@@ -69,7 +69,7 @@ or *deferred* (with the reason).
 | COPY-3 | Medium | "More growth than you assumed", said of a default the reader never set | open |
 | COPY-4 | Medium | A loss is worded as a gain ("still returned −16.4%", "you earned −0.49") | open |
 | SEC-6 | Low | The rate limiter counts per serverless instance | decision |
-| SEC-7 | Low | The API sets no security headers of its own; `/api/docs` is public; `X-Powered-By` is sent | open |
+| SEC-7 | Low | The API sets no security headers of its own; `/api/docs` is public; `X-Powered-By` is sent | fixed, docs: decision 7 |
 | SEC-8 | Low | The content security policy allows inline scripts | deferred |
 | COR-2 | Low | The Beneish leverage index is silently neutral when a company has no long-term debt line | open |
 | REL-6 | Low | A news thumbnail that fails to load draws an empty box | open |
@@ -559,6 +559,12 @@ them. `/api/docs` is served, unlimited, on every deployment (`api/index.py:89`)
 and loads its script from a third-party CDN, which the site's policy either
 blocks or does not reach; this sandbox cannot reach a deployment to see which.
 `next.config.mjs` still sends `X-Powered-By`. `audit_repro.py SEC-7`.
+
+**Fixed**, except `/api/docs`, which is Decision 7. An ASGI layer in
+`api/index.py` adds `X-Content-Type-Options`, `X-Frame-Options` and
+`Referrer-Policy` to every answer the function gives, its own 429s, 422s and
+504s included; `next.config.mjs` sets `poweredByHeader: false`.
+`tests/test_error_answers.py`.
 
 ### SEC-8. The content security policy allows inline scripts
 

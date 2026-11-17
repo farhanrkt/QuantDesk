@@ -547,6 +547,46 @@ class RequestDeadline:
 app.add_middleware(RequestDeadline)
 
 
+# The API's own headers, on every answer it gives — the 429s and 504s this
+# file writes included. They were added only by the web layer in front, so a
+# response from the function itself, or from any deployment where that layer
+# is configured differently, carried none (docs/AUDIT.md, SEC-7). JSON is not a
+# page, so the policy that matters most is that a browser never sniffs it into
+# one or frames it.
+API_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+}
+
+
+class ApiHeaders:
+    """Adds API_HEADERS to every response, without replacing one already set."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def with_headers(message):
+            if message["type"] == "http.response.start":
+                present = {name.lower() for name, _ in message.get("headers", [])}
+                extra = [(name.lower().encode(), value.encode())
+                         for name, value in API_HEADERS.items()
+                         if name.lower().encode() not in present]
+                message = {**message, "headers": [*message.get("headers", []), *extra]}
+            await send(message)
+
+        await self.app(scope, receive, with_headers)
+
+
+# Added last, so it is the outermost layer and reaches every response.
+app.add_middleware(ApiHeaders)
+
+
 @app.exception_handler(RequestValidationError)
 async def unreadable_request(request: Request, exc: RequestValidationError) -> JSONResponse:
     """A request that failed validation, answered in a sentence that names
