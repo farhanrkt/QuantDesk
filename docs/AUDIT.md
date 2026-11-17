@@ -42,7 +42,7 @@ or *deferred* (with the reason).
 |---|---|---|---|
 | REL-1 | High | A provider that hangs holds one company read for minutes; the platform kills it at 60 s | fixed |
 | REL-7 | High | The provider sometimes returns a statement with a row missing, and the app keeps it as fact for a day | open |
-| COR-1 | High | A statement line is found by substring: six Indonesian banks chart the wrong line as operating income | open |
+| COR-1 | High | A statement line is found by substring: six Indonesian banks chart the wrong line as operating income | fixed |
 | SEC-1 | High | Eighteen known advisories in the Python dependencies; CI audits npm only | open |
 | REL-4 | High | Ordinary browsing reaches the rate limit; limits are per address | open |
 | PERF-1 | High | The stock page jumps as results arrive (layout shift 0.62 on a phone) | open |
@@ -190,6 +190,17 @@ by "non", "other" or "total non". A line that cannot be found exactly is then
 missing, which every consumer already handles. This changes what the Quality
 lens concludes for JSMR.JK, so `measure_lens_agreement.py` and
 `calibrate_checks.py` run again afterwards.
+
+**Fixed.** The fallback now needs the alias as whole words with nothing
+before it that changes the line ("non", "other", "excluding" and three more).
+Over every lookup a caller makes, across all 197 cached companies, it changes
+exactly the thirteen wrong reads above and nothing else. The prediction about
+Jasa Marga was wrong: its Beneish score moves from −2.43 to −2.68 and its band
+stays "clean", and the six banks are outside the accounting screens, so no
+lens conclusion moves and no stamp is due for this fix. The banks' company
+record now shows no operating-income line instead of the wrong one.
+`tests/test_row_lookup.py`: six cases fail without the fix, four guard what
+must keep working.
 
 ### SEC-1. Eighteen known advisories in the Python dependencies
 

@@ -18,7 +18,9 @@ arguments carrying the SAME default values the widgets had. Nothing else.
 from __future__ import annotations
 
 import datetime as dt
+import re
 from typing import Optional
+
 
 import numpy as np
 import pandas as pd
@@ -215,17 +217,58 @@ ROW_ALIASES = {
 }
 
 
+# Words that, standing before an alias, turn the line into a different line:
+# "Other Receivables" is not the receivables, and "Total Non Current
+# Liabilities" is the opposite of the current ones.
+_QUALIFIERS_THAT_CHANGE_THE_LINE = ("non", "other", "excluding", "ex", "less", "minus")
+
+
+def _names_the_line(label: str, alias: str) -> bool:
+    """Whether `label` is `alias` with harmless words around it.
+
+    THE ALIAS MUST APPEAR AS WHOLE WORDS, and nothing that changes its meaning
+    may stand before it. The fallback used to be a bare substring test, and on
+    real filings it was wrong every time it fired. The November 2026 audit
+    recorded every lookup across 198 companies (docs/AUDIT.md, COR-1): seven
+    used the fallback, all Indonesian, and all seven read the wrong line —
+    six banks' "operating income" and "EBIT" from "Other Non Operating Income
+    Expenses", and Jasa Marga's receivables from "Other Receivables". The
+    same test would have read EBIT from "EBITDA" and current liabilities from
+    "Total Non Current Liabilities". None of the 122 US companies needed it.
+    """
+    words = re.findall(r"[a-z0-9]+", label)
+    wanted = re.findall(r"[a-z0-9]+", alias)
+    if not wanted:
+        return False
+    for start in range(len(words) - len(wanted) + 1):
+        if words[start:start + len(wanted)] != wanted:
+            continue
+        before = words[:start]
+        if not any(word in _QUALIFIERS_THAT_CHANGE_THE_LINE for word in before):
+            return True
+    return False
+
+
 def _get_row(df, key: str):
+    """The statement line `key` names, or None when the filing has no such line.
+
+    An exact alias first, ignoring case and surrounding space. Then, only if no
+    alias matched exactly, a line that names an alias with harmless words
+    around it (see `_names_the_line`). A missing line is None, which every
+    caller already treats as unknown — and unknown is the honest answer when
+    the only candidates are lines that mean something else.
+    """
     if df is None or not isinstance(df, pd.DataFrame) or df.empty:
         return None
     lookup = {str(i).strip().lower(): i for i in df.index}
-    for alias in ROW_ALIASES.get(key, []):
-        hit = lookup.get(alias.strip().lower())
+    aliases = [alias.strip().lower() for alias in ROW_ALIASES.get(key, [])]
+    for alias in aliases:
+        hit = lookup.get(alias)
         if hit is not None:
             return df.loc[hit]
-    for alias in ROW_ALIASES.get(key, []):
+    for alias in aliases:
         for label_lc, original in lookup.items():
-            if alias.strip().lower() in label_lc:
+            if _names_the_line(label_lc, alias):
                 return df.loc[original]
     return None
 
