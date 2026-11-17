@@ -732,10 +732,18 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
     # the textbook ratio and flatters every name by roughly rf/volatility. That
     # went unnoticed while the panel printed the bare number; the moment it
     # started saying "above 1.0 is good" the reader needed the number to mean
-    # what that sentence claims. The market convention is the same constant the
-    # valuation engine discounts with, so the two lenses now agree on what money
-    # costs.
-    risk_free = MARKETS.get((market_code or "US").upper(), MARKETS["US"])["risk_free_default"]
+    # what that sentence claims.
+    #
+    # THE RATE THE VALUE LENS DISCOUNTS WITH, NOT THE CONSTANT IT FALLS BACK TO.
+    # This comment used to say the two lenses agreed on what money costs, and
+    # they did until the valuation engine started reading the live ten-year
+    # yield: then the same page printed "US 10Y 5.154 · Value tab's rate" in the
+    # markets band and "above a 4.2% risk-free rate" on the Sortino tile
+    # (docs/AUDIT.md, COR-4). Both now ask `market_data.risk_free_rate`, which
+    # is cached for the day, so it costs one fetch per process per day. For the
+    # IDX it is the stated assumption either way.
+    market = MARKETS.get((market_code or "US").upper(), MARKETS["US"])
+    risk_free, _ = market_data.risk_free_rate(market["code"], market["risk_free_default"])
     risk = lt.risk_metrics(close_series, risk_free=risk_free) if enough else {"usable": False}
     rolling = lt.rolling_returns(close_series) if enough else []
     seasonality = lt.monthly_seasonality(close_series) if enough else {"usable": False, "months": []}

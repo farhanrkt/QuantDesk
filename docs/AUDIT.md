@@ -51,7 +51,7 @@ or *deferred* (with the reason).
 | REL-2 | Medium | During an outage the single-lens routes tell the reader their ticker is wrong | fixed |
 | REL-3 | Medium | One failed price request is final: no second attempt | fixed |
 | REL-5 | Medium | The browser never gives up on a request, and cannot read a validation error | fixed |
-| COR-4 | Medium | Two lenses on one page use two risk-free rates (4.2% and the live 5.15%) | open |
+| COR-4 | Medium | Two lenses on one page use two risk-free rates (4.2% and the live 5.15%) | fixed |
 | COR-5 | Medium | A company that stopped trading is told to "widen the date range" | open |
 | COR-3 | Medium | Three names in the Nasdaq-100 list no longer trade | decision |
 | SEC-2 | Medium | The ticker pattern accepts `..` | fixed |
@@ -373,6 +373,11 @@ which is true of one lens.
 
 **Fix.** Read the same rate in both. The Sortino figure feeds the long-horizon
 checklist and so the Trend vote, so the lens agreement is measured again.
+
+**Fixed.** `technical.analyze` asks `market_data.risk_free_rate`, the function
+the valuation engine uses, which is cached for the day. README says both lenses
+read it. `tests/test_one_rate.py`. The lens agreement is re-measured at the end
+of this phase, with the other changes that can move a vote.
 
 ### COR-5. A company that stopped trading is told to widen the date range
 

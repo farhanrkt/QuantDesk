@@ -1343,9 +1343,10 @@ seconds. Any request at all has 52, inside the platform's 60, and past that the 
 sentence in their language instead of the platform's error page. A thread cannot be stopped,
 so these bound the answer, not the provider call behind it.
 
-**Market conventions** are configured per market — US uses a 4.2% risk-free rate, 5.5%
-equity risk premium, 21% tax and `^GSPC` as benchmark; IDX uses 6.5%, 7.0%, 22% and
-`^JKSE`.
+**Market conventions** are configured per market. The US discounts from the live ten-year
+Treasury yield, falling back to 4.2% only when it cannot be fetched, with a 5.5% equity risk
+premium, 21% tax and `^GSPC` as benchmark; the IDX uses a stated 6.5%, 7.0%, 22% and `^JKSE`.
+The Trend lens's Sortino ratio reads the same rate the Value lens discounts with.
 
 ---
 
