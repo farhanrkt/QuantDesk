@@ -274,6 +274,10 @@ def is_stale(frame: Optional[pd.DataFrame], asked_through: Optional[dt.date] = N
 _DOWNLOAD_LOCK = threading.Lock()
 
 
+OHLCV_ATTEMPTS = 2
+OHLCV_RETRY_PAUSE_SECONDS = 0.6
+
+
 def ohlcv(symbol: str, *, period: Optional[str] = None,
           start: Optional[dt.date] = None, end: Optional[dt.date] = None,
           auto_adjust: bool = True,
@@ -297,20 +301,38 @@ def ohlcv(symbol: str, *, period: Optional[str] = None,
     ticker = (symbol or "").strip().upper()
     if not ticker:
         return None
-    try:
+
+    def fetch():
         if period:
-            raw = yf.Ticker(ticker).history(period=period, auto_adjust=auto_adjust)
-        else:
-            with _DOWNLOAD_LOCK:
-                raw = yf.download(
-                    ticker, start=start,
-                    end=(end + dt.timedelta(days=1)) if end else None,
-                    interval="1d", auto_adjust=auto_adjust, actions=False,
-                    progress=False, threads=False,
-                )
-    except Exception:
-        return None
-    frame = normalise(raw)
+            return yf.Ticker(ticker).history(period=period, auto_adjust=auto_adjust)
+        with _DOWNLOAD_LOCK:
+            return yf.download(
+                ticker, start=start,
+                end=(end + dt.timedelta(days=1)) if end else None,
+                interval="1d", auto_adjust=auto_adjust, actions=False,
+                progress=False, threads=False,
+            )
+
+    # ONE MORE ATTEMPT, FOR THE READER'S OWN TICKER. A single reset connection
+    # used to be final, and "no data" here is what the lenses turn into "check
+    # the symbol" — so one dropped request told a reader their ticker was wrong
+    # (docs/AUDIT.md, REL-3). It is retried once after a short pause when the
+    # call raised, and, for the reader's own ticker (`allow_stale`), when it
+    # came back empty, which is how the library reports most failures. Every
+    # other caller is a benchmark or a basket member that already degrades
+    # without it, and doubling their requests is how a lookup gets throttled.
+    raw = None
+    for attempt in range(OHLCV_ATTEMPTS):
+        if attempt:
+            time.sleep(OHLCV_RETRY_PAUSE_SECONDS)
+        try:
+            raw = fetch()
+        except Exception:
+            raw = None
+            continue
+        if not allow_stale or normalise(raw) is not None:
+            break
+    frame = normalise(raw) if raw is not None else None
     # Judged against the END OF THE REQUESTED WINDOW, so a deliberate historical
     # fetch is never rejected for ending where it was told to.
     if frame is not None and not allow_stale and is_stale(frame, end):

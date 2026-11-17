@@ -775,8 +775,9 @@ def isolation_forest(
     ),
 ):
     symbol, market = resolved_with_market(ticker, market)
-    return ok(whale_payload(symbol, period, mode, contamination, mad_k,
-                            score_threshold, recent_days, min_turnover))
+    return ok(answered_or_outage(symbol, lambda: whale_payload(
+        symbol, period, mode, contamination, mad_k, score_threshold, recent_days,
+        min_turnover)))
 
 
 # --------------------------------------------------------------------------- #
@@ -1918,7 +1919,8 @@ def technical_analysis(
     sr_levels: int = Query(6, ge=2, le=12),
 ):
     symbol, market = resolved_with_market(ticker, market)
-    return ok(technical_payload(symbol, range, sr_window, sr_levels, market.upper()))
+    return ok(answered_or_outage(symbol, lambda: technical_payload(
+        symbol, range, sr_window, sr_levels, market.upper())))
 
 
 # --------------------------------------------------------------------------- #
@@ -1998,11 +2000,11 @@ def intrinsic_value(
     manual_payout: Optional[float] = Query(None, ge=0.0, le=1.0),
 ):
     symbol, market = resolved_with_market(ticker, market)
-    return ok(valuation_payload(symbol, **_valuation_kwargs(
+    return ok(answered_or_outage(symbol, lambda: valuation_payload(symbol, **_valuation_kwargs(
         market, engine, growth, terminal, rate, n_sims, sd_growth, sd_rate,
         sd_terminal, seed, fcf_basis, dps_basis, manual_base, manual_net_debt,
         manual_shares, manual_price, manual_payout,
-    )))
+    ))))
 
 
 @app.get("/api/intrinsic-value/simulation")
@@ -2182,6 +2184,34 @@ def company_payload(symbol: str) -> dict:
     }
 
 
+def answered_or_outage(symbol: str, build):
+    """`build()`, unless its failure is really the provider's, and then say so.
+
+    ONLY `/api/confluence` USED TO ASK. When the provider is down, every lens
+    fails the same way a symbol that does not exist fails, and the routes that
+    re-run a single lens (the page uses them when a reader changes a valuation
+    assumption or a chart window) answered a dead provider with "No company
+    data came back for 'AAPL'. Non-US listings need their exchange suffix".
+    So a reader who changed one input during an outage was told their ticker
+    was wrong (docs/AUDIT.md, REL-2). A lookup that failed is now checked
+    against the market's own index, the question confluence already asks, and
+    a provider that is not answering gets the sentence that says so, as a 503
+    nobody caches.
+    """
+    try:
+        return build()
+    except HTTPException as exc:
+        detail = exc.detail
+        about_the_symbol = exc.status_code == 404 or (
+            isinstance(detail, dict) and detail.get("cause") == "unknown-sector")
+        if about_the_symbol and not market_data.provider_answering(symbols.market_of(symbol)):
+            raise HTTPException(status_code=503,
+                                detail=market_data.provider_outage_message(symbol),
+                                headers={"Cache-Control": "no-store",
+                                         "Retry-After": "60"}) from exc
+        raise
+
+
 def _short_of_a_line(payload: dict) -> bool:
     """Whether any of the three screens could not be computed for want of input."""
     return any((payload.get(name) or {}).get("band") == "unknown"
@@ -2265,7 +2295,7 @@ def quality_scores(
     none of the three models was built on financial firms and none transfers.
     """
     symbol, market = resolved_with_market(ticker, market)
-    return ok({"ticker": symbol, **quality_payload(symbol)})
+    return ok({"ticker": symbol, **answered_or_outage(symbol, lambda: quality_payload(symbol))})
 
 
 # --------------------------------------------------------------------------- #
@@ -2511,7 +2541,7 @@ def company_view(
     for curl, and costs a fetch of its own.
     """
     symbol, _ = resolved_with_market(ticker, market)
-    return ok(company_payload(symbol))
+    return ok(answered_or_outage(symbol, lambda: company_payload(symbol)))
 
 
 # --------------------------------------------------------------------------- #

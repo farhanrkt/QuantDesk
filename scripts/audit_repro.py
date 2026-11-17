@@ -118,7 +118,9 @@ def a_single_lens_route_blames_the_ticker_during_an_outage():
     finally:
         val.fetch_company, md.provider_answering = saved
     text = " | ".join(str(v) for v in answers.values())
-    return ("suffix" in text or "symbol" in text.lower(),
+    # "Suffix" is the tell: the symbol hint names the exchange suffix, and the
+    # outage sentence says, correctly, that the symbol is not the problem.
+    return ("suffix" in text,
             f"with the provider down, AAPL is told: {text[:200]}")
 
 

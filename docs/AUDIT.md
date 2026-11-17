@@ -48,8 +48,8 @@ or *deferred* (with the reason).
 | PERF-1 | High | The stock page jumps as results arrive (layout shift 0.62 on a phone) | open |
 | UX-1 | High | A company cannot be found by its everyday name, and "apple" opens a ticker called APPLE | open |
 | PERF-2 | Medium | One company read is 1.35 MB of JSON, 1.1 MB of it the chart series | open |
-| REL-2 | Medium | During an outage the single-lens routes tell the reader their ticker is wrong | open |
-| REL-3 | Medium | One failed price request is final: no second attempt | open |
+| REL-2 | Medium | During an outage the single-lens routes tell the reader their ticker is wrong | fixed |
+| REL-3 | Medium | One failed price request is final: no second attempt | fixed |
 | REL-5 | Medium | The browser never gives up on a request, and cannot read a validation error | open |
 | COR-4 | Medium | Two lenses on one page use two risk-free rates (4.2% and the live 5.15%) | open |
 | COR-5 | Medium | A company that stopped trading is told to "widen the date range" | open |
@@ -317,6 +317,11 @@ valuation assumption during an outage is told their ticker is wrong.
 
 **Fix.** Ask the same question on those routes before blaming the symbol.
 
+**Fixed.** `answered_or_outage` in `api/index.py` wraps the five single-lens
+routes: a lookup that failed is checked against the market's own index, and a
+provider that is not answering gets the outage sentence as a 503 that nothing
+caches. Eleven tests in `tests/test_outages.py`.
+
 ### REL-3. One failed price request is final
 
 `market_data.ohlcv` turns any exception into "no data" on the first attempt
@@ -327,6 +332,10 @@ reproduce it all succeeded, so it is rare, but on a serverless platform every
 cold start is a first call. `audit_repro.py REL-3`.
 
 **Fix.** One more attempt after a short pause, for the reader's own ticker.
+
+**Fixed.** `market_data.ohlcv` tries once more after 0.6 seconds when the call
+raised, and, for the reader's own ticker, when it came back empty. Benchmarks
+and basket members are not retried. Three tests in `tests/test_outages.py`.
 
 ### REL-5. The browser never gives up, and cannot read a validation error
 
