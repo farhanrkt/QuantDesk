@@ -2182,6 +2182,16 @@ def company_payload(symbol: str) -> dict:
     }
 
 
+def _short_of_a_line(payload: dict) -> bool:
+    """Whether any of the three screens could not be computed for want of input."""
+    return any((payload.get(name) or {}).get("band") == "unknown"
+               for name in ("piotroski", "altman", "beneish"))
+
+
+def _rows(company: dict) -> int:
+    return market_data._statement_rows(company)
+
+
 def quality_payload(symbol: str) -> dict:
     """Piotroski / Altman / Beneish from the statements already fetched.
 
@@ -2218,6 +2228,17 @@ def quality_payload(symbol: str) -> dict:
     # `resolved_with_market` — so this call and its neighbours cannot diverge.
     payload = quality.analyze(company, symbol=symbol,
                               market_code=symbols.market_of(symbol))
+    # A SCORE THAT COULD NOT BE COMPUTED ON A COMPANY THE SCREENS APPLY TO is
+    # the one place a statement that came back a line short shows, so it is
+    # where the statements are asked for once more (`market_data.company_again`,
+    # docs/AUDIT.md REL-7). At most once a symbol a day, and the fuller copy is
+    # kept for every lens that reads the record after this one.
+    if payload.get("applicable") and _short_of_a_line(payload):
+        again = valuation.fetch_company_again(symbol)
+        if again is not None and _rows(again) > _rows(company):
+            company = again
+            payload = quality.analyze(company, symbol=symbol,
+                                      market_code=symbols.market_of(symbol))
     # WHAT THE COMPANY ACTUALLY DOES, attached HERE rather than inside
     # `quality.analyze`, so it survives the lens declining to score.
     #

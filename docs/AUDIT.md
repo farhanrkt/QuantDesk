@@ -41,7 +41,7 @@ or *deferred* (with the reason).
 | Code | Impact | Finding | Status |
 |---|---|---|---|
 | REL-1 | High | A provider that hangs holds one company read for minutes; the platform kills it at 60 s | fixed |
-| REL-7 | High | The provider sometimes returns a statement with a row missing, and the app keeps it as fact for a day | open |
+| REL-7 | High | The provider sometimes returns a statement with a row missing, and the app keeps it as fact for a day | narrowed |
 | COR-1 | High | A statement line is found by substring: six Indonesian banks chart the wrong line as operating income | fixed |
 | SEC-1 | High | Eighteen known advisories in the Python dependencies; CI audits npm only | open |
 | REL-4 | High | Ordinary browsing reaches the rate limit; limits are per address | open |
@@ -159,6 +159,15 @@ closed, only narrowed: when a score comes back "cannot score" for want of a
 line that the same statement normally carries, ask once more before keeping
 the record, and never let a record with fewer rows replace one with more inside
 the same day. The limit that remains belongs in the README's known limits.
+
+**Narrowed.** When one of the three accounting screens cannot be scored on a
+company they apply to, `market_data.company_again` fetches the statements once
+more, keeps whichever copy has more lines for the same fiscal years, and marks
+the record so the symbol is not asked again that day. It never refetches a
+record it did not fetch. `tests/test_short_statements.py`, five tests that fail
+without it. What remains, and is now in the README's known limits: a short
+statement that leaves every score computable (a missing line that only one
+figure reads) is not noticed, and the scanner's disk cache is not covered.
 
 ### COR-1. A statement line is found by substring, and it finds the wrong line
 

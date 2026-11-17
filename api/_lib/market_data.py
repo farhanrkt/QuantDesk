@@ -934,6 +934,67 @@ def company(ticker: str) -> dict:
     return dict(result)
 
 
+def _statement_rows(record: Optional[dict]) -> int:
+    """How many lines the three statements hold between them."""
+    if not record:
+        return 0
+    return sum(len(frame.index) for frame in (record.get(name) for name in
+                                               ("income", "balance", "cashflow"))
+               if isinstance(frame, pd.DataFrame))
+
+
+def company_again(ticker: str) -> Optional[dict]:
+    """The day's record with its statements fetched once more, keeping the fuller copy.
+
+    THE PROVIDER DOES NOT ALWAYS SEND THE SAME STATEMENTS TWICE. Two passes over
+    122 US companies, minutes apart with both markets closed, read six of them
+    differently: five had a statement one line longer or shorter. NVDA's
+    balance sheet came back with 79 lines where the other pass, and five later
+    fetches, had 80, and with that line gone its solvency score went from
+    "safe" to "cannot score" — for the rest of the day, because `company` keeps
+    what it got (docs/AUDIT.md, REL-7). It is also why two runs of the lens
+    agreement differed in the third decimal.
+
+    There is nothing to check a line against, so this cannot be closed, only
+    narrowed. A caller that finds a score it cannot compute for want of a line
+    asks here; the statements are fetched once more, each one keeps whichever
+    copy has more lines for the same fiscal years, and the record is marked so
+    the same symbol is not asked again that day. One extra fetch, and only for
+    a company that came back short.
+
+    None when the day's record did not come from this cache (a test's planted
+    company, or a caller that never fetched), so nothing here ever reaches for
+    the network on a record it did not fetch.
+    """
+    key = (ticker.upper(), dt.date.today().isoformat())
+    if _cached_for(key) is None:
+        return None
+    with _company_lock(key):
+        held = _cached_for(key)
+        if held is None:
+            return None
+        if held.get("statements_rechecked"):
+            return dict(held)
+        try:
+            fresh = _apply_fx(dict(_company_uncached(ticker, convert=False)))
+        except Exception:
+            fresh = {}
+        merged = dict(held)
+        for name in ("income", "balance", "cashflow"):
+            mine, theirs = held.get(name), fresh.get(name)
+            if not isinstance(theirs, pd.DataFrame) or theirs.empty:
+                continue
+            same_years = (isinstance(mine, pd.DataFrame)
+                          and list(mine.columns) == list(theirs.columns))
+            if (not isinstance(mine, pd.DataFrame) or mine.empty
+                    or (same_years and len(theirs.index) > len(mine.index))):
+                merged[name] = theirs
+        merged["statements_rechecked"] = True
+        with _COMPANY_GUARD:
+            _COMPANY_CACHE[key] = merged
+    return dict(merged)
+
+
 def cached_company(ticker: str) -> Optional[dict]:
     """The company record already in hand, or None. NEVER fetches statements.
 

@@ -1482,6 +1482,12 @@ languages, and the first paint is English until the browser's choice is read. Th
 was written for this app, not by a translator, and has not yet been read by a native-speaking
 investor — the glossary in `lib/i18n-id.ts` is the place to correct a word everywhere at once.
 
+**The same request does not always return the same statements.** Two passes over 122 US
+companies, minutes apart, read six of them differently, five by a single line. When that costs
+an accounting screen its score, the statements are fetched once more and the fuller copy is
+kept for the day. A short statement that leaves every score computable is not noticed, because
+nothing can tell a line the provider dropped from one the company never filed.
+
 **Data.** yfinance is an unofficial scraper against an undocumented endpoint, with no SLA.
 Fundamentals for smaller IDX listings are patchy — where a figure is missing, the app offers
 a manual-input form rather than guessing. This is the single biggest fragility in the

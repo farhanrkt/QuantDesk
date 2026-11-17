@@ -306,6 +306,7 @@ def _nullable(value):
 # risk-free rate, and the rule that the last daily bar close is the canonical
 # price. See that module's header for the four bugs that arrangement fixed.
 fetch_company = market_data.company
+fetch_company_again = market_data.company_again
 fetch_risk_free_rate = market_data.risk_free_rate
 
 
