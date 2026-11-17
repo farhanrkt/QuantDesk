@@ -170,13 +170,20 @@ export function agreementOf(readings: Reading[]): Agreement {
  * ten-to-sixteen-second first run behind four identical dashes gave a reader no
  * way to tell a slow engine from a broken one.
  */
+// A LENS THAT DID NOT RUN SAYS WHY. The cell read "did not run" and nothing
+// else, on a company with no filed statements whose Value tab holds a form for
+// exactly that gap; the server's own sentence, in the reader's language, was
+// one tab away. It is here now; the server's sentence already names the way out.
 const blank = (lens: string, question: string, family: Family,
-               state?: string): Reading => ({
+               state: Engine<unknown>): Reading => ({
   lens, question, family, color: ASH, vote: 0,
-  pending: state === "loading",
-  failed: state === "error",
-  verdict: state === "loading" ? "…" : "—",
-  detail: state === "loading" ? t("running") : state === "error" ? t("did not run") : t("no reading"),
+  pending: state.status === "loading",
+  failed: state.status === "error",
+  verdict: state.status === "loading" ? "…" : "—",
+  detail: state.status === "loading" ? t("running")
+    : state.status === "error"
+      ? state.failure.message || t("did not run")
+      : t("no reading"),
 });
 
 /**
@@ -190,7 +197,7 @@ const blank = (lens: string, question: string, family: Family,
  */
 function readAnomaly(state: Engine<AnomalyResponse>): Reading {
   const question = t("Is anyone unusual trading this?");
-  if (state.status !== "ready") return blank(msg("Flow"), question, "price", state.status);
+  if (state.status !== "ready") return blank(msg("Flow"), question, "price", state);
   const { stats } = state.data;
   const bias = stats.recentFlowBias;
   const color = bias === "Accumulation" ? ACC : bias === "Distribution" ? DIST : ASH;
@@ -222,7 +229,7 @@ function readAnomaly(state: Engine<AnomalyResponse>): Reading {
 
 function readTechnical(state: Engine<TechnicalResponse>): Reading {
   const question = t("What has the price been doing?");
-  if (state.status !== "ready") return blank(msg("Trend"), question, "price", state.status);
+  if (state.status !== "ready") return blank(msg("Trend"), question, "price", state);
   const { summary, latest, longTerm, hasLongTerm } = state.data;
   const tone = summary.trend_tone;
   const color = tone === "bull" ? ACC : tone === "bear" ? DIST : TECH;
@@ -262,7 +269,7 @@ const BIAS_WORD: Record<string, string> = {
 
 function readValuation(state: Engine<ValuationResponse>): Reading {
   const question = t("What is the business worth?");
-  if (state.status !== "ready") return blank(msg("Value"), question, "filings", state.status);
+  if (state.status !== "ready") return blank(msg("Value"), question, "filings", state);
   const d = state.data;
   const color =
     d.verdict === "UNDERVALUED" ? ACC : d.verdict === "OVERVALUED" ? DIST
@@ -299,7 +306,7 @@ const MANIPULATION_WORDS: Record<string, string> = {
 
 function readQuality(state: Engine<QualityResponse>): Reading {
   const question = t("Are the numbers real?");
-  if (state.status !== "ready") return blank(msg("Quality"), question, "filings", state.status);
+  if (state.status !== "ready") return blank(msg("Quality"), question, "filings", state);
   const d = state.data;
   // THE REFUSAL SAYS WHICH REFUSAL. This printed the bank sentence for every
   // `applicable: false`, so a throttled fetch that returned no sector for
