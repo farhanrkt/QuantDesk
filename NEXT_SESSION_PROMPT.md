@@ -10,17 +10,38 @@ say what exists, why, and what may not be broken:
 
 STATE
 =====
-main has the October 2026 overhaul, the private market scanner and the market
-board, which reached it through farhanrkt/QuantDesk#5. The November 2026 work
-(the analysis fixes, Bahasa Indonesia across the app, the Indonesian field
-manual) is on claude/gallant-davinci-l5qtd5 and reaches main through its own
-pull request: start from main once that has merged, and from that branch
-before. Each commit states what it changed and why. CLAUDE.md, which Claude
-Code loads into every session, carries the checks and the standing rules.
-Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
-single Vercel Python function on the back. ~1,920 offline pytest tests, 85
-frontend assertions, 21 enforced design rules plus structural checks. US and
-Indonesian (IDX) listings. lxml is now a runtime dependency (see below).
+A six-phase launch-readiness pass was done in November 2026, each phase a pull
+request into main, each built on the one before (so each also shows the earlier
+phases' commits until those merge):
+
+  farhanrkt/QuantDesk#12  1 baseline: both stamps re-measured on real data
+  farhanrkt/QuantDesk#13  2 audit: docs/AUDIT.md, scripts/audit_repro.py, scripts/audit/
+  farhanrkt/QuantDesk#14  3 fixes for every finding that needed no decision
+  farhanrkt/QuantDesk#15  4 the screen: no self-scroll, no layout shift, phone order, Indonesian
+  farhanrkt/QuantDesk#16  5 features: name search, IDX lot cost, browser backup, did-you-mean
+  (Phase 6)               6 production: error reporting, /api/status and an uptime
+                            workflow, an optional shared rate limit, stale-if-error,
+                            graceful degradation, a deployment checklist, dead code
+
+Merge them in that order. Until they have merged, start from the Phase 6 branch,
+claude/quantdesk-production-readiness-u2gkf4-6-ops. Two older pull requests,
+farhanrkt/QuantDesk#9 and #10, are the owner's and touch some of the same files.
+
+docs/AUDIT.md is the place to start: every finding with its status, and
+"Decisions for the owner" (twelve, each with a recommendation). The ones with a
+date on them: Bank Indonesia's 2027 meeting dates (the calendar runs out on 16
+December 2026), and the three stale Nasdaq-100 names before the next
+re-measurement. Keys the owner may add, each off until set and described in
+README → Deploying: SENTRY_DSN, UPSTASH_REDIS_REST_URL/_TOKEN, and the Actions
+variable QUANTDESK_URL.
+
+CLAUDE.md, which Claude Code loads into every session, carries the checks and
+the standing rules. Stack: Next.js 15 + React 19 + Tailwind + Recharts on the
+front, FastAPI on a single Vercel Python function on the back. 2,053 offline
+pytest tests (7 skipped), 115 frontend assertions, 21 enforced design rules
+plus structural checks, 1,232 interface strings each with Indonesian. US and
+Indonesian (IDX) listings. lxml is a runtime dependency (see below); uvicorn is
+a development one only.
 
 The full battery, all green as of the last commit:
   .venv/bin/python -m pytest && .venv/bin/ruff check api tests scripts

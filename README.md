@@ -1284,7 +1284,7 @@ scripts/
   audit/              The audit's instruments, outside CI: a live sweep of
                       198 companies, a provider that hangs, and the browser
                       walk (screenshots, axe-core, layout shift, keyboard)
-tests/        1,920 offline tests (pytest), plus 85 frontend assertions
+tests/        2,053 offline tests (pytest), plus 115 frontend assertions
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·

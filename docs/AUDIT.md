@@ -799,7 +799,9 @@ I would do; the work that does not depend on the answer continues.
    the amplification caps, which need no shared state, remain the real defence.
 2. **Which error-reporting service** receives the reports Phase 6 can send.
    *Recommendation:* any service that accepts the Sentry envelope format, so
-   the code is not tied to one vendor.
+   the code is not tied to one vendor. Phase 6 built the sender
+   (`api/_lib/reporting.py`); it is off until `SENTRY_DSN` is set, and until
+   then every error is a line in the function log.
 3. **Updating the index lists** (COR-3). Replacing ANSS, EA and WBD changes the
    population behind every stamped measurement, so all of them are measured
    again. *Recommendation:* do it, as its own change, before the next
@@ -829,3 +831,16 @@ I would do; the work that does not depend on the answer continues.
 9. **The published copy of the field manual**, linked from the README, still
    carries August's figures. It is your page to republish.
 10. **A native-speaking investor's read of the Indonesian.**
+11. **Bank Indonesia's 2027 meeting dates.** The calendar's BI schedule ends on
+    16 December 2026 because BI had not published 2027 when the file was last
+    checked; `/api/status` reports it. *Recommendation:* add the dates to
+    `api/_lib/calendar_events.json` as soon as BI publishes them (usually
+    late in the year), or the band and the panel show no BI meeting from
+    January.
+12. **Rendering the first paint in the reader's language.** An Indonesian
+    reader sees English for about 0.6 s on the landing and 1.1 s on a stock
+    page on a mid-range phone (DESIGN.md). Removing it means rendering each
+    page per request with a language cookie, which gives up the static shells.
+    *Recommendation:* try a pre-hydration script that swaps the shell's few
+    fixed strings first, and measure it against the same numbers before
+    deciding on a cookie.
