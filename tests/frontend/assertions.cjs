@@ -834,6 +834,27 @@ t("fired conditions are listed, never counted", () => {
   });
 }
 
+// ---- rangeForHorizon: the holding-period message's button (UX-3) ----
+{
+  const { rangeForHorizon } = require("./lib/url.js");
+  t("five-year periods on the default five-year load ask for ten years", () => {
+    assert.equal(rangeForHorizon(5, "5y"), "10y");
+  });
+  t("ten-year periods ask for the full history", () => {
+    assert.equal(rangeForHorizon(10, "5y"), "max");
+    assert.equal(rangeForHorizon(10, "10y"), "max");
+  });
+  t("a horizon the loaded range can already hold offers nothing", () => {
+    assert.equal(rangeForHorizon(3, "5y"), null);
+    assert.equal(rangeForHorizon(5, "10y"), null);
+    assert.equal(rangeForHorizon(10, "max"), null, "nothing is longer than everything");
+  });
+  t("a short range is widened just enough", () => {
+    assert.equal(rangeForHorizon(1, "1y"), "2y");
+    assert.equal(rangeForHorizon(2, "1y"), "5y");
+  });
+}
+
 Promise.all(pending).then(() => {
   console.log(`  ${n} frontend assertions passed`);
 });

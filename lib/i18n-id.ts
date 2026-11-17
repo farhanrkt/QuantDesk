@@ -1345,5 +1345,7 @@ export const ID: Record<string, string> = {
   "strong": "kuat",
   "moderate": "sedang",
   "weak": "lemah",
-  "none": "tidak ada"
+  "none": "tidak ada",
+  "Load the full price history": "Muat seluruh riwayat harga",
+  "Load {years} years of prices": "Muat harga {years} tahun"
 };

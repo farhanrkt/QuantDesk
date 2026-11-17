@@ -1,10 +1,12 @@
 "use client";
 
 import { Clock } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { HorizonPicker, type Horizon } from "@/components/ui/horizon";
 import { ExplanationBody, TONE_TEXT } from "@/components/ui/explain";
 import { useState } from "react";
 import type { Engine, TechnicalResponse } from "@/lib/types";
+import { rangeForHorizon } from "@/lib/url";
 import { cn, pct, signedPct } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
@@ -29,11 +31,14 @@ import { useT } from "@/lib/i18n";
  * negative worst-case is bad news; `_rolling_worst` in Python did, with a test.
  */
 export function HoldingHorizonBar({
-  state, horizon, onHorizon,
+  state, horizon, onHorizon, range, onRange,
 }: {
   state: Engine<TechnicalResponse>;
   horizon: Horizon;
   onHorizon: (h: Horizon) => void;
+  /** The chart range loaded now, and how to load a longer one. */
+  range: string;
+  onRange: (range: string) => void;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -46,6 +51,19 @@ export function HoldingHorizonBar({
                         .map((r) => r.years);
   const explain = data.longTerm?.explain?.[`rollingWorst.${horizon}`];
   const measured = row && row.usable !== false && row.worst != null;
+  // THE MESSAGE CARRIES ITS OWN FIX (UX-3). Five and ten years are offered on
+  // a default load of five years of prices, which cannot answer them, and the
+  // message used to say "Widen the chart range" about a control folded away
+  // under Advanced settings. Offered only where widening can help: the server
+  // says `widenable: false` for a company that has not traded that long.
+  const wider = !data.hasLongTerm ? rangeForHorizon(5, range)
+    : !measured && row?.widenable ? rangeForHorizon(horizon, range) : null;
+  const widen = wider && (
+    <Button variant="secondary" size="sm" className="mt-3" onClick={() => onRange(wider)}>
+      {wider === "max" ? t("Load the full price history")
+        : t("Load {years} years of prices", { years: wider.replace("y", "") })}
+    </Button>
+  );
 
   return (
     <section className="animate-rise overflow-hidden rounded-xl border border-rule bg-panel">
@@ -75,10 +93,14 @@ export function HoldingHorizonBar({
 
       <div className="border-t border-rule px-5 py-5">
         {!data.hasLongTerm ? (
-          <p className="prose-col text-base leading-relaxed text-ash">
-            {t("The chart range is too short for any holding-period history. Set it to 5y or longer and this becomes the strongest evidence on the page.")}
-          </p>
+          <>
+            <p className="prose-col text-base leading-relaxed text-ash">
+              {t("The chart range is too short for any holding-period history. Set it to 5y or longer and this becomes the strongest evidence on the page.")}
+            </p>
+            {widen}
+          </>
         ) : !measured ? (
+          <>
           <p className="prose-col text-base leading-relaxed text-ash">
             {row?.reason
               ?? t("No {horizon}-year holding periods in the loaded history.", { horizon })}{" "}
@@ -86,6 +108,8 @@ export function HoldingHorizonBar({
               {t("Nothing is known about {horizon}-year outcomes for this stock here — which is not the same as nothing having gone wrong over one.", { horizon })}
             </span>
           </p>
+          {widen}
+          </>
         ) : (
           <>
             {/* THE WORST COLUMN LEADS, and it is the only one that takes a

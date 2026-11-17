@@ -324,7 +324,9 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
       {/* The frame everything below is read through: what this length of
           ownership has historically been like. Above the synthesis because it
           is neither a summary nor an objection. */}
-      <HoldingHorizonBar state={technical} horizon={horizon} onHorizon={setHorizon} />
+      <HoldingHorizonBar state={technical} horizon={horizon} onHorizon={setHorizon}
+                         range={tuning.range}
+                         onRange={(range) => router.push(stockHref(symbol, visible, { ...tuning, range }))} />
 
       {/* Reads the assembled payload, so it can only appear once every leg has
           settled — a summary of four lenses that renders before three of them

@@ -44,6 +44,22 @@ export const RUN_DEFAULTS: RunTuning = {
 /** Accepted values, mirroring the API's own validation so a link cannot 422. */
 const PERIODS = ["6mo", "1y", "2y", "5y", "max"];
 const RANGES = ["3mo", "6mo", "1y", "2y", "5y", "10y", "max"];
+const RANGE_YEARS: Record<string, number> = {
+  "3mo": 0.25, "6mo": 0.5, "1y": 1, "2y": 2, "5y": 5, "10y": 10, max: Infinity,
+};
+
+/**
+ * The shortest chart range that can hold twenty-one overlapping `horizon`-year
+ * holding periods (the server's minimum: the horizon plus twenty trading days),
+ * or null when the current range is already that long or longer. Five-year
+ * periods need ten years of prices, so the default five-year range answers
+ * "5y" with a message and this is the range its button loads.
+ */
+export function rangeForHorizon(horizon: number, current: string): string | null {
+  const needed = horizon + 20 / 252;
+  const range = RANGES.find((r) => RANGE_YEARS[r] >= needed) ?? "max";
+  return RANGE_YEARS[range] > (RANGE_YEARS[current] ?? 0) ? range : null;
+}
 const MODES = ["threshold", "mad", "quota", "walkforward"];
 
 /**
