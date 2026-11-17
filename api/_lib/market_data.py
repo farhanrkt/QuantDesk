@@ -257,6 +257,45 @@ def is_stale(frame: Optional[pd.DataFrame], asked_through: Optional[dt.date] = N
     return age > limit
 
 
+# How far after the start of a requested window a series may begin and still
+# count as covering it. Weekends, holidays and an exchange's first sessions of
+# the year all move the first bar a little; a listing that is a month younger
+# than the window it was asked for is younger than that window.
+LISTING_SLACK_DAYS = 31
+
+
+def why_short(ticker: str, frame: Optional[pd.DataFrame],
+              wanted_from: Optional[dt.date] = None) -> Optional[str]:
+    """Why a history is shorter than asked for, when a longer range cannot help.
+
+    THE LENSES USED TO SAY "WIDEN THE DATE RANGE" WHATEVER THE CAUSE. For a
+    company that stopped trading in August (Electronic Arts, in the November
+    2026 audit) and for one that listed two years ago (SPRE.JK, 569 sessions
+    in a five-year window), widening adds nothing, and the sentence sent a
+    newcomer looking for a control that cannot fix it (docs/AUDIT.md, COR-5).
+    So the two causes a range cannot fix are named, with their date, and None
+    means the advice to widen still stands.
+    """
+    if frame is None or frame.empty:
+        return None
+    first = pd.Timestamp(frame.index[0]).date()
+    last = pd.Timestamp(frame.index[-1]).date()
+    if is_stale(frame):
+        return tr(f"{ticker} has not traded since {last.isoformat()}: the provider has no "
+                  f"price after that date, which usually means it was delisted, suspended "
+                  f"or renamed. A longer range will not add anything.",
+                  f"{ticker} tidak diperdagangkan sejak {last.isoformat()}: penyedia data "
+                  f"tidak punya harga setelah tanggal itu, yang biasanya berarti saham ini "
+                  f"dihapus dari bursa, disuspensi, atau berganti nama. Rentang yang lebih "
+                  f"panjang tidak akan menambah apa pun.")
+    if wanted_from is not None and (first - wanted_from).days > LISTING_SLACK_DAYS:
+        return tr(f"{ticker} has only traded since {first.isoformat()}, so a longer range "
+                  f"will not add history.",
+                  f"{ticker} baru diperdagangkan sejak {first.isoformat()}, jadi rentang "
+                  f"yang lebih panjang tidak akan menambah riwayat.")
+    return None
+
+
 # ONE yf.download AT A TIME, PER PROCESS. yfinance's `download` keeps its results
 # in module-level globals — it sets `shared._DFS = {}` on entry and assembles its
 # return value from that dict on exit — so two downloads running at once in one

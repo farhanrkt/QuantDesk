@@ -4300,6 +4300,12 @@ def _read_trend(data: dict) -> Optional[dict]:
     summary = data.get("summary") or {}
     if not summary.get("trend"):
         return None
+    if summary.get("readable") is False:
+        # Too little history to read a trend: the lens answered, and its answer
+        # is that it could not read. `none` is the tone every reader of the
+        # synthesis already treats as no vote.
+        return _reading(tr("Trend", "Tren"), "trend", str(summary["trend"]).capitalize(),
+                        _plain(summary.get("headline")).split(". ")[0] + ".", "none", 0)
     tone = {"bull": "good", "bear": "bad"}.get(summary.get("trend_tone"), "neutral")
     return _reading(
         tr("Trend", "Tren"), "trend", str(summary["trend"]).capitalize(),

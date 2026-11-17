@@ -52,7 +52,7 @@ or *deferred* (with the reason).
 | REL-3 | Medium | One failed price request is final: no second attempt | fixed |
 | REL-5 | Medium | The browser never gives up on a request, and cannot read a validation error | fixed |
 | COR-4 | Medium | Two lenses on one page use two risk-free rates (4.2% and the live 5.15%) | fixed |
-| COR-5 | Medium | A company that stopped trading is told to "widen the date range" | open |
+| COR-5 | Medium | A company that stopped trading is told to "widen the date range" | fixed |
 | COR-3 | Medium | Three names in the Nasdaq-100 list no longer trade | decision |
 | SEC-2 | Medium | The ticker pattern accepts `..` | fixed |
 | SEC-3 | Medium | Validation errors are English lists that echo their input without limit | fixed |
@@ -392,6 +392,14 @@ whole life.
 
 **Fix.** When the last bar is old, say when trading stopped; when the series
 starts inside the requested range, say the company has not traded that long.
+
+**Fixed.** `market_data.why_short` names the two causes a range cannot fix,
+with their date, and the Trend headline, the holding-period table and the Flow
+lens use it in place of the advice to widen; that advice stays where it is
+true. A Trend lens with too little history to read anything now reports
+itself as unreadable, so it casts no vote instead of a neutral one. That can
+move the lens agreement for the delisted names, which are re-measured with the
+rest. `tests/test_short_history.py`, six tests that fail without the change.
 
 ### COR-3. Three names in the Nasdaq-100 list no longer trade
 

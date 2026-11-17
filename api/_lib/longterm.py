@@ -301,7 +301,8 @@ MIN_WINDOWS = 20
 
 
 def rolling_returns(close: pd.Series,
-                    years: Sequence[float] = HOLDING_HORIZONS) -> list[dict]:
+                    years: Sequence[float] = HOLDING_HORIZONS,
+                    short_because: Optional[str] = None) -> list[dict]:
     """Every N-year holding period in the history, summarised.
 
     THE MOST USEFUL SINGLE TABLE for a long-term investor, because it answers
@@ -327,16 +328,19 @@ def rolling_returns(close: pd.Series,
         needed = window + MIN_WINDOWS
         if len(prices) < needed:
             short_by = needed - len(prices)
+            # Widening is the fix only when the company has more history than
+            # the range shows; `short_because` says when it does not.
+            fix = short_because or tr("Widen the chart range.", "Perlebar rentang grafik.")
             out.append({
                 "years": horizon, "usable": False, "windows": 0,
                 "reason": (tr(f"Needs about {needed:,} trading days of history to have "
                               f"{MIN_WINDOWS + 1} overlapping {horizon}-year periods to compare, "
-                              f"and this range has {len(prices):,} — {short_by:,} short. Widen "
-                              f"the chart range.",
+                              f"and this range has {len(prices):,} — {short_by:,} short. {fix}",
                               f"Butuh riwayat sekitar {needed:,} hari perdagangan agar ada "
                               f"{MIN_WINDOWS + 1} periode {horizon} tahun yang saling tumpang tindih "
                               f"untuk dibandingkan, dan rentang ini hanya punya {len(prices):,} — "
-                              f"kurang {short_by:,}. Perlebar rentang grafik.")),
+                              f"kurang {short_by:,}. {fix}")),
+                "widenable": short_because is None,
             })
             continue
         ratio = prices / prices.shift(window)
