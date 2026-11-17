@@ -20,7 +20,7 @@ before. Each commit states what it changed and why. CLAUDE.md, which Claude
 Code loads into every session, carries the checks and the standing rules.
 Stack: Next.js 15 + React 19 + Tailwind + Recharts on the front, FastAPI on a
 single Vercel Python function on the back. ~1,920 offline pytest tests, 85
-frontend assertions, 20 enforced design rules plus structural checks. US and
+frontend assertions, 21 enforced design rules plus structural checks. US and
 Indonesian (IDX) listings. lxml is now a runtime dependency (see below).
 
 The full battery, all green as of the last commit:

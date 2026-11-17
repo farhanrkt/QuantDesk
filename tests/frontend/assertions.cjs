@@ -817,6 +817,23 @@ t("fired conditions are listed, never counted", () => {
   });
 }
 
+// ---- sidewaysTo: a tab strip scrolls itself, never the page (rule 21) ----
+{
+  const { sidewaysTo } = require("./lib/utils.js");
+  t("a tab already in view does not move the strip", () => {
+    assert.equal(sidewaysTo(100, 300, 150, 80), 100);
+  });
+  t("a tab past the right edge brings its right edge in, and no further", () => {
+    assert.equal(sidewaysTo(0, 300, 350, 80), 130);
+  });
+  t("a tab past the left edge brings its left edge in", () => {
+    assert.equal(sidewaysTo(200, 300, 40, 80), 40);
+  });
+  t("a tab wider than the strip shows its start", () => {
+    assert.equal(sidewaysTo(0, 100, 250, 180), 250);
+  });
+}
+
 Promise.all(pending).then(() => {
   console.log(`  ${n} frontend assertions passed`);
 });

@@ -476,7 +476,8 @@ it *sounds* is still untested — an automated pass is a floor, not a substitute
 
 ## The rules are enforced, not just written
 
-`npm run check:frontend` enforces nineteen of them, and each describes a bug
+`npm run check:frontend` enforces twenty-one of them (rule 20, the translation
+check, is described under Language), and each describes a bug
 that was really in this codebase. It walks `components/` and `app/`
 recursively — the first version listed three directories by hand, so a file in
 any new subfolder was exempt from every rule without anyone deciding so.
@@ -531,6 +532,16 @@ any new subfolder was exempt from every rule without anyone deciding so.
     news lists, the exchange status, the landing section). The board keeps its declared
     order and colours nothing by direction; the calendar's time order lives in
     `lib/calendar.ts`, outside the rule.
+20. A wrapped string with no Bahasa Indonesia, and the catalogue's other gaps; see
+    Language below.
+21. Anything that scrolls the page by itself: `scrollIntoView` or `window.scroll`,
+    outside the palette's list. `scrollIntoView` moves every scrollable ancestor,
+    the window included, and the tab strips used it to keep the selected tab in
+    view: on a phone the stock page scrolled itself twice while loading, the
+    second time 2,600 px down to the chart's horizon tabs, so a reader arrived
+    mid-chart without having seen the company's name. A strip now moves only its
+    own `scrollLeft` (`sidewaysTo` in `lib/utils.ts`). The same scroll was most
+    of the page's measured layout shift.
 
 Rule 4 now covers every text and tone token, not only `chalk` and `ash`; eight
 `text-warn/90`-style sites had walked past it. Rule 7's budget is eight hits in
