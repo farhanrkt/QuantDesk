@@ -5,6 +5,7 @@ import { useCallback, useState } from "react";
 import { MarketBand } from "@/components/markets/MarketBand";
 import { MarketRail } from "@/components/markets/MarketRail";
 import { CommandPalette } from "@/components/palette/CommandPalette";
+import { ErrorListener } from "@/components/shell/ErrorListener";
 import { MarketBoardProvider } from "@/components/shell/marketboard";
 import { PreferencesProvider } from "@/components/shell/preferences";
 import { ShortcutLayer } from "@/components/shell/ShortcutLayer";
@@ -71,6 +72,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </footer>
           <CommandPalette open={paletteOpen} onClose={closePalette} />
           <ShortcutLayer onPalette={openPalette} paletteOpen={paletteOpen} />
+          <ErrorListener />
         </ToastProvider>
         </MarketBoardProvider>
       </WorkspaceProvider>

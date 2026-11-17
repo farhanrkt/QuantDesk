@@ -1315,6 +1315,7 @@ Interactive docs at `/api/docs`.
 |---|---|
 | `GET /api/confluence` | **All four lenses in one call, plus the synthesis, the pre-trade checks and the company block** — what the UI actually uses |
 | `GET /api/company` | **What the company is**: profile, listing, statements year by year, dividends, next report. The same block confluence carries |
+| `POST /api/client-error` | **A browser's own error**, reported through this origin when error reporting is on (see Error reporting). 204, nothing else |
 | `GET /api/symbols` | **Listings matching a name, an everyday name or a ticker**, for the ticker box and the command palette. Reads the committed listing files; no provider call |
 | `GET /api/markets/today` | **What moved the markets**: 22 instruments, each move against its own past year, the unusual ones named, the base rate, and what the source cannot supply. Takes no parameters; five minutes at the edge |
 | `GET /api/markets/calendar` | **The dates that move markets** for the next 90 days, with each exchange's hours and closures, each source's coverage, and what is not published yet. Takes no parameters; an hour at the edge |
@@ -1493,6 +1494,32 @@ nothing.
 
 **It still has to be switched on in the dashboard** — Vercel project → Analytics → Enable.
 The code alone does not start collection.
+
+## Error reporting
+
+**Off until a key is set, and nothing is sent anywhere until then.** Every failure is
+written to the function log as one JSON line (`api/_lib/reporting.py`), which Vercel keeps
+under the project's Logs. Setting `SENTRY_DSN` in the project's environment variables also
+sends each event to that project, in Sentry's envelope format, which several error services
+accept; choosing the service is the owner's decision (`docs/AUDIT.md`).
+
+- **What is reported:** a lens that broke, an exception no route handled (now answered with
+  a translated 500 sentence instead of plain "Internal Server Error"), and, once the server
+  says reporting is on (`/api/capabilities` → `errorReporting`), the browser's own errors:
+  a page that failed to draw, an uncaught error and an unhandled promise rejection.
+- **What never is:** a query string, a request body, a header, the client's address, or a
+  path. The server names the route template; the browser sends `lib/redact.ts`'s template
+  (`/stock/[symbol]`), and the server cuts any query string from the message and the stack
+  again. Holdings travel in request bodies, so no body is ever read into an event.
+- **Same origin.** Browser reports go to `POST /api/client-error` on this domain, so the
+  content security policy stays `connect-src 'self'`. At most five per page load, one per
+  distinct message, and ten a minute per address at the server.
+- **Standard library only**, sent from a background thread with a two-second timeout, so a
+  reporting service that is down costs a log line, never a reader's request.
+
+Checked with a local listener as the "service": a planted browser error and a planted
+rejection on `/stock/AAPL?tab=flow` arrived as two events naming `/stock/[symbol]`, and
+neither "AAPL" nor "tab=flow" appeared anywhere in what was received.
 
 ---
 

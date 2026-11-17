@@ -69,19 +69,19 @@ import json
 import logging
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from _lib import (accumulation, econcalendar, eventstudy, explain, exposure,
                   field, lang, listings, market_data, marketboard, microstructure, news,
-                  portfolio, pretrade, quality, ranking,
+                  portfolio, pretrade, quality, ranking, reporting,
                   riskmodel, symbols, technical, trackrecord,
                   universes, valuation)
 
@@ -309,6 +309,9 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # One provider call per name and none of them batch, the shape of cost the
     # shortlist deepening has, so it takes a cap of the same order.
     "/api/markets/earnings": (3, 60),
+    # A browser's error reports. A page that breaks in a loop must not be able
+    # to flood the log or the error service, and a reader never waits on these.
+    "/api/client-error": (10, 60),
     None: (40, 60),                      # default for every other route
 }
 RATE_EXEMPT = {"/api/health", "/api/docs", "/openapi.json"}
@@ -615,6 +618,38 @@ class ApiHeaders:
 app.add_middleware(ApiHeaders)
 
 
+def route_template(request: Request) -> str:
+    """The route that matched, as declared ("/api/confluence"), or "(unrouted)".
+
+    What an error report names, never the raw path, which can carry whatever a
+    caller put in it."""
+    route = request.scope.get("route")
+    return getattr(route, "path", None) or "(unrouted)"
+
+
+@app.exception_handler(Exception)
+async def unexpected(request: Request, exc: Exception) -> JSONResponse:
+    """An exception no route handled: reported, and answered in a sentence.
+
+    The framework's answer was "Internal Server Error" as plain English text,
+    which the page could not read. The exception goes to the log and, when
+    reporting is switched on, to the error service (_lib/reporting.py)."""
+    reporting.capture_exception(exc, kind="unhandled", route=route_template(request),
+                                method=request.method, status=500)
+    # The framework calls this outside every middleware, the language one
+    # included, so the request's language is read again here.
+    token = lang.use(request.query_params.get("lang"))
+    try:
+        detail = tr("Something went wrong inside the app while answering this. It is a fault "
+                    "in the app, not in what you asked for, and it has been recorded.",
+                    "Ada yang salah di dalam aplikasi saat menjawab ini. Ini kesalahan "
+                    "aplikasi, bukan pada yang Anda minta, dan sudah dicatat.")
+    finally:
+        lang.reset(token)
+    return JSONResponse(status_code=500, headers={"Cache-Control": "no-store"},
+                        content={"detail": detail})
+
+
 @app.exception_handler(RequestValidationError)
 async def unreadable_request(request: Request, exc: RequestValidationError) -> JSONResponse:
     """A request that failed validation, answered in a sentence that names
@@ -763,7 +798,44 @@ def capabilities(request: Request):
     The same function decides the flag and guards the two routes, so the page
     and the server cannot disagree about it.
     """
-    return ok({"privateTier": private_tier_enabled(request)})
+    return ok({"privateTier": private_tier_enabled(request),
+               # Whether the browser should report its own errors here. Off
+               # until SENTRY_DSN is set, so a deployment with no error service
+               # receives no reports it has nowhere to send.
+               "errorReporting": reporting.enabled()})
+
+
+CLIENT_ROUTES = {"/", "/stock/[symbol]", "/compare", "/markets", "/journal", "/other"}
+_URL_QUERY = re.compile(r"\?[^\s)]*")
+
+
+class ClientError(BaseModel):
+    """What a browser may say about an error it hit. Nothing else is read."""
+    kind: Literal["render", "unhandled", "rejection"]
+    message: str = Field(max_length=500)
+    stack: str = Field("", max_length=4000)
+    route: str = Field(max_length=40)
+
+
+@app.post("/api/client-error", status_code=204)
+def client_error(report: ClientError):
+    """A browser's error, reported through this origin.
+
+    SAME ORIGIN, SO THE PAGE'S CONTENT SECURITY POLICY STAYS `connect-src
+    'self'`, and the report goes through the same redaction as everything the
+    server sends: the browser sends a route TEMPLATE (lib/redact.ts), and any
+    query string a stack line carries is cut here as well. Off unless the
+    server has an error service to send to; the page asks /api/capabilities
+    first and does not send otherwise.
+    """
+    if not reporting.enabled():
+        return Response(status_code=204)
+    route = report.route if report.route in CLIENT_ROUTES else "/other"
+    record = reporting.event(kind=f"browser:{report.kind}", source="browser", route=route,
+                             message=_URL_QUERY.sub("", report.message))
+    record["extra"] = {"stack": _URL_QUERY.sub("", report.stack)}
+    reporting.capture(record)
+    return Response(status_code=204)
 
 
 # --------------------------------------------------------------------------- #
@@ -2362,6 +2434,7 @@ def lens_broke(name: str, exc: BaseException) -> dict:
     the person who can fix it reads it, and the reader gets a sentence.
     """
     LOG.error("lens %s failed", name, exc_info=exc)
+    reporting.capture_exception(exc, kind="lens", route=f"lens:{name}")
     return {
         "message": tr("Something went wrong inside this lens, so it has no reading this time. "
                       "The other lenses are unaffected; trying again usually works, and if it "

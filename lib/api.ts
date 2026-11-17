@@ -708,14 +708,15 @@ export function useScan(market: Market, enabled = true) {
  * same function that guards `/api/verdict` and `/api/scan/latest`, so the page
  * cannot offer what the routes refuse.
  */
-export function useCapabilities(): { privateTier: boolean } {
+export function useCapabilities(): { privateTier: boolean; errorReporting: boolean } {
   const { state, run } = useRequest("capabilities",
     (_: void, signal: AbortSignal) => get<Capabilities>("/api/capabilities", {}, signal));
   useEffect(() => {
     const current = readSession<Engine<Capabilities>>(requestKey("capabilities"));
     if (!current || current.status === "idle" || current.status === "error") run(undefined);
   }, [run]);
-  return { privateTier: state.status === "ready" && state.data.privateTier === true };
+  return { privateTier: state.status === "ready" && state.data.privateTier === true,
+           errorReporting: state.status === "ready" && state.data.errorReporting === true };
 }
 
 /**
