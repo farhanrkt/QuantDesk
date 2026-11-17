@@ -15,10 +15,20 @@ import { useT } from "@/lib/i18n";
  */
 export function CompanyHeader({ state }: { state: Engine<CompanyResponse> }) {
   const t = useT();
+  // THE PLACEHOLDER IS THE HEADER'S HEIGHT, measured: a name line (two on a
+  // phone), a two-line summary and the report date — 132 px at 375, 98 from
+  // 640. It was one 16 px bar, so the rail grew by eighty pixels when the
+  // company arrived and pushed the lens chips off the first screen of a tablet
+  // under a reader who had started on them. It stands in before the request
+  // starts too, since that is the same wait.
   if (state.status !== "ready") {
-    return state.status === "loading"
-      ? <div aria-hidden className="mt-2 h-4 w-64 max-w-full animate-pulseline rounded bg-rule" />
-      : null;
+    return state.status === "error" ? null : (
+      <div aria-hidden className="mt-1.5 h-[132px] space-y-2.5 pt-1 sm:h-[98px]">
+        <div className="h-4 w-64 max-w-full animate-pulseline rounded bg-rule" />
+        <div className="h-3 w-full max-w-measureWide animate-pulseline rounded bg-rule" />
+        <div className="h-3 w-4/5 max-w-measure animate-pulseline rounded bg-rule" />
+      </div>
+    );
   }
   const { name, profile, listing, currency, nextEarnings } = state.data;
   const facts = [profile.industry ?? profile.sector, listing.exchange, currency.trading]

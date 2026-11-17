@@ -155,7 +155,8 @@ the title in chalk; `accent` is identity alone.
 `chip` × `xs`/`sm`/`md`, plus `ButtonLink`) replaced four button styles; `Input`, `Select`
 and `Textarea` share one ground; `StateCard` has four kinds — `error`, `refused`, `empty`,
 `loading` — and `refused` is styled quiet so a model that does not apply never looks like a
-failure; skeletons are shaped like what they stand in for; `Toaster` confirms actions (never
+failure; skeletons are shaped like what they stand in for, and above the fold they are its
+measured height (see *Nothing moves under the reader*); `Toaster` confirms actions (never
 findings) through live regions rendered before any message; `Kbd` is the one file allowed a
 key glyph. `ScrollRegion` wraps every table that can overflow: it becomes a labelled,
 focusable region exactly when its content is wider than its box, so a keyboard can scroll
@@ -276,6 +277,9 @@ highlight, no totals, and says when the currencies differ.
 - **Below 1280px**, the panel becomes a band at the top of the page: the same tiles in one
   row that scrolls sideways, the exchanges' status, the measured relation in words, and the
   next seven days as a strip.
+- **On a stock page below 640px** the band sits under the company's summary instead. Above
+  the page, it and the ticker form filled the whole first screen of a phone, and the company
+  the reader had asked for began below it.
 - **Why the side.** The first version was a 44px bar of 13px chips fixed to the foot of the
   page, and the owner's verdict was that it was too small to read. The side was the owner's
   choice. A column holds large tiles, a fortnight of dates and the news one above the other,
@@ -708,6 +712,33 @@ and keeps `.JK`, IDX30 and LQ45 where those are the names it trades under; the r
 which lives in this browser, so the static chrome switches after hydration. The requests ask
 for Indonesian from the first fetch, so no reading arrives in English and is then replaced.
 Keeping the choice in a cookie as well would let the server render it directly.
+
+## Nothing moves under the reader
+
+A page opens before its data, so everything above the fold holds the height of what it is
+waiting for. Measured on the production build with a four-times slower processor at 375 px,
+the stock page's layout shift was 0.43 (0.62 at the audit) and is now 0; the landing page
+went from 0.19 to 0.003 and Markets from 0.14 to 0. What moved, and what holds it now:
+
+- **The page scrolled itself.** Most of the stock page's shift was the tab strips'
+  `scrollIntoView` scrolling the window on mount (rule 21).
+- **The footer.** A page opens as a short placeholder, so a 70vh `main` put the footer on
+  the first screen and the page knocked it off. `main` is at least a screen tall.
+- **The band and the side panel.** The exchange status, the price tiles and the week strip
+  each arrived separately and pushed the page down. Each holds its measured height until it
+  is filled: placeholder tiles 115 px tall in the band and 100 px in the panel's two-column
+  grid, the status line and the strip their own heights.
+- **The company header** stands in as three bars at the header's measured height (132 px at
+  375, 98 from 640), not as one 16 px bar.
+- **The rail's headline** sits on its own row, two lines tall from the start. Beside the
+  ticker it fitted while it said "Awaiting data" and wrapped below once the real headline
+  arrived.
+- **No hidden first child under `space-y`.** Tailwind spaces siblings by position, not by
+  visibility, so the print-only header at the top of the stock page gave the form under it a
+  24 px top margin.
+
+`scripts/audit/shifts.mjs` names every element that moves and by how much;
+`scripts/audit/perf.mjs` gives the page's total.
 
 ## Motion
 

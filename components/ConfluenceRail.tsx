@@ -453,7 +453,12 @@ export function ConfluenceRail({
                     { lenses: agreement.lenses || t("No"), independent: agreement.independent })}
           </p>
         </div>
-        <div className="min-w-0 text-left sm:text-right">
+        {/* ITS OWN ROW, AND TWO LINES TALL FROM THE START. Beside the name it
+            fitted while it said "Awaiting data" and wrapped under the name once
+            the real headline and its footnote arrived, so the rail grew by 56 px
+            and pushed the lens chips off a tablet's first screen as the reader
+            reached them. Under the name it has nowhere to move to. */}
+        <div className="min-h-[44px] w-full min-w-0">
           <p className="text-lead font-semibold" style={{ color: agreement.color }}>
             {agreement.headline}
           </p>

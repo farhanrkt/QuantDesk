@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CompanyHeader } from "@/components/company/CompanyHeader";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
 import { HoldingHorizonBar } from "@/components/HoldingHorizonBar";
+import { MarketBand } from "@/components/markets/MarketBand";
 import { PreTradePanel } from "@/components/PreTradePanel";
 import { SynthesisPanel } from "@/components/SynthesisPanel";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
@@ -295,13 +296,18 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
 
   return (
     <div className="space-y-6">
-      <PrintHeader symbol={symbol}
-                   name={company.status === "ready" ? company.data.name : null}
-                   priceAsOf={company.status === "ready" ? company.data.listing.priceAsOf : null} />
       <div className="space-y-3 print:hidden">
         <TickerBar opts={draft} onChange={setDraft} onRun={submit} busy={busy} />
         <RunStatus symbol={symbol} busy={busy} failed={failed} at={engines.at} />
       </div>
+      {/* AFTER THE FORM, which is screen-only. `space-y-6` spaces by position,
+          not visibility, so a hidden first child still gave the form a 24 px
+          top margin: an empty band at the top of every stock page, which also
+          appeared 200 ms late and moved the page down. On paper the form is
+          hidden and this is the first thing printed. */}
+      <PrintHeader symbol={symbol}
+                   name={company.status === "ready" ? company.data.name : null}
+                   priceAsOf={company.status === "ready" ? company.data.listing.priceAsOf : null} />
 
       <ConfluenceRail
         ticker={resolvedTicker} anomaly={anomaly} technical={technical}
@@ -310,6 +316,10 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
         actions={<StockActions watched={watched} onWatch={onWatch} onCompare={onCompare}
                                onCopy={onCopy} onPrint={onPrint} />}
       />
+
+      {/* THE MARKETS BAND, ON A PHONE ONLY, under the company rather than above
+          the page: the shell's copy is hidden on a stock page below 640px. */}
+      <MarketBand className="sm:hidden" />
 
       {/* The frame everything below is read through: what this length of
           ownership has historically been like. Above the synthesis because it

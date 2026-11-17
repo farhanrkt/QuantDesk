@@ -122,7 +122,11 @@ export function MarketRail() {
                 </Button>
               </div>
             </div>
-            {calendar.status === "ready" && <ExchangeStatusLine calendar={calendar.data} />}
+            {/* Each part holds its measured height until it arrives (eight tiles in
+                four rows, about 420 px; the month, 420), so the panel does not
+                grow under the reader in three steps as it did. */}
+            {calendar.status === "ready" ? <ExchangeStatusLine calendar={calendar.data} />
+              : calendar.status !== "error" && <div aria-hidden className="h-9" />}
           </div>
 
           <section aria-labelledby="rail-prices" className="space-y-2">
@@ -138,10 +142,17 @@ export function MarketRail() {
                              onOpen={() => chooseMarket(market)} />
                 ))}
               </ul>
+            ) : state.status === "error" ? (
+              <p className="text-meta text-ash" role="status">{t("The prices did not load.")}</p>
             ) : (
-              <p className="text-meta text-ash" role="status">
-                {state.status === "error" ? t("The prices did not load.") : t("Fetching prices…")}
-              </p>
+              <>
+                <p className="sr-only" role="status">{t("Fetching prices…")}</p>
+                <ul aria-hidden className="grid grid-cols-2 gap-2">
+                  {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                    <li key={i} className="h-[100px] rounded-lg border border-ruleSoft bg-sunken" />
+                  ))}
+                </ul>
+              </>
             )}
             <Link href={marketsHref("today")}
                   className="inline-flex min-h-[24px] items-center gap-1 text-meta text-tech hover:underline">
@@ -171,10 +182,12 @@ export function MarketRail() {
                   ? <CalendarList events={list} kinds={calendar.data.kinds} board={board} compact />
                   : <p className="text-meta text-ash">{t("Nothing on the calendar in the next fortnight.")}</p>}
               </>
+            ) : calendar.status === "error" ? (
+              <p className="text-meta text-ash" role="status">{t("The calendar did not load.")}</p>
             ) : (
-              <p className="text-meta text-ash" role="status">
-                {calendar.status === "error" ? t("The calendar did not load.") : t("Fetching the calendar…")}
-              </p>
+              <div className="h-[421px]">
+                <p className="text-meta text-ash" role="status">{t("Fetching the calendar…")}</p>
+              </div>
             )}
             {pending.length > 0 && (
               <p className="text-micro leading-snug text-ash">

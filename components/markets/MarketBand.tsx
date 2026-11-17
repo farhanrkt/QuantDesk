@@ -56,7 +56,7 @@ export function MarketBand({ className }: { className?: string }) {
              className={cn("rounded-lg border border-rule bg-panel print:hidden", className)}>
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 pt-2.5">
         <span className="text-meta font-semibold text-chalk">{t("Markets")}</span>
-        <div className="flex items-center gap-2">
+        <div className="flex min-h-[32px] items-center gap-2">
           {!focus && <MarketSwitch market={market} onChange={chooseMarket} />}
           <Link href={marketsHref("today")}
                 className="inline-flex min-h-[24px] items-center text-micro text-tech hover:underline">
@@ -64,7 +64,13 @@ export function MarketBand({ className }: { className?: string }) {
           </Link>
         </div>
       </div>
-      {calendar.status === "ready" && <ExchangeStatusLine className="px-3 pt-1" calendar={calendar.data} />}
+      {/* WHAT HAS NOT ARRIVED KEEPS ITS PLACE. The band sits above the page, so
+          every pixel it grows by when its data lands pushes the page down under
+          a reader who has started reading: the status line, the tiles and the
+          week strip each arrived separately and moved everything below them.
+          Each now holds its measured height until it is filled. */}
+      {calendar.status === "ready" ? <ExchangeStatusLine className="px-3 pt-1" calendar={calendar.data} />
+        : calendar.status !== "error" && <div aria-hidden className="h-10 sm:h-5" />}
       {relations.length > 0 && (
         <p className="px-3 pt-1 text-micro text-ash">{t("{relations}. A record, not a forecast.", { relations: relations.join("; ") })}</p>
       )}
@@ -78,7 +84,14 @@ export function MarketBand({ className }: { className?: string }) {
             ))}
           </ul>
         ) : (
-          <p className="px-1.5 py-2 text-micro text-ash" role="status">{t("Fetching prices…")}</p>
+          <>
+            <p className="sr-only" role="status">{t("Fetching prices…")}</p>
+            <ul aria-hidden className="flex gap-2 px-1.5">
+              {[0, 1, 2].map((i) => (
+                <li key={i} className="h-[115px] w-40 shrink-0 rounded-lg border border-ruleSoft bg-sunken" />
+              ))}
+            </ul>
+          </>
         )}
       </ScrollRegion>
       {calendar.status === "ready" && (
@@ -94,6 +107,9 @@ export function MarketBand({ className }: { className?: string }) {
             </p>
           ) : null}
         </div>
+      )}
+      {calendar.status !== "ready" && calendar.status !== "error" && (
+        <div aria-hidden className="h-[81px] border-t border-ruleSoft" />
       )}
     </section>
   );
