@@ -1491,11 +1491,25 @@ def last_close(symbol: str, period: str = "5d") -> Optional[float]:
     For quote-like series — a yield, an index level — where a caller wants one
     number and the four-column bar the OHLCV contract insists on would be an
     obstacle rather than a guarantee.
+
+    ASKED TWICE, LIKE A PRICE SERIES. The first request in a fresh process
+    fails while the provider hands out its session crumb ("Too Many
+    Requests"), and the library swallows it; the same request a moment later
+    succeeds. This is the outage canary's yardstick and every serverless cold
+    start is a first request, so without the second attempt a cold start
+    reported a healthy provider as down — reproduced on 17 November 2026: None
+    in 0.13 s, then the S&P 500 two seconds later.
     """
-    try:
-        history = yf.Ticker((symbol or "").strip().upper()).history(period=period)
-    except Exception:
-        return None
+    history = None
+    for attempt in range(OHLCV_ATTEMPTS):
+        try:
+            history = yf.Ticker((symbol or "").strip().upper()).history(period=period)
+        except Exception:
+            history = None
+        if history is not None and not history.empty and "Close" in history:
+            break
+        if attempt + 1 < OHLCV_ATTEMPTS:
+            time.sleep(OHLCV_RETRY_PAUSE_SECONDS)
     if history is None or history.empty or "Close" not in history:
         return None
     close = history["Close"].dropna()
