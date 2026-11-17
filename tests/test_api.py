@@ -971,3 +971,34 @@ def test_statements_in_another_currency_say_they_were_converted(client, monkeypa
     body = client.get("/api/company", params={"ticker": "FAKE.JK"}).json()
     assert body["currency"]["note"] and "converted" in body["currency"]["note"]
     assert body["history"]["currency"] == "IDR"
+
+
+# --------------------------------------------------------------------------- #
+# One lot on the Indonesian exchange
+# --------------------------------------------------------------------------- #
+def test_an_idx_listing_states_what_one_lot_costs(client, monkeypatch):
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda symbol: planted_company(
+        price=9025.0, currency="IDR", price_as_of="2026-11-16"))
+    lot = client.get("/api/company", params={"ticker": "FAKE.JK"}).json()["listing"]["lot"]
+    assert lot["shares"] == 100
+    assert lot["cost"] == 902500.0
+    assert "Rp 902,500" in lot["reading"] and "2026-11-16" in lot["reading"]
+    assert "fees" in lot["reading"], "the cost is the shares only, and says so"
+
+
+def test_the_lot_is_said_in_indonesian(client, monkeypatch):
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda symbol: planted_company(
+        price=9025.0, currency="IDR"))
+    lot = client.get("/api/company", params={"ticker": "FAKE.JK", "lang": "id"}).json()["listing"]["lot"]
+    assert lot["reading"].startswith("Saham di Bursa Efek Indonesia dibeli per lot")
+
+
+def test_a_lot_without_a_price_says_so_rather_than_costing_nothing(client, monkeypatch):
+    monkeypatch.setattr(index.valuation, "fetch_company", lambda symbol: planted_company(
+        price=float("nan"), currency="IDR"))
+    lot = client.get("/api/company", params={"ticker": "FAKE.JK"}).json()["listing"]["lot"]
+    assert lot["cost"] is None and "not shown" in lot["reading"]
+
+
+def test_a_us_listing_has_no_lot(client):
+    assert client.get("/api/company", params={"ticker": "FAKE"}).json()["listing"]["lot"] is None

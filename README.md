@@ -416,6 +416,14 @@ operating and free cash flow, capital spending, debt, cash, equity), what that r
 to, and dividends per share by year. Every figure was already being fetched for the valuation
 and quality lenses and thrown away before reaching the page.
 
+**On an IDX listing it starts with what one purchase takes.** The Indonesia Stock Exchange
+trades in lots of 100 shares, so the price alone understates the smallest purchase a
+hundredfold: the tab states the lot and what one cost at the last close ("one lot cost Rp
+218,000 at the close of 17 November, before broker fees and taxes"). It is arithmetic on the
+close and a fact about the exchange, not a suggestion; fees and taxes differ by broker and
+are left out, and the sentence says so. A US listing trades one share at a time and shows
+nothing here.
+
 It is **description, never a lens**: no chip in the rail, no vote in the synthesis, no input
 to the pre-trade checks, and a test asserts both are unchanged with or without it. A missing
 year is a dash, never a zero; a bank's free cash flow is withheld because it describes

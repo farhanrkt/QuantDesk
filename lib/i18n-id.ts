@@ -1365,5 +1365,6 @@ export const ID: Record<string, string> = {
   "Ticker or company — AAPL, Telkom, BBCA.JK": "Kode saham atau perusahaan — AAPL, Telkom, BBCA.JK",
   "Ticker symbol or company name": "Kode saham atau nama perusahaan",
   "Enter opens {symbol} · {name}": "Enter membuka {symbol} · {name}",
-  "Companies by that name:": "Perusahaan dengan nama itu:"
+  "Companies by that name:": "Perusahaan dengan nama itu:",
+  "One lot ({shares} shares)": "Satu lot ({shares} lembar)"
 };

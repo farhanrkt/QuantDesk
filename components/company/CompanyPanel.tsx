@@ -169,6 +169,18 @@ export function CompanyPanel({ data }: { data: CompanyResponse }) {
 
       {/* ---------------------------------------------------- key facts */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {/* WHAT ONE PURCHASE TAKES, on an IDX listing: shares come in lots of
+            100, so the price alone understates it a hundredfold. A fact about
+            the exchange with the last close's arithmetic, not a suggestion;
+            first, and the whole row, because it is the question a newcomer asks
+            first and its sentence is the explanation. */}
+        {listing.lot && (
+          <ExplainedStat className="col-span-2 lg:col-span-4"
+                         label={t("One lot ({shares} shares)", { shares: listing.lot.shares })}
+                         value={listing.lot.cost != null && tradingCcy === "IDR"
+                           ? `Rp ${num(listing.lot.cost, 0)}` : money(listing.lot.cost, tradingCcy)}
+                         sub={listing.lot.reading} />
+        )}
         <ExplainedStat label={t("Market value")} value={money(listing.marketCap, tradingCcy)}
                        sub={listing.priceAsOf ? t("At the close of {date}", { date: listing.priceAsOf }) : undefined} />
         <ExplainedStat label={t("Listed on")} value={listing.exchange ?? (listing.market === "ID" ? "IDX" : "—")}

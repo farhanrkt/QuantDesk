@@ -1947,6 +1947,8 @@ export interface CompanyResponse {
   listing: {
     exchange: string | null; market: Market; marketCap: number | null; price: number | null;
     priceAsOf: string | null; priceSource: string | null;
+    /** IDX only: shares trade in lots of 100, and what one cost at the last close. */
+    lot: { shares: number; cost: number | null; currency: string | null; reading: string } | null;
   };
   currency: { trading: string | null; reporting: string | null; fxRate: number | null; note: string | null };
   history: CompanyHistory;
