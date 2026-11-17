@@ -90,20 +90,23 @@ app = FastAPI(title="QuantDesk API", version="1.1.0", docs_url="/api/docs")
 
 
 def _allowed_origins() -> list[str]:
-    """Wildcard CORS in local dev, same-origin only in production.
+    """Same-origin everywhere, unless ALLOWED_ORIGINS names others.
 
-    On Vercel the frontend and this function share an origin, so production
-    needs no CORS headers at all — an empty list means the middleware never
-    matches and the browser enforces same-origin. `allow_origins=["*"]` let any
-    site on the internet spend this deployment's compute (and its yfinance rate
-    budget) for free, which is the part worth closing.
+    On Vercel the frontend and this function share an origin, and in local
+    development the Next dev server proxies /api, so the browser sees one
+    origin there too. Nothing this app serves needs CORS headers, and an empty
+    list means the middleware never matches and the browser enforces
+    same-origin. `["*"]` lets any site on the internet spend this deployment's
+    compute, and its share of the provider's rate budget, for free.
 
-    Set ALLOWED_ORIGINS (comma separated) to permit specific external origins.
+    THE WILDCARD USED TO BE THE DEFAULT EVERYWHERE BUT `VERCEL_ENV=production`.
+    That opened every preview deployment, which is as public as production —
+    `private_tier_enabled` says so two functions below — and production itself
+    whenever the project does not expose its system variables, which
+    `on_vercel` warns can happen (docs/AUDIT.md, SEC-4). A wildcard now has to
+    be asked for by name: ALLOWED_ORIGINS=* (or a comma-separated list).
     """
-    configured = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
-    if configured:
-        return configured
-    return [] if os.environ.get("VERCEL_ENV") == "production" else ["*"]
+    return [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 
 
 def on_vercel(request: Optional[Request] = None) -> bool:

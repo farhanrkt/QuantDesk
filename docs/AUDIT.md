@@ -56,7 +56,7 @@ or *deferred* (with the reason).
 | COR-3 | Medium | Three names in the Nasdaq-100 list no longer trade | decision |
 | SEC-2 | Medium | The ticker pattern accepts `..` | fixed |
 | SEC-3 | Medium | Validation errors are English lists that echo their input without limit | open |
-| SEC-4 | Medium | Any website may call the API on a preview deployment | open |
+| SEC-4 | Medium | Any website may call the API on a preview deployment | fixed |
 | SEC-5 | Medium | A failed lens returns the raw exception text to the reader | open |
 | PERF-3 | Medium | Nothing is code-split: every page ships every panel, and the Indonesian catalogue | open |
 | PERF-4 | Medium | A public deployment imports the private scanner on every cold start | open |
@@ -423,6 +423,10 @@ need the wildcard: the dev server proxies `/api`, so the browser sees one
 origin. `audit_repro.py SEC-4`.
 
 **Fix.** No wildcard unless `ALLOWED_ORIGINS` asks for one.
+
+**Fixed.** `_allowed_origins` returns what `ALLOWED_ORIGINS` names and nothing
+otherwise. `tests/test_api.py` covers no `VERCEL_ENV`, preview and
+development; three cases fail on the old default.
 
 ### SEC-5. A failed lens returns the raw exception text
 
