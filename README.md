@@ -1367,6 +1367,13 @@ every instance counts in one Upstash Redis database (`api/_lib/ratestore.py`; a 
 per route and address, the address hashed with the token, one round trip, 0.35 s at most),
 and a store that is slow or down hands that request back to the in-process count.
 
+**The edge keeps a dated copy for when the function fails.** The market board, its headlines
+and its calendar are sent with `stale-if-error` (a day) and the symbol finder with a week, so
+while the function is erroring or timing out the edge serves the last good copy instead of the
+error. Each of those carries its own as-of time, so an old copy reads as old. A company read
+does not: the page labels it with the time the browser fetched it, and a stale copy would read
+as fresh, so it is never served stale on error (`tests/test_caching.py`).
+
 **A malformed answer is a failed one.** The markets band and panel sit above every page, in
 the layout. Their three answers (the board, the calendar, the watchlist's report dates) are
 checked for the shape the page iterates before anything draws them (`isBoard`, `isCalendar`,

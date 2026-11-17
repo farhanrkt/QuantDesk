@@ -2735,7 +2735,9 @@ def event_study(
 # Finding a symbol
 # --------------------------------------------------------------------------- #
 SYMBOL_QUERY_PATTERN = r"^[A-Za-z0-9 .&'\-^=,()]{1,40}$"
-SYMBOLS_CACHE = "public, max-age=3600, s-maxage=86400"
+# The listing files change only when someone commits new ones, so a week-old
+# copy of an answer is as good as a fresh one.
+SYMBOLS_CACHE = "public, max-age=3600, s-maxage=86400, stale-if-error=604800"
 
 
 @app.get("/api/symbols")
@@ -2779,10 +2781,19 @@ def find_symbols(
 # trail the market by up to twenty minutes; refetching every minute would buy
 # nothing a reader can see. The browser still revalidates on every request,
 # for the reason `CACHE` gives above.
+#
+# STALE IF THE FUNCTION FAILS, WHERE A STALE COPY SAYS HOW OLD IT IS. When the
+# function errors or times out, the edge may serve its last good copy for a
+# day instead of the error (`stale-if-error`, which Vercel's CDN honours). The
+# board, its headlines and its calendar each carry their own as-of time, so a
+# day-old copy reads as a day old. A company read does not get this: the page
+# labels it with the time the browser fetched it, so a stale copy would read
+# as fresh.
+STALE_IF_ERROR = "stale-if-error=86400"
 BOARD_CACHE = "public, max-age=0, must-revalidate, s-maxage=300"
-BOARD_CDN_CACHE = "public, s-maxage=300, stale-while-revalidate=600"
+BOARD_CDN_CACHE = f"public, s-maxage=300, stale-while-revalidate=600, {STALE_IF_ERROR}"
 HEADLINES_CACHE = "public, max-age=0, must-revalidate, s-maxage=600"
-HEADLINES_CDN_CACHE = "public, s-maxage=600, stale-while-revalidate=1200"
+HEADLINES_CDN_CACHE = f"public, s-maxage=600, stale-while-revalidate=1200, {STALE_IF_ERROR}"
 HEADLINE_TOPICS_MAX = 4
 
 
@@ -2811,7 +2822,7 @@ def markets_today():
 
 
 CALENDAR_CACHE = "public, max-age=0, must-revalidate, s-maxage=3600"
-CALENDAR_CDN_CACHE = "public, s-maxage=3600, stale-while-revalidate=86400"
+CALENDAR_CDN_CACHE = f"public, s-maxage=3600, stale-while-revalidate=86400, {STALE_IF_ERROR}"
 EARNINGS_MAX = 20
 
 
