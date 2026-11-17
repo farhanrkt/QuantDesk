@@ -1,4 +1,4 @@
-import type { BoardRow, Market, MarketBoard } from "./types";
+import type { BoardRow, Market, MarketBoard, MarketCalendar, WatchlistEarnings } from "./types";
 import { monthShort, msg, t } from "./i18n";
 
 /**
@@ -207,4 +207,31 @@ export function historyShort(row: {
     name: row.name, above: row.above, events: row.events,
     chance: row.p != null && row.p > 0.05 ? t(", within chance") : "",
   });
+}
+
+// --------------------------------------------------------------------------- //
+// Answers in the shape the page reads, or not at all
+// --------------------------------------------------------------------------- //
+// THE SHELL DRAWS THESE ON EVERY PAGE, so a malformed answer must fail as "did
+// not load", which every panel already says, and never reach code that iterates
+// it. An empty object where the calendar's events should be took the whole
+// page down, top bar and all, while testing the backup in November 2026; a
+// proxy or a partial response could send one. These check what is iterated or
+// indexed, not every field.
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+export function isBoard(v: unknown): v is MarketBoard {
+  return isObject(v) && Array.isArray(v.groups) && Array.isArray(v.rows)
+    && Array.isArray(v.missing) && isObject(v.markets) && isObject(v.eventHistory)
+    && isObject(v.explain) && isObject(v.explain.rows) && isObject(v.explain.markets);
+}
+
+export function isCalendar(v: unknown): v is MarketCalendar {
+  return isObject(v) && Array.isArray(v.events) && Array.isArray(v.pending)
+    && isObject(v.kinds) && isObject(v.exchanges);
+}
+
+export function isEarnings(v: unknown): v is WatchlistEarnings {
+  return isObject(v) && Array.isArray(v.items);
 }

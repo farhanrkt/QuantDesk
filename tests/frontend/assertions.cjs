@@ -963,6 +963,24 @@ t("fired conditions are listed, never counted", () => {
   });
 }
 
+// ---- the board's answers are read only in the shape the page iterates (Phase 6) ----
+{
+  const MB = require("./lib/marketboard.js");
+  t("an empty or partial answer is not a board, a calendar or a list of report dates", () => {
+    for (const bad of [{}, null, [], "x", { events: {} }, { rows: [] }]) {
+      assert.equal(MB.isBoard(bad), false);
+      assert.equal(MB.isCalendar(bad), false);
+    }
+    assert.equal(MB.isEarnings({ items: "x" }), false);
+  });
+  t("a well-formed answer passes", () => {
+    assert.ok(MB.isCalendar({ events: [], pending: [], kinds: {}, exchanges: {} }));
+    assert.ok(MB.isEarnings({ items: [] }));
+    assert.ok(MB.isBoard({ groups: [], rows: [], missing: [], markets: {}, eventHistory: {},
+                           explain: { rows: {}, markets: {}, eventHistory: {} } }));
+  });
+}
+
 Promise.all(pending).then(() => {
   console.log(`  ${n} frontend assertions passed`);
 });

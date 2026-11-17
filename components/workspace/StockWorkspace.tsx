@@ -16,6 +16,7 @@ import { useRegisterCommands, type RunnableCommand } from "@/components/palette/
 import { SHORTCUT_EVENT } from "@/components/shell/ShortcutLayer";
 import { usePreferences } from "@/components/shell/preferences";
 import { useWorkspace } from "@/components/shell/workspace";
+import { PartBoundary } from "@/components/ui/boundary";
 import { PanelSkeleton } from "@/components/ui/skeleton";
 import { TabPanel, Tabs, type Tab } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toaster";
@@ -319,7 +320,7 @@ export function StockWorkspace({ symbol }: { symbol: string }) {
 
       {/* THE MARKETS BAND, ON A PHONE ONLY, under the company rather than above
           the page: the shell's copy is hidden on a stock page below 640px. */}
-      <MarketBand className="sm:hidden" />
+      <PartBoundary><MarketBand className="sm:hidden" /></PartBoundary>
 
       {/* The frame everything below is read through: what this length of
           ownership has historically been like. Above the synthesis because it

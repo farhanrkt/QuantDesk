@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspace } from "@/components/shell/workspace";
 import { fetchMarketBoard, fetchMarketCalendar, fetchWatchlistEarnings } from "@/lib/api";
+import { isBoard, isCalendar, isEarnings } from "@/lib/marketboard";
 import { t, useLang } from "@/lib/i18n";
 import { BOARD_REFRESH_MS, type BoardFocus } from "@/lib/marketboard";
 import type {
@@ -117,6 +118,9 @@ export function MarketBoardProvider({ children }: { children: React.ReactNode })
     fetchMarketBoard(controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
+        // Rejected with nothing, so the panels say their own translated
+        // "did not load" rather than an English message from here.
+        if (!isBoard(data)) return Promise.reject(undefined);
         received.current = Date.now();
         setState({ status: "ready", data, at: received.current });
       })
@@ -135,6 +139,7 @@ export function MarketBoardProvider({ children }: { children: React.ReactNode })
   const loadCalendar = useCallback(() => {
     fetchMarketCalendar()
       .then((data) => {
+        if (!isCalendar(data)) return Promise.reject(undefined);
         calendarReceived.current = Date.now();
         setCalendar({ status: "ready", data, at: calendarReceived.current });
       })
@@ -176,7 +181,10 @@ export function MarketBoardProvider({ children }: { children: React.ReactNode })
     const timer = window.setTimeout(() => {
       setEarnings((current) => (current.status === "ready" ? current : { status: "loading" }));
       fetchWatchlistEarnings(watchKey.split(","), controller.signal)
-        .then((data) => { if (!controller.signal.aborted) setEarnings({ status: "ready", data, at: Date.now() }); })
+        .then((data) => {
+          if (!isEarnings(data)) return Promise.reject(undefined);
+          if (!controller.signal.aborted) setEarnings({ status: "ready", data, at: Date.now() });
+        })
         .catch((failure) => {
           if (!controller.signal.aborted) {
             setEarnings({ status: "error", failure: failureOf(failure, t("Report dates did not load.")) });

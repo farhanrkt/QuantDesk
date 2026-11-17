@@ -1367,6 +1367,14 @@ every instance counts in one Upstash Redis database (`api/_lib/ratestore.py`; a 
 per route and address, the address hashed with the token, one round trip, 0.35 s at most),
 and a store that is slow or down hands that request back to the in-process count.
 
+**A malformed answer is a failed one.** The markets band and panel sit above every page, in
+the layout. Their three answers (the board, the calendar, the watchlist's report dates) are
+checked for the shape the page iterates before anything draws them (`isBoard`, `isCalendar`,
+`isEarnings` in `lib/marketboard.ts`), and a malformed one reads as "did not load"; each part
+is also inside an error boundary (`components/ui/boundary.tsx`), so a failure while drawing it
+costs that part and is reported, not the page. Before this, an empty object where the calendar's
+events belong replaced the whole document, top bar included.
+
 **A provider failure is said and not kept.** When both price lenses fail, the app asks the
 provider for the market's own index: if that fails too, every lens says the provider is not
 answering — not that the symbol is wrong — and the response is held at the edge for fifteen
