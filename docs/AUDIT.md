@@ -40,7 +40,7 @@ or *deferred* (with the reason).
 
 | Code | Impact | Finding | Status |
 |---|---|---|---|
-| REL-1 | High | A provider that hangs holds one company read for minutes; the platform kills it at 60 s | open |
+| REL-1 | High | A provider that hangs holds one company read for minutes; the platform kills it at 60 s | fixed |
 | REL-7 | High | The provider sometimes returns a statement with a row missing, and the app keeps it as fact for a day | open |
 | COR-1 | High | A statement line is found by substring: six Indonesian banks chart the wrong line as operating income | open |
 | SEC-1 | High | Eighteen known advisories in the Python dependencies; CI audits npm only | open |
@@ -122,6 +122,14 @@ the sixth stalls, and the response waits for it.
 **Fix.** Give each leg a time budget well inside the function limit and report
 a leg that ran out as its own failure, so the other five still arrive. A thread
 cannot be cancelled, so the budget bounds the response, not the work.
+
+**Fixed.** Three budgets in `api/index.py`: 35 s per lens, 8 s for the outage
+check (now off the event loop, where it used to run), and 52 s for any request,
+answered past that by a translated 504 from a small ASGI middleware. Held by
+`tests/test_deadlines.py`, nine tests that fail without the change.
+`scripts/audit/hang.py` against the silent socket now answers after **35
+seconds** (it had not answered after 380), HTTP 200, every lens saying the
+provider is not answering, kept at the edge for fifteen seconds.
 
 ### REL-7. The provider sometimes returns a statement with a row missing, and the app keeps it
 

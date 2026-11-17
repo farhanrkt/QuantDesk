@@ -1334,6 +1334,13 @@ provider for the market's own index: if that fails too, every lens says the prov
 answering — not that the symbol is wrong — and the response is held at the edge for fifteen
 seconds instead of six minutes. An empty ranking, scan or headline feed gets the same short life.
 
+**A provider that hangs costs time it is given, and no more.** Each lens of a company read has
+35 seconds; one that runs out says so in a sentence and the others still arrive. If both price
+lenses run out, that is the outage answer and the index is not asked; otherwise asking it has 8
+seconds. Any request at all has 52, inside the platform's 60, and past that the reader gets a
+sentence in their language instead of the platform's error page. A thread cannot be stopped,
+so these bound the answer, not the provider call behind it.
+
 **Market conventions** are configured per market — US uses a 4.2% risk-free rate, 5.5%
 equity risk premium, 21% tax and `^GSPC` as benchmark; IDX uses 6.5%, 7.0%, 22% and
 `^JKSE`.

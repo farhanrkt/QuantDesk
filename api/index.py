@@ -422,6 +422,109 @@ async def language(request: Request, call_next):
         lang.reset(token)
 
 
+# --------------------------------------------------------------------------- #
+# Time budgets
+# --------------------------------------------------------------------------- #
+# NOTHING HERE USED TO COUNT TIME. Every provider call has the HTTP library's
+# own timeout of ten to thirty seconds, the calls inside a lens run one after
+# another, and nothing above them added the waits up. Measured in the November
+# 2026 audit with a provider that accepts a connection and never answers: one
+# `/api/confluence` had not returned after 380 seconds. The platform kills the
+# function at 60 (vercel.json), so a reader got a bare gateway error and not
+# one lens — although five of the six legs could have answered, and the app has
+# a worded outage state that only needs the price legs to stop waiting.
+#
+# Three budgets, each inside the next, all inside the platform's 60 seconds:
+#
+#   LEG       one lens of `/api/confluence`. The others arrive; this one
+#             reports that it ran out of time.
+#   CANARY    the question "is the provider answering at all", asked after the
+#             legs, which is itself a provider call and hung with them.
+#   REQUEST   any request whatever. The reader gets a sentence, in their
+#             language, in place of the platform's own error page.
+#
+# A THREAD CANNOT BE CANCELLED, so a budget bounds the RESPONSE and not the
+# work: the provider call behind an expired lens runs on until its own timeout.
+# That is the honest limit of doing this in one process, and it is why the
+# budgets are generous — they are for a hung provider, not a slow one.
+LEG_BUDGET_SECONDS = 35.0
+CANARY_BUDGET_SECONDS = 8.0
+REQUEST_BUDGET_SECONDS = 52.0
+
+
+def timed_out(what: str) -> dict:
+    """The failure a lens reports when its budget ran out. `cause` is the
+    identifier; the sentence is the reader's."""
+    return {
+        "message": tr(f"{what} took too long to arrive, so it was left out of this read. The "
+                      "data provider is slow or not answering; trying again in a minute "
+                      "usually works.",
+                      f"{what} terlalu lama tiba, jadi tidak disertakan dalam pembacaan ini. "
+                      "Penyedia data sedang lambat atau tidak menjawab; mencoba lagi sebentar "
+                      "lagi biasanya berhasil."),
+        "cause": "timeout",
+    }
+
+
+class RequestDeadline:
+    """Answer in words when a request outlives its budget.
+
+    A PURE ASGI MIDDLEWARE, AND NOT `asyncio.wait_for`, for one reason: the
+    route handlers are ordinary functions, which the framework runs in a
+    thread, and a task waiting on such a thread does not finish being cancelled
+    until the thread does. `wait_for` would therefore wait exactly as long as
+    the hung provider. So the request runs as its own task, this waits for it
+    with a timeout, and when the time is up it answers the reader itself and
+    stops forwarding whatever the abandoned task sends afterwards.
+
+    A response that has already started (the simulation CSV) is left alone:
+    half a body followed by a second set of headers helps nobody.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        state = {"started": False, "expired": False}
+
+        async def guarded_send(message):
+            if state["expired"]:
+                return
+            if message["type"] == "http.response.start":
+                state["started"] = True
+            await send(message)
+
+        task = asyncio.ensure_future(self.app(scope, receive, guarded_send))
+        done, _ = await asyncio.wait({task}, timeout=REQUEST_BUDGET_SECONDS)
+        if done or state["started"]:
+            await task
+            return
+
+        state["expired"] = True
+        # The abandoned task ends when its thread does; its result is nobody's.
+        task.add_done_callback(lambda finished: finished.cancelled() or finished.exception())
+        query = scope.get("query_string", b"").decode("latin-1")
+        asked = re.search(r"(?:^|&)lang=([a-z]{2})(?:&|$)", query)
+        token = lang.use(asked.group(1) if asked else None)
+        try:
+            detail = tr("This took too long, so it was stopped. The data provider is slow or "
+                        "not answering; trying again in a minute usually works.",
+                        "Ini terlalu lama, jadi dihentikan. Penyedia data sedang lambat atau "
+                        "tidak menjawab; mencoba lagi sebentar lagi biasanya berhasil.")
+        finally:
+            lang.reset(token)
+        response = JSONResponse(status_code=504, content={"detail": detail},
+                                headers={"Cache-Control": "no-store", "Retry-After": "60"})
+        await response(scope, receive, send)
+
+
+app.add_middleware(RequestDeadline)
+
+
 def ok(payload: dict, *, failed: bool = False) -> JSONResponse:
     # Cache at the edge: quotes move, but not within 60s, and every engine
     # re-runs a network fetch that we do not want to pay for on each keystroke.
@@ -2421,6 +2524,25 @@ def news_payload(symbol: str, limit: int) -> dict:
 # come from a different one, so a failed feed is never read as that outage.
 YAHOO_LEGS = ("anomaly", "technical", "valuation", "quality", "company")
 
+# What each leg is called in the sentence that says it ran out of time.
+# Functions, because prose built at import time cannot know the request's
+# language (see `_lib/lang.py`).
+LEG_NAMES = {
+    "anomaly": lambda: tr("The Flow lens", "Lensa Arus"),
+    "technical": lambda: tr("The Trend lens", "Lensa Tren"),
+    "valuation": lambda: tr("The Value lens", "Lensa Nilai"),
+    "quality": lambda: tr("The Quality lens", "Lensa Kualitas"),
+    "news": lambda: tr("The headlines", "Berita utama"),
+    "company": lambda: tr("The company's own description", "Deskripsi perusahaan"),
+}
+
+
+def _timed_out(leg: dict) -> bool:
+    """Whether a leg ran out of its time budget, which clears when the provider
+    does and so is never a fact about the company for the edge to keep."""
+    error = leg.get("error") if not leg.get("ok") else None
+    return isinstance(error, dict) and error.get("cause") == "timeout"
+
 
 def _throttled(leg: dict) -> bool:
     """Whether a leg came back with the signature of a throttled company fetch.
@@ -2486,8 +2608,15 @@ async def confluence(
     symbol, market = resolved_with_market(ticker, market)
 
     async def leg(name, fn):
+        # ONE SLOW LENS COSTS ONE LENS. `asyncio.to_thread` hands back a future
+        # that stops being waited for the moment the budget is up, so the other
+        # five still reach the reader; see LEG_BUDGET_SECONDS for why the
+        # provider call behind it cannot be stopped as well.
         try:
-            return name, {"ok": True, "data": await asyncio.to_thread(fn)}
+            data = await asyncio.wait_for(asyncio.to_thread(fn), LEG_BUDGET_SECONDS)
+            return name, {"ok": True, "data": data}
+        except asyncio.TimeoutError:
+            return name, {"ok": False, "error": timed_out(LEG_NAMES[name]())}
         except HTTPException as exc:
             return name, {"ok": False, "error": exc.detail}
         except Exception as exc:  # one leg must not be able to sink the others
@@ -2515,14 +2644,32 @@ async def confluence(
     # ("non-US listings need their exchange suffix", for AAPL) inside a 200 that
     # the edge then served for six minutes. Both price legs failing is the
     # signature; the benchmark index decides which of the two causes it is.
-    outage = (not legs["anomaly"]["ok"] and not legs["technical"]["ok"]
-              and not market_data.provider_answering(symbols.market_of(symbol)))
+    #
+    # BOTH PRICE LEGS RUNNING OUT OF TIME IS THE ANSWER ALREADY: the provider
+    # is hanging, and asking its index the same question would hang for the
+    # same reason. Otherwise the canary is asked off the event loop — it is a
+    # provider call, and it used to be made on the loop itself — and a canary
+    # that does not answer inside its own budget is a provider that is not
+    # answering.
+    outage = False
+    if not legs["anomaly"]["ok"] and not legs["technical"]["ok"]:
+        if _timed_out(legs["anomaly"]) and _timed_out(legs["technical"]):
+            outage = True
+        else:
+            try:
+                outage = not await asyncio.wait_for(
+                    asyncio.to_thread(market_data.provider_answering,
+                                      symbols.market_of(symbol)),
+                    CANARY_BUDGET_SECONDS)
+            except asyncio.TimeoutError:
+                outage = True
     if outage:
         message = market_data.provider_outage_message(symbol)
         for name in YAHOO_LEGS:
             if not legs[name]["ok"]:
                 legs[name] = {"ok": False, "error": message}
-    transient = outage or any(_throttled(value) for value in legs.values())
+    transient = (outage or any(_throttled(value) or _timed_out(value)
+                               for value in legs.values()))
     # THE COMPANY BLOCK IS NOT A LENS, and the two readers of the assembled
     # payload are handed the lenses only — so neither can start quoting a
     # description as if it were evidence.
