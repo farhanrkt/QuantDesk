@@ -280,7 +280,9 @@ button) both take a name. They read the provider's listing files, which carry le
 company and the line under the box says which before Enter is pressed; a partial name offers
 up to three companies. Text that is itself a listed ticker is left as it is. In the palette a
 company found by name comes before "open as typed"; that option is always there, so crypto
-pairs, indices and new listings still open.
+pairs, indices and new listings still open. A page for a ticker that returned nothing on any lens (an old
+link, or a name opened as typed) offers up to three listed companies the text matches: "Did
+you mean TLKM.JK · Telkom".
 
 **The command palette** also reaches every route, every tab of the current stock, the
 reading mode and your holding horizon.

@@ -1386,5 +1386,6 @@ export const ID: Record<string, string> = {
   "Add to this browser": "Tambahkan ke browser ini",
   "Added. Reloading the page to show it…": "Sudah ditambahkan. Memuat ulang halaman untuk menampilkannya…",
   "Cancel": "Batal",
-  "Save or restore this browser's data": "Simpan atau pulihkan data browser ini"
+  "Save or restore this browser's data": "Simpan atau pulihkan data browser ini",
+  "Did you mean": "Mungkin maksud Anda"
 };
