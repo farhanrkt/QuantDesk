@@ -1878,7 +1878,9 @@ export interface SymbolHit {
   name: string;
   market: Market;
   exchange: string | null;
-  match: "symbol" | "prefix" | "name" | "contains";
+  match: "alias" | "symbol" | "prefix" | "name" | "contains";
+  /** The everyday name that matched ("Telkom", "Google"), when one did. */
+  alias?: string;
 }
 
 export interface SymbolSearch {

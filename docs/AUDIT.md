@@ -50,7 +50,7 @@ by name is the first feature of Phase 5.
 | SEC-1 | High | Eighteen known advisories in the Python dependencies; CI audits npm only | fixed |
 | REL-4 | High | Ordinary browsing reaches the rate limit; limits are per address | fixed |
 | PERF-1 | High | The stock page jumps as results arrive (layout shift 0.62 on a phone) | fixed |
-| UX-1 | High | A company cannot be found by its everyday name, and "apple" opens a ticker called APPLE | Phase 5 |
+| UX-1 | High | A company cannot be found by its everyday name, and "apple" opens a ticker called APPLE | fixed (Phase 5) |
 | PERF-2 | Medium | One company read is 1.35 MB of JSON, 1.1 MB of it the chart series | narrowed |
 | REL-2 | Medium | During an outage the single-lens routes tell the reader their ticker is wrong | fixed |
 | REL-3 | Medium | One failed price request is final: no second attempt | fixed |
@@ -331,6 +331,15 @@ a name, and the landing page's main box takes only a ticker. RESEARCH_ROADMAP
 itself a listed symbol; add the names people use (Telkom, BCA, BRI, Mandiri,
 Google, Facebook) as an alias table beside the listings; let the landing box
 offer the same matches.
+
+**Fixed in Phase 5.** `listings.EVERYDAY_NAMES` maps about 130 everyday names to
+their listings, checked by a test against the committed files (every target
+listed, no name that is another company's ticker, so "Coke" and "HP" are left
+out). A match by everyday name ranks first. The palette puts a company found by
+name above "open as typed" unless the text is itself a listed symbol, and the
+ticker box resolves an exact everyday name, saying which company before Enter
+is pressed. In the browser: "telkom" opens TLKM.JK, "bca" BBCA.JK (in
+Indonesian too), "apple" AAPL; "AAPL" is untouched.
 
 ## Medium impact
 

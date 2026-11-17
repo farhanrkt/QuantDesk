@@ -128,3 +128,47 @@ def test_route_allows_typing_speed_but_is_still_limited():
     default, _ = index.RATE_LIMITS[None]
     assert limit > default, "a palette search per keystroke must not hit the default cap"
     assert window == 60
+
+
+# --------------------------------------------------------------------------- #
+# Everyday names (docs/AUDIT.md, UX-1)
+# --------------------------------------------------------------------------- #
+def test_an_everyday_name_finds_the_company_first():
+    # "bca" is inside no legal name and starts no word of one; before the alias
+    # table it found symbol prefixes and never the bank.
+    row = listings.search("bca")[0]
+    assert (row["symbol"], row["match"], row["alias"]) == ("BBCA.JK", "alias", "BCA")
+    assert listings.search("Telkom")[0]["symbol"] == "TLKM.JK"
+
+
+def test_an_everyday_name_outranks_a_symbol_prefix_and_a_name_word():
+    rows = listings.search("apple", "US")
+    assert rows[0]["symbol"] == "AAPL" and rows[0]["match"] == "alias"
+    assert symbols(rows) == ["AAPL", "APLE"]
+
+
+def test_the_start_of_an_everyday_name_finds_it_as_a_name_match():
+    row = listings.search("bank bc")[0]
+    assert (row["symbol"], row["match"], row["alias"]) == ("BBCA.JK", "name", "Bank BCA")
+
+
+def test_an_everyday_name_points_only_at_a_listed_company():
+    # An alias whose target is not in the listing files finds nothing rather
+    # than a row the files do not have.
+    assert listings.search("google") == []
+
+
+def test_every_everyday_name_resolves_in_the_committed_files_and_shadows_no_ticker():
+    import json
+    from pathlib import Path
+    rows = {}
+    for market in ("US", "ID"):
+        path = Path(listings.__file__).parent / f"listings_{market}.json"
+        for row in json.loads(path.read_text())["rows"]:
+            rows[row["symbol"]] = row["name"]
+    bases = {s[:-3]: s for s in rows if s.endswith(".JK")}
+    for name, symbol in listings.EVERYDAY_NAMES:
+        assert symbol in rows, f"{name!r} points at {symbol}, which the listing files do not have"
+        upper = name.upper()
+        clash = (upper in rows and upper != symbol) or (upper in bases and bases[upper] != symbol)
+        assert not clash, f"{name!r} is another company's ticker"

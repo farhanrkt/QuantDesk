@@ -855,6 +855,34 @@ t("fired conditions are listed, never counted", () => {
   });
 }
 
+// ---- readNameHits: the ticker box finds a company by name (UX-1) ----
+{
+  const { readNameHits } = require("./lib/symbols.js");
+  const hit = (symbol, match, extra = {}) => ({ symbol, name: symbol, market: "ID", exchange: null, match, ...extra });
+  const found = (query, results) => ({ query, market: null, results, listings: {}, note: "" });
+  t("an exact everyday name opens its company", () => {
+    const r = readNameHits(found("telkom", [hit("TLKM.JK", "alias", { alias: "Telkom" })]), "telkom");
+    assert.equal(r.opens.symbol, "TLKM.JK");
+    assert.deepEqual(r.offers, []);
+  });
+  t("text that is a listed symbol is left alone, whatever else matches", () => {
+    const r = readNameHits(found("meta", [hit("META", "symbol"), hit("BOLT.JK", "name")]), "meta");
+    assert.equal(r.opens, null);
+    assert.deepEqual(r.offers, []);
+  });
+  t("a partial name offers at most three companies and opens none", () => {
+    const names = ["A", "B", "C", "D"].map((s) => hit(s, "name"));
+    const r = readNameHits(found("ban", [hit("BAN", "prefix"), ...names]), "ban");
+    assert.equal(r.opens, null);
+    assert.deepEqual(r.offers.map((h) => h.symbol), ["A", "B", "C"]);
+  });
+  t("an answer for other text than the box holds means nothing", () => {
+    const r = readNameHits(found("tel", [hit("TLKM.JK", "alias")]), "telkom");
+    assert.equal(r.opens, null);
+    assert.deepEqual(r.offers, []);
+  });
+}
+
 Promise.all(pending).then(() => {
   console.log(`  ${n} frontend assertions passed`);
 });

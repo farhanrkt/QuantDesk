@@ -162,6 +162,70 @@ def symbols_for(market_code: str = "ID", limit: Optional[int] = None,
     return [r["symbol"] for r in rows]
 
 
+
+# --------------------------------------------------------------------------- #
+# The names people actually type
+#
+# THE LISTING FILES CARRY LEGAL NAMES, AND NOBODY TYPES THOSE. Telkom is filed as
+# "Perusahaan Perseroan (Persero) PT Telekomunikasi Indonesia Tbk", BCA as "PT
+# Bank Central Asia Tbk", Google as "Alphabet Inc." — so "telkom", "bca" and
+# "google" found nothing, and the palette's first option opened a ticker called
+# TELKOM (docs/AUDIT.md, UX-1). These are the everyday names for the companies a
+# newcomer is most likely to look for first, each pointing at its listing.
+#
+# A name here never shadows another company's ticker: "Coke" is Coca-Cola
+# Consolidated's symbol and "HP" is Helmerich & Payne's, so neither is listed.
+# tests/test_listings_search.py checks every entry against the committed files,
+# so a renamed or delisted target fails the suite instead of going quietly dead.
+# --------------------------------------------------------------------------- #
+EVERYDAY_NAMES: tuple[tuple[str, str], ...] = (
+    # Indonesia
+    ("Telkom", "TLKM.JK"), ("Telkom Indonesia", "TLKM.JK"),
+    ("Telekomunikasi Indonesia", "TLKM.JK"), ("BCA", "BBCA.JK"), ("Bank BCA", "BBCA.JK"),
+    ("BRI", "BBRI.JK"), ("Bank BRI", "BBRI.JK"), ("Mandiri", "BMRI.JK"),
+    ("Bank Mandiri", "BMRI.JK"), ("BNI", "BBNI.JK"), ("Bank BNI", "BBNI.JK"),
+    ("BTN", "BBTN.JK"), ("Bank BTN", "BBTN.JK"), ("BSI", "BRIS.JK"),
+    ("Bank Syariah Indonesia", "BRIS.JK"), ("Bank Jago", "ARTO.JK"), ("Astra", "ASII.JK"),
+    ("Unilever Indonesia", "UNVR.JK"), ("Indofood", "INDF.JK"), ("Indomie", "ICBP.JK"),
+    ("Gudang Garam", "GGRM.JK"), ("Sampoerna", "HMSP.JK"), ("Kalbe", "KLBF.JK"),
+    ("Antam", "ANTM.JK"), ("PGN", "PGAS.JK"), ("Bukit Asam", "PTBA.JK"),
+    ("Adaro", "ADRO.JK"), ("Amman", "AMMN.JK"), ("GoTo", "GOTO.JK"), ("Gojek", "GOTO.JK"),
+    ("Tokopedia", "GOTO.JK"), ("Bukalapak", "BUKA.JK"), ("Semen Indonesia", "SMGR.JK"),
+    ("Jasa Marga", "JSMR.JK"), ("XL Axiata", "EXCL.JK"), ("Indosat", "ISAT.JK"),
+    ("Vale Indonesia", "INCO.JK"), ("United Tractors", "UNTR.JK"),
+    ("Chandra Asri", "TPIA.JK"), ("Alfamart", "AMRT.JK"), ("Sido Muncul", "SIDO.JK"),
+    ("Mayora", "MYOR.JK"), ("Ultra Milk", "ULTJ.JK"), ("London Sumatra", "LSIP.JK"),
+    ("Ciputra", "CTRA.JK"), ("Hermina", "HEAL.JK"), ("Erajaya", "ERAA.JK"),
+    # United States
+    ("Apple", "AAPL"), ("Microsoft", "MSFT"), ("Google", "GOOGL"), ("Alphabet", "GOOGL"),
+    ("Amazon", "AMZN"), ("Facebook", "META"), ("Meta", "META"), ("Instagram", "META"),
+    ("Tesla", "TSLA"), ("Nvidia", "NVDA"), ("Netflix", "NFLX"), ("Coca-Cola", "KO"),
+    ("Pepsi", "PEP"), ("McDonald's", "MCD"), ("McDonalds", "MCD"), ("Starbucks", "SBUX"),
+    ("Nike", "NKE"), ("Disney", "DIS"), ("Berkshire", "BRK-B"),
+    ("Berkshire Hathaway", "BRK-B"), ("JPMorgan", "JPM"), ("Chase", "JPM"),
+    ("Bank of America", "BAC"), ("Wells Fargo", "WFC"), ("Citigroup", "C"),
+    ("Citibank", "C"), ("Goldman Sachs", "GS"), ("Visa", "V"), ("Mastercard", "MA"),
+    ("PayPal", "PYPL"), ("Intel", "INTC"), ("AMD", "AMD"), ("IBM", "IBM"),
+    ("Oracle", "ORCL"), ("Salesforce", "CRM"), ("Adobe", "ADBE"), ("Cisco", "CSCO"),
+    ("Qualcomm", "QCOM"), ("Broadcom", "AVGO"), ("TSMC", "TSM"), ("Alibaba", "BABA"),
+    ("Walmart", "WMT"), ("Costco", "COST"), ("Home Depot", "HD"),
+    ("Procter & Gamble", "PG"), ("P&G", "PG"), ("Johnson & Johnson", "JNJ"),
+    ("Pfizer", "PFE"), ("Eli Lilly", "LLY"), ("Lilly", "LLY"), ("Exxon", "XOM"),
+    ("ExxonMobil", "XOM"), ("Chevron", "CVX"), ("Boeing", "BA"), ("Ford", "F"),
+    ("General Motors", "GM"), ("AT&T", "T"), ("Verizon", "VZ"), ("T-Mobile", "TMUS"),
+    ("Uber", "UBER"), ("Airbnb", "ABNB"), ("Shopify", "SHOP"), ("Spotify", "SPOT"),
+    ("Palantir", "PLTR"), ("Coinbase", "COIN"), ("Snapchat", "SNAP"), ("Zoom", "ZM"),
+    ("FedEx", "FDX"), ("Caterpillar", "CAT"), ("Toyota", "TM"), ("Honda", "HMC"),
+    ("Sony", "SONY"), ("Novo Nordisk", "NVO"), ("ASML", "ASML"), ("Micron", "MU"),
+    ("Dell", "DELL"), ("eBay", "EBAY"), ("Roblox", "RBLX"), ("Kraft Heinz", "KHC"),
+    ("Hershey", "HSY"), ("Colgate", "CL"), ("Philip Morris", "PM"), ("Unilever", "UL"),
+    ("Nestle", "NSRGY"), ("Nestlé", "NSRGY"),
+)
+
+_ALIASES_BY_SYMBOL: dict[str, list[str]] = {}
+for _name, _symbol in EVERYDAY_NAMES:
+    _ALIASES_BY_SYMBOL.setdefault(_symbol, []).append(_name)
+
 SEARCH_MARKETS = ("US", "ID")
 SEARCH_MAX = 20
 
@@ -177,10 +241,12 @@ def search(query: str, market_code: Optional[str] = None, limit: int = 8) -> lis
     and it does not touch `market_data`, which a test asserts.
 
     ORDERED BY HOW THE TEXT MATCHES, THEN BY THE FILE'S OWN ORDER. Match classes,
-    best first: the symbol or its bare code exactly ("BBCA" finds both BBCA.JK
-    and the US BBCA), a symbol prefix, a word in the name starting with the text,
-    the text anywhere in the name. Within a class the file's order decides,
-    which is market capitalisation, largest first.
+    best first: an everyday name exactly ("telkom", "google"; EVERYDAY_NAMES), the
+    symbol or its bare code exactly ("BBCA" finds both BBCA.JK and the US BBCA), a
+    symbol prefix, a word in the name or in an everyday name starting with the
+    text, the text anywhere in the name. Within a class the file's order decides,
+    which is market capitalisation, largest first. A row found by an everyday
+    name carries it as `alias`, so the finder can show what was matched.
 
     NEVER BY MARKET CAP ACROSS MARKETS. The US file is in dollars and the IDX
     file in rupiah; comparing those numbers would rank every Indonesian name
@@ -212,11 +278,18 @@ def search(query: str, market_code: Optional[str] = None, limit: int = 8) -> lis
                 continue
             base = symbol[: -len(suffix)] if suffix and symbol.endswith(suffix) else symbol
             name = str(row.get("name") or "")
-            if upper in (symbol, base):
+            aliases = _ALIASES_BY_SYMBOL.get(symbol, [])
+            exact_alias = next((a for a in aliases if a.lower() == lower), None)
+            word_alias = next((a for a in aliases
+                               if (" " + a.lower()).find(" " + lower) >= 0), None) \
+                if len(lower) >= 3 else None
+            if exact_alias:
+                match = -1
+            elif upper in (symbol, base):
                 match = 0
             elif symbol.startswith(upper):
                 match = 1
-            elif (" " + name.lower()).find(" " + lower) >= 0:
+            elif word_alias or (" " + name.lower()).find(" " + lower) >= 0:
                 # At a word boundary, so "bank central" finds "PT Bank Central
                 # Asia" and "corp" does not find every "Incorporated".
                 match = 2
@@ -224,12 +297,16 @@ def search(query: str, market_code: Optional[str] = None, limit: int = 8) -> lis
                 match = 3
             else:
                 continue
-            scored.append((match, index, market_rank, {
+            hit = {
                 "symbol": symbol, "name": name or symbol, "market": market,
                 "exchange": row.get("exchange"),
-                "match": ("symbol", "prefix", "name", "contains")[match],
-            }))
-    scored.sort(key=lambda t: (t[0], t[2] if t[0] == 0 else 0, t[1], t[2]))
+                "match": ("alias", "symbol", "prefix", "name", "contains")[match + 1],
+            }
+            alias = exact_alias or (word_alias if match == 2 else None)
+            if alias:
+                hit["alias"] = alias
+            scored.append((match, index, market_rank, hit))
+    scored.sort(key=lambda t: (t[0], t[2] if t[0] <= 0 else 0, t[1], t[2]))
     return [row for *_, row in scored[:limit]]
 
 

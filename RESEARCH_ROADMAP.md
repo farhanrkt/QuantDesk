@@ -2426,6 +2426,10 @@ recomputed independently from raw provider data, and every page and tab driven i
 - **A company searched by its common name may not be found.** The listing files carry the
   provider's legal names: Telkom Indonesia is "Perusahaan Perseroan (Persero) PT
   Telekomunikasi Indonesia", found by "telekomunikasi" or "TLKM" but not "telkom".
+  *Narrowed in November 2026:* `listings.EVERYDAY_NAMES` maps 130 everyday names (Telkom,
+  BCA, BRI, Gojek, Google, Facebook…) to their listings, so the names a newcomer is most
+  likely to type are found; a company outside that table is still found only by its legal
+  name or ticker.
 - **Headlines are requested twice per page load in development.** React's StrictMode mounts
   twice and the first request is aborted; production makes one.
 

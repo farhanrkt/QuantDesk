@@ -272,10 +272,18 @@ same place:
 | `/compare?symbols=AAPL,BBCA.JK` | Two to four companies, read the same way, side by side. |
 | `/journal` | Every thesis you have written, for every company. |
 
-**The command palette** (⌘K, `/`, or the search button) opens any company by name or
-ticker from the provider's listing files — Bank Central Asia finds BBCA.JK — and always
-offers "open as typed", so crypto pairs, indices and new listings still open. It also reaches
-every route, every tab of the current stock, the reading mode and your holding horizon.
+**Finding a company.** The ticker box and the command palette (⌘K, `/`, or the search
+button) both take a name. They read the provider's listing files, which carry legal names
+("PT Bank Central Asia Tbk"), and a table of about 130 everyday names beside them
+(`listings.EVERYDAY_NAMES`: Telkom, BCA, BRI, Mandiri, Gojek, Apple, Google, Facebook…), so
+"telkom" finds TLKM.JK and "google" finds GOOGL. In the box, an exact everyday name opens its
+company and the line under the box says which before Enter is pressed; a partial name offers
+up to three companies. Text that is itself a listed ticker is left as it is. In the palette a
+company found by name comes before "open as typed"; that option is always there, so crypto
+pairs, indices and new listings still open.
+
+**The command palette** also reaches every route, every tab of the current stock, the
+reading mode and your holding horizon.
 Shortcuts: `[` and `]` move between tabs, `w` stars the ticker, `?` lists them all. None fire
 while you are typing.
 
@@ -1287,7 +1295,7 @@ Interactive docs at `/api/docs`.
 |---|---|
 | `GET /api/confluence` | **All four lenses in one call, plus the synthesis, the pre-trade checks and the company block** — what the UI actually uses |
 | `GET /api/company` | **What the company is**: profile, listing, statements year by year, dividends, next report. The same block confluence carries |
-| `GET /api/symbols` | **Listings matching a name or ticker**, for the command palette. Reads the committed listing files; no provider call |
+| `GET /api/symbols` | **Listings matching a name, an everyday name or a ticker**, for the ticker box and the command palette. Reads the committed listing files; no provider call |
 | `GET /api/markets/today` | **What moved the markets**: 22 instruments, each move against its own past year, the unusual ones named, the base rate, and what the source cannot supply. Takes no parameters; five minutes at the edge |
 | `GET /api/markets/calendar` | **The dates that move markets** for the next 90 days, with each exchange's hours and closures, each source's coverage, and what is not published yet. Takes no parameters; an hour at the edge |
 | `POST /api/markets/earnings` | **The next report date for each name on a reader's watchlist** (up to 20), in a body, `no-store` |

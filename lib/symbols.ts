@@ -16,7 +16,7 @@
  *
  * Pure: compiled into the frontend assertions and pinned there.
  */
-import type { Market } from "./types";
+import type { Market, SymbolHit, SymbolSearch } from "./types";
 
 /** The same shape as `TICKER_PATTERN` in api/index.py, and check_frontend holds them equal. */
 export const TICKER_PATTERN = /^\^?[A-Za-z0-9]{1,10}(?:[.\-=][A-Za-z0-9]{1,6}){0,2}$/;
@@ -46,3 +46,25 @@ export function baseCode(symbol: string): string {
   const out = symbol.trim().toUpperCase();
   return out.endsWith(MARKET_SUFFIX.ID) ? out.slice(0, -MARKET_SUFFIX.ID.length) : out;
 }
+
+// --------------------------------------------------------------------------- //
+// Finding a company by name (docs/AUDIT.md, UX-1)
+// --------------------------------------------------------------------------- //
+
+/** What the symbol finder accepts; the same pattern the palette and the API use. */
+export const NAME_QUERY_OK = /^[A-Za-z0-9 .&'\-^=,()]{1,40}$/;
+
+/**
+ * What a lookup means for the box: the company an exact everyday name opens,
+ * or up to three companies whose names match. Nothing when the text is itself
+ * a listed symbol, or when the answer is for different text than the box holds.
+ */
+export function readNameHits(found: SymbolSearch | null,
+                             typed: string): { opens: SymbolHit | null; offers: SymbolHit[] } {
+  const hits = found && found.query.trim() === typed ? found.results : [];
+  if (hits.some((h) => h.match === "symbol")) return { opens: null, offers: [] };
+  const opens = hits.find((h) => h.match === "alias") ?? null;
+  const offers = opens ? [] : hits.filter((h) => h.match === "name").slice(0, 3);
+  return { opens, offers };
+}
+

@@ -97,8 +97,8 @@ export function Landing() {
           <TickerBar opts={opts} onChange={setOpts} onRun={open} busy={false} autoFocus />
         </div>
         <p className="mt-4 text-meta text-ash">
-          {t("Know the company but not the ticker? Press")}{" "}<Kbd keys={["mod", "K"]} className="mx-1 align-middle" />
-          {t("and type its name.")}
+          {t("Know the company but not the ticker? Type its name above, or press")}{" "}
+          <Kbd keys={["mod", "K"]} className="mx-1 align-middle" />{t("to search everywhere.")}
         </p>
       </section>
 

@@ -771,8 +771,6 @@ export const ID: Record<string, string> = {
   "MADs below rolling median": "MAD di bawah median bergulir",
   "Anomaly window": "Periode anomali",
   "Chart range": "Rentang grafik",
-  "Ticker — AAPL, BBCA.JK, BTC-USD": "Ticker — AAPL, BBCA.JK, BTC-USD",
-  "Ticker symbol": "Simbol ticker",
   "US market": "Pasar AS",
   "Running…": "Berjalan…",
   "Run all lenses": "Jalankan semua lensa",
@@ -964,8 +962,8 @@ export const ID: Record<string, string> = {
   "US and Indonesian listings · research, not advice": "Saham AS dan Indonesia · riset, bukan saran",
   "Read one company through four models and two independent kinds of evidence.": "Baca satu perusahaan lewat empat model dan dua jenis bukti yang saling independen.",
   "See where they agree, where they disagree, and what none of them can tell you.": "Lihat di mana mereka sepakat, di mana mereka berselisih, dan apa yang tidak bisa diberitahukan siapa pun dari mereka.",
-  "Know the company but not the ticker? Press": "Tahu perusahaannya tetapi tidak tahu tickernya? Tekan",
-  "and type its name.": "lalu ketik namanya.",
+  "Know the company but not the ticker? Type its name above, or press": "Tahu perusahaannya tetapi tidak tahu kode sahamnya? Ketik namanya di atas, atau tekan",
+  "to search everywhere.": "untuk mencari di mana saja.",
   "Your desk": "Meja Anda",
   "Kept in this browser only. Nothing here is sent anywhere unless you press a button that says so.": "Hanya disimpan di browser ini. Tidak ada yang dikirim ke mana pun kecuali Anda menekan tombol yang mengatakannya.",
   "{length} of 50": "{length} dari 50",
@@ -1363,5 +1361,9 @@ export const ID: Record<string, string> = {
   "Not scored": "Tidak dinilai",
   "the base free cash flow": "arus kas bebas dasar",
   "the share count": "jumlah saham",
-  "the price": "harga"
+  "the price": "harga",
+  "Ticker or company — AAPL, Telkom, BBCA.JK": "Kode saham atau perusahaan — AAPL, Telkom, BBCA.JK",
+  "Ticker symbol or company name": "Kode saham atau nama perusahaan",
+  "Enter opens {symbol} · {name}": "Enter membuka {symbol} · {name}",
+  "Companies by that name:": "Perusahaan dengan nama itu:"
 };
