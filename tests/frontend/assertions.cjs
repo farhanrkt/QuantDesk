@@ -42,8 +42,8 @@ t("a family that disagrees votes zero and is named as split", () => {
   assert.match(a.footnote, /split on price and volume/);
   assert.match(a.headline, /1 of 2 independent readings constructive/);
 });
-t("dashes and n/a are excluded from the count", () => {
-  const a = agreementOf([R("Flow","price",0,"—"), R("Trend","price",1), R("Value","filings",1), R("Quality","filings",0,"n/a")]);
+t("dashes and a lens that does not apply are excluded from the count", () => {
+  const a = agreementOf([R("Flow","price",0,"—"), R("Trend","price",1), R("Value","filings",1), { ...R("Quality","filings",0,"Not scored"), absent: true }]);
   assert.equal(a.lenses, 2);
 });
 t("nothing live says Awaiting data", () => {

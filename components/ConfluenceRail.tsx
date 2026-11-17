@@ -41,6 +41,12 @@ interface Reading {
   pending?: boolean;
   /** The lens was asked and did not answer — not the same as not yet asked. */
   failed?: boolean;
+  /**
+   * The lens answered that it does not apply here (a bank, or no filings).
+   * A flag rather than a sentinel verdict: the chip used to print "n/a", an
+   * English abbreviation, in both languages.
+   */
+  absent?: boolean;
   /** -1 bearish, 0 neutral, +1 bullish. Used only for the agreement count. */
   vote: number;
   family: Family;
@@ -82,8 +88,8 @@ export function agreementOf(readings: Reading[]): Agreement {
   // A lens still running has not voted. Counting its "…" as a live neutral
   // reading headlined a half-loaded rail "Mixed signals", or "1 of 2
   // independent readings constructive" with one of the two not yet asked.
-  const live = readings.filter((r) => !r.pending && r.verdict !== "…"
-                                      && r.verdict !== "—" && r.verdict !== "n/a");
+  const live = readings.filter((r) => !r.pending && !r.absent && r.verdict !== "…"
+                                      && r.verdict !== "—");
   if (live.length === 0) {
     // NOT "AWAITING" ONCE EVERYTHING HAS SETTLED. This said "Awaiting data"
     // above four failed lenses, which reads as a page still loading when it
@@ -302,7 +308,7 @@ function readQuality(state: Engine<QualityResponse>): Reading {
   // cause and a sentence for each; only the designed refusal gets the short one.
   if (!d.applicable)
     return {
-      lens: msg("Quality"), question, verdict: "n/a",
+      lens: msg("Quality"), question, verdict: t("Not scored"), absent: true,
       detail: d.cause === "financial" || (!d.cause && !d.reason)
         ? t("These three accounting models were built on non-financial firms and do not transfer to banks or insurers, so no score is reported.")
         : d.reason ?? t("No score could be computed for this listing."),
@@ -342,7 +348,7 @@ function readQuality(state: Engine<QualityResponse>): Reading {
 
 /** A vote is the SERVER's direction. This maps it to a tone and nothing else. */
 const voteTone = (r: Reading): string =>
-  r.verdict === "—" || r.verdict === "…" || r.verdict === "n/a" ? "none"
+  r.absent || r.verdict === "—" || r.verdict === "…" ? "none"
     : r.vote > 0 ? "good" : r.vote < 0 ? "bad" : "neutral";
 
 const DOT: Record<string, string> = {

@@ -1359,5 +1359,9 @@ export const ID: Record<string, string> = {
   "1 year": "1 tahun",
   "{years} years": "{years} tahun",
   "{years}y": "{years} th",
-  "undated": "tanpa tanggal"
+  "undated": "tanpa tanggal",
+  "Not scored": "Tidak dinilai",
+  "the base free cash flow": "arus kas bebas dasar",
+  "the share count": "jumlah saham",
+  "the price": "harga"
 };
