@@ -79,6 +79,17 @@ by name is the first feature of Phase 5.
 | COPY-5 | Low | The rate-limit message says "endpoint" | fixed |
 | DOC-1 | Low | Three statements in the README no longer match the app | fixed, except CODEBASE_REVIEW.md (Phase 6) |
 
+## Re-measured after the fixes
+
+Three fixes can change what a lens concludes: the Trend lens's Sortino ratio
+reading the live risk-free rate (COR-4), a lens with too little history no
+longer voting (COR-5), and statements fetched again when a line went missing
+(REL-7). The lens agreement was measured again on 17 November 2026, after all
+of them: the two families' κ is −0.04 (US +0.02, IDX +0.03), still not
+distinguishable from zero, so the claim the rail makes stands. RESEARCH_ROADMAP
+§15 has the full table beside the two earlier runs. The pre-trade calibration
+was not due: none of its checks reads anything these fixes changed.
+
 ## What was done
 
 - **The check battery**, green before and after: 1,920 tests, ruff, the glossary

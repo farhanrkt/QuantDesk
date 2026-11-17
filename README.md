@@ -53,12 +53,12 @@ app collapses them into one vote rather than counting four.
 
 **And that caveat is now measured, not asserted.** Across 168 names in four index universes,
 the price record and the filings reach the same verdict about as often as chance puts them
-there — **κ = −0.02, on an interval that straddles zero** (re-measured 14 November 2026;
+there — **κ = −0.04, on an interval that straddles zero** (stamped 17 November 2026;
 +0.03 in August) — so agreement between them really is two facts rather than one counted
 twice. The surprise was the other half: Flow and Trend, the pair grouped together *because*
-they read the same series, do not agree either (κ = +0.03 in August, −0.13 in November), and
-the four lenses together carry **3.6 lenses' worth of independent information** rather than
-the two the count collapses them to. The grouping was left alone anyway, and the panel says
+they read the same series, do not agree either (+0.03 in August, −0.13 and −0.02 in November,
+no stable relationship at all), and the four lenses together carry **3.8 lenses' worth of
+independent information** rather than the two the count collapses them to. The grouping was left alone anyway, and the panel says
 why: a vote that correlates with nothing is what an independent reading and an uninformative
 one both look like, and the Flow lens's own event study already returns nulls.
 
@@ -537,18 +537,18 @@ every run, and until now nothing had checked it.
 The check is Cohen's κ between the two families' actual verdicts across 168 names in four index
 universes, because raw agreement is uninterpretable: a lens calling 70% of companies cheap and
 one calling 70% sound land on the same label **58% of the time while sharing nothing at all**.
-Chance-corrected, price and filings come out at **κ = −0.02 (US +0.04, IDX −0.01)**, on
+Chance-corrected, price and filings come out at **κ = −0.04 (US +0.02, IDX +0.03)**, on
 intervals that straddle zero in all three. **The claim survives** — measured in August 2026 at
-+0.03 and again on 14 November, not asserted, and the sentence on the panel is written from
++0.03 and twice in November, not asserted, and the sentence on the panel is written from
 whichever way the number came out.
 
 The unexpected half: **Flow and Trend, the pair the app collapses into one vote precisely
-because they read the same price series, do not agree: κ = +0.03 in August and −0.13 in
-November.** The four together carry 3.6 lenses' worth of independent information rather than the
+because they read the same price series, do not agree: +0.03 in August, then −0.13 and −0.02
+in November.** The four together carry 3.8 lenses' worth of independent information rather than the
 two they are counted as. The grouping was left alone regardless, and the panel says why — a vote
 uncorrelated with everything is what an independent reading and an uninformative one both look
 like, and the Flow lens's own event study returns nulls. Trend and Value are *negatively*
-correlated in both runs, which explains itself (a rising price makes a DCF look expensive).
+correlated in every run, which explains itself (a rising price makes a DCF look expensive).
 Every pair that includes Flow moved by more than its interval between the two runs, because
 Flow votes on the last ten sessions: a Flow pair that looks significant on one date is not a
 finding.

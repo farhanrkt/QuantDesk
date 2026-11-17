@@ -239,7 +239,8 @@ each with tests that plant the failure:
   - PIOTROSKI banded the raw count, so 3 of 3 checks read "weak —
     deteriorating" and voted bearish. Bands now read the share, unknown below
     six computable checks. Both stamps were RE-MEASURED on 14 November 2026
-    (calibrate_checks.py, measure_lens_agreement.py); RESEARCH_ROADMAP §7, §15.
+    (calibrate_checks.py, measure_lens_agreement.py), and the agreement again
+    on 17 November after the audit's fixes; RESEARCH_ROADMAP §7, §15.
   - PROVIDER OUTAGES told readers their ticker was wrong, inside a 200 the edge
     kept for six minutes. Now named via the market's own index, held 15s.
   - The JOURNAL lost entries across tabs (reproduced in a browser). Writes now
@@ -275,11 +276,11 @@ re-deriving the reasoning.
   §15     THE CLAIM THE APP MAKES LOUDEST, MEASURED. The confluence rail asserts
           four lenses rest on two INDEPENDENT bodies of data. Nothing had
           checked it. Cohen's kappa between the two families' verdicts across
-          168 names in four universes: κ = -0.02 (US +0.04, IDX -0.01) when
-          re-measured on 14 November 2026, +0.03 in August, every interval
+          168 names in four universes: κ = -0.04 (US +0.02, IDX +0.03) on the
+          stamp of 17 November 2026, +0.03 in August, every interval
           straddling zero — so the claim is earned. The surprise was that
           Flow and Trend, the pair collapsed into ONE vote because they read
-          the same series, do not agree either (+0.03, then -0.13; Flow votes
+          the same series, do not agree either (+0.03, -0.13, -0.02; Flow votes
           on ten sessions, so its pairs move between runs). The grouping was left
           alone anyway, because a vote that correlates with nothing is what an
           independent reading and an uninformative one both look like.
