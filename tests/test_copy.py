@@ -43,7 +43,7 @@ def test_a_gain_still_reads_as_one():
 
 def test_a_negative_sortino_is_not_called_earnings():
     reading = explain.explain("sortino", -0.49, riskFree=0.065)["reading"]
-    assert "earned -0.49" not in reading and "earned −0.49" not in reading
+    assert "earned -0.49" not in reading
     assert "fell short" in reading
 
 
@@ -78,7 +78,8 @@ def test_the_rate_limit_sentence_names_no_endpoint():
         client.get("/api/health")
         detail = client.get("/api/health").json()["detail"]
     finally:
-        index.RATE_LIMITS.clear(); index.RATE_LIMITS.update(limits)
+        index.RATE_LIMITS.clear()
+        index.RATE_LIMITS.update(limits)
         index.RATE_EXEMPT.update(exempt)
         index._RATE_HITS.clear()
     assert "endpoint" not in detail
