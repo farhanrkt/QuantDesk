@@ -1487,6 +1487,87 @@ reader's own thesis appears in the request layer.
 
 ---
 
+## Deploying
+
+The app deploys to Vercel from this repository as it is: `vercel.json` names the framework,
+routes `/api/*` to the one Python function and gives it 60 seconds. Every key below is
+optional. Without any of them the app runs, reports errors only to its own logs, rate-limits per
+instance, and the uptime check stays off.
+
+**Project settings, once**
+
+- **Function duration.** `vercel.json` asks for 60 s; the plan has to allow it. The app's own
+  budgets sit inside it: 35 s per lens, 8 s for the outage canary, 52 s for any request, and
+  the browser gives up at 60 s, each with a sentence instead of the platform's error page.
+- **System environment variables.** Turn on "Automatically expose System Environment
+  Variables". The app also recognises Vercel by the `x-vercel-id` header, but with the
+  variables on, error reports carry the release (`VERCEL_GIT_COMMIT_SHA`) and the
+  environment (`VERCEL_ENV`), and `/api/status` names the release.
+- **Analytics.** Project → Analytics → Enable; the code alone does not start collection.
+- **Region.** Every request ends at Yahoo Finance in the United States, so the function is
+  best kept in a US East region (Vercel's default) even for Indonesian readers: they pay one
+  long round trip either way, and the function's trip to the provider stays short.
+
+**Environment variables**
+
+| Name | Default | Set it to |
+|---|---|---|
+| `SENTRY_DSN` | unset: errors go to the function log only | A Sentry-format DSN, to also send each error to that project (see Error reporting). Turns on browser reports too |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | unset: the rate limit counts per instance | An Upstash Redis REST URL (https) and token, to count across instances (see Limits) |
+| `ALLOWED_ORIGINS` | unset: same origin only | A comma-separated list of other sites allowed to call the API. Nothing this app serves needs it |
+| `QUANTDESK_PRIVATE_TIER` | on locally, off on every Vercel build | Leave unset on a deployment. `1` would publish the private scanner's score |
+
+In the repository, the Actions variable `QUANTDESK_URL` (the production address, no trailing
+slash) switches on the uptime check (see Uptime).
+
+**After each deploy**, with `HOST` the production address:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "$HOST/api/health"
+```
+
+200 means the function runs.
+
+```bash
+curl -s "$HOST/api/status"
+```
+
+`ok` or `attention` with its `problems` in words; `degraded` means the provider is not answering.
+
+```bash
+curl -s "$HOST/api/capabilities"
+```
+
+`privateTier` must be `false`; `errorReporting` is `true` only if `SENTRY_DSN` is set.
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "$HOST/api/verdict?ticker=AAPL"
+```
+
+404: the private scanner is not served.
+
+```bash
+curl -sI "$HOST/api/health" | grep -iE "x-content-type-options|x-frame-options|referrer-policy"
+```
+
+The API's own security headers; the page's content security policy comes from `next.config.mjs`.
+
+```bash
+curl -s -o /dev/null -D - "$HOST/api/markets/calendar" | grep -iE "x-vercel-cache|cache-control"
+```
+
+Run it twice: the second answer should say `x-vercel-cache: HIT`.
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "content-type: application/json" -d '{"kind":"unhandled","message":"deploy check","route":"/"}' "$HOST/api/client-error"
+```
+
+With `SENTRY_DSN` set, a "deploy check" event should appear in the error service within a
+minute; without it the route answers 204 and records nothing.
+
+Then open `/stock/AAPL` and `/stock/BBCA.JK` in a browser, once in each language, and run the
+uptime workflow by hand (Actions → Uptime → Run workflow).
+
 ## Analytics
 
 Visitor counts come from **Vercel Web Analytics**, chosen because it was the only option
