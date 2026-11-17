@@ -85,7 +85,7 @@ from _lib import (accumulation, econcalendar, eventstudy, explain, exposure,
                   riskmodel, symbols, technical, trackrecord,
                   universes, valuation)
 
-from _lib.jsonsafe import clean
+from _lib.jsonsafe import WIRE_DIGITS, clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 from _lib.lang import tr
 
@@ -648,7 +648,7 @@ def ok(payload: dict, *, failed: bool = False) -> JSONResponse:
     # re-runs a network fetch that we do not want to pay for on each keystroke.
     # `failed` marks a payload that carries a TRANSIENT failure — see
     # CACHE_FAILED — and is never set for one that is about the symbol itself.
-    return JSONResponse(content=clean(payload), headers={
+    return JSONResponse(content=clean(payload, WIRE_DIGITS), headers={
         "Cache-Control": CACHE_FAILED if failed else CACHE,
         "CDN-Cache-Control": CDN_CACHE_FAILED if failed else CDN_CACHE})
 
@@ -667,7 +667,7 @@ def private_ok(payload: dict) -> JSONResponse:
     `no-store` says what is intended. It also stops a browser applying heuristic
     freshness to a body that describes somebody's portfolio.
     """
-    return JSONResponse(content=clean(payload),
+    return JSONResponse(content=clean(payload, WIRE_DIGITS),
                         headers={"Cache-Control": "no-store"})
 
 
@@ -2585,7 +2585,7 @@ def markets_today():
                             detail=tr("The price provider returned nothing for the board just now.",
                                       "Penyedia harga tidak mengembalikan apa pun untuk papan ini barusan."))
     board["explain"] = explain.for_market_board(board)
-    return JSONResponse(content=clean(board),
+    return JSONResponse(content=clean(board, WIRE_DIGITS),
                         headers={"Cache-Control": BOARD_CACHE, "CDN-Cache-Control": BOARD_CDN_CACHE})
 
 

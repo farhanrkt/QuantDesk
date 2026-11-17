@@ -47,7 +47,7 @@ or *deferred* (with the reason).
 | REL-4 | High | Ordinary browsing reaches the rate limit; limits are per address | fixed |
 | PERF-1 | High | The stock page jumps as results arrive (layout shift 0.62 on a phone) | open |
 | UX-1 | High | A company cannot be found by its everyday name, and "apple" opens a ticker called APPLE | open |
-| PERF-2 | Medium | One company read is 1.35 MB of JSON, 1.1 MB of it the chart series | open |
+| PERF-2 | Medium | One company read is 1.35 MB of JSON, 1.1 MB of it the chart series | narrowed |
 | REL-2 | Medium | During an outage the single-lens routes tell the reader their ticker is wrong | fixed |
 | REL-3 | Medium | One failed price request is final: no second attempt | fixed |
 | REL-5 | Medium | The browser never gives up on a request, and cannot read a validation error | fixed |
@@ -312,6 +312,14 @@ to 5 seconds and a repeat about 1 second, because prices are fetched again.
 
 **Fix.** Send the series as named columns instead of one object per day, and
 drop the duplicate. The numbers do not change; the client rebuilds the rows.
+
+**Narrowed.** Every float leaves the API with eight significant digits instead
+of seventeen (`jsonsafe.WIRE_DIGITS`); no figure on the page shows more than
+six, and every statistic is computed on full values before it gets there. The
+real AAPL read is now 1.03 MB, 263 KB compressed (was 1.35 MB, 408 KB). Sending
+the series as columns would save another 43 KB compressed but changes what
+every chart receives, so it is left for a change that can be checked chart by
+chart. `tests/test_jsonsafe.py`.
 
 ### REL-2. During an outage the single-lens routes blame the ticker
 
