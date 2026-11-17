@@ -1385,5 +1385,6 @@ export const ID: Record<string, string> = {
   "{count} settings this browser has not set": "{count} pengaturan yang belum diatur browser ini",
   "Add to this browser": "Tambahkan ke browser ini",
   "Added. Reloading the page to show it…": "Sudah ditambahkan. Memuat ulang halaman untuk menampilkannya…",
-  "Cancel": "Batal"
+  "Cancel": "Batal",
+  "Save or restore this browser's data": "Simpan atau pulihkan data browser ini"
 };
