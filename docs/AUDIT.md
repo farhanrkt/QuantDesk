@@ -71,7 +71,7 @@ or *deferred* (with the reason).
 | SEC-6 | Low | The rate limiter counts per serverless instance | decision |
 | SEC-7 | Low | The API sets no security headers of its own; `/api/docs` is public; `X-Powered-By` is sent | fixed, docs: decision 7 |
 | SEC-8 | Low | The content security policy allows inline scripts | deferred |
-| COR-2 | Low | The Beneish leverage index is silently neutral when a company has no long-term debt line | open |
+| COR-2 | Low | The Beneish leverage index is silently neutral when a company has no long-term debt line | fixed |
 | REL-6 | Low | A news thumbnail that fails to load draws an empty box | fixed |
 | COPY-5 | Low | The rate-limit message says "endpoint" | open |
 | DOC-1 | Low | Three statements in the README no longer match the app | open |
@@ -599,6 +599,12 @@ as zero, but a missing line is NaN and NaN is truthy, so the index is dropped
 and defaults to "no change". In the sweep that is 8 of 115 US companies and 3
 of 39 Indonesian ones; none of the eleven changes band when it is computed.
 `audit_repro.py COR-2`.
+
+**Fixed.** A missing line now counts as none of it, and the leverage is
+unknown only when both lines are missing. Measured over all 171 cached
+non-financial companies: eleven scores move, the largest by 0.14, and no band
+changes, which is what the sentence above claimed before it was checked.
+Two tests in `tests/test_quality.py`.
 
 ### REL-6. A news thumbnail that fails to load draws an empty box
 

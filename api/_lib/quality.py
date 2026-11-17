@@ -108,6 +108,12 @@ def _ratio(numerator: float, denominator: float) -> float:
     return numerator / denominator
 
 
+def _sum_known(*values: float) -> float:
+    """The sum of the values that are known, or NaN when none of them is."""
+    known = [float(v) for v in values if np.isfinite(v)]
+    return float(sum(known)) if known else np.nan
+
+
 def _nullable(value) -> Optional[float]:
     out = _safe_float(value)
     return float(out) if np.isfinite(out) else None
@@ -391,8 +397,16 @@ def beneish_m_score(income, balance, cashflow) -> dict:
     sgai = index_of("SGAI", _ratio(_ratio(sga_now, revenue_now),
                                    _ratio(sga_prior, revenue_prior)))
 
-    leverage_now = _ratio((curliab_now or 0) + (ltd_now or 0), assets_now)
-    leverage_prior = _ratio((curliab_prior or 0) + (ltd_prior or 0), assets_prior)
+    # A MISSING LINE COUNTS AS NONE OF IT, AS THIS ALWAYS MEANT TO. It was
+    # written `(ltd_now or 0)`, but a missing line arrives as NaN and NaN is
+    # true, so the NaN went straight into the sum and the whole index dropped
+    # out, defaulting to "no change". A company with current liabilities and no
+    # long-term debt line — a debt-free one, usually — therefore had its
+    # leverage index ignored rather than computed: 8 of 115 US and 3 of 39
+    # Indonesian companies in the November 2026 audit (docs/AUDIT.md, COR-2).
+    # Only when both lines are missing is the leverage unknown.
+    leverage_now = _ratio(_sum_known(curliab_now, ltd_now), assets_now)
+    leverage_prior = _ratio(_sum_known(curliab_prior, ltd_prior), assets_prior)
     lvgi = index_of("LVGI", _ratio(leverage_now, leverage_prior))
 
     # TATA is a level, not a ratio of ratios, so it defaults to 0 not 1.

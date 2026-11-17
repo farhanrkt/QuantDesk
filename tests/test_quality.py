@@ -354,3 +354,28 @@ def test_a_company_with_a_missing_sector_is_still_a_gap():
                      "income": pd.DataFrame(), "balance": pd.DataFrame(),
                      "cashflow": pd.DataFrame()}, symbol="JPM")
     assert out["cause"] == "unknown-sector"
+
+
+# --------------------------------------------------------------------------- #
+# A missing debt line is none of it (docs/AUDIT.md, COR-2)
+# --------------------------------------------------------------------------- #
+def _no_long_term_debt(healthy):
+    income, balance, cashflow = healthy
+    return income, balance.drop(index="Long Term Debt"), cashflow
+
+
+def test_beneish_leverage_is_computed_for_a_company_with_no_debt_line(healthy):
+    """`(ltd or 0)` kept the NaN — NaN is true — so the index dropped out and
+    defaulted to "no change" for a debt-free company. 11 of 171 cached
+    companies moved when this was fixed; none changed band."""
+    income, balance, cashflow = _no_long_term_debt(healthy)
+    out = Q.beneish_m_score(income, balance, cashflow)
+    expected = (400.0 / 2000.0) / (420.0 / 1900.0)
+    assert out["indices"]["LVGI"] == pytest.approx(expected)
+
+
+def test_beneish_leverage_is_unknown_only_when_both_lines_are_missing(healthy):
+    income, balance, cashflow = healthy
+    bare = balance.drop(index=["Long Term Debt", "Current Liabilities"])
+    out = Q.beneish_m_score(income, bare, cashflow)
+    assert out["indices"]["LVGI"] is None
