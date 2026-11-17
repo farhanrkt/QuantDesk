@@ -58,7 +58,7 @@ or *deferred* (with the reason).
 | SEC-3 | Medium | Validation errors are English lists that echo their input without limit | fixed |
 | SEC-4 | Medium | Any website may call the API on a preview deployment | fixed |
 | SEC-5 | Medium | A failed lens returns the raw exception text to the reader | fixed |
-| PERF-3 | Medium | Nothing is code-split: every page ships every panel, and the Indonesian catalogue | open |
+| PERF-3 | Medium | Nothing is code-split: every page ships every panel, and the Indonesian catalogue | narrowed |
 | PERF-4 | Medium | A public deployment imports the private scanner on every cold start | fixed |
 | UX-2 | Medium | The Flow tab scrolls sideways at 375 px | open |
 | UX-3 | Medium | The holding-period control offers 5 and 10 years the default load cannot answer | open |
@@ -493,6 +493,15 @@ sent to every reader in every language. `audit_repro.py PERF-3`.
 
 **Fix.** Load the tab panels, the private panels and the Indonesian catalogue
 on demand.
+
+**Narrowed.** Every stock tab but Trend, where a run lands, and every markets
+view but Today now load when first opened, drawn meanwhile as their own
+skeleton; the two private panels are never sent to a deployment that does not
+draw them. First load: the markets page 316 KB to 194 KB, the stock page 355 KB
+to 315 KB. Every tab and view was opened in the production build afterwards
+and drew its panel with no console error. The Indonesian catalogue is still
+in every reader's first load: loading it on demand means the first paint in
+Indonesian waits for it, which belongs with the first-paint work in Phase 5.
 
 ### PERF-4. A public deployment imports the private scanner on every cold start
 
