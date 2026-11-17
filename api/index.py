@@ -789,6 +789,101 @@ def health():
     })
 
 
+# The stamped measurements the published views read, and how old each may get
+# before an uptime check says so. The private tier's stamps are left out: it
+# runs only on the owner's machine and stays out of every published view.
+PUBLISHED_STAMPS = ("lens_agreement", "check_calibration", "backtest_results",
+                    "correlation_stability", "exposure_stability")
+STAMP_STALE_DAYS = 400
+LISTINGS_STALE_DAYS = 120
+CALENDAR_AHEAD_DAYS = 30
+STATUS_CACHE = "public, max-age=0, s-maxage=60"
+
+
+def _today() -> dt.date:
+    """Today, as the status check reads it; a function so a test can fix it."""
+    return dt.date.today()
+
+
+def _age_days(iso: Optional[str], today: dt.date) -> Optional[int]:
+    try:
+        return (today - dt.date.fromisoformat(str(iso)[:10])).days
+    except (TypeError, ValueError):
+        return None
+
+
+@app.get("/api/status")
+async def status():
+    """What an uptime check wants to know, beyond "the function answers".
+
+    /api/health stays as cheap as it is: no provider call, no file read. This
+    one asks the data provider for the US benchmark under the canary's own time
+    budget, and reads the dates off the files the published views depend on:
+    the stamped measurements, the listing files and the event calendar. Each
+    finding is a plain field, and `problems` lists, in words, everything that
+    needs the owner. `status` is "ok", "degraded" (the provider is not
+    answering, which the app already explains to readers) or "attention" (a
+    file is past its age). Nothing here is about any reader.
+    """
+    today = _today()
+    try:
+        answering = await asyncio.wait_for(asyncio.to_thread(market_data.provider_answering, "US"),
+                                           CANARY_BUDGET_SECONDS)
+    except asyncio.TimeoutError:
+        answering = False
+    problems: list[str] = []
+    if not answering:
+        problems.append("The data provider did not return the US benchmark.")
+
+    stamps = {}
+    for name in PUBLISHED_STAMPS:
+        try:
+            measured = json.loads((Path(__file__).parent / "_lib" / f"{name}.json")
+                                  .read_text()).get("measuredOn")
+        except (OSError, ValueError):
+            measured = None
+        age = _age_days(measured, today)
+        stamps[name] = {"measuredOn": measured, "ageDays": age}
+        if age is None or age > STAMP_STALE_DAYS:
+            problems.append(f"{name}.json has no date, or was measured more than "
+                            f"{STAMP_STALE_DAYS} days ago.")
+
+    files = {}
+    for code in listings.SEARCH_MARKETS:
+        payload = listings.load(code)
+        age = _age_days(payload.get("asOf") if payload else None, today)
+        files[code] = {"asOf": payload.get("asOf") if payload else None, "ageDays": age}
+        if age is None or age > LISTINGS_STALE_DAYS:
+            problems.append(f"The {code} listing file is missing or older than "
+                            f"{LISTINGS_STALE_DAYS} days (scripts/refresh_listings.py).")
+
+    # A source whose events are all past is a record, not a schedule, and is
+    # not expected to reach ahead; every other one should, by a month at least.
+    reach = econcalendar.coverage()
+    ahead_by = {source: -(_age_days(last, today) or 0) for source, last in reach.items()
+                if last >= today.isoformat()}
+    through = min((reach[s] for s in ahead_by), default=None)
+    ahead = min(ahead_by.values(), default=None)
+    short = sorted(s for s, days in ahead_by.items() if days < CALENDAR_AHEAD_DAYS)
+    if ahead is None or short:
+        problems.append(f"The event calendar reaches fewer than {CALENDAR_AHEAD_DAYS} days ahead "
+                        f"for {', '.join(short) or 'every source'}: add the next published "
+                        "dates to api/_lib/calendar_events.json.")
+
+    state = "degraded" if not answering else "attention" if problems else "ok"
+    return JSONResponse(headers={"Cache-Control": STATUS_CACHE}, content=clean({
+        "status": state,
+        "checkedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "release": (os.environ.get("VERCEL_GIT_COMMIT_SHA") or "")[:7] or None,
+        "provider": {"answering": answering},
+        "stamps": stamps,
+        "listings": files,
+        "calendar": {"reachesBySource": reach, "reachesAll": through, "daysAhead": ahead},
+        "errorReporting": reporting.enabled(),
+        "problems": problems,
+    }))
+
+
 @app.get("/api/capabilities")
 def capabilities(request: Request):
     """What this deployment serves, so the client draws only what it can reach.

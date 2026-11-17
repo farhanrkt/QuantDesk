@@ -1315,6 +1315,7 @@ Interactive docs at `/api/docs`.
 |---|---|
 | `GET /api/confluence` | **All four lenses in one call, plus the synthesis, the pre-trade checks and the company block** — what the UI actually uses |
 | `GET /api/company` | **What the company is**: profile, listing, statements year by year, dividends, next report. The same block confluence carries |
+| `GET /api/status` | **What an uptime check reads**: whether the provider returns the US benchmark (under the canary's 8 s budget), the age of each published stamp and listing file, how far ahead the event calendar reaches, and a list of problems in words. `ok`, `degraded` or `attention`. Cached 60 s at the edge |
 | `POST /api/client-error` | **A browser's own error**, reported through this origin when error reporting is on (see Error reporting). 204, nothing else |
 | `GET /api/symbols` | **Listings matching a name, an everyday name or a ticker**, for the ticker box and the command palette. Reads the committed listing files; no provider call |
 | `GET /api/markets/today` | **What moved the markets**: 22 instruments, each move against its own past year, the unusual ones named, the base rate, and what the source cannot supply. Takes no parameters; five minutes at the edge |
@@ -1494,6 +1495,25 @@ nothing.
 
 **It still has to be switched on in the dashboard** — Vercel project → Analytics → Enable.
 The code alone does not start collection.
+
+## Uptime
+
+`GET /api/health` answers without touching the provider or a file, so it says only that the
+function runs. `GET /api/status` says whether the app has anything to show: it asks the
+provider for the US benchmark, reads the dates off the published stamps, the listing files
+and the event calendar, and lists every problem in words. It reads `degraded` when the
+provider is silent (readers are seeing the outage sentence), `attention` when a file is
+getting old (a stamp past 400 days, a listing file past 120, a calendar source within 30
+days of its last date), and `ok` otherwise. The private tier's stamps are not listed.
+
+`.github/workflows/uptime.yml` reads both every thirty minutes once the repository variable
+`QUANTDESK_URL` holds the production address; until then each run says how to switch it on
+and passes. A dead function or a `degraded` status fails the run, which GitHub emails about;
+`attention` is a warning in the run's summary, since it needs a person within weeks, not
+within the hour.
+
+When it was written, the status read `attention` for a true reason: Bank Indonesia had not
+published its 2027 meeting dates, and the calendar's BI schedule ends on 16 December 2026.
 
 ## Error reporting
 
