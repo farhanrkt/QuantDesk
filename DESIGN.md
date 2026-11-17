@@ -690,8 +690,17 @@ the one that did not fit (see The shell), and is the one layout that changed.
   their sources wrote them. *Citations and proper names*: Piotroski (2000), The Fed, the
   Bureau of Labor Statistics. *Published models*: Piotroski F-Score, Altman Z, Beneish M, DCF —
   an Indonesian reader searches for them under those names.
-- *The page's metadata and the private scanner tier* are English. The private tier runs
-  only on the owner's machine.
+- *A shared link's preview* (the page's description) *and the private scanner tier* are
+  English: the server writes the preview before it can know the reader's language, and the
+  private tier runs only on the owner's machine. The tab's title follows the language — the
+  fixed page titles are swapped in the browser wherever Next sets one.
+- *Identifiers the interface used to print*: "WEAK" on the plain-English card, a quality
+  dimension's "outside" and "cannot tell", a ranking row's "SOUND", "1y" on the holding
+  chips and "(36M)" on the index comparison all reached an Indonesian reader as written.
+  Each is now worded where it is drawn ("Lemah", "di luar", "Sehat", "3 th", "36 bulan").
+- *Provider text is marked as English* (`lang="en"`), so a screen reader on the Indonesian
+  page pronounces the company description as English, and the company tab says it is the
+  provider's English.
 
 **The field manual is in both languages, and only one of them is written.**
 `docs/field-manual.id.html` is built from the English page by `scripts/build_glossary.py`: each

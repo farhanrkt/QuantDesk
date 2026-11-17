@@ -14,7 +14,7 @@ import type { ExplainMap, LongTermBlock } from "@/lib/types";
 import { cn, num, pct, signedPct } from "@/lib/utils";
 import { alpha, palette } from "@/lib/palette";
 import { ScrollRegion } from "@/components/ui/scroll";
-import { useT } from "@/lib/i18n";
+import { msg, useT } from "@/lib/i18n";
 
 const UP = palette.acc;
 const DOWN = palette.dist;
@@ -42,6 +42,14 @@ const DOWN = palette.dist;
  * the depth and DURATION of past declines is what decides whether someone
  * actually holds long enough to collect the return.
  */
+// The server's codes for the long view, as words. The card printed the code
+// itself, so it read "WEAK" under "Dalam bahasa sederhana" (UX-5); the code
+// stays English because the tone and the tests compare it.
+const LONG_VIEW_WORD: Record<string, string> = {
+  CONSTRUCTIVE: msg("Constructive"), WEAK: msg("Weak"), MIXED: msg("Mixed"),
+  "NO READING": msg("No reading"),
+};
+
 export function LongTermPanel({ data, currency }: { data: LongTermBlock; currency: string }) {
   const t = useT();
   const { view, drawdown, risk, rollingReturns, seasonality, position,
@@ -70,7 +78,7 @@ export function LongTermPanel({ data, currency }: { data: LongTermBlock; currenc
           <CardHeader>
             <CardTitle>{t("In plain English")}</CardTitle>
             <span className="num text-meta font-semibold" style={{ color: TONE_HEX[verdictTone] }}>
-              {view.verdict}
+              {LONG_VIEW_WORD[view.verdict] ? t(LONG_VIEW_WORD[view.verdict]) : view.verdict}
             </span>
           </CardHeader>
           <CardBody className="space-y-3">

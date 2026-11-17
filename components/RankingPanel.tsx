@@ -724,7 +724,9 @@ function DeepRow({ row }: { row: DeepenRow }) {
           : !quality.applicable ? <span className="text-ash">{t("not applicable")}</span>
             : <span className={quality.verdict === "SOUND" ? "text-acc"
                 : quality.verdict === "CONCERNS" ? "text-dist" : "text-ash"}>
-                {quality.verdict}
+                {quality.verdict === "SOUND" ? t("Sound")
+                  : quality.verdict === "CONCERNS" ? t("Concerns")
+                    : quality.verdict === "NEUTRAL" ? t("Neutral") : "—"}
               </span>}
       </td>
       <td className="num px-3 py-2 text-ash">

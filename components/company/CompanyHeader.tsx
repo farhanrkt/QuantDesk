@@ -37,10 +37,10 @@ export function CompanyHeader({ state }: { state: Engine<CompanyResponse> }) {
     <div className="mt-1.5 max-w-measureWide space-y-1">
       <p className="text-base text-body">
         <span className="font-semibold text-chalk">{name}</span>
-        {facts.length > 0 && <span className="text-ash"> · {facts.join(" · ")}</span>}
+        {facts.length > 0 && <span lang="en" className="text-ash"> · {facts.join(" · ")}</span>}
       </p>
       {profile.summaryShort && (
-        <p className="line-clamp-2 text-meta leading-relaxed text-ash">{profile.summaryShort}</p>
+        <p lang="en" className="line-clamp-2 text-meta leading-relaxed text-ash">{profile.summaryShort}</p>
       )}
       {nextEarnings.date && (
         <p className="inline-flex items-center gap-1.5 text-micro text-faint">

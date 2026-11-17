@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { DetailProvider, useDetailLevel, type DetailLevel } from "@/components/ui/explain";
 import { HorizonProvider, useHoldingHorizon, type Horizon } from "@/components/ui/horizon";
-import { resolveLanguage, setLang, storeLanguage, type Lang } from "@/lib/i18n";
+import { msg, resolveLanguage, setLang, storeLanguage, translate, type Lang } from "@/lib/i18n";
 
 /**
  * The things a reader states once and every page reads: how much detail they
@@ -39,6 +39,35 @@ export function usePreferences(): Preferences {
  * the same reason the reading mode is: the server renders this tree too, and
  * has no localStorage.
  */
+// THE TAB'S TITLE, IN THE READER'S LANGUAGE (UX-5). Next writes each page's
+// title from metadata on the server, which cannot know a language kept in this
+// browser, so an Indonesian reader's tab said "Markets · QuantDesk". The fixed
+// titles are listed here and swapped wherever Next sets one, on every
+// navigation; a ticker is a title in any language and is left alone. What a
+// shared link's preview says still comes from the server, in English.
+const PAGE_TITLES = [msg("Markets"), msg("Thesis journal"), msg("Compare"), msg("Not found"),
+                     msg("Not a ticker")];
+const TITLE_SUFFIX = " · QuantDesk";
+
+function useTitleInLanguage(language: Lang, resolved: boolean) {
+  useEffect(() => {
+    if (!resolved) return;
+    const apply = () => {
+      const title = document.title;
+      if (!title.endsWith(TITLE_SUFFIX)) return;
+      const shown = title.slice(0, -TITLE_SUFFIX.length);
+      const english = PAGE_TITLES.find((e) => e === shown || translate("id", e) === shown);
+      if (!english) return;
+      const wanted = translate(language, english) + TITLE_SUFFIX;
+      if (wanted !== title) document.title = wanted;
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(document.head, { subtree: true, childList: true, characterData: true });
+    return () => observer.disconnect();
+  }, [language, resolved]);
+}
+
 function useLanguagePreference(): [Lang, (l: Lang) => void] {
   const [language, setLanguageState] = useState<Lang>("en");
   // Until this browser's choice is read, the "en" above is only the server's
@@ -50,6 +79,7 @@ function useLanguagePreference(): [Lang, (l: Lang) => void] {
     setLang(language);
     document.documentElement.lang = language;
   }, [language, resolved]);
+  useTitleInLanguage(language, resolved);
   const update = useCallback((next: Lang) => {
     setLanguageState(next);
     storeLanguage(next);

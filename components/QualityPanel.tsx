@@ -11,7 +11,7 @@ import type {
   DomainDimension, ExplainMap, ManipulationPosterior, QualityResponse,
 } from "@/lib/types";
 import { cn, num } from "@/lib/utils";
-import { useT } from "@/lib/i18n";
+import { msg, useT } from "@/lib/i18n";
 
 
 /**
@@ -33,8 +33,11 @@ import { useT } from "@/lib/i18n";
  * So the emphasis is typographic, never chromatic. A mismatch is brighter
  * because it is the line worth reading first, and that is all it means.
  */
+// Identifiers in, words out — and the words translated where they are drawn.
+// These were printed as they stood, so an Indonesian reader met "outside" and
+// "cannot tell" in English in the middle of a translated panel (UX-5).
 const VERDICT_WORD: Record<string, string> = {
-  inside: "inside", outside: "outside", unknown: "cannot tell",
+  inside: msg("inside"), outside: msg("outside"), unknown: msg("cannot tell"),
 };
 
 /**
@@ -141,6 +144,7 @@ function FlagWorth({ data, explain }: {
 function Dimension({
   dimension, explain, guided,
 }: { dimension: DomainDimension; explain?: ExplainMap[string]; guided: boolean }) {
+  const t = useT();
   return (
     <li className="border-b border-ruleSoft px-5 py-2 last:border-0">
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5">
@@ -150,7 +154,7 @@ function Dimension({
         </span>
         <span className={cn("num text-micro uppercase tracking-[0.1em]",
                             dimension.verdict === "outside" ? "text-body" : "text-ash")}>
-          {VERDICT_WORD[dimension.verdict] ?? dimension.verdict}
+          {VERDICT_WORD[dimension.verdict] ? t(VERDICT_WORD[dimension.verdict]) : dimension.verdict}
         </span>
         <span className="ml-auto num text-micro text-ash">{dimension.thisUse}</span>
       </div>
@@ -245,7 +249,7 @@ export function QualityPanel({ data }: { data: QualityResponse }) {
           <CardHeader>
             <CardTitle>{t("Where these numbers come from")}</CardTitle>
             <span className="font-mono text-micro text-ash">
-              {t("scored on {value} filings", { value: data.domains.fiscalYear ?? "undated" })}
+              {t("scored on {value} filings", { value: data.domains.fiscalYear ?? t("undated") })}
             </span>
           </CardHeader>
           <CardBody className="px-0">

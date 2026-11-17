@@ -84,3 +84,18 @@ def test_the_rate_limit_sentence_names_no_endpoint():
         index._RATE_HITS.clear()
     assert "endpoint" not in detail
     assert "1 in 60 seconds" in detail
+
+
+@pytest.mark.parametrize("period, english, indonesian", [
+    ("36m", "Versus the index (36 months)", "Dibandingkan indeks (36 bulan)"),
+    ("1m", "Versus the index (1 month)", "Dibandingkan indeks (1 bulan)"),
+    ("12m", "Versus the index (12 months)", "Dibandingkan indeks (12 bulan)"),
+])
+def test_the_index_comparison_names_its_period_in_words(period, english, indonesian):
+    # The period code reached the page as "(36M)" in both languages (UX-5).
+    assert explain.explain("relativeExcess", 0.05, period=period)["label"] == english
+    token = lang.use("id")
+    try:
+        assert explain.explain("relativeExcess", 0.05, period=period)["label"] == indonesian
+    finally:
+        lang.reset(token)

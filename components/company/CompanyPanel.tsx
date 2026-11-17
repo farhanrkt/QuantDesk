@@ -68,12 +68,14 @@ export function WhatItDoes({ profile, name }: { profile: BusinessProfile; name?:
     <Card accent={palette.company}>
       <CardHeader>
         <CardTitle>{t("What {value} does", { value: name ?? t("this company") })}</CardTitle>
-        {where && <span className="font-mono text-micro text-ash">{where}</span>}
+        {where && <span lang="en" className="font-mono text-micro text-ash">{where}</span>}
       </CardHeader>
       <CardBody className="space-y-3">
         {summary && summaryState !== "not fetched" ? (
           <div>
-            <p id="company-summary"
+            {/* The provider's English, marked as English so a screen reader
+                reading the Indonesian page pronounces it as what it is. */}
+            <p id="company-summary" lang="en"
                className={cn("prose-col-wide text-base leading-relaxed text-body",
                              long && !expanded && "line-clamp-4")}>
               {summary}
@@ -102,7 +104,7 @@ export function WhatItDoes({ profile, name }: { profile: BusinessProfile; name?:
           )}
         </p>
         <p className="text-micro text-faint">
-          {t("In the data provider's own words. Nothing in this app checks it against the filings.")}
+          {t("In the data provider's own words, in English. Nothing in this app checks it against the filings.")}
         </p>
       </CardBody>
     </Card>

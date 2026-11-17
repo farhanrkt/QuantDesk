@@ -886,7 +886,7 @@ export const ID: Record<string, string> = {
   "Show less": "Tampilkan lebih sedikit",
   "Read the full description": "Baca deskripsi lengkap",
   "{employees} employees": "{employees} karyawan",
-  "In the data provider's own words. Nothing in this app checks it against the filings.": "Dengan kata-kata penyedia data sendiri. Tidak ada di aplikasi ini yang mencocokkannya dengan laporan keuangan.",
+  "In the data provider's own words, in English. Nothing in this app checks it against the filings.": "Dengan kata-kata penyedia data sendiri, dalam bahasa Inggris. Tidak ada di aplikasi ini yang mencocokkannya dengan laporan keuangan.",
   "not reported": "tidak dilaporkan",
   "Market value": "Nilai pasar",
   "At the close of {date}": "Pada penutupan {date}",
@@ -1347,5 +1347,17 @@ export const ID: Record<string, string> = {
   "weak": "lemah",
   "none": "tidak ada",
   "Load the full price history": "Muat seluruh riwayat harga",
-  "Load {years} years of prices": "Muat harga {years} tahun"
+  "Load {years} years of prices": "Muat harga {years} tahun",
+  "inside": "di dalam",
+  "outside": "di luar",
+  "cannot tell": "tidak dapat dipastikan",
+  "Constructive": "Konstruktif",
+  "Weak": "Lemah",
+  "No reading": "Tidak ada pembacaan",
+  "Not found": "Tidak ditemukan",
+  "Not a ticker": "Bukan kode saham",
+  "1 year": "1 tahun",
+  "{years} years": "{years} tahun",
+  "{years}y": "{years} th",
+  "undated": "tanpa tanggal"
 };
