@@ -59,7 +59,7 @@ or *deferred* (with the reason).
 | SEC-4 | Medium | Any website may call the API on a preview deployment | fixed |
 | SEC-5 | Medium | A failed lens returns the raw exception text to the reader | fixed |
 | PERF-3 | Medium | Nothing is code-split: every page ships every panel, and the Indonesian catalogue | open |
-| PERF-4 | Medium | A public deployment imports the private scanner on every cold start | open |
+| PERF-4 | Medium | A public deployment imports the private scanner on every cold start | fixed |
 | UX-2 | Medium | The Flow tab scrolls sideways at 375 px | open |
 | UX-3 | Medium | The holding-period control offers 5 and 10 years the default load cannot answer | open |
 | UX-4 | Medium | On a phone the company's name is below the first screen | open |
@@ -495,6 +495,11 @@ both routes that use them. Importing the app takes 1.15 seconds here, of which
 PERF-4`.
 
 **Fix.** Import them inside the two private routes.
+
+**Fixed.** `private_scanner()` in `api/index.py` imports the seven modules on
+first use by the private route, so a public deployment never loads them. The
+app now imports in 1.01 s here instead of 1.15 s. A test in
+`tests/test_private_tier.py` checks a fresh interpreter.
 
 ### UX-2. The Flow tab scrolls sideways at 375 px
 

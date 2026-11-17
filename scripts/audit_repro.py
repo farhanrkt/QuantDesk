@@ -315,11 +315,14 @@ def nothing_is_code_split():
 
 @finding("PERF-4")
 def a_public_deployment_imports_the_private_scanner():
-    source = _source("api/index.py")
-    head = source[:source.index("app = FastAPI(")]
-    eager = [name for name in ("tape", "patterns", "verdict", "chartlayers", "structure",
-                               "volumeprofile") if re.search(rf"\b{name}\b", head)]
-    return bool(eager), f"imported at module load on every deployment: {', '.join(eager)}"
+    import subprocess
+    probe = ("import sys; sys.path.insert(0, %r); import index; "
+             "print(','.join(m.split('.')[1] for m in sys.modules if m in ("
+             "'_lib.tape', '_lib.patterns', '_lib.verdict', '_lib.chartlayers', "
+             "'_lib.structure', '_lib.volumeprofile', '_lib.ownership')))" % str(ROOT / "api"))
+    eager = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
+                           timeout=120).stdout.strip()
+    return bool(eager), f"imported at module load on every deployment: {eager or 'none'}"
 
 
 # --------------------------------------------------------------------------- #

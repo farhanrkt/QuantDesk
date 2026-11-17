@@ -79,16 +79,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from _lib import (accumulation, chartlayers, econcalendar, eventstudy, explain, exposure,
+from _lib import (accumulation, econcalendar, eventstudy, explain, exposure,
                   field, lang, listings, market_data, marketboard, microstructure, news,
-                  ownership, patterns, portfolio, pretrade, quality, ranking,
-                  riskmodel, structure, symbols, tape, technical, trackrecord,
-                  universes, valuation, verdict, volumeprofile)
+                  portfolio, pretrade, quality, ranking,
+                  riskmodel, symbols, technical, trackrecord,
+                  universes, valuation)
+
 from _lib.jsonsafe import clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 from _lib.lang import tr
 
 app = FastAPI(title="QuantDesk API", version="1.1.0", docs_url="/api/docs")
+
+
+# THE PRIVATE SCANNER IS IMPORTED BY THE TWO ROUTES THAT USE IT, AND ONLY THEN.
+# `tape`, `patterns`, `verdict`, `chartlayers`, `structure`, `volumeprofile` and
+# `ownership` serve `/api/verdict` alone, which every deployment refuses
+# (`private_tier_enabled`). Imported here they cost every cold start of a public
+# deployment their load time — 0.36 s of the app's 1.15 s, through scipy.stats
+# (docs/AUDIT.md, PERF-4) — for routes that answer 404. `private_scanner()`
+# loads them on first use; Python keeps them for the rest of the process.
+def private_scanner():
+    """The private scanner's modules, as a namespace, loaded on first call."""
+    from types import SimpleNamespace
+
+    from _lib import (chartlayers, ownership, patterns, structure, tape, verdict,
+                      volumeprofile)
+    return SimpleNamespace(chartlayers=chartlayers, ownership=ownership, patterns=patterns,
+                           structure=structure, tape=tape, verdict=verdict,
+                           volumeprofile=volumeprofile)
 
 
 def _allowed_origins() -> list[str]:
@@ -1351,6 +1370,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
     Synchronous on purpose, and called through `asyncio.to_thread` by the route:
     every fetch below is sequential, which the route's comments explain.
     """
+    pv = private_scanner()
     row = None
     universe_context = None
     if scan is not None and entry is not None:
@@ -1383,7 +1403,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
 
     # TWO YEARS, NOT ONE. The liquidity profile only needs a few weeks, but the
     # tape reading compares a year's heaviest sessions against its ordinary ones
-    # and `tape.MIN_BARS` wants 160 usable bars after the rolling volume
+    # and `pv.tape.MIN_BARS` wants 160 usable bars after the rolling volume
     # baseline warms up. Fetching one year here and discovering the tape could
     # not be read is a silent capability loss, not an error anybody would see.
     frame = None
@@ -1397,18 +1417,18 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
     pattern_result = None
     profile_result = None
     if frame is not None:
-        tape_result = tape.read(frame, market_code=symbols.market_of(symbol))
-        pattern_result = patterns.read(frame, market_code=symbols.market_of(symbol))
+        tape_result = pv.tape.read(frame, market_code=symbols.market_of(symbol))
+        pattern_result = pv.patterns.read(frame, market_code=symbols.market_of(symbol))
         # WHERE THE TRADE HAPPENED, from the frame already in hand. Free: no
         # fetch, and it scores nothing and gates nothing — see the module's
         # docstring for the measurement that decided that.
-        profile_result = volumeprofile.build(
+        profile_result = pv.volumeprofile.build(
             frame, market_code=symbols.market_of(symbol))
 
     # WHERE THE TRADE IS WRONG, read off the levels the trend lens already
     # computed rather than recomputed here — same rule the synthesis follows, so
     # the numbers beside the verdict are the numbers the chart drew.
-    structure_result = structure.read(
+    structure_result = pv.structure.read(
         technical=legs["technical"].get("data") if legs["technical"]["ok"] else None)
 
     # The share register is the third body of data, and its own fetch. It is
@@ -1416,7 +1436,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
     # universe scan above is: this route already learned once what happens when
     # a batched yfinance call runs beside the per-symbol ones.
     try:
-        register_result = ownership.read(
+        register_result = pv.ownership.read(
             market_data.share_register(symbol),
             median_volume=(float(frame["Volume"].tail(21).median())
                            if frame is not None else None))
@@ -1424,7 +1444,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
         register_result = None
 
     checks = pretrade.assess(legs, market=symbols.market_of(symbol))
-    scored = verdict.score(
+    scored = pv.verdict.score(
         symbol, legs=legs, rank_row=row, pretrade_result=checks,
         liquidity=liquidity, market=symbols.market_of(symbol),
         # The company name comes from the cached listing where there is one.
@@ -1443,7 +1463,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
     market_regime = {"available": False, "reason": "no benchmark history"}
     try:
         benchmark_symbol = riskmodel.MARKET_INDEX.get(symbols.market_of(symbol), "^GSPC")
-        market_regime = structure.regime(
+        market_regime = pv.structure.regime(
             market_data.ohlcv(benchmark_symbol, period="2y"),
             symbol=benchmark_symbol)
     except Exception:
@@ -1467,7 +1487,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
         # the module that owns it, and a reader who can see the five points a
         # classification was made from can disagree with it, which is the whole
         # difference between a chart and an assertion.
-        "chart": chartlayers.build(
+        "chart": pv.chartlayers.build(
             frame, technical=technical_data, structure_result=structure_result,
             pattern_result=pattern_result, tape_result=tape_result,
             volume_profile=profile_result, ticker=symbol,
@@ -1475,17 +1495,17 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
         # What one buy and one sell actually cost, beside the effects this page
         # asks the reader to act on. The measured effects here are a few percent
         # and a round trip on a thin listing can be more than that.
-        "costs": structure.round_trip_cost(liquidity),
+        "costs": pv.structure.round_trip_cost(liquidity),
         "regime": market_regime,
-        "patternStudy": patterns.calibration_for(symbols.market_of(symbol)),
+        "patternStudy": pv.patterns.calibration_for(symbols.market_of(symbol)),
         # WHAT THE TAPE TEST IS WORTH IN THIS MARKET, beside its reading. On US
         # listings the measured firing rate is chance, and a reader must not have
         # to go looking for that.
-        "tapeCalibration": tape.calibration_for(symbols.market_of(symbol)),
+        "tapeCalibration": pv.tape.calibration_for(symbols.market_of(symbol)),
         # THE NULL RESULT TRAVELS WITH THE SCORE, in the same response, so a
         # client cannot render one without having been handed the other.
-        "provenance": verdict.provenance(),
-        "blendBacktest": verdict.blend_validation(symbols.market_of(symbol)),
+        "provenance": pv.verdict.provenance(),
+        "blendBacktest": pv.verdict.blend_validation(symbols.market_of(symbol)),
         "preTrade": checks,
     }
 
