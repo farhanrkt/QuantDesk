@@ -291,6 +291,16 @@ while you are typing.
 **recent**. Both live in this browser only. "Rank these" sends the watchlist to the ranking
 tier in a request body — never a URL — and only when you press it.
 
+**Keep a copy.** The watchlist, the thesis journal, your holdings and your settings live in
+this browser only, so a new device or cleared site data starts empty. "Your data in this
+browser", at the foot of the journal page, saves all of them to one dated file and restores
+one (`lib/backup.ts`). The file is built and read on the page and sent nowhere. A restore
+says what it will add before it writes anything, and it merges: journal entries are added by
+id, symbols are added to the lists, and the holdings and the settings are taken from the file
+only where this browser has none, so restoring can never remove or overwrite what is here.
+Every part is read through its own store's parser, so a hand-edited file cannot plant
+anything the stores would not accept; the journal's older export is read as a backup too.
+
 **Results stay put.** Leaving a company for the compare view and coming back restores the
 page instead of running four engines again, and a ranking, a screener scan or a half-written
 thesis survives a trip to another tab. Each page says when its figures were fetched.

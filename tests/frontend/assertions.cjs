@@ -883,6 +883,64 @@ t("fired conditions are listed, never counted", () => {
   });
 }
 
+// ---- backup: what this browser holds, saved and read back (Phase 5) ----
+{
+  const B = require("./lib/backup.js");
+  const entry = (id, ticker = "AAPL") => ({ id, ticker, written: `2026-11-${id.padStart(2, "0")}T00:00:00Z`,
+    thesis: "t", falsifier: "f", growthBelief: null, horizonYears: 5, positionShare: null,
+    snapshot: { price: 1, impliedGrowth: null, maxDrawdown: null, fairValue: null } });
+  const store = (o) => (key) => (key in o ? o[key] : null);
+  const here = {
+    "quantdesk.watchlist": JSON.stringify({ v: 1, symbols: ["AAPL"] }),
+    "quantdesk.journal": JSON.stringify([entry("1")]),
+    "quantdesk.holdings": "MSFT:0.5, KO:0.5",
+    "quantdesk.language": "id",
+  };
+  t("a backup carries every store, through each store's parser", () => {
+    const b = B.makeBackup(store(here), new Date("2026-11-17T00:00:00Z"));
+    assert.equal(b.kind, "quantdesk-backup");
+    assert.deepEqual(b.watchlist, ["AAPL"]);
+    assert.equal(b.journal.length, 1);
+    assert.equal(b.holdings, "MSFT:0.5, KO:0.5");
+    assert.deepEqual(b.preferences, { "quantdesk.language": "id" });
+  });
+  t("a saved backup reads back as itself", () => {
+    const b = B.makeBackup(store(here), new Date("2026-11-17T00:00:00Z"));
+    assert.deepEqual(B.readBackup(JSON.stringify(b)), b);
+  });
+  t("a file that is not a backup is refused, and a hand-edited one is cleaned", () => {
+    assert.equal(B.readBackup("not json"), null);
+    assert.equal(B.readBackup(JSON.stringify({ kind: "something-else" })), null);
+    assert.equal(B.readBackup(JSON.stringify({ kind: "quantdesk-backup", version: 99 })), null, "a newer format is not guessed at");
+    const b = B.readBackup(JSON.stringify({ kind: "quantdesk-backup", version: 1,
+      watchlist: ["AAPL", "../etc", 7], holdings: "<script>", preferences: { "quantdesk.language": "fr", other: "x" } }));
+    assert.deepEqual(b.watchlist, ["AAPL"]);
+    assert.equal(b.holdings, "");
+    assert.deepEqual(b.preferences, {});
+  });
+  t("the journal's own older export is read as a backup of the journal", () => {
+    const b = B.readBackup(JSON.stringify([entry("3")]));
+    assert.equal(b.journal.length, 1);
+    assert.deepEqual(b.watchlist, []);
+  });
+  t("a restore merges and never removes or overwrites", () => {
+    const incoming = B.readBackup(JSON.stringify({ kind: "quantdesk-backup", version: 1,
+      watchlist: ["AAPL", "BBCA.JK"], journal: [entry("1"), entry("2", "TLKM.JK")],
+      holdings: "NVDA:1", preferences: { "quantdesk.language": "en", "quantdesk.horizon": "5" } }));
+    const plan = B.planRestore(store(here), incoming);
+    assert.deepEqual(plan.added, { journal: 1, watchlist: 1, holdings: false, preferences: 1 });
+    assert.equal(JSON.parse(plan.writes["quantdesk.journal"]).length, 2, "the entry written here survives");
+    assert.deepEqual(JSON.parse(plan.writes["quantdesk.watchlist"]).symbols, ["AAPL", "BBCA.JK"]);
+    assert.equal(plan.writes["quantdesk.holdings"], undefined, "holdings already here are kept");
+    assert.equal(plan.writes["quantdesk.language"], undefined, "a chosen language is kept");
+    assert.equal(plan.writes["quantdesk.horizon"], "5");
+  });
+  t("restoring the same file twice changes nothing the second time", () => {
+    const b = B.makeBackup(store(here), new Date());
+    assert.deepEqual(B.planRestore(store(here), b).writes, {});
+  });
+}
+
 Promise.all(pending).then(() => {
   console.log(`  ${n} frontend assertions passed`);
 });

@@ -3,9 +3,10 @@
 import { ArrowRight, Download, NotebookPen } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { BrowserBackup } from "@/components/journal/BrowserBackup";
 import { Entry, exportJournal } from "@/components/ThesisPanel";
 import { Button } from "@/components/ui/button";
-import { Card, CardBody, CardHeader, CardTitle, Note } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { StateCard } from "@/components/ui/state";
 import { useToast } from "@/components/ui/toaster";
@@ -143,9 +144,9 @@ export function JournalView() {
         </>
       )}
 
-      <Note tone="warn">
-        {t("Kept in this browser and nowhere else — one cleared cache, private window or new machine away from gone. Export it.")}
-      </Note>
+      {/* Was a warning that the journal is one cleared cache away from gone,
+          with nothing to do about it but a one-way export. */}
+      <BrowserBackup />
     </div>
   );
 }

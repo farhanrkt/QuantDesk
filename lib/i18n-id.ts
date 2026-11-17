@@ -943,7 +943,6 @@ export const ID: Record<string, string> = {
   "No entry matches that ticker": "Tidak ada entri yang cocok dengan ticker itu",
   "Open with today's figures": "Buka dengan angka hari ini",
   "Entry on {ticker} deleted": "Entri tentang {ticker} dihapus",
-  "Kept in this browser and nowhere else — one cleared cache, private window or new machine away from gone. Export it.": "Disimpan di browser ini dan tidak di tempat lain — hanya berjarak satu pembersihan cache, jendela pribadi, atau mesin baru dari hilang. Ekspor jurnalnya.",
 
   // ---- landing/Landing ---------------------------------------------------------
   "Four models, two kinds of data": "Empat model, dua jenis data",
@@ -1366,5 +1365,25 @@ export const ID: Record<string, string> = {
   "Ticker symbol or company name": "Kode saham atau nama perusahaan",
   "Enter opens {symbol} · {name}": "Enter membuka {symbol} · {name}",
   "Companies by that name:": "Perusahaan dengan nama itu:",
-  "One lot ({shares} shares)": "Satu lot ({shares} lembar)"
+  "One lot ({shares} shares)": "Satu lot ({shares} lembar)",
+  "Your data in this browser": "Data Anda di browser ini",
+  "Your watchlist, this journal, your holdings and your settings are kept in this browser and nowhere else. A new device or cleared site data starts empty. Save them to a file to keep a copy, and restore it anywhere. The file never leaves this page unless you move it.": "Daftar pantauan, jurnal ini, kepemilikan, dan pengaturan Anda disimpan di browser ini dan tidak di tempat lain. Perangkat baru atau data situs yang dihapus mulai dari kosong. Simpan ke sebuah berkas untuk menyimpan salinannya, lalu pulihkan di mana saja. Berkas itu tidak pernah meninggalkan halaman ini kecuali Anda memindahkannya.",
+  "Save a backup file": "Simpan berkas cadangan",
+  "Restore from a file": "Pulihkan dari berkas",
+  "Choose a backup file": "Pilih berkas cadangan",
+  "That file is too large to be a QuantDesk backup.": "Berkas itu terlalu besar untuk menjadi cadangan QuantDesk.",
+  "That file is not a QuantDesk backup, so nothing was read from it.": "Berkas itu bukan cadangan QuantDesk, jadi tidak ada yang dibaca darinya.",
+  "This browser would not store the data (a private window, or storage turned off).": "Browser ini tidak mau menyimpan datanya (jendela pribadi, atau penyimpanan dimatikan).",
+  "Everything in that file is already here. Nothing to add.": "Semua isi berkas itu sudah ada di sini. Tidak ada yang perlu ditambahkan.",
+  "Restoring adds to what is here and removes nothing:": "Pemulihan menambah apa yang ada di sini dan tidak menghapus apa pun:",
+  "1 journal entry": "1 entri jurnal",
+  "{count} journal entries": "{count} entri jurnal",
+  "1 symbol on the watchlist": "1 kode saham di daftar pantauan",
+  "{count} symbols on the watchlist": "{count} kode saham di daftar pantauan",
+  "your holdings (this browser has none)": "kepemilikan Anda (browser ini belum punya)",
+  "1 setting this browser has not set": "1 pengaturan yang belum diatur browser ini",
+  "{count} settings this browser has not set": "{count} pengaturan yang belum diatur browser ini",
+  "Add to this browser": "Tambahkan ke browser ini",
+  "Added. Reloading the page to show it…": "Sudah ditambahkan. Memuat ulang halaman untuk menampilkannya…",
+  "Cancel": "Batal"
 };

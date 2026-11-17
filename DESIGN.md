@@ -554,7 +554,7 @@ four files (AnomalyPanel 2, EventStudyPanel 1, LongTermPanel 3, TechnicalPanel
 sign of a mean.
 
 Beside the design rules the same script holds structural checks:
-`lib/api.ts` may not import the journal or watchlist stores or touch browser
+`lib/api.ts` may not import the journal, watchlist or backup modules or touch browser
 storage; every analytics `track(` carries only `market` and `lenses`;
 `lib/symbols.ts` must resolve tickers with the same pattern and suffix map as
 the Python; `cn()` must know every font size the config defines; the market board's
