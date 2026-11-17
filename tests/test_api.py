@@ -705,7 +705,11 @@ def test_an_idx_holding_keeps_its_suffix_under_a_us_market(client, monkeypatch):
 # argument made again, not by analogy.
 # The watchlist's report dates joined these on 1 November 2026: the same kind of
 # input, a list a reader keeps, so the same treatment.
-PERSONAL_POST_ROUTES = {"/api/portfolio", "/api/rank/list", "/api/markets/earnings"}
+# The browser's error reports joined them on 17 November 2026: a report's message
+# and stack are text from the reader's page, which is not something to put in a
+# URL any more than a list is, and the route answers `no-store` with no body.
+PERSONAL_POST_ROUTES = {"/api/portfolio", "/api/rank/list", "/api/markets/earnings",
+                        "/api/client-error"}
 
 
 def test_post_is_permitted_for_personal_input_and_nothing_else(client):

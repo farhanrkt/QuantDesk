@@ -938,13 +938,13 @@ def client_error(report: ClientError):
     first and does not send otherwise.
     """
     if not reporting.enabled():
-        return Response(status_code=204)
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
     route = report.route if report.route in CLIENT_ROUTES else "/other"
     record = reporting.event(kind=f"browser:{report.kind}", source="browser", route=route,
                              message=_URL_QUERY.sub("", report.message))
     record["extra"] = {"stack": _URL_QUERY.sub("", report.stack)}
     reporting.capture(record)
-    return Response(status_code=204)
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
 
 # --------------------------------------------------------------------------- #
