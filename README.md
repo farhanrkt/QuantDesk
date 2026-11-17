@@ -1361,7 +1361,11 @@ before it shows a refusal; it never sends a POST twice. The screener caps at 20 
 to what actually batches. The client is identified by the forwarded address only on Vercel,
 whose edge writes it; anywhere else by the connection, as uvicorn resolves it for the proxies it
 trusts. Paths no route answers share one bucket, so a client cannot mint buckets to flush the
-table.
+table. The count lives in each warm instance, so on Vercel the cap is per instance unless a
+shared store is configured: with `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` set,
+every instance counts in one Upstash Redis database (`api/_lib/ratestore.py`; a fixed window
+per route and address, the address hashed with the token, one round trip, 0.35 s at most),
+and a store that is slow or down hands that request back to the in-process count.
 
 **A provider failure is said and not kept.** When both price lenses fail, the app asks the
 provider for the market's own index: if that fails too, every lens says the provider is not

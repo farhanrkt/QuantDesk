@@ -793,8 +793,9 @@ I would do; the work that does not depend on the answer continues.
 
 1. **A shared rate limiter needs a store** (SEC-6). *Recommendation:* add it as
    an optional adapter that switches on when two environment variables are set
-   and falls back to the per-instance limiter when they are not; Phase 6 builds
-   the adapter. Which store, and whether to pay for one, is yours. Until then
+   and falls back to the per-instance limiter when they are not. Phase 6 built
+   it for Upstash's REST API (`api/_lib/ratestore.py`); it is off until the two
+   variables are set. Which store, and whether to pay for one, is yours. Until then
    the amplification caps, which need no shared state, remain the real defence.
 2. **Which error-reporting service** receives the reports Phase 6 can send.
    *Recommendation:* any service that accepts the Sentry envelope format, so

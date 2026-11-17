@@ -81,7 +81,7 @@ from pydantic import BaseModel, Field
 
 from _lib import (accumulation, econcalendar, eventstudy, explain, exposure,
                   field, lang, listings, market_data, marketboard, microstructure, news,
-                  portfolio, pretrade, quality, ranking, reporting,
+                  portfolio, pretrade, quality, ranking, ratestore, reporting,
                   riskmodel, symbols, technical, trackrecord,
                   universes, valuation)
 
@@ -378,8 +378,10 @@ async def rate_limit(request: Request, call_next):
     the amplification itself is now bounded elsewhere (screener universe cap,
     walk-forward fit budget), which needs no shared state to be effective.
 
-    To make this global, keep the same shape and move `_RATE_HITS` to Vercel KV
-    or Upstash — the only thing that changes is where the deque is read from.
+    GLOBAL WHEN A STORE IS CONFIGURED. With Upstash's REST keys set, the count
+    lives there and every instance shares it (`_lib/ratestore.py`); a store
+    that is slow or down hands the decision back to the in-process count below
+    for that request, so the store can never be the reason a request fails.
     """
     # THE RAW ASGI PATH, NEVER `request.url.path`.
     #
@@ -415,6 +417,15 @@ async def rate_limit(request: Request, call_next):
     # served again after 10,050 such 404s.
     bucket = path if path in _known_paths() else "(unrouted)"
     key = (client_ip(request), bucket)
+
+    if ratestore.configured():
+        shared = await asyncio.to_thread(ratestore.count, key[0], bucket, window)
+        if shared is not None:
+            hits_now, resets_in = shared
+            if hits_now > limit:
+                return _too_many(limit, window, max(1, resets_in))
+            return await call_next(request)
+
     now = time.monotonic()
 
     with _RATE_LOCK:
@@ -424,21 +435,24 @@ async def rate_limit(request: Request, call_next):
         while hits and now - hits[0] >= window:
             hits.popleft()
         if len(hits) >= limit:
-            retry_after = max(1, int(window - (now - hits[0])) + 1)
-            return JSONResponse(
-                status_code=429,
-                content={"detail": tr(f"Too many requests of this kind from this connection: "
-                                      f"the limit is {limit} in {window} seconds. Try again "
-                                      f"in {retry_after} seconds.",
-                                      f"Terlalu banyak permintaan jenis ini dari koneksi ini: "
-                                      f"batasnya {limit} dalam {window} detik. Coba lagi "
-                                      f"dalam {retry_after} detik.")},
-                headers={"Retry-After": str(retry_after),
-                         "Cache-Control": "no-store"},
-            )
+            return _too_many(limit, window, max(1, int(window - (now - hits[0])) + 1))
         hits.append(now)
 
     return await call_next(request)
+
+
+def _too_many(limit: int, window: int, retry_after: int) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={"detail": tr(f"Too many requests of this kind from this connection: "
+                              f"the limit is {limit} in {window} seconds. Try again "
+                              f"in {retry_after} seconds.",
+                              f"Terlalu banyak permintaan jenis ini dari koneksi ini: "
+                              f"batasnya {limit} dalam {window} detik. Coba lagi "
+                              f"dalam {retry_after} detik.")},
+        headers={"Retry-After": str(retry_after),
+                 "Cache-Control": "no-store"},
+    )
 
 
 def _evict_rate_keys(now: float) -> None:
