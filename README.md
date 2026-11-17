@@ -1667,9 +1667,9 @@ where you press the button.
   doesn't claim, with citations and validation results.
 - **[docs/AUDIT.md](docs/AUDIT.md)** — the audit taken before launch, November 2026: what is
   wrong ranked by impact, each with its evidence and a reproduction, what was checked and
-  found sound, what was not covered, and the decisions that are the owner's.
-- **[CODEBASE_REVIEW.md](CODEBASE_REVIEW.md)** — the first engineering review, August 2026.
-  Older and partly superseded by the audit above.
+  found sound, what was not covered, and the decisions that are the owner's. It supersedes the
+  first engineering review of August 2026, which is in the git history (`CODEBASE_REVIEW.md`
+  before November 2026).
 
 ---
 

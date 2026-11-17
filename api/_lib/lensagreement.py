@@ -463,19 +463,6 @@ def _population(measurement: dict, market: Optional[str]) -> Optional[dict]:
     return entry if isinstance(entry, dict) else None
 
 
-# The pair the grouping ASSUMES is redundant. Flow and Trend are collapsed into
-# one price vote precisely because they read the same OHLCV series, so this is
-# the pair where the assumption either shows up in the votes or fails to.
-DECLARED_REDUNDANT = ("Flow", "Trend")
-
-
-def _declared_pair(pairs: Sequence[dict]) -> Optional[dict]:
-    for pair in pairs:
-        if {pair.get("a"), pair.get("b")} == set(DECLARED_REDUNDANT) and pair.get("usable"):
-            return pair
-    return None
-
-
 def _reading(families: dict, lenses: dict, pairs: Sequence[dict], scope: str) -> str:
     """One sentence. The argument lives in RESEARCH_ROADMAP.md §15.
 

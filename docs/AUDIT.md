@@ -78,7 +78,7 @@ by name is the first feature of Phase 5.
 | COR-2 | Low | The Beneish leverage index is silently neutral when a company has no long-term debt line | fixed |
 | REL-6 | Low | A news thumbnail that fails to load draws an empty box | fixed |
 | COPY-5 | Low | The rate-limit message says "endpoint" | fixed |
-| DOC-1 | Low | Three statements in the README no longer match the app | fixed, except CODEBASE_REVIEW.md (Phase 6) |
+| DOC-1 | Low | Three statements in the README no longer match the app | fixed |
 
 ## Re-measured after the fixes
 
@@ -731,9 +731,9 @@ without the change.
 - `CODEBASE_REVIEW.md` is dated 20 August and describes a codebase a fifth of
   this size; NEXT_SESSION_PROMPT already calls it "partly superseded".
 
-**Fixed**, except `CODEBASE_REVIEW.md`, which Phase 6 handles with the rest of
-what is dead: the AAPL example now carries its date and today's 32.5%, and the
-risk-free sentence was corrected with COR-4.
+**Fixed.** The AAPL example now carries its date and today's 32.5%, and the
+risk-free sentence was corrected with COR-4. `CODEBASE_REVIEW.md` was removed in
+Phase 6; it remains in the git history, and README says where.
 
 ## Checked and found sound
 

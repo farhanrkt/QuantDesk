@@ -1644,11 +1644,6 @@ def risk_free_rate(market_code: str, fallback: float) -> tuple[float, str]:
     return fallback, "US 10Y Treasury (fallback default)"
 
 
-def base_symbol(symbol: str) -> str:
-    """Re-exported so callers need not import `symbols` for this alone."""
-    return symbols.base_code(symbol)
-
-
 # --------------------------------------------------------------------------- #
 # The listed universe — who is actually on the exchange today
 #

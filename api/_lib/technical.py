@@ -110,19 +110,6 @@ def _macd(close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> 
 # --------------------------------------------------------------------------- #
 # Data
 # --------------------------------------------------------------------------- #
-def _flatten_columns(frame: pd.DataFrame, ticker: str) -> pd.DataFrame:
-    if not isinstance(frame.columns, pd.MultiIndex):
-        return frame
-    target = ticker.upper()
-    for level in range(frame.columns.nlevels):
-        values = {str(value).upper() for value in frame.columns.get_level_values(level)}
-        if target in values:
-            return frame.droplevel(level, axis=1)
-    frame = frame.copy()
-    frame.columns = frame.columns.get_level_values(0)
-    return frame
-
-
 def fetch_data(ticker: str, start: dt.date, end: dt.date) -> pd.DataFrame:
     """Daily history for the range, on the shared OHLCV contract.
 

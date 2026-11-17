@@ -6,8 +6,7 @@ say what exists, why, and what may not be broken:
   DESIGN.md           the visual system, written from the built surface
   README.md           what the app does
   RESEARCH_ROADMAP.md why each model, and what it does not claim
-
-CODEBASE_REVIEW.md is older and partly superseded.
+  docs/AUDIT.md       the pre-launch audit, each finding's status, the owner's decisions
 
 STATE
 =====
