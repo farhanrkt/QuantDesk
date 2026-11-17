@@ -183,12 +183,13 @@ export function Section({
  * a screen of twelve stats read as texture rather than as twelve numbers.
  */
 export function Stat({
-  label, value, sub, tone,
-}: { label: string; value: React.ReactNode; sub?: string; tone?: string }) {
+  label, value, sub, tone, className,
+}: { label: string; value: React.ReactNode; sub?: string; tone?: string; className?: string }) {
   return (
-    <div className="rounded border border-ruleSoft bg-sunken px-4 py-3">
+    <div className={cn("min-w-0 rounded border border-ruleSoft bg-sunken px-4 py-3", className)}>
       <div className="eyebrow mb-1.5">{label}</div>
-      <div className={cn("num text-figure font-semibold leading-none", tone ?? "text-chalk")}>
+      <div className={cn("num text-figure font-semibold leading-none [overflow-wrap:anywhere]",
+                         tone ?? "text-chalk")}>
         {value}
       </div>
       {sub && <div className="mt-2 text-micro leading-snug text-ash">{sub}</div>}

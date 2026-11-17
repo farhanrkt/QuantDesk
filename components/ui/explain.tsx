@@ -395,7 +395,7 @@ function firstSentence(text: string): string {
  * that also says 33% rather than 33.4%.
  */
 export function ExplainedStat({
-  label, value, sub, explain, tone,
+  label, value, sub, explain, tone, className,
 }: {
   label?: string;
   value?: React.ReactNode;
@@ -403,6 +403,8 @@ export function ExplainedStat({
   explain?: Explanation;
   /** Override the colour. Only for figures with no explanation to speak for them. */
   tone?: string;
+  /** Placement in the caller's grid, e.g. a span. */
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
@@ -411,8 +413,9 @@ export function ExplainedStat({
   const shown = value ?? explain?.valueText ?? "—";
   const colour = tone ?? (explain ? TONE_TEXT[explain.tone] : undefined) ?? "text-chalk";
   return (
-    <div className={cn("rounded-lg border bg-panel px-4 py-3.5 transition-colors",
-                       explain ? TONE_BORDER_SOFT[explain.tone] ?? "border-rule" : "border-rule")}>
+    <div className={cn("min-w-0 rounded-lg border bg-panel px-4 py-3.5 transition-colors",
+                       explain ? TONE_BORDER_SOFT[explain.tone] ?? "border-rule" : "border-rule",
+                       className)}>
       <div className="mb-2 flex items-start justify-between gap-2">
         <span className="eyebrow pt-0.5">{label ?? explain?.label ?? ""}</span>
         {explain && (
@@ -420,7 +423,12 @@ export function ExplainedStat({
                       onToggle={() => setOpen((v) => !v)} />
         )}
       </div>
-      <div className={cn("num text-figure font-semibold leading-none", colour)}>{shown}</div>
+      {/* A grid cell may not be widened by its figure: a word too long for a
+          half-width tile on a phone ("Accumulation") widened the whole page.
+          Callers give a word-valued tile room; this is the guard behind it. */}
+      <div className={cn("num text-figure font-semibold leading-none [overflow-wrap:anywhere]", colour)}>
+        {shown}
+      </div>
       {sub && <div className="mt-2 text-micro leading-snug text-ash">{sub}</div>}
       {/* GUIDED: the interpretation of THIS value, without a click — but only
           its FIRST SENTENCE.
