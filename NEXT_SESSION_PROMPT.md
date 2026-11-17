@@ -19,7 +19,7 @@ phases' commits until those merge):
   farhanrkt/QuantDesk#14  3 fixes for every finding that needed no decision
   farhanrkt/QuantDesk#15  4 the screen: no self-scroll, no layout shift, phone order, Indonesian
   farhanrkt/QuantDesk#16  5 features: name search, IDX lot cost, browser backup, did-you-mean
-  (Phase 6)               6 production: error reporting, /api/status and an uptime
+  farhanrkt/QuantDesk#17  6 production: error reporting, /api/status and an uptime
                             workflow, an optional shared rate limit, stale-if-error,
                             graceful degradation, a deployment checklist, dead code
 
