@@ -46,6 +46,15 @@ export const ID: Record<string, string> = {
   "Guided": "Terpandu",
   "Full": "Lengkap",
 
+  // ---- What a reader is told when a request does not answer (lib/failures.ts) ----
+  "Too many requests from this connection in the last minute. Wait a moment and try again.": "Terlalu banyak permintaan dari koneksi ini dalam semenit terakhir. Tunggu sebentar lalu coba lagi.",
+  "This request could not be read. Check the ticker: letters and digits, with an exchange suffix such as .JK where it has one.": "Permintaan ini tidak bisa dibaca. Periksa tickernya: huruf dan angka, dengan akhiran bursa seperti .JK bila ada.",
+  "The server did not answer in time. The data provider may be slow; trying again in a minute usually works.": "Server tidak menjawab tepat waktu. Penyedia data mungkin sedang lambat; mencoba lagi sebentar lagi biasanya berhasil.",
+  "The request failed (status {status}). Trying again usually works.": "Permintaan gagal (status {status}). Mencoba lagi biasanya berhasil.",
+  "This took too long and was stopped. The data provider may be slow; trying again in a minute usually works.": "Ini terlalu lama, jadi dihentikan. Penyedia data mungkin sedang lambat; mencoba lagi sebentar lagi biasanya berhasil.",
+  "QuantDesk's server could not be reached. Check the connection and try again.": "Server QuantDesk tidak bisa dihubungi. Periksa koneksi lalu coba lagi.",
+  "Something went wrong before an answer arrived. Trying again usually works.": "Ada yang salah sebelum jawaban tiba. Mencoba lagi biasanya berhasil.",
+
   // ---- Command palette --------------------------------------------------------
   "Open": "Buka",
   "Recent": "Terakhir dibuka",
@@ -843,7 +852,7 @@ export const ID: Record<string, string> = {
   "Working the model backwards": "Menjalankan model secara terbalik",
   "Implied growth": "Pertumbuhan tersirat",
   "a year, for five years": "per tahun, selama lima tahun",
-  "you assumed": "asumsi Anda",
+  "the model was run at": "model dijalankan dengan",
   "Distribution of simulated fair value": "Sebaran nilai wajar hasil simulasi",
   "Simulation CSV": "CSV simulasi",
   "Fair value {value}": "Nilai wajar {value}",
@@ -953,7 +962,7 @@ export const ID: Record<string, string> = {
   "Every name in a list against the factors whose betas were measured to persist.": "Setiap saham di sebuah daftar terhadap faktor-faktor yang betanya terukur bertahan.",
   "Two to four names read lens by lens in parallel columns. Nothing is summed.": "Dua hingga empat saham dibaca lensa demi lensa dalam kolom berdampingan. Tidak ada yang dijumlahkan.",
   "US and Indonesian listings · research, not advice": "Saham AS dan Indonesia · riset, bukan saran",
-  "Read one company through four models that share no data.": "Baca satu perusahaan lewat empat model yang tidak berbagi data.",
+  "Read one company through four models and two independent kinds of evidence.": "Baca satu perusahaan lewat empat model dan dua jenis bukti yang saling independen.",
   "See where they agree, where they disagree, and what none of them can tell you.": "Lihat di mana mereka sepakat, di mana mereka berselisih, dan apa yang tidak bisa diberitahukan siapa pun dari mereka.",
   "Know the company but not the ticker? Press": "Tahu perusahaannya tetapi tidak tahu tickernya? Tekan",
   "and type its name.": "lalu ketik namanya.",

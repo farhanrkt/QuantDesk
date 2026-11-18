@@ -32,49 +32,63 @@ that measured them, all in `scripts/audit/`:
 The four browser scripts need Playwright, which is not a dependency of this
 project; each says how to run it in its first lines.
 
-**Status** is filled in as the work is done: *open*, *fixed* (with the commit),
-*decision* (the owner's to make, with a recommendation at the end of this file),
-or *deferred* (with the reason).
+**Status** is filled in as the work is done: *open*, *fixed*, *narrowed* (made
+smaller, with what remains stated), *decision* (the owner's to make, with a
+recommendation at the end of this file), *deferred* (with the reason), or the
+later phase that takes it: layout and phone findings go to Phase 4, where each
+change is checked against a before-and-after screenshot, and finding a company
+by name is the first feature of Phase 5.
 
 ## Summary
 
 | Code | Impact | Finding | Status |
 |---|---|---|---|
-| REL-1 | High | A provider that hangs holds one company read for minutes; the platform kills it at 60 s | open |
-| REL-7 | High | The provider sometimes returns a statement with a row missing, and the app keeps it as fact for a day | open |
-| COR-1 | High | A statement line is found by substring: six Indonesian banks chart the wrong line as operating income | open |
-| SEC-1 | High | Eighteen known advisories in the Python dependencies; CI audits npm only | open |
-| REL-4 | High | Ordinary browsing reaches the rate limit; limits are per address | open |
-| PERF-1 | High | The stock page jumps as results arrive (layout shift 0.62 on a phone) | open |
-| UX-1 | High | A company cannot be found by its everyday name, and "apple" opens a ticker called APPLE | open |
-| PERF-2 | Medium | One company read is 1.35 MB of JSON, 1.1 MB of it the chart series | open |
-| REL-2 | Medium | During an outage the single-lens routes tell the reader their ticker is wrong | open |
-| REL-3 | Medium | One failed price request is final: no second attempt | open |
-| REL-5 | Medium | The browser never gives up on a request, and cannot read a validation error | open |
-| COR-4 | Medium | Two lenses on one page use two risk-free rates (4.2% and the live 5.15%) | open |
-| COR-5 | Medium | A company that stopped trading is told to "widen the date range" | open |
+| REL-1 | High | A provider that hangs holds one company read for minutes; the platform kills it at 60 s | fixed |
+| REL-7 | High | The provider sometimes returns a statement with a row missing, and the app keeps it as fact for a day | narrowed |
+| COR-1 | High | A statement line is found by substring: six Indonesian banks chart the wrong line as operating income | fixed |
+| SEC-1 | High | Eighteen known advisories in the Python dependencies; CI audits npm only | fixed |
+| REL-4 | High | Ordinary browsing reaches the rate limit; limits are per address | fixed |
+| PERF-1 | High | The stock page jumps as results arrive (layout shift 0.62 on a phone) | Phase 4 |
+| UX-1 | High | A company cannot be found by its everyday name, and "apple" opens a ticker called APPLE | Phase 5 |
+| PERF-2 | Medium | One company read is 1.35 MB of JSON, 1.1 MB of it the chart series | narrowed |
+| REL-2 | Medium | During an outage the single-lens routes tell the reader their ticker is wrong | fixed |
+| REL-3 | Medium | One failed price request is final: no second attempt | fixed |
+| REL-5 | Medium | The browser never gives up on a request, and cannot read a validation error | fixed |
+| COR-4 | Medium | Two lenses on one page use two risk-free rates (4.2% and the live 5.15%) | fixed |
+| COR-5 | Medium | A company that stopped trading is told to "widen the date range" | fixed |
 | COR-3 | Medium | Three names in the Nasdaq-100 list no longer trade | decision |
-| SEC-2 | Medium | The ticker pattern accepts `..` | open |
-| SEC-3 | Medium | Validation errors are English lists that echo their input without limit | open |
-| SEC-4 | Medium | Any website may call the API on a preview deployment | open |
-| SEC-5 | Medium | A failed lens returns the raw exception text to the reader | open |
-| PERF-3 | Medium | Nothing is code-split: every page ships every panel, and the Indonesian catalogue | open |
-| PERF-4 | Medium | A public deployment imports the private scanner on every cold start | open |
-| UX-2 | Medium | The Flow tab scrolls sideways at 375 px | open |
-| UX-3 | Medium | The holding-period control offers 5 and 10 years the default load cannot answer | open |
-| UX-4 | Medium | On a phone the company's name is below the first screen | open |
-| UX-5 | Medium | Identifiers and provider text reach an Indonesian reader in English | open |
-| COPY-1 | Medium | The Ulcer index explains itself with only its own number | open |
-| COPY-2 | Medium | The landing says the four models "share no data"; two of them share a series | open |
-| COPY-3 | Medium | "More growth than you assumed", said of a default the reader never set | open |
-| COPY-4 | Medium | A loss is worded as a gain ("still returned −16.4%", "you earned −0.49") | open |
+| SEC-2 | Medium | The ticker pattern accepts `..` | fixed |
+| SEC-3 | Medium | Validation errors are English lists that echo their input without limit | fixed |
+| SEC-4 | Medium | Any website may call the API on a preview deployment | fixed |
+| SEC-5 | Medium | A failed lens returns the raw exception text to the reader | fixed |
+| PERF-3 | Medium | Nothing is code-split: every page ships every panel, and the Indonesian catalogue | narrowed |
+| PERF-4 | Medium | A public deployment imports the private scanner on every cold start | fixed |
+| UX-2 | Medium | The Flow tab scrolls sideways at 375 px | Phase 4 |
+| UX-3 | Medium | The holding-period control offers 5 and 10 years the default load cannot answer | Phase 4 |
+| UX-4 | Medium | On a phone the company's name is below the first screen | Phase 4 |
+| UX-5 | Medium | Identifiers and provider text reach an Indonesian reader in English | Phase 4 |
+| COPY-1 | Medium | The Ulcer index explains itself with only its own number | fixed |
+| COPY-2 | Medium | The landing says the four models "share no data"; two of them share a series | fixed |
+| COPY-3 | Medium | "More growth than you assumed", said of a default the reader never set | fixed |
+| COPY-4 | Medium | A loss is worded as a gain ("still returned −16.4%", "you earned −0.49") | fixed |
 | SEC-6 | Low | The rate limiter counts per serverless instance | decision |
-| SEC-7 | Low | The API sets no security headers of its own; `/api/docs` is public; `X-Powered-By` is sent | open |
+| SEC-7 | Low | The API sets no security headers of its own; `/api/docs` is public; `X-Powered-By` is sent | fixed, docs: decision 7 |
 | SEC-8 | Low | The content security policy allows inline scripts | deferred |
-| COR-2 | Low | The Beneish leverage index is silently neutral when a company has no long-term debt line | open |
-| REL-6 | Low | A news thumbnail that fails to load draws an empty box | open |
-| COPY-5 | Low | The rate-limit message says "endpoint" | open |
-| DOC-1 | Low | Three statements in the README no longer match the app | open |
+| COR-2 | Low | The Beneish leverage index is silently neutral when a company has no long-term debt line | fixed |
+| REL-6 | Low | A news thumbnail that fails to load draws an empty box | fixed |
+| COPY-5 | Low | The rate-limit message says "endpoint" | fixed |
+| DOC-1 | Low | Three statements in the README no longer match the app | fixed, except CODEBASE_REVIEW.md (Phase 6) |
+
+## Re-measured after the fixes
+
+Three fixes can change what a lens concludes: the Trend lens's Sortino ratio
+reading the live risk-free rate (COR-4), a lens with too little history no
+longer voting (COR-5), and statements fetched again when a line went missing
+(REL-7). The lens agreement was measured again on 17 November 2026, after all
+of them: the two families' κ is −0.04 (US +0.02, IDX +0.03), still not
+distinguishable from zero, so the claim the rail makes stands. RESEARCH_ROADMAP
+§15 has the full table beside the two earlier runs. The pre-trade calibration
+was not due: none of its checks reads anything these fixes changed.
 
 ## What was done
 
@@ -123,6 +137,14 @@ the sixth stalls, and the response waits for it.
 a leg that ran out as its own failure, so the other five still arrive. A thread
 cannot be cancelled, so the budget bounds the response, not the work.
 
+**Fixed.** Three budgets in `api/index.py`: 35 s per lens, 8 s for the outage
+check (now off the event loop, where it used to run), and 52 s for any request,
+answered past that by a translated 504 from a small ASGI middleware. Held by
+`tests/test_deadlines.py`, nine tests that fail without the change.
+`scripts/audit/hang.py` against the silent socket now answers after **35
+seconds** (it had not answered after 380), HTTP 200, every lens saying the
+provider is not answering, kept at the edge for fifteen seconds.
+
 ### REL-7. The provider sometimes returns a statement with a row missing, and the app keeps it
 
 The same request for the same company, minutes apart with both markets closed,
@@ -151,6 +173,15 @@ closed, only narrowed: when a score comes back "cannot score" for want of a
 line that the same statement normally carries, ask once more before keeping
 the record, and never let a record with fewer rows replace one with more inside
 the same day. The limit that remains belongs in the README's known limits.
+
+**Narrowed.** When one of the three accounting screens cannot be scored on a
+company they apply to, `market_data.company_again` fetches the statements once
+more, keeps whichever copy has more lines for the same fiscal years, and marks
+the record so the symbol is not asked again that day. It never refetches a
+record it did not fetch. `tests/test_short_statements.py`, five tests that fail
+without it. What remains, and is now in the README's known limits: a short
+statement that leaves every score computable (a missing line that only one
+figure reads) is not noticed, and the scanner's disk cache is not covered.
 
 ### COR-1. A statement line is found by substring, and it finds the wrong line
 
@@ -183,6 +214,17 @@ missing, which every consumer already handles. This changes what the Quality
 lens concludes for JSMR.JK, so `measure_lens_agreement.py` and
 `calibrate_checks.py` run again afterwards.
 
+**Fixed.** The fallback now needs the alias as whole words with nothing
+before it that changes the line ("non", "other", "excluding" and three more).
+Over every lookup a caller makes, across all 197 cached companies, it changes
+exactly the thirteen wrong reads above and nothing else. The prediction about
+Jasa Marga was wrong: its Beneish score moves from −2.43 to −2.68 and its band
+stays "clean", and the six banks are outside the accounting screens, so no
+lens conclusion moves and no stamp is due for this fix. The banks' company
+record now shows no operating-income line instead of the wrong one.
+`tests/test_row_lookup.py`: six cases fail without the fix, four guard what
+must keep working.
+
 ### SEC-1. Eighteen known advisories in the Python dependencies
 
 `pip-audit -r requirements.txt` reports 18 advisories in three packages:
@@ -198,6 +240,11 @@ production npm tree is clean; nine advisories sit in development dependencies.
 
 **Fix.** Upgrade FastAPI and Starlette, lxml and certifi; run the suite; add
 `pip-audit` to the CI audit job.
+
+**Fixed.** FastAPI 0.115.6 to 0.162.7 (Starlette 1.10.0), lxml 6.1.3, certifi
+2026.10.23; the whole suite passes unchanged and `pip-audit` reports nothing.
+CI's audit job runs `pip-audit -r requirements.txt`, and
+`tests/test_dependencies.py` fails if that step is dropped or a pin slides back.
 
 ### REL-4. Ordinary browsing reaches the rate limit
 
@@ -218,6 +265,13 @@ announced.
 **Fix.** Keep the board, calendar and headlines in the browser for their cache
 lifetime so navigation does not refetch them; raise the limits on the three
 routes whose cost the edge already absorbs; retry once after `Retry-After`.
+
+**Fixed.** The board lives in the app shell, so moving between pages inside the
+app already reuses it; the limit was reached on full reloads. The three routes
+every page asks for now allow 60, 40 and 60 a minute, and the browser waits out
+a `Retry-After` of eight seconds or less once, in the background, before it
+shows a refusal. It never sends a POST twice. Pinned by the frontend assertions
+on `lib/failures.ts`.
 
 ### PERF-1. The stock page jumps as results arrive
 
@@ -278,6 +332,14 @@ to 5 seconds and a repeat about 1 second, because prices are fetched again.
 **Fix.** Send the series as named columns instead of one object per day, and
 drop the duplicate. The numbers do not change; the client rebuilds the rows.
 
+**Narrowed.** Every float leaves the API with eight significant digits instead
+of seventeen (`jsonsafe.WIRE_DIGITS`); no figure on the page shows more than
+six, and every statistic is computed on full values before it gets there. The
+real AAPL read is now 1.03 MB, 263 KB compressed (was 1.35 MB, 408 KB). Sending
+the series as columns would save another 43 KB compressed but changes what
+every chart receives, so it is left for a change that can be checked chart by
+chart. `tests/test_jsonsafe.py`.
+
 ### REL-2. During an outage the single-lens routes blame the ticker
 
 Only `/api/confluence` asks whether the provider is answering
@@ -288,6 +350,11 @@ valuation assumption during an outage is told their ticker is wrong.
 `audit_repro.py REL-2`.
 
 **Fix.** Ask the same question on those routes before blaming the symbol.
+
+**Fixed.** `answered_or_outage` in `api/index.py` wraps the five single-lens
+routes: a lookup that failed is checked against the market's own index, and a
+provider that is not answering gets the outage sentence as a 503 that nothing
+caches. Eleven tests in `tests/test_outages.py`.
 
 ### REL-3. One failed price request is final
 
@@ -300,6 +367,10 @@ cold start is a first call. `audit_repro.py REL-3`.
 
 **Fix.** One more attempt after a short pause, for the reader's own ticker.
 
+**Fixed.** `market_data.ohlcv` tries once more after 0.6 seconds when the call
+raised, and, for the reader's own ticker, when it came back empty. Benchmarks
+and basket members are not retried. Three tests in `tests/test_outages.py`.
+
 ### REL-5. The browser never gives up, and cannot read a validation error
 
 `lib/api.ts:73-79` and `98-110` call `fetch` with no timeout. Three smaller
@@ -310,6 +381,12 @@ connection is shown as "TypeError: Failed to fetch". `audit_repro.py REL-5`.
 
 **Fix.** A deadline on every request, and worded, translated messages for the
 three cases.
+
+**Fixed.** `lib/failures.ts` reads every failed request into a sentence in the
+reader's language: a worded server answer passes through, a list of validation
+errors, a bare status, a dropped connection and a request past its 60-second
+deadline are each named. Seven frontend assertions, run by
+`npm run check:frontend`.
 
 ### COR-4. Two lenses on one page use two risk-free rates
 
@@ -324,6 +401,11 @@ which is true of one lens.
 **Fix.** Read the same rate in both. The Sortino figure feeds the long-horizon
 checklist and so the Trend vote, so the lens agreement is measured again.
 
+**Fixed.** `technical.analyze` asks `market_data.risk_free_rate`, the function
+the valuation engine uses, which is cached for the day. README says both lenses
+read it. `tests/test_one_rate.py`. The lens agreement is re-measured at the end
+of this phase, with the other changes that can move a vote.
+
 ### COR-5. A company that stopped trading is told to widen the date range
 
 For Electronic Arts, whose history ends on 4 August 2026, the Trend lens
@@ -337,6 +419,14 @@ whole life.
 
 **Fix.** When the last bar is old, say when trading stopped; when the series
 starts inside the requested range, say the company has not traded that long.
+
+**Fixed.** `market_data.why_short` names the two causes a range cannot fix,
+with their date, and the Trend headline, the holding-period table and the Flow
+lens use it in place of the advice to widen; that advice stays where it is
+true. A Trend lens with too little history to read anything now reports
+itself as unreadable, so it casts no vote instead of a neutral one. That can
+move the lens agreement for the delisted names, which are re-measured with the
+rest. `tests/test_short_history.py`, six tests that fail without the change.
 
 ### COR-3. Three names in the Nasdaq-100 list no longer trade
 
@@ -357,6 +447,12 @@ finding, not a breach. `audit_repro.py SEC-2`.
 **Fix.** Require a letter, digit or `^` first and forbid two dots together, in
 the Python pattern and its mirror in `lib/symbols.ts`.
 
+**Fixed.** The pattern is now a shape: an optional `^`, a code of letters and
+digits, then at most two more parts each joined by one `.`, `-` or `=`. All
+10,888 symbols in the listing files, the index lists and the market board
+match it. Eleven new hostile cases in `tests/test_api.py` fail on the old
+pattern.
+
 ### SEC-3. Validation errors are English lists that echo their input
 
 A request that fails validation gets the framework's default: a list of
@@ -368,6 +464,12 @@ returned in a 50 KB error. `audit_repro.py SEC-3`.
 
 **Fix.** One handler that answers a validation failure with a short sentence
 in the reader's language and never the input; a length limit on list items.
+
+**Fixed.** `unreadable_request` in `api/index.py` answers every validation
+failure with one translated sentence naming the parameter, never its value;
+each symbol in a request body is limited to 40 characters; and the routes'
+own rejections show at most five symbols, each cut to 24 characters. A
+50,000-character symbol now gets a 177-byte answer. `tests/test_error_answers.py`.
 
 ### SEC-4. Any website may call the API on a preview deployment
 
@@ -381,6 +483,10 @@ origin. `audit_repro.py SEC-4`.
 
 **Fix.** No wildcard unless `ALLOWED_ORIGINS` asks for one.
 
+**Fixed.** `_allowed_origins` returns what `ALLOWED_ORIGINS` names and nothing
+otherwise. `tests/test_api.py` covers no `VERCEL_ENV`, preview and
+development; three cases fail on the old default.
+
 ### SEC-5. A failed lens returns the raw exception text
 
 `api/index.py:2493` (and `1089` on the private route) put
@@ -390,6 +496,10 @@ value the message carried. `audit_repro.py SEC-5`.
 
 **Fix.** A worded, translated sentence for the reader; the exception goes to
 the log (and to error reporting, Phase 6).
+
+**Fixed.** `lens_broke` logs the exception under the `quantdesk` logger and
+gives the reader a translated sentence with `cause: "internal"`, on the public
+route and the private one. `tests/test_error_answers.py`.
 
 ### PERF-3. Nothing is code-split
 
@@ -403,6 +513,15 @@ sent to every reader in every language. `audit_repro.py PERF-3`.
 **Fix.** Load the tab panels, the private panels and the Indonesian catalogue
 on demand.
 
+**Narrowed.** Every stock tab but Trend, where a run lands, and every markets
+view but Today now load when first opened, drawn meanwhile as their own
+skeleton; the two private panels are never sent to a deployment that does not
+draw them. First load: the markets page 316 KB to 194 KB, the stock page 355 KB
+to 315 KB. Every tab and view was opened in the production build afterwards
+and drew its panel with no console error. The Indonesian catalogue is still
+in every reader's first load: loading it on demand means the first paint in
+Indonesian waits for it, which belongs with the first-paint work in Phase 5.
+
 ### PERF-4. A public deployment imports the private scanner on every cold start
 
 `api/index.py:80-84` imports `tape`, `patterns`, `verdict`, `chartlayers`,
@@ -412,6 +531,11 @@ both routes that use them. Importing the app takes 1.15 seconds here, of which
 PERF-4`.
 
 **Fix.** Import them inside the two private routes.
+
+**Fixed.** `private_scanner()` in `api/index.py` imports the seven modules on
+first use by the private route, so a public deployment never loads them. The
+app now imports in 1.01 s here instead of 1.15 s. A test in
+`tests/test_private_tier.py` checks a fresh interpreter.
 
 ### UX-2. The Flow tab scrolls sideways at 375 px
 
@@ -503,6 +627,12 @@ and loads its script from a third-party CDN, which the site's policy either
 blocks or does not reach; this sandbox cannot reach a deployment to see which.
 `next.config.mjs` still sends `X-Powered-By`. `audit_repro.py SEC-7`.
 
+**Fixed**, except `/api/docs`, which is Decision 7. An ASGI layer in
+`api/index.py` adds `X-Content-Type-Options`, `X-Frame-Options` and
+`Referrer-Policy` to every answer the function gives, its own 429s, 422s and
+504s included; `next.config.mjs` sets `poweredByHeader: false`.
+`tests/test_error_answers.py`.
+
 ### SEC-8. The content security policy allows inline scripts
 
 `next.config.mjs` needs `'unsafe-inline'` because the framework injects inline
@@ -519,15 +649,34 @@ and defaults to "no change". In the sweep that is 8 of 115 US companies and 3
 of 39 Indonesian ones; none of the eleven changes band when it is computed.
 `audit_repro.py COR-2`.
 
+**Fixed.** A missing line now counts as none of it, and the leverage is
+unknown only when both lines are missing. Measured over all 171 cached
+non-financial companies: eleven scores move, the largest by 0.14, and no band
+changes, which is what the sentence above claimed before it was checked.
+Two tests in `tests/test_quality.py`.
+
 ### REL-6. A news thumbnail that fails to load draws an empty box
 
 `components/ui/headlines.tsx:36` has no fallback. This sandbox blocks the two
 image hosts, so every thumbnail here is the failure state, and the success
 path could not be checked. `audit_repro.py REL-6`.
 
+**Fixed.** A thumbnail that fails to load is left out and its headline takes
+the width. Seen in the browser here, where every thumbnail fails.
+
 ### COPY-5. The rate-limit message says "endpoint"
 
 `api/index.py:377`, in both languages.
+
+**Fixed, with COPY-1 to COPY-4.** The Ulcer index opens "11.7 — low: falls have
+been shallow, or brief, or both."; the landing says "four models and two
+independent kinds of evidence", and so do README and PRODUCT.md; the implied
+growth is compared with "the model", the grid says "Discount rate", and the
+valuation tile says "the model was run at"; a negative worst case reads "lost
+16.4% a year" and a negative Sortino "fell short of the risk-free rate"; the
+rate limit says "too many requests of this kind from this connection" and
+states its window. Both languages. `tests/test_copy.py`, ten tests that fail
+without the change.
 
 ### DOC-1. Three statements in the README no longer match the app
 
@@ -536,6 +685,10 @@ path could not be checked. `audit_repro.py REL-6`.
 - Line 1332: "US uses a 4.2% risk-free rate" (COR-4).
 - `CODEBASE_REVIEW.md` is dated 20 August and describes a codebase a fifth of
   this size; NEXT_SESSION_PROMPT already calls it "partly superseded".
+
+**Fixed**, except `CODEBASE_REVIEW.md`, which Phase 6 handles with the rest of
+what is dead: the AAPL example now carries its date and today's 32.5%, and the
+risk-free sentence was corrected with COR-4.
 
 ## Checked and found sound
 

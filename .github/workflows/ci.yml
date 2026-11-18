@@ -73,3 +73,14 @@ jobs:
       # Production dependencies must stay clean. This is the check that would
       # have caught the Next.js advisory backlog months earlier.
       - run: npm audit --omit=dev --audit-level=high
+      # THE PYTHON HALF, which this job did not look at until November 2026.
+      # The audit found eighteen known advisories in three runtime packages,
+      # seven of them in a Starlette that FastAPI's pin would not let move —
+      # the same invisible backlog, in the half that serves every number.
+      # Only requirements.txt: that is what the function bundles.
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+      - run: pip install pip-audit
+      - name: pip-audit (runtime requirements)
+        run: pip-audit -r requirements.txt --progress-spinner off

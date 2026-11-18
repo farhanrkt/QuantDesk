@@ -321,13 +321,15 @@ def _typical_daily_move(df: pd.DataFrame, window: int = 20) -> Optional[float]:
     return value if np.isfinite(value) else None
 
 
-def summarise_market(df: pd.DataFrame, levels: list, currency: str, ticker: str) -> dict:
+def summarise_market(df: pd.DataFrame, levels: list, currency: str, ticker: str,
+                     short_because: Optional[str] = None) -> dict:
     """Identical branching to the Streamlit version. The only change: the
     headline is emitted as plain text with `**bold**` markers instead of raw
     <b> tags, so the client renders it rather than trusting injected HTML."""
     price = float(df["Close"].iloc[-1])
     sma_fast = _last_valid(df["SMA_50"])
     sma_slow = _last_valid(df["SMA_200"])
+    readable = True
     rsi = _last_valid(df["RSI"])
     macd_line = _last_valid(df["MACD"])
     macd_signal = _last_valid(df["MACD_SIGNAL"])
@@ -362,7 +364,15 @@ def summarise_market(df: pd.DataFrame, levels: list, currency: str, ticker: str)
         )
     else:
         trend, trend_tone = tr("Too early to call", "Terlalu dini untuk disimpulkan"), "neutral"
+        # A LENS THAT COULD NOT READ DOES NOT VOTE. This state used to reach the
+        # synthesis as a neutral reading, so a delisted company with one bar of
+        # history counted as a Trend lens that had read it.
+        readable = False
         trend_sentence = (
+            tr(f"**{ticker}** has too little history here to read a trend. "
+               f"{short_because}",
+               f"**{ticker}** punya riwayat terlalu sedikit di sini untuk membaca tren. "
+               f"{short_because}") if short_because else
             tr(f"**{ticker}** has too little history here to read a trend. "
                "Widen the date range.",
                f"**{ticker}** punya riwayat terlalu sedikit di sini untuk membaca tren. "
@@ -459,6 +469,9 @@ def summarise_market(df: pd.DataFrame, levels: list, currency: str, ticker: str)
         "chips": chips,
         "trend": trend,
         "trend_tone": trend_tone,
+        # False when there was too little history to read a trend at all; the
+        # synthesis then counts no Trend reading rather than a neutral one.
+        "readable": readable,
         "resistance": resistance,
         "support": support,
     }
@@ -676,7 +689,8 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
     data = generate_signals(data)
     levels = calculate_support_resistance(data, window=sr_window, max_levels=sr_levels)
     currency = fetch_currency(ticker)
-    summary = summarise_market(data, levels, currency, ticker)
+    short_because = market_data.why_short(ticker, data, start_date)
+    summary = summarise_market(data, levels, currency, ticker, short_because)
 
     latest = data.iloc[-1]
     price = float(latest["Close"])
@@ -732,12 +746,21 @@ def analyze(ticker: str, range_key: str = "1y", sr_window: int = 10,
     # the textbook ratio and flatters every name by roughly rf/volatility. That
     # went unnoticed while the panel printed the bare number; the moment it
     # started saying "above 1.0 is good" the reader needed the number to mean
-    # what that sentence claims. The market convention is the same constant the
-    # valuation engine discounts with, so the two lenses now agree on what money
-    # costs.
-    risk_free = MARKETS.get((market_code or "US").upper(), MARKETS["US"])["risk_free_default"]
+    # what that sentence claims.
+    #
+    # THE RATE THE VALUE LENS DISCOUNTS WITH, NOT THE CONSTANT IT FALLS BACK TO.
+    # This comment used to say the two lenses agreed on what money costs, and
+    # they did until the valuation engine started reading the live ten-year
+    # yield: then the same page printed "US 10Y 5.154 · Value tab's rate" in the
+    # markets band and "above a 4.2% risk-free rate" on the Sortino tile
+    # (docs/AUDIT.md, COR-4). Both now ask `market_data.risk_free_rate`, which
+    # is cached for the day, so it costs one fetch per process per day. For the
+    # IDX it is the stated assumption either way.
+    market = MARKETS.get((market_code or "US").upper(), MARKETS["US"])
+    risk_free, _ = market_data.risk_free_rate(market["code"], market["risk_free_default"])
     risk = lt.risk_metrics(close_series, risk_free=risk_free) if enough else {"usable": False}
-    rolling = lt.rolling_returns(close_series) if enough else []
+    rolling = (lt.rolling_returns(close_series, short_because=short_because)
+               if enough else [])
     seasonality = lt.monthly_seasonality(close_series) if enough else {"usable": False, "months": []}
     momentum = lt.time_series_momentum(close_series)
     position = lt.price_position(close_series, data["High"], data["Low"])

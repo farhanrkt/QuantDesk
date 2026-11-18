@@ -146,3 +146,22 @@ def test_a_score_is_computed_off_the_event_loop_and_never_cached(client, monkeyp
     assert body["provenance"]                    # the null result travels with it
     assert body["chart"] is not None             # the frame reached the chart layers
     assert body["universe"] is None              # no peer group, so no percentile
+
+
+def test_a_public_deployment_does_not_load_the_private_scanner():
+    """The scanner's modules serve /api/verdict alone, which every deployment
+    refuses, and importing them cost every cold start 0.36 s of the app's 1.15
+    (docs/AUDIT.md, PERF-4). A fresh interpreter, because this one has long
+    since imported them for other tests."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    api = Path(index.__file__).resolve().parent
+    probe = ("import sys; sys.path.insert(0, %r); import index; "
+             "print(','.join(m for m in ('_lib.tape', '_lib.patterns', '_lib.verdict', "
+             "'_lib.chartlayers', '_lib.structure', '_lib.volumeprofile', '_lib.ownership') "
+             "if m in sys.modules))" % str(api))
+    loaded = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
+                            check=True, timeout=120).stdout.strip()
+    assert loaded == "", f"loaded at import: {loaded}"

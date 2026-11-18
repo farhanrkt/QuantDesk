@@ -1,31 +1,21 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AnomalyPanel } from "@/components/AnomalyPanel";
 import { CompanyHeader } from "@/components/company/CompanyHeader";
-import { CompanyPanel } from "@/components/company/CompanyPanel";
 import { ConfluenceRail } from "@/components/ConfluenceRail";
-import { EventStudyPanel } from "@/components/EventStudyPanel";
-import { ExposurePanel } from "@/components/ExposurePanel";
 import { HoldingHorizonBar } from "@/components/HoldingHorizonBar";
-import { NewsPanel } from "@/components/NewsPanel";
-import { PeersPanel } from "@/components/PeersPanel";
-import { PortfolioPanel } from "@/components/PortfolioPanel";
 import { PreTradePanel } from "@/components/PreTradePanel";
-import { QualityPanel } from "@/components/QualityPanel";
 import { SynthesisPanel } from "@/components/SynthesisPanel";
 import { TechnicalPanel } from "@/components/TechnicalPanel";
-import { ThesisPanel } from "@/components/ThesisPanel";
 import { TickerBar } from "@/components/TickerBar";
 import { useBoardFocus } from "@/components/shell/marketboard";
-import { ManualRescue } from "@/components/ValuationControls";
-import { ValuationPanel } from "@/components/ValuationPanel";
-import { VerdictPanel } from "@/components/VerdictPanel";
 import { useRegisterCommands, type RunnableCommand } from "@/components/palette/registry";
 import { SHORTCUT_EVENT } from "@/components/shell/ShortcutLayer";
 import { usePreferences } from "@/components/shell/preferences";
 import { useWorkspace } from "@/components/shell/workspace";
+import { PanelSkeleton } from "@/components/ui/skeleton";
 import { TabPanel, Tabs, type Tab } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/toaster";
 import { Panel, PortfolioSignpost, PrintHeader, RunStatus, StockActions } from "@/components/workspace/parts";
@@ -41,6 +31,41 @@ import {
   DEFAULT_TAB, compareHref, parseStockQuery, stockHref, type StockTab,
 } from "@/lib/url";
 import { msg, useT } from "@/lib/i18n";
+
+/*
+ * EVERY TAB BUT THE ONE A RUN LANDS ON IS LOADED WHEN IT IS FIRST OPENED.
+ * The stock page shipped every panel to every reader — 355 KB of script before
+ * anything was drawn, on phones where most of the Indonesian readers are
+ * (docs/AUDIT.md, PERF-3). Trend is where a run lands, so it and everything
+ * above the tabs (the rail, the summary, the pre-trade panel) stay in the
+ * first bundle; each other panel arrives on the first visit to its tab, drawn
+ * meanwhile as the skeleton its own data would show while loading. The
+ * private score tab, which a public deployment never draws, is never sent.
+ */
+const AnomalyPanel = dynamic(() => import("@/components/AnomalyPanel").then((m) => m.AnomalyPanel),
+  { loading: () => <PanelSkeleton shape="chart" /> });
+const CompanyPanel = dynamic(() => import("@/components/company/CompanyPanel").then((m) => m.CompanyPanel),
+  { loading: () => <PanelSkeleton shape="stats" /> });
+const EventStudyPanel = dynamic(() => import("@/components/EventStudyPanel").then((m) => m.EventStudyPanel),
+  { loading: () => <PanelSkeleton shape="table" /> });
+const ExposurePanel = dynamic(() => import("@/components/ExposurePanel").then((m) => m.ExposurePanel),
+  { loading: () => <PanelSkeleton shape="table" /> });
+const NewsPanel = dynamic(() => import("@/components/NewsPanel").then((m) => m.NewsPanel),
+  { loading: () => <PanelSkeleton shape="lines" /> });
+const PeersPanel = dynamic(() => import("@/components/PeersPanel").then((m) => m.PeersPanel),
+  { loading: () => <PanelSkeleton shape="table" /> });
+const PortfolioPanel = dynamic(() => import("@/components/PortfolioPanel").then((m) => m.PortfolioPanel),
+  { loading: () => <PanelSkeleton shape="table" /> });
+const QualityPanel = dynamic(() => import("@/components/QualityPanel").then((m) => m.QualityPanel),
+  { loading: () => <PanelSkeleton shape="stats" /> });
+const ThesisPanel = dynamic(() => import("@/components/ThesisPanel").then((m) => m.ThesisPanel),
+  { loading: () => <PanelSkeleton shape="lines" /> });
+const ValuationPanel = dynamic(() => import("@/components/ValuationPanel").then((m) => m.ValuationPanel),
+  { loading: () => <PanelSkeleton shape="chart" /> });
+const VerdictPanel = dynamic(() => import("@/components/VerdictPanel").then((m) => m.VerdictPanel),
+  { loading: () => <PanelSkeleton shape="stats" /> });
+const ManualRescue = dynamic(() => import("@/components/ValuationControls").then((m) => m.ManualRescue),
+  { loading: () => <PanelSkeleton shape="stats" /> });
 
 /**
  * LABELLED BY THE QUESTION, NOT THE METHOD. "Flow · anomalies" and "Intrinsic

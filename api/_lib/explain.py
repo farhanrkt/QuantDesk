@@ -434,11 +434,19 @@ def _sortino(value, riskFree=0.0, **_):
                                            "perlu cukup banyak hari turun untuk mengukur risiko penurunan"))
     band = _ladder(value, ((0.0, "bad"), (0.5, "poor"), (1.0, "fair"),
                            (2.0, "good"), (None, "excellent")))
-    reading = (tr(f"{_num(value)} — you earned {_num(value)} units of return above a "
-                  f"{_pct(riskFree, 1)} risk-free rate for every unit of downside risk. ",
-                  f"{_num(value)} — Anda memperoleh {_num(value)} satuan imbal hasil di "
-                  f"atas suku bunga bebas risiko {_pct(riskFree, 1)} untuk setiap satuan "
-                  "risiko penurunan. "))
+    # "You earned -0.49 units of return" read a shortfall as earnings, and
+    # repeated the figure the tile already shows (docs/AUDIT.md, COPY-4).
+    if value >= 0:
+        reading = (tr(f"{_num(value)} units of return above a {_pct(riskFree, 1)} risk-free "
+                      "rate for every unit of downside risk. ",
+                      f"{_num(value)} satuan imbal hasil di atas suku bunga bebas risiko "
+                      f"{_pct(riskFree, 1)} untuk setiap satuan risiko penurunan. "))
+    else:
+        reading = (tr(f"{_num(value)}: the return fell short of a {_pct(riskFree, 1)} "
+                      "risk-free rate, so the downside risk earned nothing. ",
+                      f"{_num(value)}: imbal hasilnya di bawah suku bunga bebas risiko "
+                      f"{_pct(riskFree, 1)}, jadi risiko penurunannya tidak menghasilkan "
+                      "apa pun. "))
     reading += {
         "bad": tr("Below zero means the downside was not paid for at all.",
                   "Di bawah nol berarti risiko penurunannya sama sekali tidak terbayar."),
@@ -838,20 +846,25 @@ def _ulcer(value, **_):
         return unavailable(label, what, tr("needs a price history", "perlu riwayat harga"))
     band = _ladder(value, ((5, "excellent"), (10, "good"), (20, "fair"),
                            (30, "poor"), (None, "bad")))
-    reading = f"{_num(value, 1)}. "
+    # THE FIRST SENTENCE CARRIES THE READING, because Guided mode shows only
+    # the first sentence. It used to be the bare number and a full stop, so the
+    # tile read "ULCER INDEX 11.7" over "11.7." (docs/AUDIT.md, COPY-1).
+    reading = f"{_num(value, 1)} — "
     reading += {
-        "excellent": tr("Very low — this has spent most of its life at or near its highs.",
-                        "Sangat rendah — saham ini menghabiskan sebagian besar hidupnya di "
+        "excellent": tr("very low: this has spent most of its life at or near its highs.",
+                        "sangat rendah: saham ini menghabiskan sebagian besar hidupnya di "
                         "puncak atau dekat puncak."),
-        "good": tr("Low. Falls have been shallow, or brief, or both.",
-                   "Rendah. Penurunannya dangkal, atau singkat, atau keduanya."),
-        "fair": tr("Middling. There have been real stretches below the highs, but not punishing ones.",
-                   "Sedang. Ada rentang nyata di bawah puncak, tetapi tidak menyiksa."),
-        "poor": tr("High. This has spent a lot of its life meaningfully underwater.",
-                   "Tinggi. Saham ini menghabiskan banyak waktunya jauh di bawah puncak."),
-        "bad": tr("Very high — long, deep periods below the high. Hard to hold, whatever it returned.",
-                  "Sangat tinggi — periode panjang dan dalam di bawah puncak. Sulit "
-                  "dipegang, berapa pun imbal hasilnya."),
+        "good": tr("low: falls have been shallow, or brief, or both.",
+                   "rendah: penurunannya dangkal, atau singkat, atau keduanya."),
+        "fair": tr("middling: there have been real stretches below the highs, but not "
+                   "punishing ones.",
+                   "sedang: ada rentang nyata di bawah puncak, tetapi tidak menyiksa."),
+        "poor": tr("high: this has spent a lot of its life meaningfully underwater.",
+                   "tinggi: saham ini menghabiskan banyak waktunya jauh di bawah puncak."),
+        "bad": tr("very high: long, deep periods below the high, hard to hold whatever it "
+                  "returned.",
+                  "sangat tinggi: periode panjang dan dalam di bawah puncak, sulit dipegang "
+                  "berapa pun imbal hasilnya."),
     }[band]
     reading += (tr(" Lower is better; roughly, under 5 is calm, over 20 is a difficult holding. "
                    "The scale is in percentage points, so it is comparable between stocks but not "
@@ -1303,9 +1316,17 @@ def _rolling_worst(value, years=None, positiveShare=None, reason=None, windows=N
                           f"perlu riwayat lebih dari {years or 'beberapa'} tahun")).rstrip("."))
     band = _ladder(value, ((-0.10, "bad"), (0.0, "poor"), (0.05, "fair"),
                            (0.12, "good"), (None, "excellent")))
-    reading = (tr(f"The unluckiest {horizon} entry still returned {_signed_pct(value)} a year. ",
-                  f"Titik masuk {horizon} yang paling sial tetap menghasilkan "
-                  f"{_signed_pct(value)} per tahun. "))
+    # "STILL RETURNED -16.4%" was a sentence written for a gain and read on a
+    # loss (docs/AUDIT.md, COPY-4).
+    if value >= 0:
+        reading = (tr(f"The unluckiest {horizon} entry still returned {_signed_pct(value)} a "
+                      "year. ",
+                      f"Titik masuk {horizon} yang paling sial tetap menghasilkan "
+                      f"{_signed_pct(value)} per tahun. "))
+    else:
+        reading = (tr(f"The unluckiest {horizon} entry lost {_pct(abs(value))} a year. ",
+                      f"Titik masuk {horizon} yang paling sial merugi {_pct(abs(value))} per "
+                      "tahun. "))
     if _known(positiveShare):
         reading += (tr(f"{_pct(positiveShare, 0)} of all {horizon} windows finished in profit. ",
                        f"{_pct(positiveShare, 0)} dari semua periode {horizon} berakhir untung. "))
@@ -2707,18 +2728,23 @@ def _implied_growth(value, assumedGrowth=None, engine=None, **_):
                       f"with, so the model and the market agree.",
                       f" Itu hampir persis {_pct(assumedGrowth)} yang dipakai untuk menjalankan "
                       "model ini, jadi model dan pasar sepakat."))
+        # "THAN YOU ASSUMED" WAS SAID OF A DEFAULT. A newcomer assumed nothing:
+        # the growth input is the model's starting value until someone changes
+        # it, and this file's own roadmap calls it "a default and not a
+        # forecast" (docs/AUDIT.md, COPY-3). The sentence now names whose
+        # number it is, and stops shouting.
         elif difference > 0:
-            gap = (tr(f" The model was run at {_pct(assumedGrowth)}, so the market is pricing "
-                      f"in {_pct(difference)} a year MORE growth than you assumed.",
-                      f" Model dijalankan dengan {_pct(assumedGrowth)}, jadi pasar "
-                      f"memperhitungkan pertumbuhan {_pct(difference)} per tahun LEBIH TINGGI "
-                      "daripada asumsi Anda."))
+            gap = (tr(f" The model was run at {_pct(assumedGrowth)} a year, so the market is "
+                      f"pricing in {_pct(difference)} a year more growth than the model.",
+                      f" Model dijalankan dengan {_pct(assumedGrowth)} per tahun, jadi pasar "
+                      f"memperhitungkan pertumbuhan {_pct(difference)} per tahun lebih tinggi "
+                      "daripada model."))
         else:
-            gap = (tr(f" The model was run at {_pct(assumedGrowth)}, so the market is pricing "
-                      f"in {_pct(abs(difference))} a year LESS growth than you assumed.",
-                      f" Model dijalankan dengan {_pct(assumedGrowth)}, jadi pasar "
-                      f"memperhitungkan pertumbuhan {_pct(abs(difference))} per tahun LEBIH "
-                      "RENDAH daripada asumsi Anda."))
+            gap = (tr(f" The model was run at {_pct(assumedGrowth)} a year, so the market is "
+                      f"pricing in {_pct(abs(difference))} a year less growth than the model.",
+                      f" Model dijalankan dengan {_pct(assumedGrowth)} per tahun, jadi pasar "
+                      f"memperhitungkan pertumbuhan {_pct(abs(difference))} per tahun lebih "
+                      "rendah daripada model."))
 
     reading = {
         "good": (tr(f"The price implies about {_pct(value)} a year for the next five years — "
@@ -4300,6 +4326,12 @@ def _read_trend(data: dict) -> Optional[dict]:
     summary = data.get("summary") or {}
     if not summary.get("trend"):
         return None
+    if summary.get("readable") is False:
+        # Too little history to read a trend: the lens answered, and its answer
+        # is that it could not read. `none` is the tone every reader of the
+        # synthesis already treats as no vote.
+        return _reading(tr("Trend", "Tren"), "trend", str(summary["trend"]).capitalize(),
+                        _plain(summary.get("headline")).split(". ")[0] + ".", "none", 0)
     tone = {"bull": "good", "bear": "bad"}.get(summary.get("trend_tone"), "neutral")
     return _reading(
         tr("Trend", "Tren"), "trend", str(summary["trend"]).capitalize(),

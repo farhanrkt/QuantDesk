@@ -88,7 +88,7 @@ export function Landing() {
       <section className="mx-auto max-w-3xl pt-4 text-center sm:pt-10">
         <p className="eyebrow mb-4">{t("US and Indonesian listings · research, not advice")}</p>
         <h1 className="text-balance sm:text-display">
-          {t("Read one company through four models that share no data.")}
+          {t("Read one company through four models and two independent kinds of evidence.")}
         </h1>
         <p className="mx-auto mt-4 max-w-measure text-lead text-body">
           {t("See where they agree, where they disagree, and what none of them can tell you.")}

@@ -430,6 +430,8 @@ export interface RollingReturnRow {
   years: number;
   usable?: boolean;
   reason?: string;
+  /** False when the company's own history is the limit, so a longer range cannot help. */
+  widenable?: boolean;
   windows: number;
   best?: number; worst?: number; median?: number; mean?: number;
   positiveShare?: number; p25?: number; p75?: number;
@@ -621,6 +623,8 @@ export interface TechnicalResponse {
     headline: string;
     chips: { label: string; value: string; tone: string }[];
     trend: string; trend_tone: string;
+    /** False when there was too little history to read a trend; the lens then casts no vote. */
+    readable?: boolean;
     resistance: number | null; support: number | null;
   };
   levels: number[];

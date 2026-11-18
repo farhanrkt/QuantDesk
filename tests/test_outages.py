@@ -20,6 +20,7 @@ quoted error is shortened at a word, not through one.
 
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -218,3 +219,120 @@ def test_a_long_message_is_cut_at_a_sentence_or_a_word():
     assert clipped.endswith("…")
     assert clipped[:-1].split()[-1] in no_stop.replace(".", "").split()   # a whole word
     assert explain._clip("short") == "short"
+
+
+# --------------------------------------------------------------------------- #
+# The single-lens routes say it too (docs/AUDIT.md, REL-2)
+# --------------------------------------------------------------------------- #
+# Only /api/confluence used to ask whether the provider was answering. The page
+# re-runs one lens through these routes when a reader changes an assumption,
+# and during an outage they told that reader the ticker was wrong.
+SINGLE_LENS_ROUTES = (("/api/quality", "quality_payload"),
+                      ("/api/intrinsic-value", "valuation_payload"),
+                      ("/api/technical-analysis", "technical_payload"),
+                      ("/api/isolation-forest", "whale_payload"),
+                      ("/api/company", "company_payload"))
+
+
+@pytest.mark.parametrize("route, builder", SINGLE_LENS_ROUTES)
+def test_a_single_lens_route_names_an_outage_as_one(client, monkeypatch, route, builder):
+    _every_provider_leg_fails(monkeypatch)
+    monkeypatch.setattr(index.market_data, "provider_answering", lambda market: False)
+    response = client.get(route, params={"ticker": "AAPL"})
+    assert response.status_code == 503
+    assert response.json()["detail"] == market_data.provider_outage_message("AAPL")
+    assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize("route, builder", SINGLE_LENS_ROUTES)
+def test_a_single_lens_route_keeps_the_symbol_hint_when_the_provider_answers(
+        client, monkeypatch, route, builder):
+    _every_provider_leg_fails(monkeypatch)
+    monkeypatch.setattr(index.market_data, "provider_answering", lambda market: True)
+    response = client.get(route, params={"ticker": "AAPL"})
+    assert response.status_code == 404
+    assert response.json()["detail"] == SYMBOL_BLAME
+
+
+def test_a_throttled_sector_during_an_outage_is_an_outage(client, monkeypatch):
+    """The valuation lens reports a missing sector as a structured refusal, not
+    a 404, and during an outage that refusal is the provider's too."""
+    def unknown_sector(*_args, **_kwargs):
+        raise HTTPException(status_code=422, detail={"message": "No sector came back.",
+                                                     "cause": "unknown-sector"})
+    monkeypatch.setattr(index, "valuation_payload", unknown_sector)
+    monkeypatch.setattr(index.market_data, "provider_answering", lambda market: False)
+    response = client.get("/api/intrinsic-value", params={"ticker": "AAPL"})
+    assert response.status_code == 503
+
+
+# --------------------------------------------------------------------------- #
+# One dropped request is not "no such symbol" (docs/AUDIT.md, REL-3)
+# --------------------------------------------------------------------------- #
+class _FlakyTicker:
+    """Raises on the first history request, answers every later one."""
+    calls = 0
+
+    def __init__(self, ticker):
+        pass
+
+    def history(self, **kwargs):
+        type(self).calls += 1
+        if type(self).calls == 1:
+            raise ConnectionError("planted: connection reset by peer")
+        dates = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=30)
+        return pd.DataFrame({"Open": 10.0, "High": 11.0, "Low": 9.0, "Close": 10.0,
+                             "Volume": 1000.0}, index=dates)
+
+
+@pytest.fixture
+def flaky(monkeypatch):
+    _FlakyTicker.calls = 0
+    monkeypatch.setattr(market_data.yf, "Ticker", _FlakyTicker)
+    monkeypatch.setattr(market_data, "OHLCV_RETRY_PAUSE_SECONDS", 0.0)
+    return _FlakyTicker
+
+
+def test_a_reset_connection_is_asked_again(flaky):
+    frame = market_data.ohlcv("AAPL", period="1mo")
+    assert frame is not None and len(frame) == 30
+    assert flaky.calls == 2
+
+
+def test_an_empty_answer_for_the_readers_own_ticker_is_asked_again(monkeypatch):
+    calls = []
+
+    class EmptyThenWhole:
+        def __init__(self, ticker):
+            pass
+
+        def history(self, **kwargs):
+            calls.append(1)
+            if len(calls) == 1:
+                return pd.DataFrame()
+            dates = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=30)
+            return pd.DataFrame({"Open": 10.0, "High": 11.0, "Low": 9.0, "Close": 10.0,
+                                 "Volume": 1000.0}, index=dates)
+
+    monkeypatch.setattr(market_data.yf, "Ticker", EmptyThenWhole)
+    monkeypatch.setattr(market_data, "OHLCV_RETRY_PAUSE_SECONDS", 0.0)
+    assert market_data.ohlcv("AAPL", period="1mo", allow_stale=True) is not None
+    assert len(calls) == 2
+
+
+def test_an_empty_answer_for_a_benchmark_is_not_asked_again(monkeypatch):
+    """A benchmark or basket member already degrades without it, and doubling
+    those requests is how a lookup gets throttled."""
+    calls = []
+
+    class Empty:
+        def __init__(self, ticker):
+            pass
+
+        def history(self, **kwargs):
+            calls.append(1)
+            return pd.DataFrame()
+
+    monkeypatch.setattr(market_data.yf, "Ticker", Empty)
+    assert market_data.ohlcv("^GSPC", period="1mo") is None
+    assert len(calls) == 1

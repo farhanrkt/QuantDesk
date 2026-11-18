@@ -257,6 +257,45 @@ def is_stale(frame: Optional[pd.DataFrame], asked_through: Optional[dt.date] = N
     return age > limit
 
 
+# How far after the start of a requested window a series may begin and still
+# count as covering it. Weekends, holidays and an exchange's first sessions of
+# the year all move the first bar a little; a listing that is a month younger
+# than the window it was asked for is younger than that window.
+LISTING_SLACK_DAYS = 31
+
+
+def why_short(ticker: str, frame: Optional[pd.DataFrame],
+              wanted_from: Optional[dt.date] = None) -> Optional[str]:
+    """Why a history is shorter than asked for, when a longer range cannot help.
+
+    THE LENSES USED TO SAY "WIDEN THE DATE RANGE" WHATEVER THE CAUSE. For a
+    company that stopped trading in August (Electronic Arts, in the November
+    2026 audit) and for one that listed two years ago (SPRE.JK, 569 sessions
+    in a five-year window), widening adds nothing, and the sentence sent a
+    newcomer looking for a control that cannot fix it (docs/AUDIT.md, COR-5).
+    So the two causes a range cannot fix are named, with their date, and None
+    means the advice to widen still stands.
+    """
+    if frame is None or frame.empty:
+        return None
+    first = pd.Timestamp(frame.index[0]).date()
+    last = pd.Timestamp(frame.index[-1]).date()
+    if is_stale(frame):
+        return tr(f"{ticker} has not traded since {last.isoformat()}: the provider has no "
+                  f"price after that date, which usually means it was delisted, suspended "
+                  f"or renamed. A longer range will not add anything.",
+                  f"{ticker} tidak diperdagangkan sejak {last.isoformat()}: penyedia data "
+                  f"tidak punya harga setelah tanggal itu, yang biasanya berarti saham ini "
+                  f"dihapus dari bursa, disuspensi, atau berganti nama. Rentang yang lebih "
+                  f"panjang tidak akan menambah apa pun.")
+    if wanted_from is not None and (first - wanted_from).days > LISTING_SLACK_DAYS:
+        return tr(f"{ticker} has only traded since {first.isoformat()}, so a longer range "
+                  f"will not add history.",
+                  f"{ticker} baru diperdagangkan sejak {first.isoformat()}, jadi rentang "
+                  f"yang lebih panjang tidak akan menambah riwayat.")
+    return None
+
+
 # ONE yf.download AT A TIME, PER PROCESS. yfinance's `download` keeps its results
 # in module-level globals — it sets `shared._DFS = {}` on entry and assembles its
 # return value from that dict on exit — so two downloads running at once in one
@@ -272,6 +311,10 @@ def is_stale(frame: Optional[pd.DataFrame], asked_through: Optional[dt.date] = N
 # shape of defect this codebase most often has. `Ticker(...).history` builds its
 # frame on its own instance and does not need this; every `yf.download` does.
 _DOWNLOAD_LOCK = threading.Lock()
+
+
+OHLCV_ATTEMPTS = 2
+OHLCV_RETRY_PAUSE_SECONDS = 0.6
 
 
 def ohlcv(symbol: str, *, period: Optional[str] = None,
@@ -297,20 +340,38 @@ def ohlcv(symbol: str, *, period: Optional[str] = None,
     ticker = (symbol or "").strip().upper()
     if not ticker:
         return None
-    try:
+
+    def fetch():
         if period:
-            raw = yf.Ticker(ticker).history(period=period, auto_adjust=auto_adjust)
-        else:
-            with _DOWNLOAD_LOCK:
-                raw = yf.download(
-                    ticker, start=start,
-                    end=(end + dt.timedelta(days=1)) if end else None,
-                    interval="1d", auto_adjust=auto_adjust, actions=False,
-                    progress=False, threads=False,
-                )
-    except Exception:
-        return None
-    frame = normalise(raw)
+            return yf.Ticker(ticker).history(period=period, auto_adjust=auto_adjust)
+        with _DOWNLOAD_LOCK:
+            return yf.download(
+                ticker, start=start,
+                end=(end + dt.timedelta(days=1)) if end else None,
+                interval="1d", auto_adjust=auto_adjust, actions=False,
+                progress=False, threads=False,
+            )
+
+    # ONE MORE ATTEMPT, FOR THE READER'S OWN TICKER. A single reset connection
+    # used to be final, and "no data" here is what the lenses turn into "check
+    # the symbol" — so one dropped request told a reader their ticker was wrong
+    # (docs/AUDIT.md, REL-3). It is retried once after a short pause when the
+    # call raised, and, for the reader's own ticker (`allow_stale`), when it
+    # came back empty, which is how the library reports most failures. Every
+    # other caller is a benchmark or a basket member that already degrades
+    # without it, and doubling their requests is how a lookup gets throttled.
+    raw = None
+    for attempt in range(OHLCV_ATTEMPTS):
+        if attempt:
+            time.sleep(OHLCV_RETRY_PAUSE_SECONDS)
+        try:
+            raw = fetch()
+        except Exception:
+            raw = None
+            continue
+        if not allow_stale or normalise(raw) is not None:
+            break
+    frame = normalise(raw) if raw is not None else None
     # Judged against the END OF THE REQUESTED WINDOW, so a deliberate historical
     # fetch is never rejected for ending where it was told to.
     if frame is not None and not allow_stale and is_stale(frame, end):
@@ -932,6 +993,67 @@ def company(ticker: str) -> dict:
                 _COMPANY_EXPIRES[key] = time.monotonic() + COMPANY_GAP_TTL_SECONDS
 
     return dict(result)
+
+
+def _statement_rows(record: Optional[dict]) -> int:
+    """How many lines the three statements hold between them."""
+    if not record:
+        return 0
+    return sum(len(frame.index) for frame in (record.get(name) for name in
+                                               ("income", "balance", "cashflow"))
+               if isinstance(frame, pd.DataFrame))
+
+
+def company_again(ticker: str) -> Optional[dict]:
+    """The day's record with its statements fetched once more, keeping the fuller copy.
+
+    THE PROVIDER DOES NOT ALWAYS SEND THE SAME STATEMENTS TWICE. Two passes over
+    122 US companies, minutes apart with both markets closed, read six of them
+    differently: five had a statement one line longer or shorter. NVDA's
+    balance sheet came back with 79 lines where the other pass, and five later
+    fetches, had 80, and with that line gone its solvency score went from
+    "safe" to "cannot score" — for the rest of the day, because `company` keeps
+    what it got (docs/AUDIT.md, REL-7). It is also why two runs of the lens
+    agreement differed in the third decimal.
+
+    There is nothing to check a line against, so this cannot be closed, only
+    narrowed. A caller that finds a score it cannot compute for want of a line
+    asks here; the statements are fetched once more, each one keeps whichever
+    copy has more lines for the same fiscal years, and the record is marked so
+    the same symbol is not asked again that day. One extra fetch, and only for
+    a company that came back short.
+
+    None when the day's record did not come from this cache (a test's planted
+    company, or a caller that never fetched), so nothing here ever reaches for
+    the network on a record it did not fetch.
+    """
+    key = (ticker.upper(), dt.date.today().isoformat())
+    if _cached_for(key) is None:
+        return None
+    with _company_lock(key):
+        held = _cached_for(key)
+        if held is None:
+            return None
+        if held.get("statements_rechecked"):
+            return dict(held)
+        try:
+            fresh = _apply_fx(dict(_company_uncached(ticker, convert=False)))
+        except Exception:
+            fresh = {}
+        merged = dict(held)
+        for name in ("income", "balance", "cashflow"):
+            mine, theirs = held.get(name), fresh.get(name)
+            if not isinstance(theirs, pd.DataFrame) or theirs.empty:
+                continue
+            same_years = (isinstance(mine, pd.DataFrame)
+                          and list(mine.columns) == list(theirs.columns))
+            if (not isinstance(mine, pd.DataFrame) or mine.empty
+                    or (same_years and len(theirs.index) > len(mine.index))):
+                merged[name] = theirs
+        merged["statements_rechecked"] = True
+        with _COMPANY_GUARD:
+            _COMPANY_CACHE[key] = merged
+    return dict(merged)
 
 
 def cached_company(ticker: str) -> Optional[dict]:

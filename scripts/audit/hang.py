@@ -59,13 +59,19 @@ def main() -> int:
     import index
     from fastapi.testclient import TestClient
 
+    # ENTERED, so the request runs on one long-lived event loop as it would
+    # under a server. A bare TestClient opens and closes a loop per request,
+    # and closing a loop waits for its worker threads — so it would report the
+    # hung provider's own wait, not the time the reader waited for an answer.
     client = TestClient(index.app)
+    client.__enter__()
     outcome: dict = {}
 
     def ask() -> None:
         started = time.monotonic()
         response = client.get("/api/confluence", params={"ticker": "AAPL"})
         outcome["seconds"] = time.monotonic() - started
+        outcome["status"] = response.status_code
         outcome["body"] = response.json()
         outcome["cache"] = response.headers.get("cache-control")
 
@@ -79,12 +85,16 @@ def main() -> int:
         # not ours to stop, so leave without joining them.
         os._exit(1)
     body = outcome["body"]
-    print(f"Answered after {outcome['seconds']:.0f} seconds "
-          f"(providerAnswering={body.get('providerAnswering')}, {outcome['cache']}).")
+    print(f"Answered after {outcome['seconds']:.0f} seconds, HTTP {outcome['status']} "
+          f"(providerAnswering={body.get('providerAnswering')}, {outcome['cache']}).",
+          flush=True)
     for leg in ("anomaly", "technical", "valuation", "quality", "news", "company"):
         value = body.get(leg) or {}
-        print(f"  {leg:10} ok={value.get('ok')}  {str(value.get('error'))[:100]}")
-    return 0 if outcome["seconds"] < 60 else 1
+        print(f"  {leg:10} ok={value.get('ok')}  {str(value.get('error'))[:100]}", flush=True)
+    if "detail" in body:
+        print(f"  detail: {str(body['detail'])[:160]}", flush=True)
+    # The provider calls behind the answer are still waiting on the socket.
+    os._exit(0 if outcome["seconds"] < 60 else 1)
 
 
 if __name__ == "__main__":

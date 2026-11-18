@@ -1,6 +1,6 @@
 # QuantDesk
 
-**Four independent models read the same stock, side by side.**
+**Four models read the same stock, side by side, from two independent bodies of data.**
 
 Most research tools give you one opinion. QuantDesk gives you four — order flow, price
 trend, intrinsic value, and accounting quality — and shows you where they agree and where
@@ -53,12 +53,12 @@ app collapses them into one vote rather than counting four.
 
 **And that caveat is now measured, not asserted.** Across 168 names in four index universes,
 the price record and the filings reach the same verdict about as often as chance puts them
-there — **κ = −0.02, on an interval that straddles zero** (re-measured 14 November 2026;
+there — **κ = −0.04, on an interval that straddles zero** (stamped 17 November 2026;
 +0.03 in August) — so agreement between them really is two facts rather than one counted
 twice. The surprise was the other half: Flow and Trend, the pair grouped together *because*
-they read the same series, do not agree either (κ = +0.03 in August, −0.13 in November), and
-the four lenses together carry **3.6 lenses' worth of independent information** rather than
-the two the count collapses them to. The grouping was left alone anyway, and the panel says
+they read the same series, do not agree either (+0.03 in August, −0.13 and −0.02 in November,
+no stable relationship at all), and the four lenses together carry **3.8 lenses' worth of
+independent information** rather than the two the count collapses them to. The grouping was left alone anyway, and the panel says
 why: a vote that correlates with nothing is what an independent reading and an uninformative
 one both look like, and the Flow lens's own event study already returns nulls.
 
@@ -193,8 +193,8 @@ Each runs a 5-year projection plus a terminal value, then a 10,000-draw Monte Ca
 simulation to produce a range rather than a single number.
 
 **Run it backwards.** The panel also solves the model in reverse: what growth rate would make
-today's price correct? On AAPL that came out at **37% a year for five years** against a 10%
-assumption — which is a claim about the world you can agree or disagree with, rather than a fair
+today's price correct? On AAPL on 14 November 2026 that came out at **32.5% a year for five
+years** against the model's default of 10% — which is a claim about the world you can agree or disagree with, rather than a fair
 value you have no basis to judge. It is stated as conditional on the other inputs, because it is:
 lower the discount rate and the implied growth falls with it. The panel says so, and a
 **sensitivity grid** shows it: the base-case value across growth ±6 points and the discount
@@ -537,18 +537,18 @@ every run, and until now nothing had checked it.
 The check is Cohen's κ between the two families' actual verdicts across 168 names in four index
 universes, because raw agreement is uninterpretable: a lens calling 70% of companies cheap and
 one calling 70% sound land on the same label **58% of the time while sharing nothing at all**.
-Chance-corrected, price and filings come out at **κ = −0.02 (US +0.04, IDX −0.01)**, on
+Chance-corrected, price and filings come out at **κ = −0.04 (US +0.02, IDX +0.03)**, on
 intervals that straddle zero in all three. **The claim survives** — measured in August 2026 at
-+0.03 and again on 14 November, not asserted, and the sentence on the panel is written from
++0.03 and twice in November, not asserted, and the sentence on the panel is written from
 whichever way the number came out.
 
 The unexpected half: **Flow and Trend, the pair the app collapses into one vote precisely
-because they read the same price series, do not agree: κ = +0.03 in August and −0.13 in
-November.** The four together carry 3.6 lenses' worth of independent information rather than the
+because they read the same price series, do not agree: +0.03 in August, then −0.13 and −0.02
+in November.** The four together carry 3.8 lenses' worth of independent information rather than the
 two they are counted as. The grouping was left alone regardless, and the panel says why — a vote
 uncorrelated with everything is what an independent reading and an uninformative one both look
 like, and the Flow lens's own event study returns nulls. Trend and Value are *negatively*
-correlated in both runs, which explains itself (a rising price makes a DCF look expensive).
+correlated in every run, which explains itself (a rising price makes a DCF look expensive).
 Every pair that includes Flow moved by more than its interval between the two runs, because
 Flow votes on the last ten sessions: a Flow pair that looks significant on one date is not a
 finding.
@@ -1320,9 +1320,11 @@ dividend history still returns its other three panels.
 **Limits.** Per-IP rate limiting (40/min default; 3/min for the screener, the ranking scan
 and the verdict, which runs a universe scan *and* four lenses; 2/min for shortlist deepening,
 which is the one route that does *not* batch; 6/min for the event study; 120/min for the
-symbol finder, which reads two files already in memory and has to keep up with typing; 30/min
-for the market board, its calendar and 20/min for its headlines, most of which the edge
-cache answers; 3/min for the watchlist's report dates, one provider call per name). The screener caps at 20 symbols, the ranking tier at 250, and deepening at
+symbol finder, which reads two files already in memory and has to keep up with typing; 60/min
+for the market board and its calendar and 40/min for its headlines, which every page asks for
+and the edge cache mostly answers; 3/min for the watchlist's report dates, one provider call per
+name). The browser waits out a `Retry-After` of eight seconds or less once, in the background,
+before it shows a refusal; it never sends a POST twice. The screener caps at 20 symbols, the ranking tier at 250, and deepening at
 8. These exist because each of those requests fans out to upstream calls — the caps are sized
 to what actually batches. The client is identified by the forwarded address only on Vercel,
 whose edge writes it; anywhere else by the connection, as uvicorn resolves it for the proxies it
@@ -1334,9 +1336,17 @@ provider for the market's own index: if that fails too, every lens says the prov
 answering — not that the symbol is wrong — and the response is held at the edge for fifteen
 seconds instead of six minutes. An empty ranking, scan or headline feed gets the same short life.
 
-**Market conventions** are configured per market — US uses a 4.2% risk-free rate, 5.5%
-equity risk premium, 21% tax and `^GSPC` as benchmark; IDX uses 6.5%, 7.0%, 22% and
-`^JKSE`.
+**A provider that hangs costs time it is given, and no more.** Each lens of a company read has
+35 seconds; one that runs out says so in a sentence and the others still arrive. If both price
+lenses run out, that is the outage answer and the index is not asked; otherwise asking it has 8
+seconds. Any request at all has 52, inside the platform's 60, and past that the reader gets a
+sentence in their language instead of the platform's error page. A thread cannot be stopped,
+so these bound the answer, not the provider call behind it.
+
+**Market conventions** are configured per market. The US discounts from the live ten-year
+Treasury yield, falling back to 4.2% only when it cannot be fetched, with a 5.5% equity risk
+premium, 21% tax and `^GSPC` as benchmark; the IDX uses a stated 6.5%, 7.0%, 22% and `^JKSE`.
+The Trend lens's Sortino ratio reads the same rate the Value lens discounts with.
 
 ---
 
@@ -1474,6 +1484,12 @@ scanner tier and the page metadata are English, numbers keep English separators 
 languages, and the first paint is English until the browser's choice is read. The Indonesian
 was written for this app, not by a translator, and has not yet been read by a native-speaking
 investor — the glossary in `lib/i18n-id.ts` is the place to correct a word everywhere at once.
+
+**The same request does not always return the same statements.** Two passes over 122 US
+companies, minutes apart, read six of them differently, five by a single line. When that costs
+an accounting screen its score, the statements are fetched once more and the fuller copy is
+kept for the day. A short statement that leaves every score computable is not noticed, because
+nothing can tell a line the provider dropped from one the company never filed.
 
 **Data.** yfinance is an unofficial scraper against an undocumented endpoint, with no SLA.
 Fundamentals for smaller IDX listings are patchy — where a figure is missing, the app offers

@@ -60,7 +60,8 @@ do.
 
 ## Positioning
 
-Most research tools give one opinion. This gives four that share no inputs, and then
+Most research tools give one opinion. This gives four, resting on two bodies of data that
+share no inputs, and then
 spends real effort establishing how much that agreement is actually worth — publishing the
 measurement whichever way it comes out. Eight stamped artifacts already do this
 (`backtest_results.json`, `check_calibration.json`, `correlation_stability.json`,

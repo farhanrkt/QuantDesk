@@ -30,6 +30,9 @@ const csp = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // No "X-Powered-By: Next.js". It tells a visitor nothing they need and
+  // tells anyone probing which framework, and roughly which version, to try.
+  poweredByHeader: false,
   // News thumbnails are fetched by Next's optimizer from these hosts and served
   // from our own origin, so `img-src 'self'` above stays as it is and the reader's
   // browser never contacts them. Must equal NEWS_IMAGE_HOSTS in

@@ -60,6 +60,8 @@ benign causes (index rebalances, dividends, options expiry, news). DYOR.
 
 from __future__ import annotations
 
+import datetime as dt
+
 import logging
 import math
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -102,6 +104,11 @@ class WhaleTrackerError(Exception):
 
 class DataFetchError(WhaleTrackerError):
     """Raised when market data cannot be fetched or is empty/invalid."""
+
+
+# Calendar days each look-back covers, for saying when a short history is the
+# company's and not the window's. "max" asks for everything, so nothing is short.
+PERIOD_DAYS = {"6mo": 183, "1y": 366, "2y": 731, "5y": 1827}
 
 
 @dataclass
@@ -286,11 +293,18 @@ class WhaleTracker:
         df = self._engineer_features(history)
 
         if len(df) < self.config.min_rows:
+            # "Try a longer period" only when a longer period could help. For a
+            # company that stopped trading, or listed recently, it cannot, and
+            # `why_short` says which (docs/AUDIT.md, COR-5).
+            days = PERIOD_DAYS.get(period)
+            wanted_from = dt.date.today() - dt.timedelta(days=days) if days else None
+            because = market_data.why_short(ticker, history, wanted_from)
             raise DataFetchError(
-                tr(f"Only {len(df)} usable rows for '{ticker}'; need at least "
-                   f"{self.config.min_rows}. Try a longer period.",
-                   f"Hanya {len(df)} baris yang bisa dipakai untuk '{ticker}'; butuh "
-                   f"setidaknya {self.config.min_rows}. Coba periode yang lebih panjang.")
+                tr(f"Only {len(df)} usable days for '{ticker}'; this lens needs at least "
+                   f"{self.config.min_rows}. {because or 'Try a longer period.'}",
+                   f"Hanya {len(df)} hari yang bisa dipakai untuk '{ticker}'; lensa ini butuh "
+                   f"setidaknya {self.config.min_rows}. "
+                   f"{because or 'Coba periode yang lebih panjang.'}")
             )
         return df
 

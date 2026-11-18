@@ -118,7 +118,9 @@ def a_single_lens_route_blames_the_ticker_during_an_outage():
     finally:
         val.fetch_company, md.provider_answering = saved
     text = " | ".join(str(v) for v in answers.values())
-    return ("suffix" in text or "symbol" in text.lower(),
+    # "Suffix" is the tell: the symbol hint names the exchange suffix, and the
+    # outage sentence says, correctly, that the symbol is not the problem.
+    return ("suffix" in text,
             f"with the provider down, AAPL is told: {text[:200]}")
 
 
@@ -251,10 +253,12 @@ def the_api_sets_no_security_headers_of_its_own():
     missing = [h for h in ("x-content-type-options", "x-frame-options", "referrer-policy")
                if h not in headers]
     powered = "poweredByHeader: false" not in _source("next.config.mjs")
+    # Whether /api/docs is served on a deployment is the owner's Decision 7, so
+    # it is reported here and does not count toward the finding.
     docs_public = client.get("/api/docs", headers={"x-vercel-id": "sin1::planted"}).status_code == 200
-    return (bool(missing) or powered or docs_public,
-            f"API responses lack {missing}; Next still sends X-Powered-By: {powered}; "
-            f"/api/docs answers on a deployment: {docs_public}")
+    return (bool(missing) or powered,
+            f"API responses lack {missing or 'nothing'}; Next sends X-Powered-By: {powered}; "
+            f"/api/docs answers on a deployment (Decision 7): {docs_public}")
 
 
 # --------------------------------------------------------------------------- #
@@ -313,11 +317,14 @@ def nothing_is_code_split():
 
 @finding("PERF-4")
 def a_public_deployment_imports_the_private_scanner():
-    source = _source("api/index.py")
-    head = source[:source.index("app = FastAPI(")]
-    eager = [name for name in ("tape", "patterns", "verdict", "chartlayers", "structure",
-                               "volumeprofile") if re.search(rf"\b{name}\b", head)]
-    return bool(eager), f"imported at module load on every deployment: {', '.join(eager)}"
+    import subprocess
+    probe = ("import sys; sys.path.insert(0, %r); import index; "
+             "print(','.join(m.split('.')[1] for m in sys.modules if m in ("
+             "'_lib.tape', '_lib.patterns', '_lib.verdict', '_lib.chartlayers', "
+             "'_lib.structure', '_lib.volumeprofile', '_lib.ownership')))" % str(ROOT / "api"))
+    eager = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True,
+                           timeout=120).stdout.strip()
+    return bool(eager), f"imported at module load on every deployment: {eager or 'none'}"
 
 
 # --------------------------------------------------------------------------- #

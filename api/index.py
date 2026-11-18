@@ -66,44 +66,68 @@ from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 
 import json
+import logging
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
-from typing import Optional
+from typing import Annotated, Optional
 
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from _lib import (accumulation, chartlayers, econcalendar, eventstudy, explain, exposure,
+from _lib import (accumulation, econcalendar, eventstudy, explain, exposure,
                   field, lang, listings, market_data, marketboard, microstructure, news,
-                  ownership, patterns, portfolio, pretrade, quality, ranking,
-                  riskmodel, structure, symbols, tape, technical, trackrecord,
-                  universes, valuation, verdict, volumeprofile)
-from _lib.jsonsafe import clean
+                  portfolio, pretrade, quality, ranking,
+                  riskmodel, symbols, technical, trackrecord,
+                  universes, valuation)
+
+from _lib.jsonsafe import WIRE_DIGITS, clean
 from _lib.whale import AnalysisConfig, DataFetchError, WhaleTracker, WhaleTrackerError
 from _lib.lang import tr
 
 app = FastAPI(title="QuantDesk API", version="1.1.0", docs_url="/api/docs")
 
 
+# THE PRIVATE SCANNER IS IMPORTED BY THE TWO ROUTES THAT USE IT, AND ONLY THEN.
+# `tape`, `patterns`, `verdict`, `chartlayers`, `structure`, `volumeprofile` and
+# `ownership` serve `/api/verdict` alone, which every deployment refuses
+# (`private_tier_enabled`). Imported here they cost every cold start of a public
+# deployment their load time — 0.36 s of the app's 1.15 s, through scipy.stats
+# (docs/AUDIT.md, PERF-4) — for routes that answer 404. `private_scanner()`
+# loads them on first use; Python keeps them for the rest of the process.
+def private_scanner():
+    """The private scanner's modules, as a namespace, loaded on first call."""
+    from types import SimpleNamespace
+
+    from _lib import (chartlayers, ownership, patterns, structure, tape, verdict,
+                      volumeprofile)
+    return SimpleNamespace(chartlayers=chartlayers, ownership=ownership, patterns=patterns,
+                           structure=structure, tape=tape, verdict=verdict,
+                           volumeprofile=volumeprofile)
+
+
 def _allowed_origins() -> list[str]:
-    """Wildcard CORS in local dev, same-origin only in production.
+    """Same-origin everywhere, unless ALLOWED_ORIGINS names others.
 
-    On Vercel the frontend and this function share an origin, so production
-    needs no CORS headers at all — an empty list means the middleware never
-    matches and the browser enforces same-origin. `allow_origins=["*"]` let any
-    site on the internet spend this deployment's compute (and its yfinance rate
-    budget) for free, which is the part worth closing.
+    On Vercel the frontend and this function share an origin, and in local
+    development the Next dev server proxies /api, so the browser sees one
+    origin there too. Nothing this app serves needs CORS headers, and an empty
+    list means the middleware never matches and the browser enforces
+    same-origin. `["*"]` lets any site on the internet spend this deployment's
+    compute, and its share of the provider's rate budget, for free.
 
-    Set ALLOWED_ORIGINS (comma separated) to permit specific external origins.
+    THE WILDCARD USED TO BE THE DEFAULT EVERYWHERE BUT `VERCEL_ENV=production`.
+    That opened every preview deployment, which is as public as production —
+    `private_tier_enabled` says so two functions below — and production itself
+    whenever the project does not expose its system variables, which
+    `on_vercel` warns can happen (docs/AUDIT.md, SEC-4). A wildcard now has to
+    be asked for by name: ALLOWED_ORIGINS=* (or a comma-separated list).
     """
-    configured = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
-    if configured:
-        return configured
-    return [] if os.environ.get("VERCEL_ENV") == "production" else ["*"]
+    return [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 
 
 def on_vercel(request: Optional[Request] = None) -> bool:
@@ -200,12 +224,29 @@ SERIES_CAP = 1500
 # yfinance interpolates it into a URL PATH (.../v8/finance/chart/{ticker}), and
 # the CSV route interpolates it into a Content-Disposition HEADER.
 #
-# The character class is exactly what real symbols need and nothing more:
-#   A-Z 0-9  ordinary listings           .  exchange suffixes (BBCA.JK, BRK.B)
-#   -        crypto/FX pairs (BTC-USD)   ^  indices (^TNX)     =  FX (EURUSD=X)
-# No slashes, no dots-dot, no quotes, no control characters, no whitespace.
-TICKER_PATTERN = r"^[A-Za-z0-9.\-^=]{1,20}$"
+# A SHAPE, NOT A CHARACTER CLASS. A symbol is an optional `^` (an index,
+# ^TNX), a code of letters and digits, then at most two more parts, each joined
+# by one `.` (an exchange suffix, BBCA.JK, BRK.B), `-` (a pair, BTC-USD) or `=`
+# (FX and futures, EURUSD=X, GC=F). No slashes, no quotes, no control
+# characters, no whitespace.
+#
+# It used to be the character class `[A-Za-z0-9.\-^=]{1,20}`, whose comment
+# promised "no dots-dot" and whose class allowed them: `..`, `.`, `-` and `^`
+# alone all passed, and `GET /api/isolation-forest?ticker=..` sent the provider
+# a request for `/v8/finance/chart/..` (docs/AUDIT.md, SEC-2). The reach was
+# the provider's own host, so it was a gap in the fence rather than a breach.
+# Every one of the 10,888 symbols in the listing files, the index lists and the
+# market board matches the shape; the longest code is five characters, so ten
+# leaves room.
+TICKER_PATTERN = r"^\^?[A-Za-z0-9]{1,10}(?:[.\-=][A-Za-z0-9]{1,6}){0,2}$"
 TICKER_RE = re.compile(TICKER_PATTERN)
+
+# One symbol inside a request body. Bounded on its own, because a list's length
+# says nothing about its items: a body of one 50,000-character "symbol" passed
+# every check that existed (docs/AUDIT.md, SEC-3). The pattern itself is
+# applied by each route, which names the offenders rather than failing the
+# whole list anonymously.
+Symbol = Annotated[str, Field(max_length=40)]
 
 
 # --------------------------------------------------------------------------- #
@@ -252,11 +293,19 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # The board names nothing and is cached at the edge for five minutes, so
     # almost every poll is served without reaching this function. The cap is
     # for the ones that do: one batch download, then arithmetic.
-    "/api/markets/today": (30, 60),
+    #
+    # EVERY PAGE ASKS FOR THESE THREE, so their caps are set by reading, not by
+    # cost. At 30, 20 and 30 a minute, sixteen ordinary page loads from one
+    # address reached them in the November 2026 audit (docs/AUDIT.md, REL-4),
+    # and an address is not a reader: an Indonesian mobile carrier puts many
+    # readers behind one. What reaches the function is already bounded by the
+    # edge cache and by the process caches behind it, so doubling the caps
+    # costs little and the browser now also waits out a short Retry-After once.
+    "/api/markets/today": (60, 60),
     # Up to four feeds per call, each one bounded and timed out.
-    "/api/markets/headlines": (20, 60),
+    "/api/markets/headlines": (40, 60),
     # A committed file and some date arithmetic; the edge answers most of these.
-    "/api/markets/calendar": (30, 60),
+    "/api/markets/calendar": (60, 60),
     # One provider call per name and none of them batch, the shape of cost the
     # shortlist deepening has, so it takes a cap of the same order.
     "/api/markets/earnings": (3, 60),
@@ -347,8 +396,9 @@ async def rate_limit(request: Request, call_next):
     #
     # `scope["path"]` is the value the router itself uses, so the bucket can
     # never disagree with the endpoint that actually executes. This holds
-    # regardless of the Starlette version (CVE fixed in 1.3.0; FastAPI 0.115
-    # pins <0.42, so the library fix is not available without a major bump).
+    # regardless of the Starlette version. The library fixed the flaw in 1.3.0
+    # and this app has run a fixed Starlette since November 2026; the read
+    # stays on the raw scope because it is the router's own value either way.
     path = request.scope.get("path") or request.url.path
     if request.method == "OPTIONS" or path in RATE_EXEMPT:
         return await call_next(request)
@@ -374,11 +424,12 @@ async def rate_limit(request: Request, call_next):
             retry_after = max(1, int(window - (now - hits[0])) + 1)
             return JSONResponse(
                 status_code=429,
-                content={"detail": tr(f"Rate limit reached for this endpoint "
-                                      f"({limit} requests per {window}s). "
-                                      f"Try again in {retry_after}s.",
-                                      f"Batas permintaan untuk endpoint ini tercapai ({limit} permintaan per "
-                                      f"{window} detik). Coba lagi dalam {retry_after} detik.")},
+                content={"detail": tr(f"Too many requests of this kind from this connection: "
+                                      f"the limit is {limit} in {window} seconds. Try again "
+                                      f"in {retry_after} seconds.",
+                                      f"Terlalu banyak permintaan jenis ini dari koneksi ini: "
+                                      f"batasnya {limit} dalam {window} detik. Coba lagi "
+                                      f"dalam {retry_after} detik.")},
                 headers={"Retry-After": str(retry_after),
                          "Cache-Control": "no-store"},
             )
@@ -421,12 +472,184 @@ async def language(request: Request, call_next):
         lang.reset(token)
 
 
+# --------------------------------------------------------------------------- #
+# Time budgets
+# --------------------------------------------------------------------------- #
+# NOTHING HERE USED TO COUNT TIME. Every provider call has the HTTP library's
+# own timeout of ten to thirty seconds, the calls inside a lens run one after
+# another, and nothing above them added the waits up. Measured in the November
+# 2026 audit with a provider that accepts a connection and never answers: one
+# `/api/confluence` had not returned after 380 seconds. The platform kills the
+# function at 60 (vercel.json), so a reader got a bare gateway error and not
+# one lens — although five of the six legs could have answered, and the app has
+# a worded outage state that only needs the price legs to stop waiting.
+#
+# Three budgets, each inside the next, all inside the platform's 60 seconds:
+#
+#   LEG       one lens of `/api/confluence`. The others arrive; this one
+#             reports that it ran out of time.
+#   CANARY    the question "is the provider answering at all", asked after the
+#             legs, which is itself a provider call and hung with them.
+#   REQUEST   any request whatever. The reader gets a sentence, in their
+#             language, in place of the platform's own error page.
+#
+# A THREAD CANNOT BE CANCELLED, so a budget bounds the RESPONSE and not the
+# work: the provider call behind an expired lens runs on until its own timeout.
+# That is the honest limit of doing this in one process, and it is why the
+# budgets are generous — they are for a hung provider, not a slow one.
+LEG_BUDGET_SECONDS = 35.0
+CANARY_BUDGET_SECONDS = 8.0
+REQUEST_BUDGET_SECONDS = 52.0
+
+
+def timed_out(what: str) -> dict:
+    """The failure a lens reports when its budget ran out. `cause` is the
+    identifier; the sentence is the reader's."""
+    return {
+        "message": tr(f"{what} took too long to arrive, so it was left out of this read. The "
+                      "data provider is slow or not answering; trying again in a minute "
+                      "usually works.",
+                      f"{what} terlalu lama tiba, jadi tidak disertakan dalam pembacaan ini. "
+                      "Penyedia data sedang lambat atau tidak menjawab; mencoba lagi sebentar "
+                      "lagi biasanya berhasil."),
+        "cause": "timeout",
+    }
+
+
+class RequestDeadline:
+    """Answer in words when a request outlives its budget.
+
+    A PURE ASGI MIDDLEWARE, AND NOT `asyncio.wait_for`, for one reason: the
+    route handlers are ordinary functions, which the framework runs in a
+    thread, and a task waiting on such a thread does not finish being cancelled
+    until the thread does. `wait_for` would therefore wait exactly as long as
+    the hung provider. So the request runs as its own task, this waits for it
+    with a timeout, and when the time is up it answers the reader itself and
+    stops forwarding whatever the abandoned task sends afterwards.
+
+    A response that has already started (the simulation CSV) is left alone:
+    half a body followed by a second set of headers helps nobody.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        state = {"started": False, "expired": False}
+
+        async def guarded_send(message):
+            if state["expired"]:
+                return
+            if message["type"] == "http.response.start":
+                state["started"] = True
+            await send(message)
+
+        task = asyncio.ensure_future(self.app(scope, receive, guarded_send))
+        done, _ = await asyncio.wait({task}, timeout=REQUEST_BUDGET_SECONDS)
+        if done or state["started"]:
+            await task
+            return
+
+        state["expired"] = True
+        # The abandoned task ends when its thread does; its result is nobody's.
+        task.add_done_callback(lambda finished: finished.cancelled() or finished.exception())
+        query = scope.get("query_string", b"").decode("latin-1")
+        asked = re.search(r"(?:^|&)lang=([a-z]{2})(?:&|$)", query)
+        token = lang.use(asked.group(1) if asked else None)
+        try:
+            detail = tr("This took too long, so it was stopped. The data provider is slow or "
+                        "not answering; trying again in a minute usually works.",
+                        "Ini terlalu lama, jadi dihentikan. Penyedia data sedang lambat atau "
+                        "tidak menjawab; mencoba lagi sebentar lagi biasanya berhasil.")
+        finally:
+            lang.reset(token)
+        response = JSONResponse(status_code=504, content={"detail": detail},
+                                headers={"Cache-Control": "no-store", "Retry-After": "60"})
+        await response(scope, receive, send)
+
+
+app.add_middleware(RequestDeadline)
+
+
+# The API's own headers, on every answer it gives — the 429s and 504s this
+# file writes included. They were added only by the web layer in front, so a
+# response from the function itself, or from any deployment where that layer
+# is configured differently, carried none (docs/AUDIT.md, SEC-7). JSON is not a
+# page, so the policy that matters most is that a browser never sniffs it into
+# one or frames it.
+API_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+}
+
+
+class ApiHeaders:
+    """Adds API_HEADERS to every response, without replacing one already set."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def with_headers(message):
+            if message["type"] == "http.response.start":
+                present = {name.lower() for name, _ in message.get("headers", [])}
+                extra = [(name.lower().encode(), value.encode())
+                         for name, value in API_HEADERS.items()
+                         if name.lower().encode() not in present]
+                message = {**message, "headers": [*message.get("headers", []), *extra]}
+            await send(message)
+
+        await self.app(scope, receive, with_headers)
+
+
+# Added last, so it is the outermost layer and reaches every response.
+app.add_middleware(ApiHeaders)
+
+
+@app.exception_handler(RequestValidationError)
+async def unreadable_request(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """A request that failed validation, answered in a sentence that names
+    WHICH input was wrong and never repeats what it held.
+
+    The framework's own answer is a list of objects, in English whatever the
+    reader asked for, each carrying the rejected input whole (docs/AUDIT.md,
+    SEC-3). The page could not read it either: `lib/api.ts` cast the list to a
+    failure with no message and drew a blank card. Parameter names are
+    identifiers and stay as they are in both languages.
+    """
+    names = []
+    for error in exc.errors():
+        loc = [part for part in error.get("loc", ()) if isinstance(part, str)
+               and part not in ("query", "body", "path")]
+        name = loc[-1] if loc else "request"
+        if name not in names:
+            names.append(name)
+    listed = ", ".join(f"`{name}`" for name in names[:4])
+    return JSONResponse(status_code=422, headers={"Cache-Control": "no-store"}, content={
+        "detail": tr(f"This request could not be read: {listed} is not in the form this app "
+                     "expects. A ticker is letters and digits, with an exchange suffix such as "
+                     ".JK where it has one.",
+                     f"Permintaan ini tidak bisa dibaca: {listed} tidak dalam bentuk yang "
+                     "diharapkan aplikasi ini. Ticker terdiri dari huruf dan angka, dengan "
+                     "akhiran bursa seperti .JK bila ada."),
+    })
+
+
 def ok(payload: dict, *, failed: bool = False) -> JSONResponse:
     # Cache at the edge: quotes move, but not within 60s, and every engine
     # re-runs a network fetch that we do not want to pay for on each keystroke.
     # `failed` marks a payload that carries a TRANSIENT failure — see
     # CACHE_FAILED — and is never set for one that is about the symbol itself.
-    return JSONResponse(content=clean(payload), headers={
+    return JSONResponse(content=clean(payload, WIRE_DIGITS), headers={
         "Cache-Control": CACHE_FAILED if failed else CACHE,
         "CDN-Cache-Control": CDN_CACHE_FAILED if failed else CDN_CACHE})
 
@@ -445,8 +668,23 @@ def private_ok(payload: dict) -> JSONResponse:
     `no-store` says what is intended. It also stops a browser applying heuristic
     freshness to a body that describes somebody's portfolio.
     """
-    return JSONResponse(content=clean(payload),
+    return JSONResponse(content=clean(payload, WIRE_DIGITS),
                         headers={"Cache-Control": "no-store"})
+
+
+def shown(rejected: list[str]) -> str:
+    """Up to five rejected symbols, each cut to what a person could have typed.
+
+    The rejection messages used to join the offending input as it arrived, and
+    nothing bounded an item, so a 50,000-character "symbol" came back in a
+    50 KB error (docs/AUDIT.md, SEC-3). Naming what was wrong is useful; echoing
+    it whole is a reflection anyone can aim.
+    """
+    def cut(text: str) -> str:
+        text = "".join(ch if ch.isprintable() else "?" for ch in text)
+        return text if len(text) <= 24 else text[:23] + "…"
+    head = ", ".join(cut(t) for t in rejected[:5])
+    return head + ("..." if len(rejected) > 5 else "")
 
 
 def resolved(ticker: str, market: str) -> str:
@@ -471,10 +709,8 @@ def parse_ticker_list(tickers: str, market: str) -> list[str]:
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}.",
-                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}."))
+            detail=tr(f"Not valid ticker symbols: {shown(bad)}.",
+                      f"Bukan simbol ticker yang valid: {shown(bad)}."))
     return list(dict.fromkeys(resolved(t, market) for t in raw))
 
 
@@ -671,8 +907,9 @@ def isolation_forest(
     ),
 ):
     symbol, market = resolved_with_market(ticker, market)
-    return ok(whale_payload(symbol, period, mode, contamination, mad_k,
-                            score_threshold, recent_days, min_turnover))
+    return ok(answered_or_outage(symbol, lambda: whale_payload(
+        symbol, period, mode, contamination, mad_k, score_threshold, recent_days,
+        min_turnover)))
 
 
 # --------------------------------------------------------------------------- #
@@ -712,10 +949,8 @@ def screener(
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}.",
-                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}."),
+            detail=tr(f"Not valid ticker symbols: {shown(bad)}.",
+                      f"Bukan simbol ticker yang valid: {shown(bad)}."),
         )
     universe = list(dict.fromkeys(resolved(t, market) for t in raw))
     if not universe:
@@ -925,7 +1160,7 @@ class RankListRequest(BaseModel):
     The GET with `tickers=` stays, for curl and for anyone who prefers it; the
     UI no longer uses it for a reader's own list.
     """
-    tickers: list[str] = Field(..., min_length=1, max_length=RANK_MAX_UNIVERSE)
+    tickers: list[Symbol] = Field(..., min_length=1, max_length=RANK_MAX_UNIVERSE)
     market: str = Field("US", pattern="^(US|ID|us|id)$")
 
 
@@ -1086,7 +1321,7 @@ async def name_verdict(
         except HTTPException as exc:
             return name, {"ok": False, "error": exc.detail}
         except Exception as exc:
-            return name, {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            return name, {"ok": False, "error": lens_broke(name, exc)}
 
     # THE UNIVERSE SCAN RUNS BEFORE THE LENSES AND NOT BESIDE THEM. This was
     # written the other way first, on the obvious reasoning that the batched
@@ -1136,6 +1371,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
     Synchronous on purpose, and called through `asyncio.to_thread` by the route:
     every fetch below is sequential, which the route's comments explain.
     """
+    pv = private_scanner()
     row = None
     universe_context = None
     if scan is not None and entry is not None:
@@ -1168,7 +1404,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
 
     # TWO YEARS, NOT ONE. The liquidity profile only needs a few weeks, but the
     # tape reading compares a year's heaviest sessions against its ordinary ones
-    # and `tape.MIN_BARS` wants 160 usable bars after the rolling volume
+    # and `pv.tape.MIN_BARS` wants 160 usable bars after the rolling volume
     # baseline warms up. Fetching one year here and discovering the tape could
     # not be read is a silent capability loss, not an error anybody would see.
     frame = None
@@ -1182,18 +1418,18 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
     pattern_result = None
     profile_result = None
     if frame is not None:
-        tape_result = tape.read(frame, market_code=symbols.market_of(symbol))
-        pattern_result = patterns.read(frame, market_code=symbols.market_of(symbol))
+        tape_result = pv.tape.read(frame, market_code=symbols.market_of(symbol))
+        pattern_result = pv.patterns.read(frame, market_code=symbols.market_of(symbol))
         # WHERE THE TRADE HAPPENED, from the frame already in hand. Free: no
         # fetch, and it scores nothing and gates nothing — see the module's
         # docstring for the measurement that decided that.
-        profile_result = volumeprofile.build(
+        profile_result = pv.volumeprofile.build(
             frame, market_code=symbols.market_of(symbol))
 
     # WHERE THE TRADE IS WRONG, read off the levels the trend lens already
     # computed rather than recomputed here — same rule the synthesis follows, so
     # the numbers beside the verdict are the numbers the chart drew.
-    structure_result = structure.read(
+    structure_result = pv.structure.read(
         technical=legs["technical"].get("data") if legs["technical"]["ok"] else None)
 
     # The share register is the third body of data, and its own fetch. It is
@@ -1201,7 +1437,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
     # universe scan above is: this route already learned once what happens when
     # a batched yfinance call runs beside the per-symbol ones.
     try:
-        register_result = ownership.read(
+        register_result = pv.ownership.read(
             market_data.share_register(symbol),
             median_volume=(float(frame["Volume"].tail(21).median())
                            if frame is not None else None))
@@ -1209,7 +1445,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
         register_result = None
 
     checks = pretrade.assess(legs, market=symbols.market_of(symbol))
-    scored = verdict.score(
+    scored = pv.verdict.score(
         symbol, legs=legs, rank_row=row, pretrade_result=checks,
         liquidity=liquidity, market=symbols.market_of(symbol),
         # The company name comes from the cached listing where there is one.
@@ -1228,7 +1464,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
     market_regime = {"available": False, "reason": "no benchmark history"}
     try:
         benchmark_symbol = riskmodel.MARKET_INDEX.get(symbols.market_of(symbol), "^GSPC")
-        market_regime = structure.regime(
+        market_regime = pv.structure.regime(
             market_data.ohlcv(benchmark_symbol, period="2y"),
             symbol=benchmark_symbol)
     except Exception:
@@ -1252,7 +1488,7 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
         # the module that owns it, and a reader who can see the five points a
         # classification was made from can disagree with it, which is the whole
         # difference between a chart and an assertion.
-        "chart": chartlayers.build(
+        "chart": pv.chartlayers.build(
             frame, technical=technical_data, structure_result=structure_result,
             pattern_result=pattern_result, tape_result=tape_result,
             volume_profile=profile_result, ticker=symbol,
@@ -1260,17 +1496,17 @@ def _verdict_reading(symbol: str, entry: Optional[dict], scan: Optional[dict], l
         # What one buy and one sell actually cost, beside the effects this page
         # asks the reader to act on. The measured effects here are a few percent
         # and a round trip on a thin listing can be more than that.
-        "costs": structure.round_trip_cost(liquidity),
+        "costs": pv.structure.round_trip_cost(liquidity),
         "regime": market_regime,
-        "patternStudy": patterns.calibration_for(symbols.market_of(symbol)),
+        "patternStudy": pv.patterns.calibration_for(symbols.market_of(symbol)),
         # WHAT THE TAPE TEST IS WORTH IN THIS MARKET, beside its reading. On US
         # listings the measured firing rate is chance, and a reader must not have
         # to go looking for that.
-        "tapeCalibration": tape.calibration_for(symbols.market_of(symbol)),
+        "tapeCalibration": pv.tape.calibration_for(symbols.market_of(symbol)),
         # THE NULL RESULT TRAVELS WITH THE SCORE, in the same response, so a
         # client cannot render one without having been handed the other.
-        "provenance": verdict.provenance(),
-        "blendBacktest": verdict.blend_validation(symbols.market_of(symbol)),
+        "provenance": pv.verdict.provenance(),
+        "blendBacktest": pv.verdict.blend_validation(symbols.market_of(symbol)),
         "preTrade": checks,
     }
 
@@ -1585,10 +1821,8 @@ def rank_deepen(
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}.",
-                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}."))
+            detail=tr(f"Not valid ticker symbols: {shown(bad)}.",
+                      f"Bukan simbol ticker yang valid: {shown(bad)}."))
     shortlist = list(dict.fromkeys(resolved(t, market) for t in raw))
     if not shortlist:
         raise HTTPException(status_code=400, detail=tr("Provide at least one ticker.",
@@ -1689,7 +1923,7 @@ class PortfolioRequest(BaseModel):
     fans out to a batch download.
     """
     candidate: str = Field(..., pattern=TICKER_PATTERN)
-    holdings: list[str] = Field(..., min_length=1, max_length=200)
+    holdings: list[Symbol] = Field(..., min_length=1, max_length=200)
     market: str = Field("US", pattern="^(US|ID|us|id)$")
     # Self-describing rather than positional. A parallel list aligned to
     # `holdings` would silently attach the wrong weight to the wrong name the
@@ -1706,8 +1940,9 @@ def _validated_weights(raw: dict) -> dict:
         symbol = str(ticker).strip().upper()
         if not TICKER_RE.match(symbol):
             raise HTTPException(status_code=400,
-                                detail=tr(f"Not a valid ticker symbol in weights: {symbol!r}.",
-                                          f"Bukan simbol ticker yang valid dalam bobot: {symbol!r}."))
+                                detail=tr(f"Not a valid ticker symbol in weights: {shown([symbol])}.",
+                                          f"Bukan simbol ticker yang valid dalam bobot: "
+                                          f"{shown([symbol])}."))
         try:
             weight = float(value)
         except (TypeError, ValueError) as exc:
@@ -1750,10 +1985,8 @@ def portfolio_context(body: PortfolioRequest):
     if bad:
         raise HTTPException(
             status_code=400,
-            detail=tr(f"Not valid ticker symbols: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}.",
-                      f"Bukan simbol ticker yang valid: {', '.join(bad[:5])}"
-                      f"{'...' if len(bad) > 5 else ''}."))
+            detail=tr(f"Not valid ticker symbols: {shown(bad)}.",
+                      f"Bukan simbol ticker yang valid: {shown(bad)}."))
     if not raw:
         raise HTTPException(status_code=400, detail=tr("Provide at least one holding.",
                                                        "Masukkan setidaknya satu kepemilikan."))
@@ -1814,7 +2047,8 @@ def technical_analysis(
     sr_levels: int = Query(6, ge=2, le=12),
 ):
     symbol, market = resolved_with_market(ticker, market)
-    return ok(technical_payload(symbol, range, sr_window, sr_levels, market.upper()))
+    return ok(answered_or_outage(symbol, lambda: technical_payload(
+        symbol, range, sr_window, sr_levels, market.upper())))
 
 
 # --------------------------------------------------------------------------- #
@@ -1894,11 +2128,11 @@ def intrinsic_value(
     manual_payout: Optional[float] = Query(None, ge=0.0, le=1.0),
 ):
     symbol, market = resolved_with_market(ticker, market)
-    return ok(valuation_payload(symbol, **_valuation_kwargs(
+    return ok(answered_or_outage(symbol, lambda: valuation_payload(symbol, **_valuation_kwargs(
         market, engine, growth, terminal, rate, n_sims, sd_growth, sd_rate,
         sd_terminal, seed, fcf_basis, dps_basis, manual_base, manual_net_debt,
         manual_shares, manual_price, manual_payout,
-    )))
+    ))))
 
 
 @app.get("/api/intrinsic-value/simulation")
@@ -2078,6 +2312,67 @@ def company_payload(symbol: str) -> dict:
     }
 
 
+LOG = logging.getLogger("quantdesk")
+
+
+def lens_broke(name: str, exc: BaseException) -> dict:
+    """What a reader sees when a lens raised something nobody planned for.
+
+    It used to be `f"{type(exc).__name__}: {exc}"`: a Python exception, in
+    English whatever the reader asked for, carrying whatever path or value the
+    message held (docs/AUDIT.md, SEC-5). The exception goes to the log, where
+    the person who can fix it reads it, and the reader gets a sentence.
+    """
+    LOG.error("lens %s failed", name, exc_info=exc)
+    return {
+        "message": tr("Something went wrong inside this lens, so it has no reading this time. "
+                      "The other lenses are unaffected; trying again usually works, and if it "
+                      "keeps happening it is a fault in the app, not in the company.",
+                      "Ada yang salah di dalam lensa ini, jadi kali ini tidak ada pembacaan. "
+                      "Lensa lain tidak terpengaruh; mencoba lagi biasanya berhasil, dan jika "
+                      "terus terjadi, itu kesalahan aplikasi, bukan perusahaannya."),
+        "cause": "internal",
+    }
+
+
+def answered_or_outage(symbol: str, build):
+    """`build()`, unless its failure is really the provider's, and then say so.
+
+    ONLY `/api/confluence` USED TO ASK. When the provider is down, every lens
+    fails the same way a symbol that does not exist fails, and the routes that
+    re-run a single lens (the page uses them when a reader changes a valuation
+    assumption or a chart window) answered a dead provider with "No company
+    data came back for 'AAPL'. Non-US listings need their exchange suffix".
+    So a reader who changed one input during an outage was told their ticker
+    was wrong (docs/AUDIT.md, REL-2). A lookup that failed is now checked
+    against the market's own index, the question confluence already asks, and
+    a provider that is not answering gets the sentence that says so, as a 503
+    nobody caches.
+    """
+    try:
+        return build()
+    except HTTPException as exc:
+        detail = exc.detail
+        about_the_symbol = exc.status_code == 404 or (
+            isinstance(detail, dict) and detail.get("cause") == "unknown-sector")
+        if about_the_symbol and not market_data.provider_answering(symbols.market_of(symbol)):
+            raise HTTPException(status_code=503,
+                                detail=market_data.provider_outage_message(symbol),
+                                headers={"Cache-Control": "no-store",
+                                         "Retry-After": "60"}) from exc
+        raise
+
+
+def _short_of_a_line(payload: dict) -> bool:
+    """Whether any of the three screens could not be computed for want of input."""
+    return any((payload.get(name) or {}).get("band") == "unknown"
+               for name in ("piotroski", "altman", "beneish"))
+
+
+def _rows(company: dict) -> int:
+    return market_data._statement_rows(company)
+
+
 def quality_payload(symbol: str) -> dict:
     """Piotroski / Altman / Beneish from the statements already fetched.
 
@@ -2114,6 +2409,17 @@ def quality_payload(symbol: str) -> dict:
     # `resolved_with_market` — so this call and its neighbours cannot diverge.
     payload = quality.analyze(company, symbol=symbol,
                               market_code=symbols.market_of(symbol))
+    # A SCORE THAT COULD NOT BE COMPUTED ON A COMPANY THE SCREENS APPLY TO is
+    # the one place a statement that came back a line short shows, so it is
+    # where the statements are asked for once more (`market_data.company_again`,
+    # docs/AUDIT.md REL-7). At most once a symbol a day, and the fuller copy is
+    # kept for every lens that reads the record after this one.
+    if payload.get("applicable") and _short_of_a_line(payload):
+        again = valuation.fetch_company_again(symbol)
+        if again is not None and _rows(again) > _rows(company):
+            company = again
+            payload = quality.analyze(company, symbol=symbol,
+                                      market_code=symbols.market_of(symbol))
     # WHAT THE COMPANY ACTUALLY DOES, attached HERE rather than inside
     # `quality.analyze`, so it survives the lens declining to score.
     #
@@ -2140,7 +2446,7 @@ def quality_scores(
     none of the three models was built on financial firms and none transfers.
     """
     symbol, market = resolved_with_market(ticker, market)
-    return ok({"ticker": symbol, **quality_payload(symbol)})
+    return ok({"ticker": symbol, **answered_or_outage(symbol, lambda: quality_payload(symbol))})
 
 
 # --------------------------------------------------------------------------- #
@@ -2280,7 +2586,7 @@ def markets_today():
                             detail=tr("The price provider returned nothing for the board just now.",
                                       "Penyedia harga tidak mengembalikan apa pun untuk papan ini barusan."))
     board["explain"] = explain.for_market_board(board)
-    return JSONResponse(content=clean(board),
+    return JSONResponse(content=clean(board, WIRE_DIGITS),
                         headers={"Cache-Control": BOARD_CACHE, "CDN-Cache-Control": BOARD_CDN_CACHE})
 
 
@@ -2311,7 +2617,7 @@ class EarningsRequest(BaseModel):
     here and the browser logs by default, and the answer is `no-store`. See
     `RankListRequest`.
     """
-    tickers: list[str] = Field(..., min_length=1, max_length=EARNINGS_MAX)
+    tickers: list[Symbol] = Field(..., min_length=1, max_length=EARNINGS_MAX)
 
 
 @app.post("/api/markets/earnings")
@@ -2386,7 +2692,7 @@ def company_view(
     for curl, and costs a fetch of its own.
     """
     symbol, _ = resolved_with_market(ticker, market)
-    return ok(company_payload(symbol))
+    return ok(answered_or_outage(symbol, lambda: company_payload(symbol)))
 
 
 # --------------------------------------------------------------------------- #
@@ -2419,6 +2725,25 @@ def news_payload(symbol: str, limit: int) -> dict:
 # The legs whose data comes from the price-and-filings provider. The headlines
 # come from a different one, so a failed feed is never read as that outage.
 YAHOO_LEGS = ("anomaly", "technical", "valuation", "quality", "company")
+
+# What each leg is called in the sentence that says it ran out of time.
+# Functions, because prose built at import time cannot know the request's
+# language (see `_lib/lang.py`).
+LEG_NAMES = {
+    "anomaly": lambda: tr("The Flow lens", "Lensa Arus"),
+    "technical": lambda: tr("The Trend lens", "Lensa Tren"),
+    "valuation": lambda: tr("The Value lens", "Lensa Nilai"),
+    "quality": lambda: tr("The Quality lens", "Lensa Kualitas"),
+    "news": lambda: tr("The headlines", "Berita utama"),
+    "company": lambda: tr("The company's own description", "Deskripsi perusahaan"),
+}
+
+
+def _timed_out(leg: dict) -> bool:
+    """Whether a leg ran out of its time budget, which clears when the provider
+    does and so is never a fact about the company for the edge to keep."""
+    error = leg.get("error") if not leg.get("ok") else None
+    return isinstance(error, dict) and error.get("cause") == "timeout"
 
 
 def _throttled(leg: dict) -> bool:
@@ -2485,12 +2810,19 @@ async def confluence(
     symbol, market = resolved_with_market(ticker, market)
 
     async def leg(name, fn):
+        # ONE SLOW LENS COSTS ONE LENS. `asyncio.to_thread` hands back a future
+        # that stops being waited for the moment the budget is up, so the other
+        # five still reach the reader; see LEG_BUDGET_SECONDS for why the
+        # provider call behind it cannot be stopped as well.
         try:
-            return name, {"ok": True, "data": await asyncio.to_thread(fn)}
+            data = await asyncio.wait_for(asyncio.to_thread(fn), LEG_BUDGET_SECONDS)
+            return name, {"ok": True, "data": data}
+        except asyncio.TimeoutError:
+            return name, {"ok": False, "error": timed_out(LEG_NAMES[name]())}
         except HTTPException as exc:
             return name, {"ok": False, "error": exc.detail}
         except Exception as exc:  # one leg must not be able to sink the others
-            return name, {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            return name, {"ok": False, "error": lens_broke(name, exc)}
 
     results = await asyncio.gather(
         leg("anomaly", lambda: whale_payload(
@@ -2514,14 +2846,32 @@ async def confluence(
     # ("non-US listings need their exchange suffix", for AAPL) inside a 200 that
     # the edge then served for six minutes. Both price legs failing is the
     # signature; the benchmark index decides which of the two causes it is.
-    outage = (not legs["anomaly"]["ok"] and not legs["technical"]["ok"]
-              and not market_data.provider_answering(symbols.market_of(symbol)))
+    #
+    # BOTH PRICE LEGS RUNNING OUT OF TIME IS THE ANSWER ALREADY: the provider
+    # is hanging, and asking its index the same question would hang for the
+    # same reason. Otherwise the canary is asked off the event loop — it is a
+    # provider call, and it used to be made on the loop itself — and a canary
+    # that does not answer inside its own budget is a provider that is not
+    # answering.
+    outage = False
+    if not legs["anomaly"]["ok"] and not legs["technical"]["ok"]:
+        if _timed_out(legs["anomaly"]) and _timed_out(legs["technical"]):
+            outage = True
+        else:
+            try:
+                outage = not await asyncio.wait_for(
+                    asyncio.to_thread(market_data.provider_answering,
+                                      symbols.market_of(symbol)),
+                    CANARY_BUDGET_SECONDS)
+            except asyncio.TimeoutError:
+                outage = True
     if outage:
         message = market_data.provider_outage_message(symbol)
         for name in YAHOO_LEGS:
             if not legs[name]["ok"]:
                 legs[name] = {"ok": False, "error": message}
-    transient = outage or any(_throttled(value) for value in legs.values())
+    transient = (outage or any(_throttled(value) or _timed_out(value)
+                               for value in legs.values()))
     # THE COMPANY BLOCK IS NOT A LENS, and the two readers of the assembled
     # payload are handed the lenses only — so neither can start quoting a
     # description as if it were evidence.

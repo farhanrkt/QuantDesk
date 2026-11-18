@@ -84,7 +84,8 @@ def offline_company(monkeypatch):
 # --------------------------------------------------------------------------- #
 # C4 — ticker validation
 # --------------------------------------------------------------------------- #
-@pytest.mark.parametrize("good", ["AAPL", "BBCA.JK", "BRK.B", "BTC-USD", "^TNX", "EURUSD=X"])
+@pytest.mark.parametrize("good", ["AAPL", "BBCA.JK", "BRK.B", "BTC-USD", "^TNX", "EURUSD=X",
+                                  "GC=F", "^JKSE", "DX-Y.NYB", "0700.HK"])
 def test_ticker_pattern_accepts_real_symbols(good):
     assert index.TICKER_RE.match(good), f"{good} is a real symbol and must be accepted"
 
@@ -98,6 +99,9 @@ def test_ticker_pattern_accepts_real_symbols(good):
     "<script>alert(1)</script>",
     "A" * 21,                   # over length
     "",
+    # The character class these replaced accepted every one of these, and
+    # `..` reached the provider as /v8/finance/chart/.. (docs/AUDIT.md, SEC-2).
+    "..", ".", "-", "^", "=", "....", "A..B", "AAPL.", ".JK", "^^GSPC", "BTC--USD",
 ])
 def test_ticker_pattern_rejects_hostile_input(bad):
     assert not index.TICKER_RE.match(bad)
@@ -787,9 +791,23 @@ def test_cors_is_same_origin_in_production(monkeypatch):
     assert index._allowed_origins() == []
 
 
-def test_cors_is_open_in_local_dev(monkeypatch):
-    monkeypatch.delenv("VERCEL_ENV", raising=False)
+@pytest.mark.parametrize("vercel_env", [None, "preview", "development"])
+def test_cors_is_same_origin_unless_asked(monkeypatch, vercel_env):
+    """A preview deployment is as public as production, and a production
+    project that does not expose its system variables looks like no Vercel at
+    all. The wildcard used to be the default in every one of these
+    (docs/AUDIT.md, SEC-4); local development needs none, because the dev
+    server proxies /api and the browser sees one origin."""
+    if vercel_env is None:
+        monkeypatch.delenv("VERCEL_ENV", raising=False)
+    else:
+        monkeypatch.setenv("VERCEL_ENV", vercel_env)
     monkeypatch.delenv("ALLOWED_ORIGINS", raising=False)
+    assert index._allowed_origins() == []
+
+
+def test_a_wildcard_has_to_be_asked_for_by_name(monkeypatch):
+    monkeypatch.setenv("ALLOWED_ORIGINS", "*")
     assert index._allowed_origins() == ["*"]
 
 

@@ -1,15 +1,13 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExposurePanel } from "@/components/ExposurePanel";
-import { RankingPanel } from "@/components/RankingPanel";
-import { ScanPanel } from "@/components/ScanPanel";
-import { ScreenerPanel } from "@/components/ScreenerPanel";
 import { TodayView } from "@/components/markets/TodayView";
 import { useRegisterCommands } from "@/components/palette/registry";
 import { Section } from "@/components/ui/card";
 import { Select } from "@/components/ui/input";
+import { PanelSkeleton } from "@/components/ui/skeleton";
 import { TabPanel, Tabs, type Tab } from "@/components/ui/tabs";
 import { useCapabilities, useExposureScan, useScan, useUniverses } from "@/lib/api";
 import { palette } from "@/lib/palette";
@@ -17,6 +15,20 @@ import { useSessionState } from "@/lib/session";
 import type { Market } from "@/lib/types";
 import { marketsHref, parseMarketView, stockHref, type MarketView } from "@/lib/url";
 import { msg, useT } from "@/lib/i18n";
+
+/*
+ * Markets opens on Today, so the other four views arrive when first opened
+ * (docs/AUDIT.md, PERF-3). The local scan is private and a public deployment
+ * never draws it, so it is never sent there.
+ */
+const ExposurePanel = dynamic(() => import("@/components/ExposurePanel").then((m) => m.ExposurePanel),
+  { loading: () => <PanelSkeleton shape="table" /> });
+const RankingPanel = dynamic(() => import("@/components/RankingPanel").then((m) => m.RankingPanel),
+  { loading: () => <PanelSkeleton shape="table" /> });
+const ScanPanel = dynamic(() => import("@/components/ScanPanel").then((m) => m.ScanPanel),
+  { loading: () => <PanelSkeleton shape="table" /> });
+const ScreenerPanel = dynamic(() => import("@/components/ScreenerPanel").then((m) => m.ScreenerPanel),
+  { loading: () => <PanelSkeleton shape="table" /> });
 
 /**
  * The tools that read a whole list of companies at once.

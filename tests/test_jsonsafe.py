@@ -75,3 +75,40 @@ def test_cleaned_payload_is_strict_json():
                "d": pd.Timestamp("2026-01-01")}
     encoded = json.dumps(clean(payload), allow_nan=False)   # raises on NaN/Infinity
     assert json.loads(encoded) == {"a": None, "b": [None, 1], "c": None, "d": "2026-01-01"}
+
+
+# --------------------------------------------------------------------------- #
+# Digits on the wire (docs/AUDIT.md, PERF-2)
+# --------------------------------------------------------------------------- #
+def test_the_wire_keeps_eight_significant_digits():
+    from _lib.jsonsafe import WIRE_DIGITS
+    out = clean({"close": 345.91468811035156, "tiny": 0.0012345678912, "big": 2.4467e12,
+                 "zero": 0.0, "count": 1234567891234, "nan": float("nan")}, WIRE_DIGITS)
+    assert out["close"] == 345.91469
+    assert out["tiny"] == 0.0012345679
+    assert out["big"] == 2.4467e12
+    assert out["zero"] == 0.0
+    assert out["count"] == 1234567891234, "an integer is never rounded"
+    assert out["nan"] is None
+
+
+def test_without_digits_nothing_is_rounded():
+    """Scripts and the scanner's reports still get every digit."""
+    assert clean(345.91468811035156) == 345.91468811035156
+
+
+def test_a_company_read_goes_out_rounded(monkeypatch):
+    import json
+
+    import index
+    from fastapi.testclient import TestClient
+
+    index._RATE_HITS.clear()
+    planted = {"series": [{"close": 345.91468811035156}]}
+    for name in ("whale_payload", "technical_payload", "valuation_payload",
+                 "quality_payload", "news_payload", "company_payload"):
+        monkeypatch.setattr(index, name, lambda *a, **k: planted)
+    monkeypatch.setattr(index.market_data, "provider_answering", lambda market: True)
+    body = TestClient(index.app).get("/api/confluence", params={"ticker": "AAPL"}).text
+    assert "345.91468811035156" not in body
+    assert json.loads(body)["technical"]["data"]["series"][0]["close"] == 345.91469
