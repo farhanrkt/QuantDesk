@@ -902,13 +902,30 @@ if (catalog) {
   }
 }
 
+// 21. NOTHING SCROLLS THE WINDOW ON ITS OWN. `scrollIntoView` scrolls every
+//     scrollable ancestor, the window included, so a tab strip that "kept its
+//     selected tab in view" with it scrolled the whole stock page on a phone as
+//     it loaded: once to the lens tabs and again, two seconds later, 2,600 px
+//     down to the chart's horizon tabs. The reader arrived mid-chart without
+//     seeing the company's name. A strip moves itself with `scrollLeft`
+//     (`sidewaysTo` in lib/utils.ts). One exemption: the palette's list, a
+//     fixed dialog with nothing behind it to scroll.
+const SCROLL_INTO_VIEW_EXEMPT = new Set(["components/palette/CommandPalette.tsx"]);
+for (const [file, src] of uiFiles) {
+  if (SCROLL_INTO_VIEW_EXEMPT.has(file)) continue;
+  if (/\.scrollIntoView\(|\bwindow\.scroll(?:To|By)?\(/.test(src)) {
+    fail(file, "Something scrolls the page by itself (scrollIntoView or window.scroll).",
+         "Move only the element's own scroll container, e.g. row.scrollLeft = sidewaysTo(...).");
+  }
+}
+
 if (designFailures.length) {
   console.error("\nDesign-system rules broken (see DESIGN.md):\n");
   console.error(designFailures.join("\n\n"));
   console.error("\nEach of these was a real bug found by measuring the rendered page.");
   process.exit(1);
 }
-console.log(`  design rules: 20 checked across ${uiFiles.length} UI files`);
+console.log(`  design rules: 21 checked across ${uiFiles.length} UI files`);
 console.log(`  translation: ${wrapped.size} interface strings, every one with Bahasa Indonesia`);
 
 const work = mkdtempSync(join(tmpdir(), "quantdesk-frontend-"));

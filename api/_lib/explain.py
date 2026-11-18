@@ -1229,10 +1229,25 @@ def _regression_r2(value, **_):
                 band, "high", evidence="weak", value_text=_pct(value, 0))
 
 
+def _period_words(period: Optional[str]) -> Optional[str]:
+    """"36m" as "36 months" / "36 bulan". The code itself reached the page as
+    "(36M)" under an upper-case label, in both languages (UX-5)."""
+    if not period:
+        return None
+    count, unit = period[:-1], period[-1:].lower()
+    if not count.isdigit() or unit not in ("m", "y"):
+        return period
+    n = int(count)
+    if unit == "m":
+        return tr(f"{n} month" if n == 1 else f"{n} months", f"{n} bulan")
+    return tr(f"{n} year" if n == 1 else f"{n} years", f"{n} tahun")
+
+
 @metric("relativeExcess")
 def _relative_excess(value, period=None, benchmark=None, **_):
-    label = tr(f"Versus the index{f' ({period})' if period else ''}",
-               f"Dibandingkan indeks{f' ({period})' if period else ''}")
+    span = _period_words(period)
+    label = tr(f"Versus the index{f' ({span})' if span else ''}",
+               f"Dibandingkan indeks{f' ({span})' if span else ''}")
     what = (tr("How much better or worse this did than simply buying the market index over the "
                "same stretch. The index fund is the real alternative — not cash.",
                "Seberapa jauh lebih baik atau lebih buruk kinerjanya dibandingkan "

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useCallback, useState } from "react";
 import { MarketBand } from "@/components/markets/MarketBand";
 import { MarketRail } from "@/components/markets/MarketRail";
@@ -26,6 +27,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const closePalette = useCallback(() => setPaletteOpen(false), []);
+  // On a phone the band and the ticker form filled the whole first screen of a
+  // stock page, and the company the reader asked for began below it. There the
+  // stock workspace draws the band itself, under the company's summary.
+  const onStock = usePathname()?.startsWith("/stock/") ?? false;
 
   return (
     <PreferencesProvider>
@@ -43,11 +48,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               panel widens nothing; below 1280px the panel becomes the band at
               the top of the page. */}
           <div className="xl:flex">
+            {/* AT LEAST A SCREEN TALL, so the footer starts below the fold.
+                A page opens as a short placeholder and then fills; with 70vh the
+                footer sat on the first screen and jumped off it when the page
+                arrived, which was a third of the stock page's layout shift. */}
             <main id="main" tabIndex={-1}
-                  className="min-h-[70vh] min-w-0 flex-1 px-4 pb-16 pt-6 focus:outline-none
+                  className="min-h-[calc(100svh-3.5rem)] min-w-0 flex-1 px-4 pb-16 pt-6 focus:outline-none
                              sm:px-6 sm:pt-8 lg:px-8">
               <div className="mx-auto max-w-7xl">
-                <MarketBand className="mb-6 xl:hidden" />
+                <MarketBand className={onStock ? "mb-6 hidden sm:block xl:hidden" : "mb-6 xl:hidden"} />
                 {children}
               </div>
             </main>

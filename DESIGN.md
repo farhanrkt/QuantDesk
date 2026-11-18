@@ -155,7 +155,8 @@ the title in chalk; `accent` is identity alone.
 `chip` × `xs`/`sm`/`md`, plus `ButtonLink`) replaced four button styles; `Input`, `Select`
 and `Textarea` share one ground; `StateCard` has four kinds — `error`, `refused`, `empty`,
 `loading` — and `refused` is styled quiet so a model that does not apply never looks like a
-failure; skeletons are shaped like what they stand in for; `Toaster` confirms actions (never
+failure; skeletons are shaped like what they stand in for, and above the fold they are its
+measured height (see *Nothing moves under the reader*); `Toaster` confirms actions (never
 findings) through live regions rendered before any message; `Kbd` is the one file allowed a
 key glyph. `ScrollRegion` wraps every table that can overflow: it becomes a labelled,
 focusable region exactly when its content is wider than its box, so a keyboard can scroll
@@ -276,6 +277,9 @@ highlight, no totals, and says when the currencies differ.
 - **Below 1280px**, the panel becomes a band at the top of the page: the same tiles in one
   row that scrolls sideways, the exchanges' status, the measured relation in words, and the
   next seven days as a strip.
+- **On a stock page below 640px** the band sits under the company's summary instead. Above
+  the page, it and the ticker form filled the whole first screen of a phone, and the company
+  the reader had asked for began below it.
 - **Why the side.** The first version was a 44px bar of 13px chips fixed to the foot of the
   page, and the owner's verdict was that it was too small to read. The side was the owner's
   choice. A column holds large tiles, a fortnight of dates and the news one above the other,
@@ -476,7 +480,8 @@ it *sounds* is still untested — an automated pass is a floor, not a substitute
 
 ## The rules are enforced, not just written
 
-`npm run check:frontend` enforces nineteen of them, and each describes a bug
+`npm run check:frontend` enforces twenty-one of them (rule 20, the translation
+check, is described under Language), and each describes a bug
 that was really in this codebase. It walks `components/` and `app/`
 recursively — the first version listed three directories by hand, so a file in
 any new subfolder was exempt from every rule without anyone deciding so.
@@ -531,6 +536,16 @@ any new subfolder was exempt from every rule without anyone deciding so.
     news lists, the exchange status, the landing section). The board keeps its declared
     order and colours nothing by direction; the calendar's time order lives in
     `lib/calendar.ts`, outside the rule.
+20. A wrapped string with no Bahasa Indonesia, and the catalogue's other gaps; see
+    Language below.
+21. Anything that scrolls the page by itself: `scrollIntoView` or `window.scroll`,
+    outside the palette's list. `scrollIntoView` moves every scrollable ancestor,
+    the window included, and the tab strips used it to keep the selected tab in
+    view: on a phone the stock page scrolled itself twice while loading, the
+    second time 2,600 px down to the chart's horizon tabs, so a reader arrived
+    mid-chart without having seen the company's name. A strip now moves only its
+    own `scrollLeft` (`sidewaysTo` in `lib/utils.ts`). The same scroll was most
+    of the page's measured layout shift.
 
 Rule 4 now covers every text and tone token, not only `chalk` and `ash`; eight
 `text-warn/90`-style sites had walked past it. Rule 7's budget is eight hits in
@@ -675,8 +690,17 @@ the one that did not fit (see The shell), and is the one layout that changed.
   their sources wrote them. *Citations and proper names*: Piotroski (2000), The Fed, the
   Bureau of Labor Statistics. *Published models*: Piotroski F-Score, Altman Z, Beneish M, DCF —
   an Indonesian reader searches for them under those names.
-- *The page's metadata and the private scanner tier* are English. The private tier runs
-  only on the owner's machine.
+- *A shared link's preview* (the page's description) *and the private scanner tier* are
+  English: the server writes the preview before it can know the reader's language, and the
+  private tier runs only on the owner's machine. The tab's title follows the language — the
+  fixed page titles are swapped in the browser wherever Next sets one.
+- *Identifiers the interface used to print*: "WEAK" on the plain-English card, a quality
+  dimension's "outside" and "cannot tell", a ranking row's "SOUND", "1y" on the holding
+  chips and "(36M)" on the index comparison all reached an Indonesian reader as written.
+  Each is now worded where it is drawn ("Lemah", "di luar", "Sehat", "3 th", "36 bulan").
+- *Provider text is marked as English* (`lang="en"`), so a screen reader on the Indonesian
+  page pronounces the company description as English, and the company tab says it is the
+  provider's English.
 
 **The field manual is in both languages, and only one of them is written.**
 `docs/field-manual.id.html` is built from the English page by `scripts/build_glossary.py`: each
@@ -697,6 +721,33 @@ and keeps `.JK`, IDX30 and LQ45 where those are the names it trades under; the r
 which lives in this browser, so the static chrome switches after hydration. The requests ask
 for Indonesian from the first fetch, so no reading arrives in English and is then replaced.
 Keeping the choice in a cookie as well would let the server render it directly.
+
+## Nothing moves under the reader
+
+A page opens before its data, so everything above the fold holds the height of what it is
+waiting for. Measured on the production build with a four-times slower processor at 375 px,
+the stock page's layout shift was 0.43 (0.62 at the audit) and is now 0; the landing page
+went from 0.19 to 0.003 and Markets from 0.14 to 0. What moved, and what holds it now:
+
+- **The page scrolled itself.** Most of the stock page's shift was the tab strips'
+  `scrollIntoView` scrolling the window on mount (rule 21).
+- **The footer.** A page opens as a short placeholder, so a 70vh `main` put the footer on
+  the first screen and the page knocked it off. `main` is at least a screen tall.
+- **The band and the side panel.** The exchange status, the price tiles and the week strip
+  each arrived separately and pushed the page down. Each holds its measured height until it
+  is filled: placeholder tiles 115 px tall in the band and 100 px in the panel's two-column
+  grid, the status line and the strip their own heights.
+- **The company header** stands in as three bars at the header's measured height (132 px at
+  375, 98 from 640), not as one 16 px bar.
+- **The rail's headline** sits on its own row, two lines tall from the start. Beside the
+  ticker it fitted while it said "Awaiting data" and wrapped below once the real headline
+  arrived.
+- **No hidden first child under `space-y`.** Tailwind spaces siblings by position, not by
+  visibility, so the print-only header at the top of the stock page gave the form under it a
+  24 px top margin.
+
+`scripts/audit/shifts.mjs` names every element that moves and by how much;
+`scripts/audit/perf.mjs` gives the page's total.
 
 ## Motion
 

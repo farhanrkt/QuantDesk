@@ -369,7 +369,7 @@ Audited and fixed 29 Aug 2026. What the audit found and what happened to it:
 
 Verified by walking the real tab order: 64 focusables, none unnamed, none without a
 visible focus style, no positive `tabindex`. These rules and the ones added since are
-enforced by `npm run check:frontend` (nineteen design rules, plus the privacy, analytics and
+enforced by `npm run check:frontend` (twenty-one design rules, plus the privacy, analytics and
 drift checks) so they cannot come back.
 
 *Overhaul, 25 Oct 2026:* the command palette is a native `<dialog>` with the ARIA combobox

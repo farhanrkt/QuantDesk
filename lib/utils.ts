@@ -121,3 +121,18 @@ export function ordinal(n: number) {
   if (teens >= 11 && teens <= 13) return "th";
   return ["th", "st", "nd", "rd"][value % 10] ?? "th";
 }
+
+/**
+ * Where a sideways strip should scroll so one item in it is fully in view,
+ * moving as little as possible: unchanged when the item is already visible,
+ * otherwise just far enough to bring its nearer edge in. The tab strips use
+ * this instead of `scrollIntoView`, which also scrolls the window (rule 21).
+ */
+export function sidewaysTo(scrollLeft: number, viewWidth: number,
+                           itemLeft: number, itemWidth: number): number {
+  if (itemLeft < scrollLeft) return Math.max(0, itemLeft);
+  if (itemLeft + itemWidth > scrollLeft + viewWidth) {
+    return Math.max(0, Math.min(itemLeft, itemLeft + itemWidth - viewWidth));
+  }
+  return scrollLeft;
+}

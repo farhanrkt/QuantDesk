@@ -41,6 +41,12 @@ interface Reading {
   pending?: boolean;
   /** The lens was asked and did not answer — not the same as not yet asked. */
   failed?: boolean;
+  /**
+   * The lens answered that it does not apply here (a bank, or no filings).
+   * A flag rather than a sentinel verdict: the chip used to print "n/a", an
+   * English abbreviation, in both languages.
+   */
+  absent?: boolean;
   /** -1 bearish, 0 neutral, +1 bullish. Used only for the agreement count. */
   vote: number;
   family: Family;
@@ -82,8 +88,8 @@ export function agreementOf(readings: Reading[]): Agreement {
   // A lens still running has not voted. Counting its "…" as a live neutral
   // reading headlined a half-loaded rail "Mixed signals", or "1 of 2
   // independent readings constructive" with one of the two not yet asked.
-  const live = readings.filter((r) => !r.pending && r.verdict !== "…"
-                                      && r.verdict !== "—" && r.verdict !== "n/a");
+  const live = readings.filter((r) => !r.pending && !r.absent && r.verdict !== "…"
+                                      && r.verdict !== "—");
   if (live.length === 0) {
     // NOT "AWAITING" ONCE EVERYTHING HAS SETTLED. This said "Awaiting data"
     // above four failed lenses, which reads as a page still loading when it
@@ -164,13 +170,20 @@ export function agreementOf(readings: Reading[]): Agreement {
  * ten-to-sixteen-second first run behind four identical dashes gave a reader no
  * way to tell a slow engine from a broken one.
  */
+// A LENS THAT DID NOT RUN SAYS WHY. The cell read "did not run" and nothing
+// else, on a company with no filed statements whose Value tab holds a form for
+// exactly that gap; the server's own sentence, in the reader's language, was
+// one tab away. It is here now; the server's sentence already names the way out.
 const blank = (lens: string, question: string, family: Family,
-               state?: string): Reading => ({
+               state: Engine<unknown>): Reading => ({
   lens, question, family, color: ASH, vote: 0,
-  pending: state === "loading",
-  failed: state === "error",
-  verdict: state === "loading" ? "…" : "—",
-  detail: state === "loading" ? t("running") : state === "error" ? t("did not run") : t("no reading"),
+  pending: state.status === "loading",
+  failed: state.status === "error",
+  verdict: state.status === "loading" ? "…" : "—",
+  detail: state.status === "loading" ? t("running")
+    : state.status === "error"
+      ? state.failure.message || t("did not run")
+      : t("no reading"),
 });
 
 /**
@@ -184,7 +197,7 @@ const blank = (lens: string, question: string, family: Family,
  */
 function readAnomaly(state: Engine<AnomalyResponse>): Reading {
   const question = t("Is anyone unusual trading this?");
-  if (state.status !== "ready") return blank(msg("Flow"), question, "price", state.status);
+  if (state.status !== "ready") return blank(msg("Flow"), question, "price", state);
   const { stats } = state.data;
   const bias = stats.recentFlowBias;
   const color = bias === "Accumulation" ? ACC : bias === "Distribution" ? DIST : ASH;
@@ -216,7 +229,7 @@ function readAnomaly(state: Engine<AnomalyResponse>): Reading {
 
 function readTechnical(state: Engine<TechnicalResponse>): Reading {
   const question = t("What has the price been doing?");
-  if (state.status !== "ready") return blank(msg("Trend"), question, "price", state.status);
+  if (state.status !== "ready") return blank(msg("Trend"), question, "price", state);
   const { summary, latest, longTerm, hasLongTerm } = state.data;
   const tone = summary.trend_tone;
   const color = tone === "bull" ? ACC : tone === "bear" ? DIST : TECH;
@@ -256,7 +269,7 @@ const BIAS_WORD: Record<string, string> = {
 
 function readValuation(state: Engine<ValuationResponse>): Reading {
   const question = t("What is the business worth?");
-  if (state.status !== "ready") return blank(msg("Value"), question, "filings", state.status);
+  if (state.status !== "ready") return blank(msg("Value"), question, "filings", state);
   const d = state.data;
   const color =
     d.verdict === "UNDERVALUED" ? ACC : d.verdict === "OVERVALUED" ? DIST
@@ -293,7 +306,7 @@ const MANIPULATION_WORDS: Record<string, string> = {
 
 function readQuality(state: Engine<QualityResponse>): Reading {
   const question = t("Are the numbers real?");
-  if (state.status !== "ready") return blank(msg("Quality"), question, "filings", state.status);
+  if (state.status !== "ready") return blank(msg("Quality"), question, "filings", state);
   const d = state.data;
   // THE REFUSAL SAYS WHICH REFUSAL. This printed the bank sentence for every
   // `applicable: false`, so a throttled fetch that returned no sector for
@@ -302,7 +315,7 @@ function readQuality(state: Engine<QualityResponse>): Reading {
   // cause and a sentence for each; only the designed refusal gets the short one.
   if (!d.applicable)
     return {
-      lens: msg("Quality"), question, verdict: "n/a",
+      lens: msg("Quality"), question, verdict: t("Not scored"), absent: true,
       detail: d.cause === "financial" || (!d.cause && !d.reason)
         ? t("These three accounting models were built on non-financial firms and do not transfer to banks or insurers, so no score is reported.")
         : d.reason ?? t("No score could be computed for this listing."),
@@ -342,7 +355,7 @@ function readQuality(state: Engine<QualityResponse>): Reading {
 
 /** A vote is the SERVER's direction. This maps it to a tone and nothing else. */
 const voteTone = (r: Reading): string =>
-  r.verdict === "—" || r.verdict === "…" || r.verdict === "n/a" ? "none"
+  r.absent || r.verdict === "—" || r.verdict === "…" ? "none"
     : r.vote > 0 ? "good" : r.vote < 0 ? "bad" : "neutral";
 
 const DOT: Record<string, string> = {
@@ -453,7 +466,12 @@ export function ConfluenceRail({
                     { lenses: agreement.lenses || t("No"), independent: agreement.independent })}
           </p>
         </div>
-        <div className="min-w-0 text-left sm:text-right">
+        {/* ITS OWN ROW, AND TWO LINES TALL FROM THE START. Beside the name it
+            fitted while it said "Awaiting data" and wrapped under the name once
+            the real headline and its footnote arrived, so the rail grew by 56 px
+            and pushed the lens chips off a tablet's first screen as the reader
+            reached them. Under the name it has nowhere to move to. */}
+        <div className="min-h-[44px] w-full min-w-0">
           <p className="text-lead font-semibold" style={{ color: agreement.color }}>
             {agreement.headline}
           </p>

@@ -97,12 +97,16 @@ export function AnomalyPanel({ data }: { data: AnomalyResponse }) {
         {/* Two horizons, kept apart on purpose. The all-time figure summarises
             the whole look-back; only the recent one describes where flow is
             now, and that is what the confluence view votes with. */}
+        {/* The two bias tiles are WORDS at the figure size, too wide for half a
+            phone's row (UX-2), so below 640 px each takes the whole row. */}
         <ExplainedStat explain={ex.recentFlowBias} value={t(stats.recentFlowBias)}
+                       className="col-span-2 sm:col-span-1"
                        tone={toneOf(stats.recentFlowBias)}
                        sub={stats.recentCount === 1
                          ? t("{count} fresh event", { count: stats.recentCount })
                          : t("{count} fresh events", { count: stats.recentCount })} />
         <ExplainedStat explain={ex.netFlowBias} value={t(stats.netFlowBias)}
+                       className="col-span-2 sm:col-span-1"
                        label={t("Flow bias · full {period}", { period: config.period })}
                        tone={toneOf(stats.netFlowBias)}
                        sub={t("whole look-back")} />

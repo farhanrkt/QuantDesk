@@ -24,6 +24,7 @@ that measured them, all in `scripts/audit/`:
 |---|---|
 | `sweep.py` | Runs the production payload builders over 198 real companies and records every statement lookup, statement shape and quality score; `--compare` diffs two passes |
 | `hang.py` | Times one company read against a provider that accepts a connection and never answers. Touches no real network |
+| `shifts.mjs` | Names every element that moves while a page loads, and by how much (Phase 4) |
 | `walk.mjs` | Opens pages of the production build at given widths and languages: screenshot, visible text, sideways scroll, axe-core |
 | `perf.mjs` | Load cost on an emulated mid-range phone: layout shift, blocking time, bytes |
 | `overflow.mjs` | Finds the element that makes a page scroll sideways |
@@ -48,7 +49,7 @@ by name is the first feature of Phase 5.
 | COR-1 | High | A statement line is found by substring: six Indonesian banks chart the wrong line as operating income | fixed |
 | SEC-1 | High | Eighteen known advisories in the Python dependencies; CI audits npm only | fixed |
 | REL-4 | High | Ordinary browsing reaches the rate limit; limits are per address | fixed |
-| PERF-1 | High | The stock page jumps as results arrive (layout shift 0.62 on a phone) | Phase 4 |
+| PERF-1 | High | The stock page jumps as results arrive (layout shift 0.62 on a phone) | fixed |
 | UX-1 | High | A company cannot be found by its everyday name, and "apple" opens a ticker called APPLE | Phase 5 |
 | PERF-2 | Medium | One company read is 1.35 MB of JSON, 1.1 MB of it the chart series | narrowed |
 | REL-2 | Medium | During an outage the single-lens routes tell the reader their ticker is wrong | fixed |
@@ -63,10 +64,10 @@ by name is the first feature of Phase 5.
 | SEC-5 | Medium | A failed lens returns the raw exception text to the reader | fixed |
 | PERF-3 | Medium | Nothing is code-split: every page ships every panel, and the Indonesian catalogue | narrowed |
 | PERF-4 | Medium | A public deployment imports the private scanner on every cold start | fixed |
-| UX-2 | Medium | The Flow tab scrolls sideways at 375 px | Phase 4 |
-| UX-3 | Medium | The holding-period control offers 5 and 10 years the default load cannot answer | Phase 4 |
-| UX-4 | Medium | On a phone the company's name is below the first screen | Phase 4 |
-| UX-5 | Medium | Identifiers and provider text reach an Indonesian reader in English | Phase 4 |
+| UX-2 | Medium | The Flow tab scrolls sideways at 375 px | fixed |
+| UX-3 | Medium | The holding-period control offers 5 and 10 years the default load cannot answer | fixed |
+| UX-4 | Medium | On a phone the company's name is below the first screen | fixed |
+| UX-5 | Medium | Identifiers and provider text reach an Indonesian reader in English | fixed, except number formatting (decision 4) |
 | COPY-1 | Medium | The Ulcer index explains itself with only its own number | fixed |
 | COPY-2 | Medium | The landing says the four models "share no data"; two of them share a series | fixed |
 | COPY-3 | Medium | "More growth than you assumed", said of a default the reader never set | fixed |
@@ -293,6 +294,18 @@ place.
 **Fix.** Reserve the band's height before its data arrives, and size each
 skeleton to the panel it stands in for (DESIGN.md already says they are "shaped
 like what they stand in for"; the heights are what drifted).
+
+**Fixed in Phase 4, and the diagnosis above was mostly wrong.** Tracing each
+shift with `scripts/audit/shifts.mjs` showed that most of the stock page's
+score was not skeletons at all: the tab strips kept their selected tab in view
+with `scrollIntoView`, which also scrolls the window, so the page scrolled
+itself twice as it loaded, the second time 2,600 px down to the chart. The
+rest was the footer under a short placeholder, the band and side panel growing
+in three steps, the company header's 16 px placeholder for a header 98 to 132
+px tall, the rail headline wrapping to a new row, and a 24 px margin from a
+hidden first child. On the same harness the stock page is now 0 (0.43 on the
+Phase 3 build), the landing 0.003 and Markets 0. Rule 21 keeps the scroll out;
+DESIGN.md's "Nothing moves under the reader" says what holds each height.
 
 ### UX-1. A company cannot be found by its everyday name
 
@@ -547,6 +560,11 @@ sideways at 375 px.
 **Seen.** `scripts/audit/overflow.mjs "/stock/AAPL?tab=flow" 375 en`, which
 hides one node at a time until the width returns to 375.
 
+**Fixed in Phase 4.** Below 640 px the two word-valued bias tiles take the
+whole row, and every stat tile is `min-w-0` with `overflow-wrap: anywhere` as
+the guard behind it. Walked afterwards: all eight tabs of the six tickers at
+375 px in both languages, 96 pages, none wider than the screen.
+
 ### UX-3. The holding-period control offers horizons the default load cannot answer
 
 The control offers 1, 2, 3, 5 and 10 years. The default range is five years
@@ -557,6 +575,11 @@ settings".
 
 **Fix.** A button on the message that loads the range it asks for.
 
+**Fixed in Phase 4.** The message carries a button, "Load 10 years of prices"
+(or the full history for ten-year periods), shown only where the server says
+widening can help. On AAPL one press loads ten years and the table shows 1,253
+five-year periods.
+
 ### UX-4. On a phone the company's name is below the first screen
 
 At 375 px the markets band and the ticker form fill the first 770 px of
@@ -566,6 +589,11 @@ below the summary and the pre-trade panel that head every tab.
 
 **Fix.** On a stock page at phone width, the company first and the band after
 it.
+
+**Fixed in Phase 4.** Below 640 px a stock page draws the band under the
+company's summary, and the self-scroll found under PERF-1 no longer carries the
+reader past it: the name, the description and the rail's headline are on the
+first screen.
 
 ### UX-5. Identifiers and provider text reach an Indonesian reader in English
 
@@ -578,6 +606,14 @@ it.
 - The holding-period chips read "1y 2y 3y 5y 10y" and a tile reads "(36M)".
 - "Rp 4,031" uses English separators, which an Indonesian reader reads as four
   rupiah. PRODUCT.md lists this as an open decision; see Decision 4.
+
+**Fixed in Phase 4, except the numbers.** Each identifier is worded where it is
+drawn ("Lemah", "di luar", "Sehat", "Tidak dinilai", "3 th", "36 bulan"); the
+fixed tab titles follow the language; the provider's description is marked as
+English and the company tab says it is. The walk found three more of the same
+kind, fixed alongside: "undated", "Market" and "Median" on the valuation chart,
+and a rescue form's field key ("base") printed mid-sentence. Number formatting
+stays a decision (4).
 
 ### COPY-1. The Ulcer index explains itself with only its own number
 

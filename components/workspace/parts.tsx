@@ -7,9 +7,17 @@ import { ApplyButton } from "@/components/ui/controls";
 import { StateCard } from "@/components/ui/state";
 import type { Engine, EngineFailure } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { useT } from "@/lib/i18n";
+import { msg, useT } from "@/lib/i18n";
 
 /** One wrapper so the four lens panels handle loading and failure identically. */
+// The server names a missing figure by the key its form uses ("base"), which
+// reached the reader as "Yahoo tidak memiliki base untuk saham ini". The key
+// stays a key; this is the word for it. Anything else the server sends here is
+// already a sentence fragment in the reader's language.
+const MISSING_WORD: Record<string, string> = {
+  base: msg("the base free cash flow"), shares: msg("the share count"), price: msg("the price"),
+};
+
 export function Panel<T>({
   state, children, rescue,
 }: {
@@ -33,7 +41,9 @@ export function Panel<T>({
           // holds it never rendered.
           <div className="space-y-3">
             <p className="prose-col text-meta leading-relaxed text-warn">
-              {t("Yahoo is missing {value} for this listing. Enter it below to value the company anyway.", { value: failure.missing?.length ? failure.missing.join(", ") : t("a required figure") })}
+              {t("Yahoo is missing {value} for this listing. Enter it below to value the company anyway.", { value: failure.missing?.length
+                  ? failure.missing.map((code) => (MISSING_WORD[code] ? t(MISSING_WORD[code]) : code)).join(", ")
+                  : t("a required figure") })}
             </p>
             {rescue?.(failure)}
           </div>

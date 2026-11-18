@@ -213,9 +213,9 @@ export function ValuationPanel({
               <ReferenceArea x1={mc.p25} x2={mc.p75} fill={UP} fillOpacity={0.06} />
               <Bar dataKey="count" fill={accent} fillOpacity={0.55} isAnimationActive={false} />
               <ReferenceLine x={data.price} stroke={MARKET} strokeWidth={2}
-                             label={{ value: "Market", fill: MARKET, fontSize: 11, position: "top" }} />
+                             label={{ value: t("Market"), fill: MARKET, fontSize: 11, position: "top" }} />
               <ReferenceLine x={mc.p50} stroke={UP} strokeWidth={2} strokeDasharray="5 4"
-                             label={{ value: "Median", fill: UP, fontSize: 11, position: "top" }} />
+                             label={{ value: t("Median"), fill: UP, fontSize: 11, position: "top" }} />
             </BarChart>
           </ResponsiveContainer>
           <p className="mt-3 text-meta leading-relaxed text-ash">

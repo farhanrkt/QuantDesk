@@ -107,6 +107,8 @@ export function HorizonPicker({
             type="button"
             role="radio"
             aria-checked={value === option}
+            // Said in words: "1y" was read aloud as "one why".
+            aria-label={option === 1 ? t("1 year") : t("{years} years", { years: option })}
             tabIndex={value === option ? 0 : -1}
             onClick={() => onChange(option)}
             title={measured ? undefined : t("Not enough loaded history for this horizon")}
@@ -120,7 +122,7 @@ export function HorizonPicker({
                   : "text-faint hover:text-ash",
             )}
           >
-            {option}y
+            {t("{years}y", { years: option })}
           </button>
         );
       })}

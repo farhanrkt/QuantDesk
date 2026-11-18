@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useRef } from "react";
 import { msg, useT } from "@/lib/i18n";
 import { alpha } from "@/lib/palette";
-import { cn } from "@/lib/utils";
+import { cn, sidewaysTo } from "@/lib/utils";
 
 export interface Tab {
   id: string;
@@ -61,9 +61,20 @@ export function Tabs({
   // used to wrap, which on a phone made it three sticky rows covering a third of
   // the screen; scrolling keeps it one row, and a tab chosen from the palette or
   // with `]` is brought into view rather than selected off-screen.
+  //
+  // SIDEWAYS ONLY. This used `scrollIntoView({ block: "nearest" })`, which also
+  // scrolls the WINDOW when the strip is below the fold — and every tablist
+  // runs this on mount. On a phone the stock page scrolled itself twice while
+  // loading, to the lens tabs and then to the chart's horizon tabs 2,600 px
+  // down, so the reader arrived in the middle of the Trend chart without ever
+  // seeing the company's name. The strip is the only thing that should move.
   useEffect(() => {
-    const el = strip.current?.querySelector<HTMLElement>(`[role=tab][aria-selected=true]`);
-    el?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const row = strip.current;
+    const el = row?.querySelector<HTMLElement>(`[role=tab][aria-selected=true]`);
+    if (!row || !el) return;
+    // The strip is `relative`, so it is the tab's offsetParent and offsetLeft
+    // is measured along its own scrolled content.
+    row.scrollLeft = sidewaysTo(row.scrollLeft, row.clientWidth, el.offsetLeft, el.offsetWidth);
   }, [active]);
 
   const onKeyDown = (event: React.KeyboardEvent) => {
@@ -89,7 +100,7 @@ export function Tabs({
       role="tablist"
       aria-label={t(label)}
       onKeyDown={onKeyDown}
-      className="flex gap-1 overflow-x-auto border-b border-rule [scrollbar-width:none]
+      className="relative flex gap-1 overflow-x-auto border-b border-rule [scrollbar-width:none]
                  [&::-webkit-scrollbar]:hidden"
     >
       {tabs.map((tab) => {

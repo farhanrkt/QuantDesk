@@ -143,7 +143,9 @@ checklist — 200-day average, Faber's 10-month rule, 12-1 momentum, ADX, Hurst 
 trend-line fit, 52-week position, drawdown survivability — each line saying which way it
 points and why. Then the table that matters most: **every overlapping holding period in the
 history**, so "worst 3-year window" replaces a headline CAGR that only describes one lucky
-start date. Then what holding it *cost* — maximum drawdown with its depth, duration and
+start date. A horizon the loaded prices cannot hold says so, with a button that loads the
+range it needs: five-year periods need ten years of prices, ten-year periods the whole
+history, and a company that has not traded that long is said to be one instead. Then what holding it *cost* — maximum drawdown with its depth, duration and
 recovery, plus the Ulcer index, which scores a long shallow grind as worse than a sharp
 fall, because that is how it feels. Then relative strength against the index, since the real
 alternative was never cash.

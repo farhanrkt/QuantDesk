@@ -42,8 +42,8 @@ t("a family that disagrees votes zero and is named as split", () => {
   assert.match(a.footnote, /split on price and volume/);
   assert.match(a.headline, /1 of 2 independent readings constructive/);
 });
-t("dashes and n/a are excluded from the count", () => {
-  const a = agreementOf([R("Flow","price",0,"—"), R("Trend","price",1), R("Value","filings",1), R("Quality","filings",0,"n/a")]);
+t("dashes and a lens that does not apply are excluded from the count", () => {
+  const a = agreementOf([R("Flow","price",0,"—"), R("Trend","price",1), R("Value","filings",1), { ...R("Quality","filings",0,"Not scored"), absent: true }]);
   assert.equal(a.lenses, 2);
 });
 t("nothing live says Awaiting data", () => {
@@ -814,6 +814,44 @@ t("fired conditions are listed, never counted", () => {
   });
   t("the browser's deadline is past the server's own, inside nothing", () => {
     assert.ok(F.REQUEST_DEADLINE_MS >= 55_000, "the server answers in words by 52 s; wait for it");
+  });
+}
+
+// ---- sidewaysTo: a tab strip scrolls itself, never the page (rule 21) ----
+{
+  const { sidewaysTo } = require("./lib/utils.js");
+  t("a tab already in view does not move the strip", () => {
+    assert.equal(sidewaysTo(100, 300, 150, 80), 100);
+  });
+  t("a tab past the right edge brings its right edge in, and no further", () => {
+    assert.equal(sidewaysTo(0, 300, 350, 80), 130);
+  });
+  t("a tab past the left edge brings its left edge in", () => {
+    assert.equal(sidewaysTo(200, 300, 40, 80), 40);
+  });
+  t("a tab wider than the strip shows its start", () => {
+    assert.equal(sidewaysTo(0, 100, 250, 180), 250);
+  });
+}
+
+// ---- rangeForHorizon: the holding-period message's button (UX-3) ----
+{
+  const { rangeForHorizon } = require("./lib/url.js");
+  t("five-year periods on the default five-year load ask for ten years", () => {
+    assert.equal(rangeForHorizon(5, "5y"), "10y");
+  });
+  t("ten-year periods ask for the full history", () => {
+    assert.equal(rangeForHorizon(10, "5y"), "max");
+    assert.equal(rangeForHorizon(10, "10y"), "max");
+  });
+  t("a horizon the loaded range can already hold offers nothing", () => {
+    assert.equal(rangeForHorizon(3, "5y"), null);
+    assert.equal(rangeForHorizon(5, "10y"), null);
+    assert.equal(rangeForHorizon(10, "max"), null, "nothing is longer than everything");
+  });
+  t("a short range is widened just enough", () => {
+    assert.equal(rangeForHorizon(1, "1y"), "2y");
+    assert.equal(rangeForHorizon(2, "1y"), "5y");
   });
 }
 
