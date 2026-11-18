@@ -75,6 +75,8 @@ const SOURCES = [
   "lib/failures.ts",
   // The browser's own backup file: what it carries, and that a restore merges.
   "lib/backup.ts",
+  // What a browser error report may carry: a template, a bounded message.
+  "lib/errorreport.ts",
 ];
 
 // Real packages the compiled output requires at load time.

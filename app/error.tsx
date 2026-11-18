@@ -1,7 +1,9 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
+import { useEffect } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { reportError } from "@/lib/errorreport";
 import { useT } from "@/lib/i18n";
 
 /**
@@ -20,6 +22,7 @@ export default function Error({
   error, reset,
 }: { error: Error & { digest?: string }; reset: () => void }) {
   const t = useT();
+  useEffect(() => { reportError("render", error); }, [error]);
   return (
     <div className="mx-auto flex min-h-[50vh] max-w-2xl items-center">
       <div className="w-full rounded-xl border border-dist/40 bg-dist/5 p-6" role="alert">

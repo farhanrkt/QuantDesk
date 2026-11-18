@@ -1284,7 +1284,7 @@ scripts/
   audit/              The audit's instruments, outside CI: a live sweep of
                       198 companies, a provider that hangs, and the browser
                       walk (screenshots, axe-core, layout shift, keyboard)
-tests/        1,920 offline tests (pytest), plus 85 frontend assertions
+tests/        2,053 offline tests (pytest), plus 115 frontend assertions
 ```
 
 **Stack.** Next.js 15 (App Router, React 19) · Tailwind · Recharts · FastAPI ·
@@ -1315,6 +1315,8 @@ Interactive docs at `/api/docs`.
 |---|---|
 | `GET /api/confluence` | **All four lenses in one call, plus the synthesis, the pre-trade checks and the company block** — what the UI actually uses |
 | `GET /api/company` | **What the company is**: profile, listing, statements year by year, dividends, next report. The same block confluence carries |
+| `GET /api/status` | **What an uptime check reads**: whether the provider returns the US benchmark (under the canary's 8 s budget), the age of each published stamp and listing file, how far ahead the event calendar reaches, and a list of problems in words. `ok`, `degraded` or `attention`. Cached 60 s at the edge |
+| `POST /api/client-error` | **A browser's own error**, reported through this origin when error reporting is on (see Error reporting). 204, nothing else |
 | `GET /api/symbols` | **Listings matching a name, an everyday name or a ticker**, for the ticker box and the command palette. Reads the committed listing files; no provider call |
 | `GET /api/markets/today` | **What moved the markets**: 22 instruments, each move against its own past year, the unusual ones named, the base rate, and what the source cannot supply. Takes no parameters; five minutes at the edge |
 | `GET /api/markets/calendar` | **The dates that move markets** for the next 90 days, with each exchange's hours and closures, each source's coverage, and what is not published yet. Takes no parameters; an hour at the edge |
@@ -1359,7 +1361,26 @@ before it shows a refusal; it never sends a POST twice. The screener caps at 20 
 to what actually batches. The client is identified by the forwarded address only on Vercel,
 whose edge writes it; anywhere else by the connection, as uvicorn resolves it for the proxies it
 trusts. Paths no route answers share one bucket, so a client cannot mint buckets to flush the
-table.
+table. The count lives in each warm instance, so on Vercel the cap is per instance unless a
+shared store is configured: with `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` set,
+every instance counts in one Upstash Redis database (`api/_lib/ratestore.py`; a fixed window
+per route and address, the address hashed with the token, one round trip, 0.35 s at most),
+and a store that is slow or down hands that request back to the in-process count.
+
+**The edge keeps a dated copy for when the function fails.** The market board, its headlines
+and its calendar are sent with `stale-if-error` (a day) and the symbol finder with a week, so
+while the function is erroring or timing out the edge serves the last good copy instead of the
+error. Each of those carries its own as-of time, so an old copy reads as old. A company read
+does not: the page labels it with the time the browser fetched it, and a stale copy would read
+as fresh, so it is never served stale on error (`tests/test_caching.py`).
+
+**A malformed answer is a failed one.** The markets band and panel sit above every page, in
+the layout. Their three answers (the board, the calendar, the watchlist's report dates) are
+checked for the shape the page iterates before anything draws them (`isBoard`, `isCalendar`,
+`isEarnings` in `lib/marketboard.ts`), and a malformed one reads as "did not load"; each part
+is also inside an error boundary (`components/ui/boundary.tsx`), so a failure while drawing it
+costs that part and is reported, not the page. Before this, an empty object where the calendar's
+events belong replaced the whole document, top bar included.
 
 **A provider failure is said and not kept.** When both price lenses fail, the app asks the
 provider for the market's own index: if that fails too, every lens says the provider is not
@@ -1466,6 +1487,87 @@ reader's own thesis appears in the request layer.
 
 ---
 
+## Deploying
+
+The app deploys to Vercel from this repository as it is: `vercel.json` names the framework,
+routes `/api/*` to the one Python function and gives it 60 seconds. Every key below is
+optional. Without any of them the app runs, reports errors only to its own logs, rate-limits per
+instance, and the uptime check stays off.
+
+**Project settings, once**
+
+- **Function duration.** `vercel.json` asks for 60 s; the plan has to allow it. The app's own
+  budgets sit inside it: 35 s per lens, 8 s for the outage canary, 52 s for any request, and
+  the browser gives up at 60 s, each with a sentence instead of the platform's error page.
+- **System environment variables.** Turn on "Automatically expose System Environment
+  Variables". The app also recognises Vercel by the `x-vercel-id` header, but with the
+  variables on, error reports carry the release (`VERCEL_GIT_COMMIT_SHA`) and the
+  environment (`VERCEL_ENV`), and `/api/status` names the release.
+- **Analytics.** Project → Analytics → Enable; the code alone does not start collection.
+- **Region.** Every request ends at Yahoo Finance in the United States, so the function is
+  best kept in a US East region (Vercel's default) even for Indonesian readers: they pay one
+  long round trip either way, and the function's trip to the provider stays short.
+
+**Environment variables**
+
+| Name | Default | Set it to |
+|---|---|---|
+| `SENTRY_DSN` | unset: errors go to the function log only | A Sentry-format DSN, to also send each error to that project (see Error reporting). Turns on browser reports too |
+| `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` | unset: the rate limit counts per instance | An Upstash Redis REST URL (https) and token, to count across instances (see Limits) |
+| `ALLOWED_ORIGINS` | unset: same origin only | A comma-separated list of other sites allowed to call the API. Nothing this app serves needs it |
+| `QUANTDESK_PRIVATE_TIER` | on locally, off on every Vercel build | Leave unset on a deployment. `1` would publish the private scanner's score |
+
+In the repository, the Actions variable `QUANTDESK_URL` (the production address, no trailing
+slash) switches on the uptime check (see Uptime).
+
+**After each deploy**, with `HOST` the production address:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "$HOST/api/health"
+```
+
+200 means the function runs.
+
+```bash
+curl -s "$HOST/api/status"
+```
+
+`ok` or `attention` with its `problems` in words; `degraded` means the provider is not answering.
+
+```bash
+curl -s "$HOST/api/capabilities"
+```
+
+`privateTier` must be `false`; `errorReporting` is `true` only if `SENTRY_DSN` is set.
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "$HOST/api/verdict?ticker=AAPL"
+```
+
+404: the private scanner is not served.
+
+```bash
+curl -sI "$HOST/api/health" | grep -iE "x-content-type-options|x-frame-options|referrer-policy"
+```
+
+The API's own security headers; the page's content security policy comes from `next.config.mjs`.
+
+```bash
+curl -s -o /dev/null -D - "$HOST/api/markets/calendar" | grep -iE "x-vercel-cache|cache-control"
+```
+
+Run it twice: the second answer should say `x-vercel-cache: HIT`.
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "content-type: application/json" -d '{"kind":"unhandled","message":"deploy check","route":"/"}' "$HOST/api/client-error"
+```
+
+With `SENTRY_DSN` set, a "deploy check" event should appear in the error service within a
+minute; without it the route answers 204 and records nothing.
+
+Then open `/stock/AAPL` and `/stock/BBCA.JK` in a browser, once in each language, and run the
+uptime workflow by hand (Actions → Uptime → Run workflow).
+
 ## Analytics
 
 Visitor counts come from **Vercel Web Analytics**, chosen because it was the only option
@@ -1493,6 +1595,51 @@ nothing.
 
 **It still has to be switched on in the dashboard** — Vercel project → Analytics → Enable.
 The code alone does not start collection.
+
+## Uptime
+
+`GET /api/health` answers without touching the provider or a file, so it says only that the
+function runs. `GET /api/status` says whether the app has anything to show: it asks the
+provider for the US benchmark, reads the dates off the published stamps, the listing files
+and the event calendar, and lists every problem in words. It reads `degraded` when the
+provider is silent (readers are seeing the outage sentence), `attention` when a file is
+getting old (a stamp past 400 days, a listing file past 120, a calendar source within 30
+days of its last date), and `ok` otherwise. The private tier's stamps are not listed.
+
+`.github/workflows/uptime.yml` reads both every thirty minutes once the repository variable
+`QUANTDESK_URL` holds the production address; until then each run says how to switch it on
+and passes. A dead function or a `degraded` status fails the run, which GitHub emails about;
+`attention` is a warning in the run's summary, since it needs a person within weeks, not
+within the hour.
+
+When it was written, the status read `attention` for a true reason: Bank Indonesia had not
+published its 2027 meeting dates, and the calendar's BI schedule ends on 16 December 2026.
+
+## Error reporting
+
+**Off until a key is set, and nothing is sent anywhere until then.** Every failure is
+written to the function log as one JSON line (`api/_lib/reporting.py`), which Vercel keeps
+under the project's Logs. Setting `SENTRY_DSN` in the project's environment variables also
+sends each event to that project, in Sentry's envelope format, which several error services
+accept; choosing the service is the owner's decision (`docs/AUDIT.md`).
+
+- **What is reported:** a lens that broke, an exception no route handled (now answered with
+  a translated 500 sentence instead of plain "Internal Server Error"), and, once the server
+  says reporting is on (`/api/capabilities` → `errorReporting`), the browser's own errors:
+  a page that failed to draw, an uncaught error and an unhandled promise rejection.
+- **What never is:** a query string, a request body, a header, the client's address, or a
+  path. The server names the route template; the browser sends `lib/redact.ts`'s template
+  (`/stock/[symbol]`), and the server cuts any query string from the message and the stack
+  again. Holdings travel in request bodies, so no body is ever read into an event.
+- **Same origin.** Browser reports go to `POST /api/client-error` on this domain, so the
+  content security policy stays `connect-src 'self'`. At most five per page load, one per
+  distinct message, and ten a minute per address at the server.
+- **Standard library only**, sent from a background thread with a two-second timeout, so a
+  reporting service that is down costs a log line, never a reader's request.
+
+Checked with a local listener as the "service": a planted browser error and a planted
+rejection on `/stock/AAPL?tab=flow` arrived as two events naming `/stock/[symbol]`, and
+neither "AAPL" nor "tab=flow" appeared anywhere in what was received.
 
 ---
 
@@ -1601,9 +1748,9 @@ where you press the button.
   doesn't claim, with citations and validation results.
 - **[docs/AUDIT.md](docs/AUDIT.md)** — the audit taken before launch, November 2026: what is
   wrong ranked by impact, each with its evidence and a reproduction, what was checked and
-  found sound, what was not covered, and the decisions that are the owner's.
-- **[CODEBASE_REVIEW.md](CODEBASE_REVIEW.md)** — the first engineering review, August 2026.
-  Older and partly superseded by the audit above.
+  found sound, what was not covered, and the decisions that are the owner's. It supersedes the
+  first engineering review of August 2026, which is in the git history (`CODEBASE_REVIEW.md`
+  before November 2026).
 
 ---
 

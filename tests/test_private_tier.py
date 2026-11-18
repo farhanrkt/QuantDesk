@@ -26,7 +26,7 @@ from helpers import path, steady
 
 @pytest.fixture(autouse=True)
 def clean_env(monkeypatch):
-    for name in ("QUANTDESK_PRIVATE_TIER", "VERCEL", "VERCEL_ENV"):
+    for name in ("QUANTDESK_PRIVATE_TIER", "VERCEL", "VERCEL_ENV", "SENTRY_DSN"):
         monkeypatch.delenv(name, raising=False)
     index._RATE_HITS.clear()
     yield
@@ -68,7 +68,8 @@ def test_a_request_through_vercels_edge_is_a_deployment_without_the_variables(cl
     `x-vercel-id` header reaches every function either way."""
     monkeypatch.setattr(index.ranking, "scan", _explode)
     edge = {"x-vercel-id": "sin1::iad1::abcde-1700000000000-0123456789ab"}
-    assert client.get("/api/capabilities", headers=edge).json() == {"privateTier": False}
+    assert client.get("/api/capabilities", headers=edge).json() == {"privateTier": False,
+                                                                     "errorReporting": False}
     assert client.get("/api/verdict", params={"ticker": "AAPL"}, headers=edge).status_code == 404
     assert client.get("/api/scan/latest", headers=edge).json()["available"] is False
 
@@ -115,7 +116,7 @@ def test_the_client_is_told_what_the_routes_act_on(client, monkeypatch, env, exp
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     body = client.get("/api/capabilities").json()
-    assert body == {"privateTier": expected}
+    assert body == {"privateTier": expected, "errorReporting": False}
     assert index.private_tier_enabled() is expected
 
 

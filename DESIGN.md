@@ -720,7 +720,11 @@ and keeps `.JK`, IDX30 and LQ45 where those are the names it trades under; the r
 **The first paint is English.** The server renders the page before it can know the choice,
 which lives in this browser, so the static chrome switches after hydration. The requests ask
 for Indonesian from the first fetch, so no reading arrives in English and is then replaced.
-Keeping the choice in a cookie as well would let the server render it directly.
+Keeping the choice in a cookie as well would let the server render it directly. Measured in
+November 2026 on the production build with a four-times slower processor and a 9 Mbit
+connection, an Indonesian reader sees the English chrome for about 0.6 s on the landing and
+the journal and about 1.1 s on a stock page (three loads each) before it switches. Whether to
+spend per-request rendering on removing that is an open proposal (#5 in the Phase 5 list).
 
 ## Nothing moves under the reader
 

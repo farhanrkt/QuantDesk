@@ -44,11 +44,6 @@ export function writeSession<T>(key: string, value: T | ((prev: T | undefined) =
   listeners.get(key)?.forEach((notify) => notify());
 }
 
-export function clearSession(key: string): void {
-  store.delete(key);
-  listeners.get(key)?.forEach((notify) => notify());
-}
-
 export function useSessionState<T>(key: string, initial: T):
   [T, (value: T | ((prev: T) => T)) => void] {
   const subscribe = useCallback((notify: () => void) => {

@@ -1,4 +1,6 @@
 "use client";
+import { useEffect } from "react";
+import { reportError } from "@/lib/errorreport";
 import { palette } from "@/lib/palette";
 import { useT } from "@/lib/i18n";
 
@@ -12,6 +14,7 @@ export default function GlobalError({
   error, reset,
 }: { error: Error & { digest?: string }; reset: () => void }) {
   const t = useT();
+  useEffect(() => { reportError("render", error); }, [error]);
   return (
     <html lang="en">
       <body

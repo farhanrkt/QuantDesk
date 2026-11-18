@@ -5,11 +5,13 @@ import { useCallback, useState } from "react";
 import { MarketBand } from "@/components/markets/MarketBand";
 import { MarketRail } from "@/components/markets/MarketRail";
 import { CommandPalette } from "@/components/palette/CommandPalette";
+import { ErrorListener } from "@/components/shell/ErrorListener";
 import { MarketBoardProvider } from "@/components/shell/marketboard";
 import { PreferencesProvider } from "@/components/shell/preferences";
 import { ShortcutLayer } from "@/components/shell/ShortcutLayer";
 import { TopBar } from "@/components/shell/TopBar";
 import { WorkspaceProvider } from "@/components/shell/workspace";
+import { PartBoundary } from "@/components/ui/boundary";
 import { ToastProvider } from "@/components/ui/toaster";
 import { useT } from "@/lib/i18n";
 
@@ -56,11 +58,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   className="min-h-[calc(100svh-3.5rem)] min-w-0 flex-1 px-4 pb-16 pt-6 focus:outline-none
                              sm:px-6 sm:pt-8 lg:px-8">
               <div className="mx-auto max-w-7xl">
-                <MarketBand className={onStock ? "mb-6 hidden sm:block xl:hidden" : "mb-6 xl:hidden"} />
+                <PartBoundary>
+                  <MarketBand className={onStock ? "mb-6 hidden sm:block xl:hidden" : "mb-6 xl:hidden"} />
+                </PartBoundary>
                 {children}
               </div>
             </main>
-            <MarketRail />
+            <PartBoundary><MarketRail /></PartBoundary>
           </div>
           <footer className="border-t border-rule print:border-0">
             <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -71,6 +75,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </footer>
           <CommandPalette open={paletteOpen} onClose={closePalette} />
           <ShortcutLayer onPalette={openPalette} paletteOpen={paletteOpen} />
+          <ErrorListener />
         </ToastProvider>
         </MarketBoardProvider>
       </WorkspaceProvider>

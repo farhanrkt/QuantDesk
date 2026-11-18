@@ -680,6 +680,44 @@ def test_last_close_does_not_demand_a_full_bar():
         assert MD.last_close("^TNX") == pytest.approx(4.73)
 
 
+def test_last_close_asks_again_when_a_fresh_process_is_refused_once(monkeypatch):
+    """A fresh process's first request fails while the provider issues its
+    session crumb; the library swallows the error and returns an empty frame.
+    The outage canary reads this function, and on serverless every cold start
+    is a first request: one refusal must not read as an outage."""
+    calls = []
+
+    class FakeTicker:
+        def __init__(self, symbol): pass
+        def history(self, period, **_):
+            calls.append(period)
+            return pd.DataFrame() if len(calls) == 1 else pd.DataFrame({"Close": [7389.9]})
+
+    import unittest.mock as mock
+    monkeypatch.setattr(MD, "OHLCV_RETRY_PAUSE_SECONDS", 0)
+    with mock.patch.object(MD, "yf") as fake:
+        fake.Ticker = FakeTicker
+        assert MD.last_close("^GSPC") == pytest.approx(7389.9)
+    assert len(calls) == 2
+
+
+def test_last_close_gives_up_after_its_attempts(monkeypatch):
+    calls = []
+
+    class FakeTicker:
+        def __init__(self, symbol): pass
+        def history(self, period, **_):
+            calls.append(period)
+            raise RuntimeError("no route to host")
+
+    import unittest.mock as mock
+    monkeypatch.setattr(MD, "OHLCV_RETRY_PAUSE_SECONDS", 0)
+    with mock.patch.object(MD, "yf") as fake:
+        fake.Ticker = FakeTicker
+        assert MD.last_close("^GSPC") is None
+    assert len(calls) == MD.OHLCV_ATTEMPTS
+
+
 def test_ok_means_the_symbol_resolved_to_something_real(monkeypatch):
     """`ok` used to be `bool(info) or isfinite(price)`.
 

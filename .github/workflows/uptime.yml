@@ -1,0 +1,54 @@
+# Is the deployment up, and does it have data?
+#
+# OFF UNTIL A URL IS SET. Add a repository variable QUANTDESK_URL (Settings →
+# Secrets and variables → Actions → Variables) holding the production address,
+# for example https://quantdesk.example.com, with no trailing slash. Until then
+# every run says how to switch it on and passes.
+#
+# What fails the run (GitHub then emails whoever the repository notifies):
+#   - /api/health does not answer 200: the function is down;
+#   - /api/status reads "degraded": the data provider is not answering, so every
+#     reader is seeing the outage sentence instead of figures.
+# What only warns: "attention", a stamped file or the calendar getting old.
+# Those need a person within weeks, not within the hour, so they are written to
+# the run's summary rather than turned into a failure every thirty minutes.
+name: Uptime
+
+on:
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      URL: ${{ vars.QUANTDESK_URL }}
+    steps:
+      - name: Not configured
+        if: env.URL == ''
+        run: echo "Set the repository variable QUANTDESK_URL to the production address to switch this check on."
+
+      - name: The function answers
+        if: env.URL != ''
+        run: curl --fail --silent --show-error --max-time 20 --retry 2 --retry-delay 10 "$URL/api/health" > /dev/null
+
+      - name: The data provider answers, and the files are current
+        if: env.URL != ''
+        run: |
+          curl --fail --silent --show-error --max-time 30 --retry 2 --retry-delay 10 \
+            "$URL/api/status" > status.json
+          python3 - <<'PY'
+          import json, os
+          body = json.load(open("status.json"))
+          lines = [f"Status: **{body['status']}** (release {body.get('release') or 'unknown'})"]
+          lines += [f"- {problem}" for problem in body.get("problems", [])]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("\n".join(lines) + "\n")
+          for problem in body.get("problems", []):
+              print(f"::warning::{problem}")
+          raise SystemExit(1 if body["status"] == "degraded" else 0)
+          PY

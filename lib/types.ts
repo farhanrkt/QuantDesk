@@ -1699,6 +1699,8 @@ export interface ScanRow {
  */
 export interface Capabilities {
   privateTier: boolean;
+  /** Whether the browser should report its own errors (api/_lib/reporting.py). */
+  errorReporting?: boolean;
 }
 
 /**

@@ -78,7 +78,7 @@ by name is the first feature of Phase 5.
 | COR-2 | Low | The Beneish leverage index is silently neutral when a company has no long-term debt line | fixed |
 | REL-6 | Low | A news thumbnail that fails to load draws an empty box | fixed |
 | COPY-5 | Low | The rate-limit message says "endpoint" | fixed |
-| DOC-1 | Low | Three statements in the README no longer match the app | fixed, except CODEBASE_REVIEW.md (Phase 6) |
+| DOC-1 | Low | Three statements in the README no longer match the app | fixed |
 
 ## Re-measured after the fixes
 
@@ -731,9 +731,9 @@ without the change.
 - `CODEBASE_REVIEW.md` is dated 20 August and describes a codebase a fifth of
   this size; NEXT_SESSION_PROMPT already calls it "partly superseded".
 
-**Fixed**, except `CODEBASE_REVIEW.md`, which Phase 6 handles with the rest of
-what is dead: the AAPL example now carries its date and today's 32.5%, and the
-risk-free sentence was corrected with COR-4.
+**Fixed.** The AAPL example now carries its date and today's 32.5%, and the
+risk-free sentence was corrected with COR-4. `CODEBASE_REVIEW.md` was removed in
+Phase 6; it remains in the git history, and README says where.
 
 ## Checked and found sound
 
@@ -793,12 +793,15 @@ I would do; the work that does not depend on the answer continues.
 
 1. **A shared rate limiter needs a store** (SEC-6). *Recommendation:* add it as
    an optional adapter that switches on when two environment variables are set
-   and falls back to the per-instance limiter when they are not; Phase 6 builds
-   the adapter. Which store, and whether to pay for one, is yours. Until then
+   and falls back to the per-instance limiter when they are not. Phase 6 built
+   it for Upstash's REST API (`api/_lib/ratestore.py`); it is off until the two
+   variables are set. Which store, and whether to pay for one, is yours. Until then
    the amplification caps, which need no shared state, remain the real defence.
 2. **Which error-reporting service** receives the reports Phase 6 can send.
    *Recommendation:* any service that accepts the Sentry envelope format, so
-   the code is not tied to one vendor.
+   the code is not tied to one vendor. Phase 6 built the sender
+   (`api/_lib/reporting.py`); it is off until `SENTRY_DSN` is set, and until
+   then every error is a line in the function log.
 3. **Updating the index lists** (COR-3). Replacing ANSS, EA and WBD changes the
    population behind every stamped measurement, so all of them are measured
    again. *Recommendation:* do it, as its own change, before the next
@@ -828,3 +831,16 @@ I would do; the work that does not depend on the answer continues.
 9. **The published copy of the field manual**, linked from the README, still
    carries August's figures. It is your page to republish.
 10. **A native-speaking investor's read of the Indonesian.**
+11. **Bank Indonesia's 2027 meeting dates.** The calendar's BI schedule ends on
+    16 December 2026 because BI had not published 2027 when the file was last
+    checked; `/api/status` reports it. *Recommendation:* add the dates to
+    `api/_lib/calendar_events.json` as soon as BI publishes them (usually
+    late in the year), or the band and the panel show no BI meeting from
+    January.
+12. **Rendering the first paint in the reader's language.** An Indonesian
+    reader sees English for about 0.6 s on the landing and 1.1 s on a stock
+    page on a mid-range phone (DESIGN.md). Removing it means rendering each
+    page per request with a language cookie, which gives up the static shells.
+    *Recommendation:* try a pre-hydration script that swaps the shell's few
+    fixed strings first, and measure it against the same numbers before
+    deciding on a cookie.

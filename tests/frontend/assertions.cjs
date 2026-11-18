@@ -941,6 +941,46 @@ t("fired conditions are listed, never counted", () => {
   });
 }
 
+// ---- errorReport: what the browser may say about its own errors (Phase 6) ----
+{
+  const E = require("./lib/errorreport.js");
+  t("a report names the route template, never the path", () => {
+    const r = E.errorReport("render", new TypeError("x is undefined"), "/stock/BBCA.JK", new Set());
+    assert.equal(r.route, "/stock/[symbol]");
+    assert.equal(r.message, "TypeError: x is undefined");
+  });
+  t("one report per message, and at most five per page", () => {
+    const seen = new Set();
+    assert.ok(E.errorReport("render", new Error("a"), "/", seen));
+    assert.equal(E.errorReport("render", new Error("a"), "/", seen), null, "a repeat is not sent");
+    for (const m of ["b", "c", "d", "e"]) assert.ok(E.errorReport("unhandled", new Error(m), "/", seen));
+    assert.equal(E.errorReport("unhandled", new Error("f"), "/", seen), null);
+  });
+  t("a thrown non-error is still bounded text", () => {
+    const r = E.errorReport("rejection", "x".repeat(900), "/journal", new Set());
+    assert.ok(r.message.length <= 500);
+    assert.equal(r.route, "/journal");
+  });
+}
+
+// ---- the board's answers are read only in the shape the page iterates (Phase 6) ----
+{
+  const MB = require("./lib/marketboard.js");
+  t("an empty or partial answer is not a board, a calendar or a list of report dates", () => {
+    for (const bad of [{}, null, [], "x", { events: {} }, { rows: [] }]) {
+      assert.equal(MB.isBoard(bad), false);
+      assert.equal(MB.isCalendar(bad), false);
+    }
+    assert.equal(MB.isEarnings({ items: "x" }), false);
+  });
+  t("a well-formed answer passes", () => {
+    assert.ok(MB.isCalendar({ events: [], pending: [], kinds: {}, exchanges: {} }));
+    assert.ok(MB.isEarnings({ items: [] }));
+    assert.ok(MB.isBoard({ groups: [], rows: [], missing: [], markets: {}, eventHistory: {},
+                           explain: { rows: {}, markets: {}, eventHistory: {} } }));
+  });
+}
+
 Promise.all(pending).then(() => {
   console.log(`  ${n} frontend assertions passed`);
 });

@@ -69,19 +69,19 @@ import json
 import logging
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from _lib import (accumulation, econcalendar, eventstudy, explain, exposure,
                   field, lang, listings, market_data, marketboard, microstructure, news,
-                  portfolio, pretrade, quality, ranking,
+                  portfolio, pretrade, quality, ranking, ratestore, reporting,
                   riskmodel, symbols, technical, trackrecord,
                   universes, valuation)
 
@@ -309,6 +309,9 @@ RATE_LIMITS: dict[Optional[str], tuple[int, int]] = {
     # One provider call per name and none of them batch, the shape of cost the
     # shortlist deepening has, so it takes a cap of the same order.
     "/api/markets/earnings": (3, 60),
+    # A browser's error reports. A page that breaks in a loop must not be able
+    # to flood the log or the error service, and a reader never waits on these.
+    "/api/client-error": (10, 60),
     None: (40, 60),                      # default for every other route
 }
 RATE_EXEMPT = {"/api/health", "/api/docs", "/openapi.json"}
@@ -375,8 +378,10 @@ async def rate_limit(request: Request, call_next):
     the amplification itself is now bounded elsewhere (screener universe cap,
     walk-forward fit budget), which needs no shared state to be effective.
 
-    To make this global, keep the same shape and move `_RATE_HITS` to Vercel KV
-    or Upstash — the only thing that changes is where the deque is read from.
+    GLOBAL WHEN A STORE IS CONFIGURED. With Upstash's REST keys set, the count
+    lives there and every instance shares it (`_lib/ratestore.py`); a store
+    that is slow or down hands the decision back to the in-process count below
+    for that request, so the store can never be the reason a request fails.
     """
     # THE RAW ASGI PATH, NEVER `request.url.path`.
     #
@@ -412,6 +417,15 @@ async def rate_limit(request: Request, call_next):
     # served again after 10,050 such 404s.
     bucket = path if path in _known_paths() else "(unrouted)"
     key = (client_ip(request), bucket)
+
+    if ratestore.configured():
+        shared = await asyncio.to_thread(ratestore.count, key[0], bucket, window)
+        if shared is not None:
+            hits_now, resets_in = shared
+            if hits_now > limit:
+                return _too_many(limit, window, max(1, resets_in))
+            return await call_next(request)
+
     now = time.monotonic()
 
     with _RATE_LOCK:
@@ -421,21 +435,24 @@ async def rate_limit(request: Request, call_next):
         while hits and now - hits[0] >= window:
             hits.popleft()
         if len(hits) >= limit:
-            retry_after = max(1, int(window - (now - hits[0])) + 1)
-            return JSONResponse(
-                status_code=429,
-                content={"detail": tr(f"Too many requests of this kind from this connection: "
-                                      f"the limit is {limit} in {window} seconds. Try again "
-                                      f"in {retry_after} seconds.",
-                                      f"Terlalu banyak permintaan jenis ini dari koneksi ini: "
-                                      f"batasnya {limit} dalam {window} detik. Coba lagi "
-                                      f"dalam {retry_after} detik.")},
-                headers={"Retry-After": str(retry_after),
-                         "Cache-Control": "no-store"},
-            )
+            return _too_many(limit, window, max(1, int(window - (now - hits[0])) + 1))
         hits.append(now)
 
     return await call_next(request)
+
+
+def _too_many(limit: int, window: int, retry_after: int) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={"detail": tr(f"Too many requests of this kind from this connection: "
+                              f"the limit is {limit} in {window} seconds. Try again "
+                              f"in {retry_after} seconds.",
+                              f"Terlalu banyak permintaan jenis ini dari koneksi ini: "
+                              f"batasnya {limit} dalam {window} detik. Coba lagi "
+                              f"dalam {retry_after} detik.")},
+        headers={"Retry-After": str(retry_after),
+                 "Cache-Control": "no-store"},
+    )
 
 
 def _evict_rate_keys(now: float) -> None:
@@ -615,6 +632,38 @@ class ApiHeaders:
 app.add_middleware(ApiHeaders)
 
 
+def route_template(request: Request) -> str:
+    """The route that matched, as declared ("/api/confluence"), or "(unrouted)".
+
+    What an error report names, never the raw path, which can carry whatever a
+    caller put in it."""
+    route = request.scope.get("route")
+    return getattr(route, "path", None) or "(unrouted)"
+
+
+@app.exception_handler(Exception)
+async def unexpected(request: Request, exc: Exception) -> JSONResponse:
+    """An exception no route handled: reported, and answered in a sentence.
+
+    The framework's answer was "Internal Server Error" as plain English text,
+    which the page could not read. The exception goes to the log and, when
+    reporting is switched on, to the error service (_lib/reporting.py)."""
+    reporting.capture_exception(exc, kind="unhandled", route=route_template(request),
+                                method=request.method, status=500)
+    # The framework calls this outside every middleware, the language one
+    # included, so the request's language is read again here.
+    token = lang.use(request.query_params.get("lang"))
+    try:
+        detail = tr("Something went wrong inside the app while answering this. It is a fault "
+                    "in the app, not in what you asked for, and it has been recorded.",
+                    "Ada yang salah di dalam aplikasi saat menjawab ini. Ini kesalahan "
+                    "aplikasi, bukan pada yang Anda minta, dan sudah dicatat.")
+    finally:
+        lang.reset(token)
+    return JSONResponse(status_code=500, headers={"Cache-Control": "no-store"},
+                        content={"detail": detail})
+
+
 @app.exception_handler(RequestValidationError)
 async def unreadable_request(request: Request, exc: RequestValidationError) -> JSONResponse:
     """A request that failed validation, answered in a sentence that names
@@ -754,6 +803,101 @@ def health():
     })
 
 
+# The stamped measurements the published views read, and how old each may get
+# before an uptime check says so. The private tier's stamps are left out: it
+# runs only on the owner's machine and stays out of every published view.
+PUBLISHED_STAMPS = ("lens_agreement", "check_calibration", "backtest_results",
+                    "correlation_stability", "exposure_stability")
+STAMP_STALE_DAYS = 400
+LISTINGS_STALE_DAYS = 120
+CALENDAR_AHEAD_DAYS = 30
+STATUS_CACHE = "public, max-age=0, s-maxage=60"
+
+
+def _today() -> dt.date:
+    """Today, as the status check reads it; a function so a test can fix it."""
+    return dt.date.today()
+
+
+def _age_days(iso: Optional[str], today: dt.date) -> Optional[int]:
+    try:
+        return (today - dt.date.fromisoformat(str(iso)[:10])).days
+    except (TypeError, ValueError):
+        return None
+
+
+@app.get("/api/status")
+async def status():
+    """What an uptime check wants to know, beyond "the function answers".
+
+    /api/health stays as cheap as it is: no provider call, no file read. This
+    one asks the data provider for the US benchmark under the canary's own time
+    budget, and reads the dates off the files the published views depend on:
+    the stamped measurements, the listing files and the event calendar. Each
+    finding is a plain field, and `problems` lists, in words, everything that
+    needs the owner. `status` is "ok", "degraded" (the provider is not
+    answering, which the app already explains to readers) or "attention" (a
+    file is past its age). Nothing here is about any reader.
+    """
+    today = _today()
+    try:
+        answering = await asyncio.wait_for(asyncio.to_thread(market_data.provider_answering, "US"),
+                                           CANARY_BUDGET_SECONDS)
+    except asyncio.TimeoutError:
+        answering = False
+    problems: list[str] = []
+    if not answering:
+        problems.append("The data provider did not return the US benchmark.")
+
+    stamps = {}
+    for name in PUBLISHED_STAMPS:
+        try:
+            measured = json.loads((Path(__file__).parent / "_lib" / f"{name}.json")
+                                  .read_text()).get("measuredOn")
+        except (OSError, ValueError):
+            measured = None
+        age = _age_days(measured, today)
+        stamps[name] = {"measuredOn": measured, "ageDays": age}
+        if age is None or age > STAMP_STALE_DAYS:
+            problems.append(f"{name}.json has no date, or was measured more than "
+                            f"{STAMP_STALE_DAYS} days ago.")
+
+    files = {}
+    for code in listings.SEARCH_MARKETS:
+        payload = listings.load(code)
+        age = _age_days(payload.get("asOf") if payload else None, today)
+        files[code] = {"asOf": payload.get("asOf") if payload else None, "ageDays": age}
+        if age is None or age > LISTINGS_STALE_DAYS:
+            problems.append(f"The {code} listing file is missing or older than "
+                            f"{LISTINGS_STALE_DAYS} days (scripts/refresh_listings.py).")
+
+    # A source whose events are all past is a record, not a schedule, and is
+    # not expected to reach ahead; every other one should, by a month at least.
+    reach = econcalendar.coverage()
+    ahead_by = {source: -(_age_days(last, today) or 0) for source, last in reach.items()
+                if last >= today.isoformat()}
+    through = min((reach[s] for s in ahead_by), default=None)
+    ahead = min(ahead_by.values(), default=None)
+    short = sorted(s for s, days in ahead_by.items() if days < CALENDAR_AHEAD_DAYS)
+    if ahead is None or short:
+        problems.append(f"The event calendar reaches fewer than {CALENDAR_AHEAD_DAYS} days ahead "
+                        f"for {', '.join(short) or 'every source'}: add the next published "
+                        "dates to api/_lib/calendar_events.json.")
+
+    state = "degraded" if not answering else "attention" if problems else "ok"
+    return JSONResponse(headers={"Cache-Control": STATUS_CACHE}, content=clean({
+        "status": state,
+        "checkedAt": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+        "release": (os.environ.get("VERCEL_GIT_COMMIT_SHA") or "")[:7] or None,
+        "provider": {"answering": answering},
+        "stamps": stamps,
+        "listings": files,
+        "calendar": {"reachesBySource": reach, "reachesAll": through, "daysAhead": ahead},
+        "errorReporting": reporting.enabled(),
+        "problems": problems,
+    }))
+
+
 @app.get("/api/capabilities")
 def capabilities(request: Request):
     """What this deployment serves, so the client draws only what it can reach.
@@ -763,7 +907,44 @@ def capabilities(request: Request):
     The same function decides the flag and guards the two routes, so the page
     and the server cannot disagree about it.
     """
-    return ok({"privateTier": private_tier_enabled(request)})
+    return ok({"privateTier": private_tier_enabled(request),
+               # Whether the browser should report its own errors here. Off
+               # until SENTRY_DSN is set, so a deployment with no error service
+               # receives no reports it has nowhere to send.
+               "errorReporting": reporting.enabled()})
+
+
+CLIENT_ROUTES = {"/", "/stock/[symbol]", "/compare", "/markets", "/journal", "/other"}
+_URL_QUERY = re.compile(r"\?[^\s)]*")
+
+
+class ClientError(BaseModel):
+    """What a browser may say about an error it hit. Nothing else is read."""
+    kind: Literal["render", "unhandled", "rejection"]
+    message: str = Field(max_length=500)
+    stack: str = Field("", max_length=4000)
+    route: str = Field(max_length=40)
+
+
+@app.post("/api/client-error", status_code=204)
+def client_error(report: ClientError):
+    """A browser's error, reported through this origin.
+
+    SAME ORIGIN, SO THE PAGE'S CONTENT SECURITY POLICY STAYS `connect-src
+    'self'`, and the report goes through the same redaction as everything the
+    server sends: the browser sends a route TEMPLATE (lib/redact.ts), and any
+    query string a stack line carries is cut here as well. Off unless the
+    server has an error service to send to; the page asks /api/capabilities
+    first and does not send otherwise.
+    """
+    if not reporting.enabled():
+        return Response(status_code=204, headers={"Cache-Control": "no-store"})
+    route = report.route if report.route in CLIENT_ROUTES else "/other"
+    record = reporting.event(kind=f"browser:{report.kind}", source="browser", route=route,
+                             message=_URL_QUERY.sub("", report.message))
+    record["extra"] = {"stack": _URL_QUERY.sub("", report.stack)}
+    reporting.capture(record)
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
 
 # --------------------------------------------------------------------------- #
@@ -2362,6 +2543,7 @@ def lens_broke(name: str, exc: BaseException) -> dict:
     the person who can fix it reads it, and the reader gets a sentence.
     """
     LOG.error("lens %s failed", name, exc_info=exc)
+    reporting.capture_exception(exc, kind="lens", route=f"lens:{name}")
     return {
         "message": tr("Something went wrong inside this lens, so it has no reading this time. "
                       "The other lenses are unaffected; trying again usually works, and if it "
@@ -2553,7 +2735,9 @@ def event_study(
 # Finding a symbol
 # --------------------------------------------------------------------------- #
 SYMBOL_QUERY_PATTERN = r"^[A-Za-z0-9 .&'\-^=,()]{1,40}$"
-SYMBOLS_CACHE = "public, max-age=3600, s-maxage=86400"
+# The listing files change only when someone commits new ones, so a week-old
+# copy of an answer is as good as a fresh one.
+SYMBOLS_CACHE = "public, max-age=3600, s-maxage=86400, stale-if-error=604800"
 
 
 @app.get("/api/symbols")
@@ -2597,10 +2781,19 @@ def find_symbols(
 # trail the market by up to twenty minutes; refetching every minute would buy
 # nothing a reader can see. The browser still revalidates on every request,
 # for the reason `CACHE` gives above.
+#
+# STALE IF THE FUNCTION FAILS, WHERE A STALE COPY SAYS HOW OLD IT IS. When the
+# function errors or times out, the edge may serve its last good copy for a
+# day instead of the error (`stale-if-error`, which Vercel's CDN honours). The
+# board, its headlines and its calendar each carry their own as-of time, so a
+# day-old copy reads as a day old. A company read does not get this: the page
+# labels it with the time the browser fetched it, so a stale copy would read
+# as fresh.
+STALE_IF_ERROR = "stale-if-error=86400"
 BOARD_CACHE = "public, max-age=0, must-revalidate, s-maxage=300"
-BOARD_CDN_CACHE = "public, s-maxage=300, stale-while-revalidate=600"
+BOARD_CDN_CACHE = f"public, s-maxage=300, stale-while-revalidate=600, {STALE_IF_ERROR}"
 HEADLINES_CACHE = "public, max-age=0, must-revalidate, s-maxage=600"
-HEADLINES_CDN_CACHE = "public, s-maxage=600, stale-while-revalidate=1200"
+HEADLINES_CDN_CACHE = f"public, s-maxage=600, stale-while-revalidate=1200, {STALE_IF_ERROR}"
 HEADLINE_TOPICS_MAX = 4
 
 
@@ -2629,7 +2822,7 @@ def markets_today():
 
 
 CALENDAR_CACHE = "public, max-age=0, must-revalidate, s-maxage=3600"
-CALENDAR_CDN_CACHE = "public, s-maxage=3600, stale-while-revalidate=86400"
+CALENDAR_CDN_CACHE = f"public, s-maxage=3600, stale-while-revalidate=86400, {STALE_IF_ERROR}"
 EARNINGS_MAX = 20
 
 
