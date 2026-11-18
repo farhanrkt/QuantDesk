@@ -768,7 +768,7 @@ def _rate_for(calibration: Optional[dict], check_id: str,
     the Dow and 80% of IDX30 — Yahoo's fundamentals coverage for smaller
     Indonesian listings is the single biggest fragility in this project, and it
     is a fact about the data source rather than about any company. Blending the
-    two gives roughly 40%, which is simultaneously alarming for a US large cap
+    two gives roughly 35%, which is simultaneously alarming for a US large cap
     (where it is genuinely unusual) and reassuring for an IDX one (where it is
     the norm). Neither reading is true of the company in front of the reader.
 

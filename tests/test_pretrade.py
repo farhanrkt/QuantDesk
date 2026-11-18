@@ -341,7 +341,7 @@ def test_every_rendered_check_carries_its_own_firing_rate():
 # --------------------------------------------------------------------------- #
 # The full calibration run is what forced this: "scores built from incomplete
 # data" fires on 10% of the Dow and 80% of IDX30, because Yahoo's coverage of
-# smaller Indonesian filings is thin. The blend near 40% is simultaneously
+# smaller Indonesian filings is thin. The blend near 35% is simultaneously
 # alarming for a US large cap and reassuring for an IDX one, and neither reading
 # is true of the company in front of the reader.
 THIN_BY_MARKET = {"thinFilings": {
