@@ -1878,7 +1878,9 @@ export interface SymbolHit {
   name: string;
   market: Market;
   exchange: string | null;
-  match: "symbol" | "prefix" | "name" | "contains";
+  match: "alias" | "symbol" | "prefix" | "name" | "contains";
+  /** The everyday name that matched ("Telkom", "Google"), when one did. */
+  alias?: string;
 }
 
 export interface SymbolSearch {
@@ -1945,6 +1947,8 @@ export interface CompanyResponse {
   listing: {
     exchange: string | null; market: Market; marketCap: number | null; price: number | null;
     priceAsOf: string | null; priceSource: string | null;
+    /** IDX only: shares trade in lots of 100, and what one cost at the last close. */
+    lot: { shares: number; cost: number | null; currency: string | null; reading: string } | null;
   };
   currency: { trading: string | null; reporting: string | null; fxRate: number | null; note: string | null };
   history: CompanyHistory;

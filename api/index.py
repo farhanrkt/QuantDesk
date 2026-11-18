@@ -2241,6 +2241,42 @@ def _dividend_record(company: dict) -> dict:
     }
 
 
+IDX_LOT_SHARES = 100
+
+
+def _lot(market_code: str, price: Optional[float], currency: Optional[str],
+         as_of: Optional[str]) -> Optional[dict]:
+    """How shares are bought on the exchange, as a fact with today's number.
+
+    THE FIRST PRACTICAL QUESTION AN INDONESIAN NEWCOMER HAS is how much money one
+    purchase takes, and the price alone does not say: the Indonesia Stock
+    Exchange trades in lots of 100 shares, so a Rp 9,000 share is a Rp 900,000
+    purchase. Stated as arithmetic on the last close, never as advice, and
+    without broker fees or taxes, which differ by broker. A US listing trades
+    one share at a time, so there is nothing to state.
+    """
+    if market_code != "ID":
+        return None
+    cost = price * IDX_LOT_SHARES if price is not None and price > 0 else None
+    if cost is None:
+        reading = tr(f"Shares on the Indonesia Stock Exchange are bought in lots of "
+                     f"{IDX_LOT_SHARES}. The price did not come back, so the cost of one lot "
+                     "is not shown.",
+                     f"Saham di Bursa Efek Indonesia dibeli per lot berisi {IDX_LOT_SHARES} "
+                     "lembar. Harganya tidak kembali, jadi biaya satu lot tidak ditampilkan.")
+    else:
+        money = (f"Rp {cost:,.0f}" if (currency or "").upper() == "IDR"
+                 else f"{cost:,.2f} {currency or ''}".strip())
+        when = tr(f" at the close of {as_of}", f" pada penutupan {as_of}") if as_of else ""
+        reading = tr(f"Shares on the Indonesia Stock Exchange are bought in lots of "
+                     f"{IDX_LOT_SHARES}, so one lot cost {money}{when}, before broker fees "
+                     "and taxes.",
+                     f"Saham di Bursa Efek Indonesia dibeli per lot berisi {IDX_LOT_SHARES} "
+                     f"lembar, jadi satu lot seharga {money}{when}, belum termasuk biaya "
+                     "broker dan pajak.")
+    return {"shares": IDX_LOT_SHARES, "cost": cost, "currency": currency, "reading": reading}
+
+
 def company_payload(symbol: str) -> dict:
     """Who the company is and what its filings say it has done, year by year.
 
@@ -2280,6 +2316,8 @@ def company_payload(symbol: str) -> dict:
             "price": _finite_or_none(company.get("price")),
             "priceAsOf": company.get("price_as_of"),
             "priceSource": company.get("price_source"),
+            "lot": _lot(market_code, _finite_or_none(company.get("price")), trading,
+                        company.get("price_as_of")),
         },
         "currency": {
             "trading": trading,

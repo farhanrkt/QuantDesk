@@ -73,6 +73,8 @@ const SOURCES = [
   // What a reader is told when a request does not answer: the request layer
   // itself is a client module, so the reading of a failure lives apart from it.
   "lib/failures.ts",
+  // The browser's own backup file: what it carries, and that a restore merges.
+  "lib/backup.ts",
 ];
 
 // Real packages the compiled output requires at load time.
@@ -110,7 +112,7 @@ const rawRequestLayer = readFileSync(join(ROOT, "lib/api.ts"), "utf8");
 const strippedRequestLayer = rawRequestLayer
   .replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 for (const [pattern, why] of [
-  [/from\s+["'](?:\.\/|@\/lib\/)(?:journal|watchlist)["']/, "imports a browser-only store"],
+  [/from\s+["'](?:\.\/|@\/lib\/)(?:journal|watchlist|backup)["']/, "imports a browser-only store"],
   [/\b(?:localStorage|sessionStorage)\b/, "reads browser storage directly"],
 ]) {
   if (pattern.test(strippedRequestLayer)) {

@@ -109,24 +109,44 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const commands = useMemo<RunnableCommand[]>(() => {
     const typed = query.trim();
     const list: RunnableCommand[] = [];
+    // A COMPANY FOUND BY NAME COMES BEFORE "AS TYPED", unless the text is itself
+    // a listed symbol. "As typed" first is right for someone who typed a ticker
+    // and a trap for someone who typed a name: Enter on "apple" opened a page
+    // for a ticker called APPLE (docs/AUDIT.md, UX-1). Only a result for the
+    // text on screen decides; an answer to an earlier keystroke does not.
+    const hits = found && found.query.trim() === typed ? found.results : [];
+    const byName = !hits.some((h) => h.match === "symbol")
+      && hits.some((h) => h.match === "alias" || h.match === "name");
+    const hitCommands = hits.map((hit): RunnableCommand => ({
+      id: `open:${hit.symbol}`, group: "Open",
+      label: `${hit.symbol} · ${hit.name}`,
+      keywords: [hit.name, hit.alias].filter(Boolean).join(" "),
+      detail: hit.alias ? `${hit.alias} · ${hit.market === "ID" ? "IDX" : hit.exchange ?? "US"}`
+        : hit.market === "ID" ? "IDX" : hit.exchange ?? "US",
+      run: () => go(stockHref(hit.symbol)),
+    }));
+    if (byName) list.push(...hitCommands);
     if (typed && isTicker(typed)) {
       const asTyped = resolveSymbol(typed, "US");
-      list.push({ id: `open:${asTyped}`, group: "Open", label: t("Open {symbol}", { symbol: asTyped }),
-                  detail: t("as typed"), run: () => go(stockHref(asTyped)) });
+      if (!list.some((c) => c.id === `open:${asTyped}`)) {
+        list.push({ id: `open:${asTyped}`, group: "Open", label: t("Open {symbol}", { symbol: asTyped }),
+                    detail: t("as typed"), run: () => go(stockHref(asTyped)) });
+      }
       // A bare four-letter code is how IDX names are written everywhere but
       // Yahoo. Offer the suffixed form beside it rather than guessing: BBCA is a
       // US ETF and BBCA.JK a bank, and only the reader knows which they meant.
       if (/^[A-Za-z]{4}$/.test(typed)) {
         const idx = resolveSymbol(typed, "ID");
-        list.push({ id: `open:${idx}`, group: "Open", label: t("Open {symbol}", { symbol: idx }),
-                    detail: t("Indonesia (IDX)"), run: () => go(stockHref(idx)) });
+        if (!list.some((c) => c.id === `open:${idx}`)) {
+          list.push({ id: `open:${idx}`, group: "Open", label: t("Open {symbol}", { symbol: idx }),
+                      detail: t("Indonesia (IDX)"), run: () => go(stockHref(idx)) });
+        }
       }
     }
-    for (const hit of found?.results ?? []) {
-      if (list.some((c) => c.id === `open:${hit.symbol}`)) continue;
-      list.push({ id: `open:${hit.symbol}`, group: "Open", label: `${hit.symbol} · ${hit.name}`,
-                  keywords: hit.name, detail: hit.market === "ID" ? "IDX" : hit.exchange ?? "US",
-                  run: () => go(stockHref(hit.symbol)) });
+    if (!byName) {
+      for (const command of hitCommands) {
+        if (!list.some((c) => c.id === command.id)) list.push(command);
+      }
     }
     if (!typed) {
       for (const s of recent.slice(0, 5)) {
@@ -164,6 +184,9 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         keywords: "side by side columns bandingkan", run: () => go(compareHref([])) },
       { id: "go:journal", group: "Go to", label: t("Thesis journal"),
         keywords: "notes entries jurnal catatan tesis", run: () => go("/journal") },
+      { id: "go:backup", group: "Go to", label: t("Save or restore this browser's data"),
+        keywords: "backup export import restore file watchlist holdings cadangan pulihkan berkas",
+        run: () => go("/journal#backup") },
       { id: "go:manual", group: "Go to", label: t("Field manual"),
         keywords: "help glossary guide learn panduan bantuan istilah",
         run: () => { onClose(); window.location.href = MANUAL_HREF[getLang()]; } },

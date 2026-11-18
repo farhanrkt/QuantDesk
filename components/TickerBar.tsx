@@ -1,10 +1,13 @@
 "use client";
 
 import { Search, SlidersHorizontal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useDetail } from "@/components/ui/explain";
 import { Input, Select } from "@/components/ui/input";
-import type { RunOptions } from "@/lib/api";
+import { searchSymbols, type RunOptions } from "@/lib/api";
+import { NAME_QUERY_OK, readNameHits } from "@/lib/symbols";
+import type { SymbolSearch } from "@/lib/types";
 import { PRESETS } from "@/lib/url";
 import { useT } from "@/lib/i18n";
 
@@ -43,9 +46,40 @@ export function TickerBar({
   const set = <K extends keyof RunOptions>(key: K, value: RunOptions[K]) =>
     onChange({ ...opts, [key]: value });
 
-  const submit = (e: React.FormEvent) => {
+  // A COMPANY BY ITS EVERYDAY NAME (docs/AUDIT.md, UX-1). The box took only a
+  // ticker, so "telkom" opened a page for a ticker called TELKOM. The text is
+  // looked up in the committed listing files as it is typed (no provider call):
+  // an exact everyday name opens that company, and the line under the box says
+  // so before Enter is pressed; a partial name offers up to three companies.
+  // Text that is itself a listed symbol is left alone, as it always was.
+  const typed = opts.ticker.trim();
+  const [found, setFound] = useState<SymbolSearch | null>(null);
+  const pending = useRef<Promise<SymbolSearch | null> | null>(null);
+  useEffect(() => {
+    if (!NAME_QUERY_OK.test(typed) || typed.length < 2) { setFound(null); pending.current = null; return; }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      const request = searchSymbols(typed, opts.market, controller.signal).catch(() => null);
+      pending.current = request;
+      request.then((r) => { if (!controller.signal.aborted) setFound(r); });
+    }, 150);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [typed, opts.market]);
+  const reading = readNameHits(found, typed);
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onRun(opts);
+    let named = reading.opens;
+    // Enter pressed before the lookup answered: wait for it briefly, so the
+    // same text does not open different pages depending on typing speed.
+    if (!found || found.query.trim() !== typed) {
+      const answer = await Promise.race([
+        pending.current ?? searchSymbols(typed, opts.market).catch(() => null),
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 1500)),
+      ]);
+      named = readNameHits(answer, typed).opens;
+    }
+    onRun(named ? { ...opts, ticker: named.symbol, market: named.market } : opts);
   };
 
   const controls = (
@@ -124,8 +158,8 @@ export function TickerBar({
           <Input
             value={opts.ticker}
             onChange={(e) => set("ticker", e.target.value)}
-            placeholder={t("Ticker — AAPL, BBCA.JK, BTC-USD")}
-            aria-label={t("Ticker symbol")}
+            placeholder={t("Ticker or company — AAPL, Telkom, BBCA.JK")}
+            aria-label={t("Ticker symbol or company name")}
             autoFocus={autoFocus}
             autoComplete="off"
             spellCheck={false}
@@ -146,8 +180,24 @@ export function TickerBar({
         </Button>
       </div>
 
+      {reading.opens ? (
+        <p className="text-meta text-ash" role="status">
+          {t("Enter opens {symbol} · {name}", { symbol: reading.opens.symbol, name: reading.opens.name })}
+        </p>
+      ) : reading.offers.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-meta text-ash" role="status">
+          <span>{t("Companies by that name:")}</span>
+          {reading.offers.map((hit) => (
+            <Button key={hit.symbol} type="button" variant="chip" size="xs"
+                    onClick={() => onRun({ ...opts, ticker: hit.symbol, market: hit.market })}>
+              {hit.symbol} · {hit.alias ?? hit.name}
+            </Button>
+          ))}
+        </div>
+      )}
+
       {/* The market selector now applies to every engine, not just valuation. */}
-      {opts.market === "ID" && !opts.ticker.trim().toUpperCase().endsWith(".JK")
+      {!reading.opens && opts.market === "ID" && !opts.ticker.trim().toUpperCase().endsWith(".JK")
         && opts.ticker.trim() && (
         <p className="text-meta text-ash">
           {t("Will resolve to")}{" "}

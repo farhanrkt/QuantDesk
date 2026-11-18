@@ -272,16 +272,36 @@ same place:
 | `/compare?symbols=AAPL,BBCA.JK` | Two to four companies, read the same way, side by side. |
 | `/journal` | Every thesis you have written, for every company. |
 
-**The command palette** (⌘K, `/`, or the search button) opens any company by name or
-ticker from the provider's listing files — Bank Central Asia finds BBCA.JK — and always
-offers "open as typed", so crypto pairs, indices and new listings still open. It also reaches
-every route, every tab of the current stock, the reading mode and your holding horizon.
+**Finding a company.** The ticker box and the command palette (⌘K, `/`, or the search
+button) both take a name. They read the provider's listing files, which carry legal names
+("PT Bank Central Asia Tbk"), and a table of about 130 everyday names beside them
+(`listings.EVERYDAY_NAMES`: Telkom, BCA, BRI, Mandiri, Gojek, Apple, Google, Facebook…), so
+"telkom" finds TLKM.JK and "google" finds GOOGL. In the box, an exact everyday name opens its
+company and the line under the box says which before Enter is pressed; a partial name offers
+up to three companies. Text that is itself a listed ticker is left as it is. In the palette a
+company found by name comes before "open as typed"; that option is always there, so crypto
+pairs, indices and new listings still open. A page for a ticker that returned nothing on any lens (an old
+link, or a name opened as typed) offers up to three listed companies the text matches: "Did
+you mean TLKM.JK · Telkom".
+
+**The command palette** also reaches every route, every tab of the current stock, the
+reading mode and your holding horizon.
 Shortcuts: `[` and `]` move between tabs, `w` stars the ticker, `?` lists them all. None fire
 while you are typing.
 
 **Your desk.** Star a ticker to keep it on a **watchlist**; the last twelve you opened are
 **recent**. Both live in this browser only. "Rank these" sends the watchlist to the ranking
 tier in a request body — never a URL — and only when you press it.
+
+**Keep a copy.** The watchlist, the thesis journal, your holdings and your settings live in
+this browser only, so a new device or cleared site data starts empty. "Your data in this
+browser", at the foot of the journal page, saves all of them to one dated file and restores
+one (`lib/backup.ts`). The file is built and read on the page and sent nowhere. A restore
+says what it will add before it writes anything, and it merges: journal entries are added by
+id, symbols are added to the lists, and the holdings and the settings are taken from the file
+only where this browser has none, so restoring can never remove or overwrite what is here.
+Every part is read through its own store's parser, so a hand-edited file cannot plant
+anything the stores would not accept; the journal's older export is read as a backup too.
 
 **Results stay put.** Leaving a company for the compare view and coming back restores the
 page instead of running four engines again, and a ranking, a screener scan or a half-written
@@ -407,6 +427,14 @@ statements year by year as small charts and a table (revenue, operating and net 
 operating and free cash flow, capital spending, debt, cash, equity), what that record adds up
 to, and dividends per share by year. Every figure was already being fetched for the valuation
 and quality lenses and thrown away before reaching the page.
+
+**On an IDX listing it starts with what one purchase takes.** The Indonesia Stock Exchange
+trades in lots of 100 shares, so the price alone understates the smallest purchase a
+hundredfold: the tab states the lot and what one cost at the last close ("one lot cost Rp
+218,000 at the close of 17 November, before broker fees and taxes"). It is arithmetic on the
+close and a fact about the exchange, not a suggestion; fees and taxes differ by broker and
+are left out, and the sentence says so. A US listing trades one share at a time and shows
+nothing here.
 
 It is **description, never a lens**: no chip in the rail, no vote in the synthesis, no input
 to the pre-trade checks, and a test asserts both are unchanged with or without it. A missing
@@ -1287,7 +1315,7 @@ Interactive docs at `/api/docs`.
 |---|---|
 | `GET /api/confluence` | **All four lenses in one call, plus the synthesis, the pre-trade checks and the company block** — what the UI actually uses |
 | `GET /api/company` | **What the company is**: profile, listing, statements year by year, dividends, next report. The same block confluence carries |
-| `GET /api/symbols` | **Listings matching a name or ticker**, for the command palette. Reads the committed listing files; no provider call |
+| `GET /api/symbols` | **Listings matching a name, an everyday name or a ticker**, for the ticker box and the command palette. Reads the committed listing files; no provider call |
 | `GET /api/markets/today` | **What moved the markets**: 22 instruments, each move against its own past year, the unusual ones named, the base rate, and what the source cannot supply. Takes no parameters; five minutes at the edge |
 | `GET /api/markets/calendar` | **The dates that move markets** for the next 90 days, with each exchange's hours and closures, each source's coverage, and what is not published yet. Takes no parameters; an hour at the edge |
 | `POST /api/markets/earnings` | **The next report date for each name on a reader's watchlist** (up to 20), in a body, `no-store` |

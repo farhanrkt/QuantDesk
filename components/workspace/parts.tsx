@@ -1,11 +1,15 @@
 "use client";
 
 import { Columns3, Link2, Printer, Star } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Card, CardBody } from "@/components/ui/card";
 import { ApplyButton } from "@/components/ui/controls";
 import { StateCard } from "@/components/ui/state";
-import type { Engine, EngineFailure } from "@/lib/types";
+import { searchSymbols } from "@/lib/api";
+import { NAME_QUERY_OK, baseCode } from "@/lib/symbols";
+import type { Engine, EngineFailure, SymbolHit } from "@/lib/types";
+import { stockHref } from "@/lib/url";
 import { cn } from "@/lib/utils";
 import { msg, useT } from "@/lib/i18n";
 
@@ -145,7 +149,45 @@ export function RunStatus({
             : <>{t("Fetched {time} · figures are as of the last close the data source had", { time })}</>}
         </p>
       )}
+      {!busy && at && nothing && <DidYouMean symbol={symbol} />}
     </>
+  );
+}
+
+/**
+ * WHEN NOTHING CAME BACK, WHAT THE TEXT MIGHT HAVE MEANT. A page for a ticker
+ * that does not exist — an old link, or a company's name opened "as typed" —
+ * answered four failures and nothing else. The same finder the ticker box uses
+ * is asked with the text, and up to three listed companies it matches are
+ * offered. Nothing is offered for a symbol the listings already have, since
+ * then the failure is the provider's, not the spelling.
+ */
+function DidYouMean({ symbol }: { symbol: string }) {
+  const t = useT();
+  const [hits, setHits] = useState<SymbolHit[]>([]);
+  useEffect(() => {
+    const text = baseCode(symbol);
+    if (!NAME_QUERY_OK.test(text)) return;
+    const controller = new AbortController();
+    searchSymbols(text, null, controller.signal)
+      .then((r) => {
+        if (r.results.some((h) => h.symbol === symbol)) return;
+        setHits(r.results.filter((h) => h.match !== "contains").slice(0, 3));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [symbol]);
+  if (!hits.length) return null;
+  return (
+    <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-meta text-ash" role="status">
+      <span>{t("Did you mean")}</span>
+      {hits.map((hit) => (
+        <Link key={hit.symbol} href={stockHref(hit.symbol)}
+              className="inline-flex min-h-[24px] items-center text-tech hover:underline">
+          {hit.symbol} · {hit.alias ?? hit.name}
+        </Link>
+      ))}
+    </p>
   );
 }
 
